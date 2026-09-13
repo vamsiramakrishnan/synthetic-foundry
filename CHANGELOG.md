@@ -11,6 +11,38 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A catalogue project compiles and grades end to end
+
+- A Studio project derived from the catalogue (`industry.project`) now
+  builds a world of its own company and compiles its dataset. The world's
+  business units are the company's declared units (`industry.divisions`:
+  one pack unit per declared unit, named as declared, its kind the unit's
+  archetype), so a process fact can be about the unit that owns the work.
+  The process company rides the snapshot world's recipe under
+  `process_structure` (`recipe.apply_process_structure`, recorded as the
+  recipe step `ApplyProcessStructure` so a rebuild replays it in its
+  place), declared as one event
+  (`organisation.process_structure`, the chief executive its actor, dated
+  where the company's facts begin) and stated in the ledger: the
+  programme's facts join the world subjected to its units and caused by
+  that event (`sor.facts_for_world`), so a record that cites them cites
+  facts the world holds. From the recipe the builtin projections derive the
+  company's records on `sor` (`connector_data.generate_sor`) and its channel
+  evidence on the emulated channels (`sor.channel_records`: one email
+  thread, Jira issue, SharePoint file or Confluence page per bound activity,
+  declared channel and period, scoped to the line's LOB, stream and owning
+  unit, naming the period's records and the one that tripped the
+  exception). A use case declares one hard requirement and one read step
+  per source entity, a selector scoped to a value stream covers the use
+  case's activities, and support ownership forms nothing for a world built
+  from the structure it is given, so construction checks the line's
+  evidence against the world and finds it. A world built without a process
+  company projects nothing new, so every existing corpus is unchanged.
+  Materialising a corpus memoises the connector entity alias check, which
+  was parsing a connector definition once per record. Generation: worlds
+  and datasets of catalogue projects change (units, the declaration event,
+  the process facts, `sor` records and channel evidence).
+
 ### Requests read their answers off the records
 
 - A programme now derives the company's system-of-record records

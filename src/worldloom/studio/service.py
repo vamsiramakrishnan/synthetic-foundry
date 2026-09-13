@@ -28,7 +28,8 @@ def snapshot_intent(spec: ProjectSpec) -> dict[str, Any]:
     """One identity for generation, narration selection and read-only readiness."""
     return {"company": spec.company, "seed": spec.seed,
             "lobs": [lob.model_dump(mode="json") for lob in spec.lobs],
-            "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes)}
+            "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes),
+            **({"structure": spec.structure.model_dump(mode="json")} if spec.structure is not None else {})}
 
 
 def changes(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
@@ -379,6 +380,15 @@ class Studio:
         else:
             built = blueprint.build()
         world = built.world
+        if spec.structure is not None:
+            # The process company rides the world, so its systems of record
+            # and their evidence project from the world alone wherever
+            # records are read, and its facts are in the ledger they cite.
+            # Before compilation, as a rebuild replays it: a step first, the
+            # derived layer after.
+            from ..recipe import apply_process_structure
+
+            world = apply_process_structure(world, spec.structure)
         if spec.episodes:
             world = world.compile()
         world.validate().raise_if_failed()
@@ -638,19 +648,8 @@ class Studio:
         if generation_contracts:
             plan = plan.model_copy(update={"generation_contracts": generation_contracts})
         destination = self.path("datasets", digest([job["project"], job["revision"]]))
-        projections = None
-        if spec.structure is not None:
-            # The project's processes name systems no engine builds (SAP,
-            # Workday, a core banking system); their records are derived from
-            # the compiled bindings and served through the `sor` connector.
-            from .. import industry, sor
-            from ..process_bindings import compile_company
-
-            compiled = compile_company(spec.structure)
-            projections = sor.projections(compiled, world, facts=industry.facts(compiled))
         run = compile_dataset(plan, destination, builder=FrozenCompanyBuilder(world, seed=spec.seed,
-                              query_transforms=query_transforms, bind_cases=spec.retail_process is not None,
-                              projections=projections),
+                              query_transforms=query_transforms, bind_cases=spec.retail_process is not None),
                               batch_limit=options.batch_limit)
         return {"dataset": destination.name, "snapshot": location.name, "report": run.report.model_dump(mode="json")}
 

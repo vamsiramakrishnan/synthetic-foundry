@@ -227,3 +227,38 @@ def test_the_cli_grades_and_refuses_a_harness_without_a_command(compiled: tuple[
     result = runner.invoke(app, ["studio", "run", p["id"], "--operation", "evalrun", "-w", str(studio.root)])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["result"]["summary"]["pass_rate"] == 1.0
+
+
+def test_a_catalogue_project_compiles_its_own_evidence_and_grades_it(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """A telecom billing line, no engine of its own: the world's records and
+    channel evidence come from the process company, construction accepts
+    them, and the reference agent is graded on the cases they ground."""
+    import json
+
+    from worldloom import industry
+
+    studio = Studio(tmp_path_factory.mktemp("catalogue"))
+    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    project = studio.store.create(spec)
+    job = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="compile", batch_limit=1))
+    assert run_job(studio, job["id"])
+    compiled = studio.store.job(job["id"])
+    assert compiled["status"] == "complete", compiled
+    report = compiled["result"]["report"]
+    assert report["accepted"] > 0 and report["companies"] == 1, report
+    dataset = studio.path("datasets", compiled["result"]["dataset"])
+    batch = next(dataset.glob("batches/*/qualified/connector-data.json"))
+    records = json.loads(batch.read_text(encoding="utf-8"))["records"]
+    by_connector = {record["connector"] for record in records}
+    assert {"sor", "email"} <= by_connector
+    threads = [r for r in records if r["connector"] == "email" and r["entity"] == "thread"]
+    assert threads and any(r["fields"]["lob"] == "billing" for r in threads)
+    assert all(r["fields"]["stream"] and r["fields"]["business_unit"] for r in threads)
+    assert all(r["fields"]["stream"] for r in records if r["connector"] == "sor")
+    run = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="evalrun", evalrun_limit=4))
+    assert run_job(studio, run["id"])
+    graded = studio.store.job(run["id"])
+    assert graded["status"] == "complete", graded
+    assert graded["result"]["cases"] == 4
+    page = studio.agent_results(project["id"], run["id"], limit=4)
+    assert page["total"] == 4 and all(row["use_case"].startswith("billing-") for row in page["rows"])

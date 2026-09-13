@@ -25,8 +25,10 @@ SAP rather than ServiceNow.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
+from functools import lru_cache
 from typing import Any
 
 from .connector_data import (
@@ -177,7 +179,9 @@ def _record(
         "pcf_id": row.pcf_id,
         "pcf_name": row.pcf_name,
         "function": row.function,
+        "lob": row.function,
         "owner_bu": row.owner_bu,
+        "business_unit": row.owner_bu,
         "country": row.country,
         "control": row.control,
         "exception": row.exception.strip() if tripped else "",
@@ -221,11 +225,226 @@ def projections(
     return builtin_projections().extended(CONNECTOR, rows)
 
 
+class _Company:
+    """One process company's derived records, computed once per world payload."""
+
+    def __init__(self, compiled: CompiledCatalogue, periods: tuple[str, ...], facts: tuple[CanonicalFact, ...]) -> None:
+        self.compiled = compiled
+        self.periods = periods
+        self.facts = facts
+        self.records = records(compiled, company_id=compiled.company, periods=periods, facts=facts)
+        self.channel_records = channel_records(compiled, self.records, periods=periods, company_id=compiled.company)
+
+
+def _company_of(world: Any) -> _Company | None:
+    """The process company a world was built for, with its records, or `None`."""
+    from .recipe import PROCESS_STRUCTURE_KEY
+
+    recipe = getattr(world, "recipe", None) or {}
+    payload = recipe.get(PROCESS_STRUCTURE_KEY)
+    if not payload:
+        return None
+    period = str(getattr(world, "period", None) or ANCHOR_PERIOD)
+    return _compiled_company(json.dumps(payload, sort_keys=True), period)
+
+
+@lru_cache(maxsize=8)
+def _compiled_company(payload: str, period: str) -> _Company:
+    # Cached on the company's own JSON: every connector projection of one
+    # world reads the same derivation, and the derivation is a pure function
+    # of the payload and the period.
+    from . import industry
+    from .process_bindings import CompanySpec, compile_company
+
+    compiled = compile_company(CompanySpec.model_validate(json.loads(payload)))
+    return _Company(compiled, periods_ending(period, DEFAULT_PERIODS), industry.facts(compiled))
+
+
+def facts_for_world(world: Any) -> tuple[CanonicalFact, ...]:
+    """The process company's facts, subjected to the world's own business units.
+
+    A programme's facts are about bindings (`industry.facts`); a world's
+    ledger is about the world's entities, so each fact is restated with the
+    owning unit as its subject, found by name among the world's business
+    units (the company itself where no unit carries the name) and no source
+    system, since the product is the fact's own value. Ids, kinds and values
+    are unchanged, so a record derived for the world cites the same ids.
+    """
+    company = _company_of(world)
+    if company is None:
+        return ()
+    units = {unit.name: unit.id for unit in getattr(world, "business_units", ())}
+    fallback = world.company.id
+    owners = {row.id: row.owner_bu for row in company.compiled.rows}
+    return tuple(
+        fact.model_copy(update={"subject": units.get(owners.get(fact.subject, ""), fallback), "source_system": None})
+        for fact in company.facts
+    )
+
+
+def records_for_world(world: Any) -> list[ConnectorRecord]:
+    """The records of the process company a world was built for, or none.
+
+    Reads the company from the world's recipe (`recipe.process_structure_of`),
+    compiles it, and derives the records for `DEFAULT_PERIODS` ending at the
+    world's period (or `ANCHOR_PERIOD`), linked to the programme's facts. A
+    world built without a process company projects nothing, so every corpus
+    built before this existed is unchanged.
+    """
+    company = _company_of(world)
+    return list(company.records) if company is not None else []
+
+
+def channel_records_for_world(world: Any, connector: str) -> list[ConnectorRecord]:
+    """The channel evidence of the process company a world was built for, on *connector*.
+
+    Empty for a world built without a process company and for a connector
+    that emulates no declared channel.
+    """
+    company = _company_of(world)
+    if company is None:
+        return []
+    return [record for record in company.channel_records if record.connector == connector]
+
+
 def by_binding(rows: Sequence[ConnectorRecord]) -> dict[str, dict[str, list[ConnectorRecord]]]:
     """Records by binding id, then by period, in the order they were derived."""
     out: dict[str, dict[str, list[ConnectorRecord]]] = {}
     for record in rows:
         out.setdefault(str(record.fields["binding_id"]), {}).setdefault(str(record.fields["period"]), []).append(record)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Channel evidence: where a binding's records are talked about
+# ---------------------------------------------------------------------------
+
+#: The day of the month a channel record is dated, so it sits inside the
+#: period it reports on whatever the world's clock says.
+CHANNEL_DAY = 15
+
+
+def _stamp(period: str) -> str:
+    return f"{period}-{CHANNEL_DAY:02d}T09:00:00+00:00"
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "x"
+
+
+def _address(name: str, company_id: str) -> str:
+    return f"{name} <{_slug(name)}@{_slug(company_id)}.example>"
+
+
+def _channel_text(row: ActivityBinding, period: str, cited: Sequence[ConnectorRecord]) -> str:
+    lines = [
+        f"{row.activity} in {row.stream_name}, {row.owner_bu}, {row.country}, period {period}.",
+        f"Control: {row.control}.",
+    ]
+    if cited:
+        names = ", ".join(f"{r.fields['object']} {r.external_id} ({r.fields['status']})" for r in cited)
+        lines.append(f"Records in {row.sor_product}: {names}.")
+        tripped = [r for r in cited if r.fields["exception"]]
+        if tripped:
+            names = ", ".join(f"{r.fields['object']} {r.external_id}" for r in tripped)
+            lines.append(f"Exception {tripped[0].fields['exception']}: {names}.")
+        else:
+            lines.append("No record tripped the exception this period.")
+    else:
+        lines.append(f"No system of record holds a record for this step ({row.sor_class}).")
+    return "\n".join(lines)
+
+
+def channel_records(
+    compiled: CompiledCatalogue,
+    rows: Sequence[ConnectorRecord],
+    *,
+    periods: Sequence[str],
+    company_id: str,
+    table: dict[str, Any] | None = None,
+) -> list[ConnectorRecord]:
+    """One channel record per bound activity, declared channel and period.
+
+    A binding declares the channels its evidence lands in (`channels`); the
+    emulator table (`industry.emulated_systems`) says which connector stands
+    in for each (an email thread, a Jira issue, a SharePoint file, a
+    Confluence page). Each record is scoped like the system-of-record records
+    it cites: the LOB (the function), the stream, the owning unit, the
+    activity, the period. Its text names the period's records and the one
+    that tripped the exception, so an agent that reads the thread and the
+    records reads one account. A channel no emulator covers yields nothing;
+    the line reports it as unemulated.
+    """
+    from . import industry
+
+    channels = (table if table is not None else industry.emulated_systems())["channels"]
+    grouped = by_binding(rows)
+    out: list[ConnectorRecord] = []
+    for row in compiled.rows:
+        for channel in sorted(set(row.channels)):
+            mapped = channels.get(channel)
+            if not mapped:
+                continue
+            connector, entity = str(mapped["connector"]), str(mapped["entity"])
+            for period in periods:
+                cited = grouped.get(row.id, {}).get(period, [])
+                key = content_key("sor-channel", company_id, row.id, channel, period)
+                title = f"{row.activity} ({row.owner_bu}, {period})"
+                body = _channel_text(row, period, cited)
+                fields: dict[str, Any] = {
+                    "channel": channel,
+                    "activity_id": row.activity_id,
+                    "activity": row.activity,
+                    "stream": row.stream,
+                    "stream_name": row.stream_name,
+                    "pcf_id": row.pcf_id,
+                    "function": row.function,
+                    "lob": row.function,
+                    "owner_bu": row.owner_bu,
+                    "business_unit": row.owner_bu,
+                    "country": row.country,
+                    "period": period,
+                    "company_id": company_id,
+                    "binding_id": row.id,
+                    "record_ids": [r.id for r in cited],
+                    "record_idents": [r.external_id for r in cited],
+                    "exception": next((str(r.fields["exception"]) for r in cited if r.fields["exception"]), ""),
+                    "body": body,
+                    "created_at": _stamp(period),
+                    "modified_at": _stamp(period),
+                }
+                if connector == "email":
+                    fields.update(
+                        thread_id=f"<{key}@{_slug(company_id)}.example>",
+                        subject=title,
+                        sent_at=_stamp(period),
+                        state="sent",
+                        labels=["process", row.stream, row.function, period],
+                        **{"from": _address(f"{row.function} team", company_id),
+                           "to": [_address(row.owner_bu, company_id)]},
+                    )
+                elif connector == "jira":
+                    project = row.stream.upper()[:10]
+                    fields.update(
+                        key=f"{project}-{int(key[:8], 16) % 100000}", summary=title,
+                        status="done" if not fields["exception"] else "open",
+                        assignee=row.owner_bu, project=project,
+                        labels=[row.stream, row.function, period], priority="High" if fields["exception"] else "Medium",
+                    )
+                elif connector == "confluence":
+                    fields.update(page_id=str(int(key[:10], 16) % 10**8), space=row.stream.upper()[:10], text=body)
+                else:
+                    fields.update(item_id=key[:16].upper(), name=f"{title}.{channel}",
+                                  parent=f"/{_slug(row.function)}/{row.stream}", content=body)
+                out.append(ConnectorRecord(
+                    id=f"CONN-{connector.upper()}-{key[:12].upper()}",
+                    connector=connector,
+                    entity=entity,
+                    external_id=key[:16].upper(),
+                    title=title,
+                    fields=fields,
+                    fact_ids=sorted({fact for r in cited for fact in r.fact_ids}),
+                ))
     return out
 
 
@@ -277,6 +496,7 @@ def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -
 
 
 __all__ = [
-    "ANCHOR_PERIOD", "CONNECTOR", "DEFAULT_PERIODS", "EXCEPTION_EVERY", "MONEY_KINDS", "RECORDS_PER_PERIOD",
-    "answer", "by_binding", "entity_name", "periods_ending", "projections", "records",
+    "ANCHOR_PERIOD", "CHANNEL_DAY", "CONNECTOR", "DEFAULT_PERIODS", "EXCEPTION_EVERY", "MONEY_KINDS",
+    "RECORDS_PER_PERIOD", "answer", "by_binding", "channel_records", "channel_records_for_world", "entity_name",
+    "facts_for_world", "periods_ending", "projections", "records", "records_for_world",
 ]

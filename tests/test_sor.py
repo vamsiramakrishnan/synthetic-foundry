@@ -161,3 +161,89 @@ def test_answers_are_read_off_the_records_by_shape() -> None:
     assert sor.answer("find_exception", "list", closed)[0].startswith("None of the")
     with pytest.raises(ValueError, match="at least one record"):
         sor.answer("chase", "message", [])
+
+
+def test_channel_evidence_is_derived_per_binding_channel_and_period() -> None:
+    compiled = compile_company(default_company("telecom"))
+    periods = sor.periods_ending("2026-06", 2)
+    rows = sor.records(compiled, company_id="C1", periods=periods)
+    first = sor.channel_records(compiled, rows, periods=periods, company_id="C1")
+    second = sor.channel_records(compiled, rows, periods=periods, company_id="C1")
+    assert first == second and first
+    table = industry.emulated_systems()["channels"]
+    expected = sum(
+        len(periods) for row in compiled.rows for channel in set(row.channels) if table.get(channel)
+    )
+    assert len(first) == expected
+    assert {r.connector for r in first} == {"email", "jira", "sharepoint", "confluence"}
+    thread = next(r for r in first if r.connector == "email")
+    assert thread.entity == "thread" and thread.fields["thread_id"].startswith("<")
+    assert thread.fields["lob"] == thread.fields["function"]
+    assert thread.fields["business_unit"] == thread.fields["owner_bu"]
+    assert thread.fields["stream"] and thread.fields["period"] in periods
+    # The thread names the period's records, and the exception when one tripped it.
+    cited = [r for r in rows if r.id in thread.fields["record_ids"]]
+    assert cited and all(r.external_id in thread.fields["body"] for r in cited)
+    tripped = [r for r in cited if r.fields["exception"]]
+    assert bool(tripped) == bool(thread.fields["exception"])
+    assert thread.fact_ids == sorted({fact for r in cited for fact in r.fact_ids})
+    # Every channel record carries its connector's stable field, as the corpus validator demands.
+    from worldloom.connector_data import CAPABILITIES
+
+    stable = {(c.connector, c.entity): c.stable_id_field for c in CAPABILITIES}
+    assert all(r.fields.get(stable[(r.connector, r.entity)]) for r in first)
+    # Every emulated channel record is served by its connector's emulator.
+    searches = {"email": "search_threads", "jira": "search_issues", "sharepoint": "search_files", "confluence": "search"}
+    for connector, tool in searches.items():
+        record = next(r for r in first if r.connector == connector)
+        emulator = ConnectorEmulator(load_connector_definition(connector), [
+            {**record.fields, "fid": record.id, "server": connector, "entity": record.entity,
+             "external_id": record.external_id, "title": record.title}
+        ])
+        found = emulator.call(tool, entity=record.entity, predicate={"stream": record.fields["stream"]}, _node="read")
+        hits = found.get("records") or found.get("items") or found.get("results") or found.get("threads") or []
+        assert hits, (connector, found)
+
+
+def test_a_world_built_for_a_process_company_projects_its_records_and_evidence(tmp_path: Path) -> None:
+    from worldloom.connector_data import builtin_projections
+    from worldloom.recipe import (
+        PROCESS_STRUCTURE_EVENT,
+        PROCESS_STRUCTURE_KEY,
+        process_structure_of,
+        rebuild,
+    )
+    from worldloom.studio.service import Studio
+
+    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    world, _ = Studio(tmp_path).snapshot(spec)
+    assert process_structure_of(world.recipe) == spec.structure
+    # The world's units are the company's own, the declaration is one event,
+    # and the company's facts are in the ledger about those units.
+    assert [unit.name for unit in world.business_units] == [unit.name for unit in spec.structure.bus]  # type: ignore[union-attr]
+    declared = [event for event in world.events if event.kind == PROCESS_STRUCTURE_EVENT]
+    assert len(declared) == 1 and declared[0].actors == [world._roles["ceo"]]
+    process_facts = [fact for fact in world.facts if fact.id.startswith("PFACT-")]
+    assert [fact.model_copy(update={"event_id": None}) for fact in process_facts] == list(sor.facts_for_world(world))
+    assert {fact.subject for fact in process_facts} <= set(world.business_units.ids())
+    assert all(fact.event_id == declared[0].id and fact.source_system is None for fact in process_facts)
+    assert world.validate().ok
+    registry = builtin_projections()
+    served = registry.project("sor", world)
+    assert served == sor.records_for_world(world) and served
+    assert all(r.fields["company_id"] == spec.structure.name for r in served)  # type: ignore[union-attr]
+    threads = [r for r in registry.project("email", world) if r.entity == "thread"]
+    assert threads and threads == sor.channel_records_for_world(world, "email")
+    assert registry.project("servicenow", world) == registry.project("servicenow", world)
+    # The key rides a rebuild, so a replayed corpus projects the same records.
+    replayed = rebuild(world.recipe)
+    assert replayed.recipe[PROCESS_STRUCTURE_KEY] == world.recipe[PROCESS_STRUCTURE_KEY]
+    assert sor.records_for_world(replayed) == served
+    assert list(replayed.facts) == list(world.facts) and list(replayed.events) == list(world.events)
+    # Every record cites facts the world holds, which is what qualification checks.
+    held = set(world.facts.ids())
+    assert all(set(record.fact_ids) <= held for record in served)
+    # A world built without one projects nothing on `sor`, as every corpus did before.
+    plain = world.extend(recipe={k: v for k, v in world.recipe.items() if k != PROCESS_STRUCTURE_KEY})
+    assert sor.records_for_world(plain) == [] and sor.channel_records_for_world(plain, "email") == []
+    assert registry.project("sor", plain) == []

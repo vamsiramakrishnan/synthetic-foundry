@@ -33,6 +33,7 @@ That works only if the corpus knows how to rebuild itself.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -483,6 +484,96 @@ def _pack_payload(pack: Any) -> dict[str, Any]:
 #: thing that survives to disk *and* drives replay, and a corpus whose documents
 #: were shaped by a genome the corpus does not record could not be rebuilt.
 STRUCTURE_KEY = "structure"
+
+#: The process company a Studio project was built for (`process_bindings.CompanySpec`):
+#: its industry, operating model, countries, business units and system
+#: landscape. Recorded on the world so its systems of record can be projected
+#: from the world alone (`connector_data.generate_sor`), and carried through a
+#: rebuild like the structural genome. Absent on every world built without one.
+PROCESS_STRUCTURE_KEY = "process_structure"
+
+
+def with_process_structure(recipe: dict[str, Any], structure: Any) -> dict[str, Any]:
+    """A copy of *recipe* recording the process company the world was built for."""
+    payload = structure if isinstance(structure, dict) else structure.model_dump(mode="json")
+    return {**recipe, PROCESS_STRUCTURE_KEY: payload}
+
+
+#: The event that declares a process company on a world: the approved process
+#: structure, dated where the company's process facts begin.
+PROCESS_STRUCTURE_EVENT = "organisation.process_structure"
+
+#: The recipe step that applies a process company, so a rebuild replays it
+#: where it happened among the other steps.
+PROCESS_STRUCTURE_STEP = "ApplyProcessStructure"
+
+
+def apply_process_structure(world: Any, structure: Any) -> Any:
+    """*world* with the process company recorded on its recipe, declared as an event and stated in its facts.
+
+    The declaration is one event (`PROCESS_STRUCTURE_EVENT`, the chief
+    executive its actor, every business unit its subject) dated where the
+    company's process facts begin, so a world built without an episode has a
+    timeline for constructions to follow. The company's facts
+    (`industry.facts`, one per binding and attribute) join the ledger
+    subjected to the world's own units and caused by that event
+    (`sor.facts_for_world`), so a record that cites them cites facts the
+    world holds. Recorded as a recipe step (`PROCESS_STRUCTURE_STEP`), so
+    `rebuild` replays it in its place; applied to a world that already
+    carries this company it changes nothing, so a snapshot that extends a
+    timeline does not declare the company twice.
+    """
+    import json
+
+    from .ids import content_key
+    from .models import EnterpriseEvent
+    from .sor import facts_for_world
+
+    payload = structure if isinstance(structure, dict) else structure.model_dump(mode="json")
+    if world.recipe.get(PROCESS_STRUCTURE_KEY) == payload:
+        return world
+    recipe = with_step(with_process_structure(world.recipe, structure), PROCESS_STRUCTURE_STEP, structure=payload)
+    extended = world.extend(recipe=recipe)
+    facts = facts_for_world(extended)
+    if not facts:
+        return extended
+    event = EnterpriseEvent(
+        id=f"EV-PROCESS-{content_key('process-structure', payload['name'])[:12].upper()}",
+        kind=PROCESS_STRUCTURE_EVENT,
+        occurred_at=min(fact.valid_from for fact in facts),
+        summary=json.dumps({"schema": "worldloom.process-structure/v1", "company": payload["name"],
+                            "industry": payload["industry"], "operating_model": payload["operating_model"],
+                            "countries": list(payload["countries"]),
+                            "units": [unit["name"] for unit in payload["bus"]], "facts": len(facts)},
+                           sort_keys=True, separators=(",", ":")),
+        actors=[identifier for identifier in (extended._roles.get("ceo"),) if identifier],
+        business_units=[unit.id for unit in extended.business_units],
+    )
+    declared = tuple(fact.model_copy(update={"event_id": event.id}) for fact in facts)
+    return extended.extend(events=(event,), facts=declared)
+
+
+@dataclass(frozen=True)
+class ApplyProcessStructure:
+    """The recipe verb for `apply_process_structure`."""
+
+    structure: dict[str, Any]
+    physics: Any = None
+
+    def run(self, world: Any) -> Any:
+        return apply_process_structure(world, self.structure)
+
+
+def process_structure_of(recipe: Mapping[str, Any] | None) -> Any:
+    """The process company a world was built for, or `None` when it was built without one."""
+    if not recipe:
+        return None
+    payload = recipe.get(PROCESS_STRUCTURE_KEY)
+    if not payload:
+        return None
+    from .process_bindings import CompanySpec
+
+    return CompanySpec.model_validate(payload)
 
 
 def with_structure(recipe: dict[str, Any], genome: Any) -> dict[str, Any]:
@@ -1102,8 +1193,13 @@ def has_actor_step(recipe: dict[str, Any]) -> bool:
     return any(step.get("actors") for step in recipe.get("steps", ()))
 
 
+register_step(PROCESS_STRUCTURE_STEP, ("structure",), ApplyProcessStructure)
+
+
 __all__ = [
-    "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "RecipeError", "STEPS", "build_recipe",
-    "has_actor_step", "locale_of", "presentation_of", "rebuild", "register_step",
-    "with_locale", "with_presentation", "with_prior_receipts", "with_step",
+    "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "PROCESS_STRUCTURE_EVENT", "PROCESS_STRUCTURE_KEY",
+    "PROCESS_STRUCTURE_STEP", "RecipeError", "STEPS",
+    "apply_process_structure", "build_recipe", "has_actor_step", "locale_of", "presentation_of",
+    "process_structure_of", "rebuild", "register_step", "with_locale", "with_presentation",
+    "with_prior_receipts", "with_process_structure", "with_step",
 ]

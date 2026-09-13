@@ -1076,27 +1076,32 @@ def use_cases(
         selector: dict[str, str | int | bool] = {"lob": line.lob, "stream": line.stream}
         if owner:
             selector["business_unit"] = owner
+        # One hard requirement and one read step per source pair, so every
+        # entity the workflow reads (each record kind the line's systems hold)
+        # is demanded of the world under the same line-scoped selector.
         requirements = tuple(
             WorldRequirement(
-                id=f"source-{role.connector}",
+                id=f"source-{role.connector}-{entity}",
                 kind=RequirementKind.CONNECTOR,
                 selector={
                     **selector,
                     "connector": role.connector,
-                    "entity": role.entities[0],
+                    "entity": entity,
                 },
             )
             for role in sources
+            for entity in role.entities
         )
         steps = tuple(
             EvalStepSpec(
-                id=f"read-{role.connector}",
+                id=f"read-{role.connector}-{entity}",
                 capability="search",
                 connector=role.connector,
-                entity=role.entities[0],
+                entity=entity,
                 operation="search",
             )
             for role in sources
+            for entity in role.entities
         )
         design = EvalSpec(
             id=name,
@@ -1134,6 +1139,29 @@ def use_cases(
 # ---------------------------------------------------------------------------
 # A Studio project
 # ---------------------------------------------------------------------------
+
+
+def divisions(structure: CompanySpec) -> tuple[Any, ...]:
+    """The company's business units as the pack units a Studio project builds.
+
+    One unit per declared business unit, named as declared, its kind the
+    unit's archetype and its share an equal cut of the group, so the world's
+    units are the ones the bindings name and a process fact can be about the
+    unit that owns it.
+    """
+    from .packs import PackUnit
+
+    count = len(structure.bus)
+    share = round(1.0 / count, 4)
+    return tuple(
+        PackUnit(
+            key=re.sub(r"[^a-z0-9_]+", "_", unit.name.lower()).strip("_"),
+            name=unit.name,
+            kind=unit.archetype,
+            share=share if index < count - 1 else round(1.0 - share * (count - 1), 4),
+        )
+        for index, unit in enumerate(structure.bus)
+    )
 
 
 def project(
@@ -1191,6 +1219,7 @@ def project(
         company=document,
         seed=seed,
         structure=structure,
+        divisions=divisions(structure),
         lobs=selected,
         use_cases=cases,
         acknowledged_unmet=tuple(resolution.unmet),

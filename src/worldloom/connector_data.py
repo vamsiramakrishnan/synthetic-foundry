@@ -720,6 +720,32 @@ def generate_salesforce(world: World) -> list[ConnectorRecord]:
 Projection = Callable[[Any], list[ConnectorRecord]]
 
 
+def generate_sor(world: World) -> list[ConnectorRecord]:
+    """The system-of-record records of the process company the world was built for.
+
+    Empty for a world whose recipe names no process company, which is every
+    world built outside a catalogue-derived Studio project; see `worldloom.sor`.
+    """
+    from .sor import records_for_world
+
+    return records_for_world(world)
+
+
+def _with_process_evidence(connector: str, base: Projection) -> Projection:
+    """*base* followed by the process company's channel evidence on *connector*.
+
+    Nothing follows for a world built without a process company, so every
+    corpus built before this existed projects byte for byte as it did.
+    """
+
+    def project(world: World) -> list[ConnectorRecord]:
+        from .sor import channel_records_for_world
+
+        return [*base(world), *channel_records_for_world(world, connector)]
+
+    return project
+
+
 def generate_witnesses(world: World, connector: str) -> list[ConnectorRecord]:
     """Records the eval-first constructive layer minted for *connector*.
 
@@ -817,17 +843,18 @@ class ConnectorProjectionRegistry:
 def builtin_projections() -> ConnectorProjectionRegistry:
     return ConnectorProjectionRegistry(
         {
-            "jira": generate_jira,
+            "jira": _with_process_evidence("jira", generate_jira),
             "servicenow": generate_servicenow,
-            "email": generate_email,
-            "confluence": lambda value: generate_artifact_projection(
-                value, "confluence"
+            "email": _with_process_evidence("email", generate_email),
+            "confluence": _with_process_evidence(
+                "confluence", lambda value: generate_artifact_projection(value, "confluence")
             ),
-            "sharepoint": lambda value: generate_artifact_projection(
-                value, "sharepoint"
+            "sharepoint": _with_process_evidence(
+                "sharepoint", lambda value: generate_artifact_projection(value, "sharepoint")
             ),
             "drive": lambda value: generate_artifact_projection(value, "drive"),
             "salesforce": generate_salesforce,
+            "sor": generate_sor,
         }
     )
 

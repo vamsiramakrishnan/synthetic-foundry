@@ -129,6 +129,21 @@ its own for a retailer, a bank or an insurer, and the retail shape for an
 industry no engine builds, with that limitation stated in the project's
 `acknowledged_unmet` and the programme it does have named in the sentence.
 
+A project compiles like any other. Its world's business units are the
+company's declared units (`industry.divisions`), the process company is
+recorded on the snapshot world's recipe (`process_structure`) and declared
+as one event dated where the company's facts begin, and the programme's
+facts join the world's ledger about those units. From the recipe the
+builtin projections derive the company's records on `sor` and its channel
+evidence on the emulated channels from the world alone: one email thread,
+Jira issue, SharePoint file or Confluence page per bound activity, declared
+channel and period, scoped to the line's LOB, stream and owning unit, and
+naming the period's records and the one that tripped the exception. Each
+use case requires one source entity per hard requirement under that scope,
+so construction checks the line's evidence against the world and finds it,
+and the evalrun that follows grades an agent on cases whose sources are
+those records.
+
 A project seats every line of business with a supported process line by
 default, or the families named in `lobs`. A composed company's name pool is
 cut to the people its description mints, and each line adds three or four;

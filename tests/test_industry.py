@@ -607,3 +607,33 @@ def test_the_studio_preset_starts_any_catalogue_industry_from_its_programme() ->
         ]
         == "banking"
     )  # type: ignore[index]
+
+
+def test_a_project_meets_its_own_evidence_requirements_from_the_world(tmp_path: Path) -> None:
+    """Every hard connector requirement a catalogue project declares is satisfied
+    by the records the world projects, so construction has nothing to refuse."""
+    from worldloom.eval_candidates import check_requirement
+    from worldloom.eval_design import RequirementKind
+    from worldloom.process_bindings.ownership import materialize_owners
+    from worldloom.studio.construction import restore_generator
+    from worldloom.studio.service import Studio
+
+    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    assert [unit.key for unit in spec.divisions] == ["consumer_mobile", "enterprise", "network", "group_finance"]
+    assert abs(sum(unit.share for unit in spec.divisions) - 1.0) < 0.01
+    world, _ = Studio(tmp_path).snapshot(spec)
+    # The support units the structure declares are the world's own, so
+    # ownership has nothing to form and the world is returned as it is.
+    assert materialize_owners(restore_generator(world), spec.structure) is not None  # type: ignore[arg-type]
+    assert len(materialize_owners(restore_generator(world), spec.structure).business_units) == len(world.business_units)  # type: ignore[arg-type]
+    checked = 0
+    for use_case in spec.use_cases:
+        assert use_case.construction is not None
+        for requirement in use_case.construction.requirements:
+            if requirement.kind is not RequirementKind.CONNECTOR or not requirement.hard:
+                continue
+            check = check_requirement(requirement, world)
+            assert check.satisfied, (requirement.id, check.detail)
+            assert requirement.selector["lob"] == use_case.lob
+            checked += 1
+    assert checked >= 2 * len(spec.use_cases)
