@@ -462,16 +462,12 @@ def test_a_project_carries_the_largest_lobs_and_their_lines_with_derived_counts(
     spec = industry.project("telecom", "Ardent Telecom")
     derived = industry.programme(spec.structure, engine="retail")  # type: ignore[arg-type]
     assert spec.structure is not None and spec.structure.name == "Ardent Telecom"
-    assert len(spec.lobs) == industry.PROJECT_LOBS
     ranked = sorted(
         derived.summary.by_lob().items(), key=lambda item: (-item[1], item[0])
     )
     supported = {line.lob for line in derived.summary.lines if line.supported}
-    assert [lob.name for lob in spec.lobs] == sorted(
-        f for f, _ in ranked if f in supported
-    )[:0] or {lob.name for lob in spec.lobs} == set(
-        [f for f, _ in ranked if f in supported][: industry.PROJECT_LOBS]
-    )
+    assert {lob.name for lob in spec.lobs} == {f for f, _ in ranked if f in supported}
+    assert len(spec.lobs) > 4, "every family with a supported line is seated, not a capped few"
     assert all(lob.engine == "retail" for lob in spec.lobs), (
         "no engine builds a telecom; the LOBs ride the resolved engine"
     )
@@ -490,6 +486,47 @@ def test_a_project_carries_the_largest_lobs_and_their_lines_with_derived_counts(
         "worldloom industry programme telecom" in want
         for want in spec.acknowledged_unmet
     )
+
+
+def test_a_bank_project_seats_every_line_and_the_pack_pool_is_recut(tmp_path: Path) -> None:
+    """Twenty-five lines add over a hundred people; the composed pack's pools
+    were cut to the bank's own organisation, so the blueprint re-cuts them from
+    the locale as each line attaches and the bank keeps its own role table."""
+    from worldloom.studio.service import Studio
+
+    spec = industry.project("banking", "Harbour Bank")
+    assert len(spec.lobs) > 20
+    world, _ = Studio(tmp_path).snapshot(spec)
+    assert world.validate().ok
+    assert "credit_risk_lead" in world._roles, "the bank's own spine survives the attach"
+    assert "ap_support" in world._roles and "treasury_head" in world._roles
+    assert len(world._roles) > 100
+    names = [person.name for person in world.people]
+    assert len(names) == len(set(names))
+
+
+def test_attaching_a_lob_recuts_a_composed_pool_but_leaves_an_authored_one() -> None:
+    from worldloom import company, lob, sdk
+
+    document = {"industry": "retail", "identity": {"company_name": "Northstar Retail"}, "geo": "australia"}
+    resolution = company.resolve(company.from_document(document))
+    blueprint = sdk.from_resolution(resolution, seed=8128)
+    before = blueprint.pack_source.name_pools.given
+    big = lob.Lob(
+        name="wide", title="Wide", purpose="Many people.", engine=resolution.engine,
+        roles=[industry.ROOT, *[lob.RoleSpec(key=f"w{i}", title=f"W {i}", function="Wide", reports_to="ceo") for i in range(60)]],
+        responsibilities=[],
+    )
+    grown = blueprint.lob(big)
+    after = grown.pack_source.name_pools.given
+    assert len(after) > len(before) and after[: len(before)] == before
+    authored = blueprint.pack_source.model_copy(
+        update={"name_pools": blueprint.pack_source.name_pools.model_copy(update={"given": ["Ada", "Bea", "Cy"]})}
+    )
+    from dataclasses import replace
+
+    kept = replace(blueprint, pack_source=authored).lob(big)
+    assert kept.pack_source.name_pools.given == ["Ada", "Bea", "Cy"]
 
 
 def test_a_project_takes_an_explicit_lob_selection_and_refuses_an_unknown_one() -> None:

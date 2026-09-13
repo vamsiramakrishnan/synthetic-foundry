@@ -435,8 +435,46 @@ class Blueprint:
             )
         lob_rows = tuple(role.as_row() for role in loaded.roles)
         combined = list(self.implied_roles) + list(lob_rows)
-        return replace(self, implied_roles=tuple(combined),
-                       lob_specs=self.lob_specs + (loaded,))
+        attached = replace(self, implied_roles=tuple(combined),
+                           lob_specs=self.lob_specs + (loaded,))
+        return replace(attached, pack_source=attached._pools_for_people())
+
+    def _pools_for_people(self) -> Any:
+        """The pack, its locale name pools re-sized to the people it now mints.
+
+        A composed pack's pools are cut from the locale to the organisation
+        the description mints (`company.pack_of`); a LOB attached afterwards
+        adds people the cut did not count, and `organisation.generate` would
+        refuse the build for a pool too small. So each attach re-cuts the
+        pools from the same locale to the new count, which keeps every draw
+        identical while the count fits the base pool (the base is a verbatim
+        prefix of the extended one and `Locale.name_pool` returns the base
+        whenever the count fits it) and reaches the extended pool past it. A
+        pool an author wrote by hand is not a locale cut and is left alone:
+        `packs.lint` reports it short, which is the authoring error it is.
+        """
+        pack = self.pack_source
+        if pack is None:
+            return None
+        from . import domains, locales
+
+        table = self.role_table() or ()
+        domain = domains.by_name(self.domain_name)
+        suffixes = domain.unit_role_suffixes if domain is not None else ()
+        needed = len(table) + len(pack.units) * len(suffixes)
+        place = locales.named(self.locale_name) if self.locale_name else locales.DEFAULT
+        pools = {}
+        for kind in ("given", "family"):
+            have = tuple(getattr(pack.name_pools, kind))
+            if not have or len(have) >= needed:
+                continue
+            fresh = place.name_pool(kind, needed)
+            if tuple(fresh[: len(have)]) != have:
+                continue  # an authored pool, not a locale cut: leave it to lint
+            pools[kind] = list(fresh)
+        if not pools:
+            return pack
+        return pack.model_copy(update={"name_pools": pack.name_pools.model_copy(update=pools)})
 
     def participation(self, process: Any) -> dict[str, tuple[Any, ...]]:
         """Who is in *process*, per attached LOB — derived, never stored.
@@ -522,9 +560,16 @@ class Blueprint:
                 engine=self.domain_name,
             )))
         else:
-            from .generators import organisation
+            # The engine's own table, so a LOB attached to a bank joins the
+            # bank's organisation rather than displacing it with retail's.
+            from . import roles as roles_module
 
-            rows = list(organisation._ROLES)
+            try:
+                rows = list(roles_module.to_rows(roles_module._shipped(self.domain_name)))
+            except KeyError:
+                from .generators import organisation
+
+                rows = list(organisation._ROLES)
         have = {row[0] for row in rows}
         rows.extend(role for role in self.implied_roles if role[0] not in have)
         return tuple(rows)

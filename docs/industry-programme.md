@@ -107,11 +107,12 @@ its own for a retailer, a bank or an insurer, and the retail shape for an
 industry no engine builds, with that limitation stated in the project's
 `acknowledged_unmet` and the programme it does have named in the sentence.
 
-A project seats the four largest lines of business by default
-(`PROJECT_LOBS`), or the families named in `lobs`. The limit is the world's
-name pool: every LOB adds three people and a composed company's pool holds
-forty, so a project carries its largest LOBs and names the rest in the
-programme rather than failing to build. The interview request carries the
+A project seats every line of business with a supported process line by
+default, or the families named in `lobs`. A composed company's name pool is
+cut to the people its description mints, and each line adds three or four;
+`sdk.Blueprint.lob` re-cuts the pools from the locale to the new count when a
+line attaches, so a project of thirty lines builds where four was the
+ceiling. The interview request carries the
 programme's headline numbers under `programme`, and its instructions tell the
 interviewer to derive a use case's count from its process line rather than
 write a round number.

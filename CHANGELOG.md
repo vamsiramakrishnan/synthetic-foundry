@@ -11,6 +11,20 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A project seats every line of business
+
+- `industry.project` seats every family with a supported process line, not
+  the four largest: a bank is twenty-five lines and over a hundred people.
+  The cap was the composed pack's name pool, cut to the organisation the
+  description mints before any line attached; `sdk.Blueprint.lob` now
+  re-cuts the pools from the locale to the people the lines add (identical
+  draws while the count fits the base pool, the extended pool past it) and
+  leaves a pool an author wrote alone for `packs.lint` to report. A
+  blueprint with attached lines and no shape takes the engine's own role
+  table, so a line attached to a bank joins the bank's organisation instead
+  of displacing it with retail's. Generation: every derived Studio project
+  and interview request carries every line and its people.
+
 ### Job titles from O*NET on every derived line of business
 
 - The function table carries one job title per tier (head, manager,

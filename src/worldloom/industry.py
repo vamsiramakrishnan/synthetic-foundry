@@ -1081,13 +1081,6 @@ def use_cases(
 # ---------------------------------------------------------------------------
 
 
-#: How many derived LOBs a project seats by default. A world's name pool is
-#: the limit: every LOB adds three people, and the composed pack's pool holds
-#: forty, so a project carries the largest lines of business and names the
-#: rest in its programme rather than failing to build. Explicit `lobs` win.
-PROJECT_LOBS = 4
-
-
 def project(
     industry: str,
     name: str,
@@ -1106,9 +1099,10 @@ def project(
     renamed, the LOBs are the derived ones for the selected families (rooted
     at the chief executive so they lint clean, engine set to the resolved
     engine so they ride the world), and the use cases are every supported
-    line of those families with the line's count. `lobs` defaults to the
-    `PROJECT_LOBS` families with the most situations among those with a
-    supported line.
+    line of those families with the line's count. `lobs` defaults to every
+    family with a supported line, largest first; the blueprint re-cuts the
+    composed pack's name pools to the people the LOBs add
+    (`sdk.Blueprint.lob`), so the count of lines is not capped by a pool.
     """
     from . import company as company_module
     from .studio.models import ProjectSpec
@@ -1123,9 +1117,7 @@ def project(
         ranked = sorted(
             derived.summary.by_lob().items(), key=lambda item: (-item[1], item[0])
         )
-        chosen = tuple(family for family, _ in ranked if family in supported)[
-            :PROJECT_LOBS
-        ]
+        chosen = tuple(family for family, _ in ranked if family in supported)
     else:
         unknown = sorted(set(lobs) - set(derived.summary.lobs))
         if unknown:
@@ -1225,7 +1217,6 @@ __all__ = [
     "KIND_PREFIX",
     "PROGRAMME_SCHEMA",
     "INDUSTRY_WORDS",
-    "PROJECT_LOBS",
     "ROOT",
     "SEAT_BY_TYPE",
     "IndustryProgramme",

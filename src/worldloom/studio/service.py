@@ -55,7 +55,7 @@ def preset(engine: str = "retail", name: str = "Northstar Retail") -> ProjectSpe
 
         if engine in resource("defaults.json")["DEFAULT_ORGS"]:
             # Any industry the process catalogue knows starts from its derived
-            # programme: the largest lines of business, every supported process
+            # programme: every line of business with a supported process line, every
             # line of theirs as a use case with the line's own count, and the
             # company's limitations acknowledged rather than hidden.
             return project(engine, name)
