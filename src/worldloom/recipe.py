@@ -511,32 +511,54 @@ PROCESS_STRUCTURE_STEP = "ApplyProcessStructure"
 def apply_process_structure(world: Any, structure: Any) -> Any:
     """*world* with the process company recorded on its recipe, declared as an event and stated in its facts.
 
-    The declaration is one event (`PROCESS_STRUCTURE_EVENT`, the chief
-    executive its actor, every business unit its subject) dated where the
-    company's process facts begin, so a world built without an episode has a
-    timeline for constructions to follow. The company's facts
-    (`industry.facts`, one per binding and attribute) join the ledger
-    subjected to the world's own units and caused by that event
-    (`sor.facts_for_world`), so a record that cites them cites facts the
-    world holds. Recorded as a recipe step (`PROCESS_STRUCTURE_STEP`), so
-    `rebuild` replays it in its place; applied to a world that already
-    carries this company it changes nothing, so a snapshot that extends a
-    timeline does not declare the company twice.
+    The company's systems of record are the products its bindings name
+    (`sor.products_for_world`): one `System` each, minted in product order,
+    owned by the leader of the unit that owns most of its bindings, holding
+    the record kinds the catalogue gives it. The declaration is one event
+    (`PROCESS_STRUCTURE_EVENT`, the chief executive its actor, every business
+    unit and every new system its subject) dated where the company's process
+    facts begin, so a world built without an episode has a timeline for
+    constructions to follow. The company's facts (`industry.facts`, one per
+    binding and attribute) join the ledger subjected to the world's own units
+    and systems and caused by that event (`sor.facts_for_world`), so a record
+    that cites them cites facts the world holds. Recorded as a recipe step
+    (`PROCESS_STRUCTURE_STEP`), so `rebuild` replays it in its place; applied
+    to a world that already carries this company it changes nothing, so a
+    snapshot that extends a timeline does not declare the company twice.
     """
     import json
+    from copy import deepcopy
+    from dataclasses import replace as _replace
 
     from .ids import content_key
-    from .models import EnterpriseEvent
-    from .sor import facts_for_world
+    from .models import EnterpriseEvent, System
+    from .sor import facts_for_world, products_for_world
 
     payload = structure if isinstance(structure, dict) else structure.model_dump(mode="json")
     if world.recipe.get(PROCESS_STRUCTURE_KEY) == payload:
         return world
     recipe = with_step(with_process_structure(world.recipe, structure), PROCESS_STRUCTURE_STEP, structure=payload)
     extended = world.extend(recipe=recipe)
-    facts = facts_for_world(extended)
-    if not facts:
+    products = products_for_world(extended)
+    if not products:
         return extended
+    if extended._minter is None:
+        raise ValueError("a process structure needs generation state; apply it to a built world or through rebuild")
+    minter = deepcopy(extended._minter)
+    ceo = extended._roles.get("ceo")
+    leaders = {unit.name: unit.leader_id for unit in extended.business_units}
+    held = {system.name for system in extended.systems}
+    systems = tuple(
+        System(
+            id=minter.next("SYS"), name=use.product,
+            purpose=f"{use.sor_class} system of record for {', '.join(kind.replace('_', ' ') for kind in use.kinds)}",
+            owner_id=leaders.get(use.owner_bu) or ceo or extended.company.id,
+            is_system_of_record_for=list(use.kinds),
+        )
+        for use in products if use.product not in held
+    )
+    extended = _replace(extended, _minter=minter).extend(systems=systems)
+    facts = facts_for_world(extended)
     event = EnterpriseEvent(
         id=f"EV-PROCESS-{content_key('process-structure', payload['name'])[:12].upper()}",
         kind=PROCESS_STRUCTURE_EVENT,
@@ -544,9 +566,11 @@ def apply_process_structure(world: Any, structure: Any) -> Any:
         summary=json.dumps({"schema": "worldloom.process-structure/v1", "company": payload["name"],
                             "industry": payload["industry"], "operating_model": payload["operating_model"],
                             "countries": list(payload["countries"]),
-                            "units": [unit["name"] for unit in payload["bus"]], "facts": len(facts)},
+                            "units": [unit["name"] for unit in payload["bus"]],
+                            "systems": [system.name for system in systems], "facts": len(facts)},
                            sort_keys=True, separators=(",", ":")),
-        actors=[identifier for identifier in (extended._roles.get("ceo"),) if identifier],
+        actors=[identifier for identifier in (ceo,) if identifier],
+        systems=[system.id for system in systems],
         business_units=[unit.id for unit in extended.business_units],
     )
     declared = tuple(fact.model_copy(update={"event_id": event.id}) for fact in facts)

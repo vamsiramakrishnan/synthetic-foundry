@@ -130,10 +130,14 @@ industry no engine builds, with that limitation stated in the project's
 `acknowledged_unmet` and the programme it does have named in the sentence.
 
 A project compiles like any other. Its world's business units are the
-company's declared units (`industry.divisions`), the process company is
-recorded on the snapshot world's recipe (`process_structure`) and declared
-as one event dated where the company's facts begin, and the programme's
-facts join the world's ledger about those units. From the recipe the
+company's declared units (`industry.divisions`) and its systems of record
+are the products the bindings name (`sor.products_for_world`: SAP S/4HANA
+holding the journal entries and open items, Amdocs the bills, ServiceNow
+the incidents), each owned by the leader of the unit that owns most of its
+bindings. The process company is recorded on the snapshot world's recipe
+(`process_structure`) and declared as one event dated where the company's
+facts begin, and the programme's facts join the world's ledger about those
+units, sourced on those systems. From the recipe the
 builtin projections derive the company's records on `sor` and its channel
 evidence on the emulated channels from the world alone: one email thread,
 Jira issue, SharePoint file or Confluence page per bound activity, declared

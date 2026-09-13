@@ -226,7 +226,17 @@ def test_a_world_built_for_a_process_company_projects_its_records_and_evidence(t
     process_facts = [fact for fact in world.facts if fact.id.startswith("PFACT-")]
     assert [fact.model_copy(update={"event_id": None}) for fact in process_facts] == list(sor.facts_for_world(world))
     assert {fact.subject for fact in process_facts} <= set(world.business_units.ids())
-    assert all(fact.event_id == declared[0].id and fact.source_system is None for fact in process_facts)
+    assert all(fact.event_id == declared[0].id for fact in process_facts)
+    # The company's systems are the products its bindings name, and every
+    # fact about a binding is sourced on the binding's product.
+    products = sor.products_for_world(world)
+    names = {system.name: system for system in world.systems}
+    assert products and all(use.product in names for use in products)
+    sap = next(use for use in products if use.product == "SAP S/4HANA")
+    assert names["SAP S/4HANA"].is_system_of_record_for == list(sap.kinds) and "journal_entry" in sap.kinds
+    assert names["SAP S/4HANA"].owner_id in {unit.leader_id for unit in world.business_units}
+    assert {fact.source_system for fact in process_facts} <= set(world.systems.ids())
+    assert set(declared[0].systems) == {names[use.product].id for use in products}
     assert world.validate().ok
     registry = builtin_projections()
     served = registry.project("sor", world)
@@ -240,6 +250,7 @@ def test_a_world_built_for_a_process_company_projects_its_records_and_evidence(t
     assert replayed.recipe[PROCESS_STRUCTURE_KEY] == world.recipe[PROCESS_STRUCTURE_KEY]
     assert sor.records_for_world(replayed) == served
     assert list(replayed.facts) == list(world.facts) and list(replayed.events) == list(world.events)
+    assert list(replayed.systems) == list(world.systems)
     # Every record cites facts the world holds, which is what qualification checks.
     held = set(world.facts.ids())
     assert all(set(record.fact_ids) <= held for record in served)

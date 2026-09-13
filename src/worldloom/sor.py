@@ -37,7 +37,7 @@ from .connector_data import (
     builtin_projections,
 )
 from .ids import content_key
-from .models import CanonicalFact
+from .models import CanonicalFact, Model
 from .process_bindings import CompiledCatalogue, load_catalogue
 from .process_bindings.models import ActivityBinding
 
@@ -260,26 +260,73 @@ def _compiled_company(payload: str, period: str) -> _Company:
     return _Company(compiled, periods_ending(period, DEFAULT_PERIODS), industry.facts(compiled))
 
 
+class ProductUse(Model):
+    """One product the company's bindings name, and what it holds for them."""
+
+    product: str
+    sor_class: str
+    kinds: tuple[str, ...]
+    """The record kinds the product holds, as `sor` entity names, sorted."""
+    owner_bu: str
+    """The unit owning most of the product's bindings; ties go to the first by name."""
+    bindings: int
+
+
+def products_for_world(world: Any) -> tuple[ProductUse, ...]:
+    """The products the process company's bindings name, in product order.
+
+    Each is the system of record the catalogue declares for some of the
+    company's work: the class it belongs to, the record kinds it holds and
+    the unit that owns most of the bindings on it. Empty for a world built
+    without a process company.
+    """
+    company = _company_of(world)
+    if company is None:
+        return ()
+    uses: dict[str, dict[str, Any]] = {}
+    for row in company.compiled.rows:
+        if not row.sor_product:
+            continue
+        use = uses.setdefault(row.sor_product, {"classes": set(), "kinds": set(), "owners": {}})
+        use["classes"].add(row.sor_class)
+        use["kinds"].update(entity_name(kind) for kind in row.sor_objects)
+        use["owners"][row.owner_bu] = use["owners"].get(row.owner_bu, 0) + 1
+    out = []
+    for product in sorted(uses):
+        use = uses[product]
+        owner = sorted(use["owners"].items(), key=lambda item: (-item[1], item[0]))[0][0]
+        out.append(ProductUse(
+            product=product, sor_class="/".join(sorted(use["classes"])), kinds=tuple(sorted(use["kinds"])),
+            owner_bu=owner, bindings=sum(use["owners"].values()),
+        ))
+    return tuple(out)
+
+
 def facts_for_world(world: Any) -> tuple[CanonicalFact, ...]:
-    """The process company's facts, subjected to the world's own business units.
+    """The process company's facts, subjected to the world's own business units and systems.
 
     A programme's facts are about bindings (`industry.facts`); a world's
     ledger is about the world's entities, so each fact is restated with the
     owning unit as its subject, found by name among the world's business
-    units (the company itself where no unit carries the name) and no source
-    system, since the product is the fact's own value. Ids, kinds and values
+    units (the company itself where no unit carries the name), and the
+    binding's product as its source system where the world holds a system of
+    that name (`products_for_world`; none otherwise). Ids, kinds and values
     are unchanged, so a record derived for the world cites the same ids.
     """
     company = _company_of(world)
     if company is None:
         return ()
     units = {unit.name: unit.id for unit in getattr(world, "business_units", ())}
+    systems = {system.name: system.id for system in getattr(world, "systems", ())}
     fallback = world.company.id
-    owners = {row.id: row.owner_bu for row in company.compiled.rows}
-    return tuple(
-        fact.model_copy(update={"subject": units.get(owners.get(fact.subject, ""), fallback), "source_system": None})
-        for fact in company.facts
-    )
+    rows = {row.id: row for row in company.compiled.rows}
+    out = []
+    for fact in company.facts:
+        row = rows.get(fact.subject)
+        subject = units.get(row.owner_bu, fallback) if row is not None else fallback
+        source = systems.get(row.sor_product) if row is not None and row.sor_product else None
+        out.append(fact.model_copy(update={"subject": subject, "source_system": source}))
+    return tuple(out)
 
 
 def records_for_world(world: Any) -> list[ConnectorRecord]:
@@ -497,6 +544,7 @@ def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -
 
 __all__ = [
     "ANCHOR_PERIOD", "CHANNEL_DAY", "CONNECTOR", "DEFAULT_PERIODS", "EXCEPTION_EVERY", "MONEY_KINDS",
-    "RECORDS_PER_PERIOD", "answer", "by_binding", "channel_records", "channel_records_for_world", "entity_name",
-    "facts_for_world", "periods_ending", "projections", "records", "records_for_world",
+    "ProductUse", "RECORDS_PER_PERIOD", "answer", "by_binding", "channel_records", "channel_records_for_world",
+    "entity_name",
+    "facts_for_world", "periods_ending", "products_for_world", "projections", "records", "records_for_world",
 ]

@@ -21,12 +21,17 @@ first written up, before the waves above it landed.
   The process company rides the snapshot world's recipe under
   `process_structure` (`recipe.apply_process_structure`, recorded as the
   recipe step `ApplyProcessStructure` so a rebuild replays it in its
-  place), declared as one event
-  (`organisation.process_structure`, the chief executive its actor, dated
-  where the company's facts begin) and stated in the ledger: the
-  programme's facts join the world subjected to its units and caused by
-  that event (`sor.facts_for_world`), so a record that cites them cites
-  facts the world holds. From the recipe the builtin projections derive the
+  place). The company's systems of record are the products its bindings
+  name (`sor.products_for_world`): one system each, owned by the leader of
+  the unit that owns most of its bindings, holding the record kinds the
+  catalogue gives it (a telecom gains nineteen, SAP S/4HANA and Amdocs
+  among them). The company is declared as one event
+  (`organisation.process_structure`, the chief executive its actor, the
+  units and the new systems its subjects, dated where the company's facts
+  begin) and stated in the ledger: the programme's facts join the world
+  subjected to its units, sourced on its systems and caused by that event
+  (`sor.facts_for_world`), so a record that cites them cites facts the
+  world holds. From the recipe the builtin projections derive the
   company's records on `sor` (`connector_data.generate_sor`) and its channel
   evidence on the emulated channels (`sor.channel_records`: one email
   thread, Jira issue, SharePoint file or Confluence page per bound activity,
