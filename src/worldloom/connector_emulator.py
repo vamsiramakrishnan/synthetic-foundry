@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -900,8 +901,10 @@ class ConnectorEmulator:
         pattern = self.definition.id.pattern
         if "{project}" in pattern:
             return pattern.replace("{project}", str(values.get("project") or "WL")).replace("{n}", str(n))
-        if "{7d}" in pattern:
-            return pattern.replace("{7d}", f"{n:07d}")
+        digits = re.search(r"\{(\d+)d\}", pattern)
+        if digits:
+            width = int(digits.group(1))
+            return pattern.replace(digits.group(0), f"{n:0{width}d}")
         if pattern == "18char":
             return hashlib.sha1(f"{self.server}:{entity}:{n}".encode()).hexdigest()[:15].upper() + "AAA"
         if pattern == "numeric":

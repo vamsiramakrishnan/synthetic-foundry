@@ -89,7 +89,7 @@ PROGRAMME_SCHEMA: Literal["worldloom.industry-programme/v1"] = (
 #: Where the emulator table lives. Versioned in the name, like every file under
 #: `_data/`: which connector stands in for a system decides which records a
 #: use case reads, so a change is a new version.
-EMULATED_SYSTEMS = "emulated-systems@1.json"
+EMULATED_SYSTEMS = "emulated-systems@2.json"
 
 #: Facts derived from the catalogue are valid from a declared moment, not from
 #: a clock. The programme is a structure, and a structure does not know when it

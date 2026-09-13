@@ -225,6 +225,18 @@ READ = (Operation.SEARCH, Operation.LIST, Operation.READ)
 MUTATE = (Operation.CREATE, Operation.UPDATE, Operation.PATCH, Operation.UPSERT)
 FILES = ("docx", "xlsx", "pptx", "pdf", "csv", "html", "markdown")
 
+def _sor_connector() -> ConnectorSpec:
+    """The system-of-record connector, its entities read from its definition."""
+    from .connector_definition import load_connector_definition
+
+    definition = load_connector_definition("sor")
+    return ConnectorSpec(
+        name="sor", display_name="System of record",
+        entities=tuple(_entity(name, "ident", READ + MUTATE + (Operation.COMMENT,)) for name in definition.entities),
+        content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE, ContentAction.RECONCILE),
+    )
+
+
 BUILTIN_CONNECTORS = (
     ConnectorSpec(name="jira", display_name="Jira", entities=(_entity("issue", "key", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH, Operation.LINK)),), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
     ConnectorSpec(name="confluence", display_name="Confluence", entities=(_entity("page", "page_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH), "html", "markdown", "pdf"),), content_actions=tuple(ContentAction)),
@@ -233,6 +245,7 @@ BUILTIN_CONNECTORS = (
     ConnectorSpec(name="servicenow", display_name="ServiceNow", entities=(_entity("incident", "sys_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH)), _entity("change_request", "sys_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
     ConnectorSpec(name="salesforce", display_name="Salesforce", entities=(_entity("account", "id", READ + MUTATE), _entity("contact", "id", READ + MUTATE), _entity("opportunity", "id", READ + MUTATE), _entity("case", "id", READ + MUTATE)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
     ConnectorSpec(name="email", display_name="Email", entities=(_entity("message", "message_id", READ + (Operation.DRAFT, Operation.SEND, Operation.REPLY, Operation.FORWARD, Operation.ATTACH)), _entity("thread", "thread_id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    _sor_connector(),
 )
 
 

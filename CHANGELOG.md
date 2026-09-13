@@ -11,6 +11,32 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Every system the catalogue names has records
+
+- `_data/connectors/sor.json`, one system-of-record connector standing in
+  for every product the catalogue names and no emulator of its own covers
+  (61 of 67 products: SAP S/4HANA, Workday, Temenos T24, Guidewire, Epic,
+  Amdocs and the rest). Its 73 entities are the catalogue's record kinds,
+  each with a workflow (a purchase order is created, approved, sent,
+  received, invoiced, closed), searchable on the fields a binding gives a
+  record, created under an idempotency key on the activity, period and
+  owner. `tools/build_sor_connector.py` builds it and
+  `emulated-systems@2.json` from the catalogue; only the workflow table is
+  authored, and the tests check the shipped files against a rebuild.
+- `worldloom.sor` derives the records: one per bound activity, record kind
+  and period, id in the product's own pattern (SAP's `45{8d}`), status from
+  the kind's workflow, an amount in the country's currency where the kind
+  carries money, the binding's exception on one record in four, every
+  record linked to the programme's facts about its binding. No draw and no
+  clock: the record is a function of the binding, the kind and the period.
+- The programme reports every line of every industry as supported; what
+  stays unemulated is the three channels with no emulator (chat, workflow
+  approval, portal filing). A Studio dataset built from a catalogue project
+  serves the records through `FrozenCompanyBuilder(projections=...)`, so a
+  request about a March invoice in SAP has March invoices in SAP to be asked
+  over. Generation: datasets of catalogue projects gain `sor` records; the
+  emulator mints ids for any `{Nd}` pattern.
+
 ### A project seats every line of business
 
 - `industry.project` seats every family with a supported process line, not

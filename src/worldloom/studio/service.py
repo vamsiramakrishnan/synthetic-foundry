@@ -638,8 +638,19 @@ class Studio:
         if generation_contracts:
             plan = plan.model_copy(update={"generation_contracts": generation_contracts})
         destination = self.path("datasets", digest([job["project"], job["revision"]]))
+        projections = None
+        if spec.structure is not None:
+            # The project's processes name systems no engine builds (SAP,
+            # Workday, a core banking system); their records are derived from
+            # the compiled bindings and served through the `sor` connector.
+            from .. import industry, sor
+            from ..process_bindings import compile_company
+
+            compiled = compile_company(spec.structure)
+            projections = sor.projections(compiled, world, facts=industry.facts(compiled))
         run = compile_dataset(plan, destination, builder=FrozenCompanyBuilder(world, seed=spec.seed,
-                              query_transforms=query_transforms, bind_cases=spec.retail_process is not None),
+                              query_transforms=query_transforms, bind_cases=spec.retail_process is not None,
+                              projections=projections),
                               batch_limit=options.batch_limit)
         return {"dataset": destination.name, "snapshot": location.name, "report": run.report.model_dump(mode="json")}
 

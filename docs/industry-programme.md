@@ -73,19 +73,21 @@ the builtin registry as it stands.
 
 ## What is emulated, and what is said out loud
 
-`_data/process-catalogue/emulated-systems@1.json` says which systems of record
-the connector emulators stand in for (ServiceNow incidents and changes,
-Salesforce accounts, opportunities and cases, SharePoint documents and lists,
-Confluence pages, Exchange Online mail) and which evidence channels have an
-emulator (email, ticket, document, report, minutes). A product the table does
-not list, an SAP ledger or a Workday position, is reported on the line and on
-the programme as unemulated; its bindings draw evidence only from the channels
-the catalogue says the work lands in. A line whose only channel is the system
-record itself has no emulated source at all and is listed under
-`unsupported_lines` with its count intact. Nothing is quietly replaced by a
-connector that happens to exist, and the file is versioned in its name because
-changing which connector stands in for a system changes every programme
-derived from it.
+`_data/process-catalogue/emulated-systems@2.json` says which connector stands
+in for each system of record and which evidence channels have an emulator
+(email, ticket, document, report, minutes). Six products have an emulator of
+their own (ServiceNow, Jira Service Management, Salesforce, SharePoint,
+Confluence, Exchange Online). Every other product the catalogue names, an SAP
+ledger, a Workday position, a core banking loan, is stood in for by the `sor`
+connector: one system-of-record connector whose entities are the catalogue's
+record kinds and whose records are derived from the company's bindings
+(`worldloom.sor`, one record per binding, record kind and period, ids in the
+product's own pattern, a status from the kind's workflow, the binding's
+exception on the records that tripped it). The table and the connector are
+built from the catalogue by `tools/build_sor_connector.py`. A channel with
+no emulator (chat, a workflow approval, a portal filing) is still reported as
+unemulated, and the file is versioned in its name because changing which
+connector stands in for a system changes every programme derived from it.
 
 `IndustryProgramme.engine` names the registered domain that builds the
 company's world (`retail`, `banking`, `insurance`) and is empty for the nine
@@ -134,17 +136,17 @@ Counts for each catalogue's default company, as `worldloom industry list`
 prints them. Each is thirty LOBs; the lines are LOB × stream cells with at
 least one bound activity; situations are the requests derived.
 
-| Industry | Engine | Lines | Situations | Writes | Lines with no emulated source |
-| --- | --- | --- | --- | --- | --- |
-| banking | banking | 64 | 21,321 | 10,242 | 12 |
+| Industry | Engine | Lines | Situations | Writes |
+| --- | --- | --- | --- | --- |
+| banking | banking | 64 | 21,321 | 10,242 |
 | consumer_products | | 52 | 19,768 | 9,516 | 9 |
 | healthcare | | 58 | 4,931 | 2,362 | 12 |
-| insurance | insurance | 63 | 15,294 | 7,356 | 14 |
+| insurance | insurance | 63 | 15,294 | 7,356 |
 | life_sciences | | 52 | 14,826 | 7,137 | 9 |
 | logistics | | 58 | 39,560 | 19,100 | 12 |
 | manufacturing | | 55 | 20,388 | 9,801 | 11 |
 | public_sector | | 60 | 4,074 | 1,934 | 10 |
-| retail | retail | 61 | 9,896 | 4,762 | 12 |
+| retail | retail | 61 | 9,896 | 4,762 |
 | technology_saas | | 58 | 28,944 | 13,804 | 10 |
 | telecom | | 62 | 5,550 | 2,677 | 10 |
 | utilities | | 58 | 4,794 | 2,325 | 9 |

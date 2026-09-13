@@ -1,0 +1,541 @@
+{
+  "schema": "worldloom.emulated-systems/v1",
+  "about": "Which systems of record the connector emulators can stand in for, and which record kinds each emulated connector holds. `worldloom.industry` reads this to turn a compiled catalogue's `sor_product` into connector source roles: a product listed here becomes a source on the named connector, with its catalogue objects mapped to the connector's entities; a product absent from `products` is reported by the programme as unemulated and its bindings draw evidence only from the channels the catalogue says the work lands in. A channel mapped to null has no emulator (a chat message, a workflow approval, a portal filing) and is reported the same way. The mapping is versioned in the file name: a change to which connector stands in for a system changes every programme derived from it, so it is a new version, never an edit. Version 2: every product with no emulator of its own is stood in for by the `sor` connector (tools/build_sor_connector.py), its objects mapped to that connector's entities.",
+  "products": {
+    "ADP": {
+      "connector": "sor",
+      "objects": {
+        "PayRun": "pay_run"
+      }
+    },
+    "Amdocs": {
+      "connector": "sor",
+      "objects": {
+        "Bill": "bill",
+        "Order": "order"
+      }
+    },
+    "Anaplan": {
+      "connector": "sor",
+      "objects": {
+        "Model": "model"
+      }
+    },
+    "BMC Helix": {
+      "connector": "sor",
+      "objects": {
+        "Change": "change",
+        "Incident": "incident"
+      }
+    },
+    "Blue Yonder WMS": {
+      "connector": "sor",
+      "objects": {
+        "Task": "task"
+      }
+    },
+    "Box": {
+      "connector": "sor",
+      "objects": {
+        "File": "file"
+      }
+    },
+    "CargoWise": {
+      "connector": "sor",
+      "objects": {
+        "Shipment": "shipment"
+      }
+    },
+    "Cerner": {
+      "connector": "sor",
+      "objects": {
+        "Encounter": "encounter"
+      }
+    },
+    "Confluence": {
+      "connector": "confluence",
+      "objects": {
+        "Page": "page"
+      }
+    },
+    "Conga": {
+      "connector": "sor",
+      "objects": {
+        "Quote": "quote"
+      }
+    },
+    "Coupa": {
+      "connector": "sor",
+      "objects": {
+        "Invoice": "invoice",
+        "PurchaseOrder": "purchase_order",
+        "Requisition": "requisition"
+      }
+    },
+    "Duck Creek": {
+      "connector": "sor",
+      "objects": {
+        "Policy": "policy"
+      }
+    },
+    "Dynamics 365": {
+      "connector": "sor",
+      "objects": {
+        "Invoice": "invoice",
+        "SalesOrder": "sales_order"
+      }
+    },
+    "Dynamics 365 Sales": {
+      "connector": "sor",
+      "objects": {
+        "Lead": "lead",
+        "Opportunity": "opportunity",
+        "Quote": "quote"
+      }
+    },
+    "Epic": {
+      "connector": "sor",
+      "objects": {
+        "Encounter": "encounter",
+        "Order": "order"
+      }
+    },
+    "Exchange Online": {
+      "connector": "email",
+      "objects": {
+        "Message": "thread"
+      }
+    },
+    "Finacle": {
+      "connector": "sor",
+      "objects": {
+        "Account": "account",
+        "Loan": "loan"
+      }
+    },
+    "GE ADMS": {
+      "connector": "sor",
+      "objects": {
+        "Outage": "outage"
+      }
+    },
+    "Gmail": {
+      "connector": "sor",
+      "objects": {
+        "Message": "message"
+      }
+    },
+    "Google Drive": {
+      "connector": "sor",
+      "objects": {
+        "File": "file"
+      }
+    },
+    "Guidewire ClaimCenter": {
+      "connector": "sor",
+      "objects": {
+        "Claim": "claim",
+        "Exposure": "exposure"
+      }
+    },
+    "Guidewire PolicyCenter": {
+      "connector": "sor",
+      "objects": {
+        "Policy": "policy",
+        "Submission": "submission"
+      }
+    },
+    "HubSpot": {
+      "connector": "sor",
+      "objects": {
+        "Deal": "deal",
+        "Ticket": "ticket"
+      }
+    },
+    "India IRP": {
+      "connector": "sor",
+      "objects": {
+        "Invoice": "invoice"
+      }
+    },
+    "Jira Service Management": {
+      "connector": "jira",
+      "objects": {
+        "Incident": "issue",
+        "Change": "issue",
+        "Request": "issue"
+      }
+    },
+    "Korea e-Tax": {
+      "connector": "sor",
+      "objects": {
+        "Invoice": "invoice"
+      }
+    },
+    "Kyriba": {
+      "connector": "sor",
+      "objects": {
+        "BankStatement": "bank_statement"
+      }
+    },
+    "Looker": {
+      "connector": "sor",
+      "objects": {
+        "Look": "look"
+      }
+    },
+    "Malaysia MyInvois": {
+      "connector": "sor",
+      "objects": {
+        "Invoice": "invoice"
+      }
+    },
+    "Manhattan Active WM": {
+      "connector": "sor",
+      "objects": {
+        "Pick": "pick",
+        "Wave": "wave"
+      }
+    },
+    "Microsoft Teams": {
+      "connector": "sor",
+      "objects": {
+        "Message": "message"
+      }
+    },
+    "NetSuite": {
+      "connector": "sor",
+      "objects": {
+        "CustomerPayment": "customer_payment",
+        "Delivery": "delivery",
+        "Invoice": "invoice",
+        "JournalEntry": "journal_entry",
+        "SalesOrder": "sales_order",
+        "VendorBill": "vendor_bill"
+      }
+    },
+    "Netcracker": {
+      "connector": "sor",
+      "objects": {
+        "Order": "order"
+      }
+    },
+    "Notion": {
+      "connector": "sor",
+      "objects": {
+        "Page": "page"
+      }
+    },
+    "OneStream": {
+      "connector": "sor",
+      "objects": {
+        "Consolidation": "consolidation",
+        "Cube": "cube"
+      }
+    },
+    "Oracle FCCS": {
+      "connector": "sor",
+      "objects": {
+        "Consolidation": "consolidation"
+      }
+    },
+    "Oracle FLEXCUBE": {
+      "connector": "sor",
+      "objects": {
+        "Account": "account"
+      }
+    },
+    "Oracle Fusion Cloud": {
+      "connector": "sor",
+      "objects": {
+        "ARInvoice": "ar_invoice",
+        "Invoice": "invoice",
+        "JournalEntry": "journal_entry",
+        "Receipt": "receipt",
+        "SalesOrder": "sales_order",
+        "Shipment": "shipment"
+      }
+    },
+    "Oracle HCM": {
+      "connector": "sor",
+      "objects": {
+        "Worker": "worker"
+      }
+    },
+    "Oracle OTM": {
+      "connector": "sor",
+      "objects": {
+        "Shipment": "shipment"
+      }
+    },
+    "Oracle Procurement Cloud": {
+      "connector": "sor",
+      "objects": {
+        "PurchaseOrder": "purchase_order",
+        "Receipt": "receipt"
+      }
+    },
+    "PEPPOL access point": {
+      "connector": "sor",
+      "objects": {
+        "Invoice": "invoice"
+      }
+    },
+    "PTC Windchill": {
+      "connector": "sor",
+      "objects": {
+        "ChangeNotice": "change_notice",
+        "Part": "part"
+      }
+    },
+    "Power BI": {
+      "connector": "sor",
+      "objects": {
+        "Report": "report"
+      }
+    },
+    "Rockwell FactoryTalk": {
+      "connector": "sor",
+      "objects": {
+        "Batch": "batch"
+      }
+    },
+    "SAP Analytics Cloud": {
+      "connector": "sor",
+      "objects": {
+        "Plan": "plan"
+      }
+    },
+    "SAP Ariba": {
+      "connector": "sor",
+      "objects": {
+        "Invoice": "invoice",
+        "PurchaseOrder": "purchase_order",
+        "Requisition": "requisition"
+      }
+    },
+    "SAP EWM": {
+      "connector": "sor",
+      "objects": {
+        "WarehouseOrder": "warehouse_order"
+      }
+    },
+    "SAP Group Reporting": {
+      "connector": "sor",
+      "objects": {
+        "Consolidation": "consolidation"
+      }
+    },
+    "SAP Payroll": {
+      "connector": "sor",
+      "objects": {
+        "PayRun": "pay_run"
+      }
+    },
+    "SAP S/4HANA": {
+      "connector": "sor",
+      "objects": {
+        "APOpenItem": "ap_open_item",
+        "AROpenItem": "ar_open_item",
+        "BillingDoc": "billing_doc",
+        "CreditBlock": "credit_block",
+        "Delivery": "delivery",
+        "Dunning": "dunning",
+        "GoodsReceipt": "goods_receipt",
+        "IncomingPayment": "incoming_payment",
+        "InvoiceReceipt": "invoice_receipt",
+        "JournalEntry": "journal_entry",
+        "PaymentRun": "payment_run",
+        "PurchaseOrder": "purchase_order",
+        "PurchaseRequisition": "purchase_requisition",
+        "SalesOrder": "sales_order"
+      }
+    },
+    "SAP SuccessFactors": {
+      "connector": "sor",
+      "objects": {
+        "Employee": "employee",
+        "Requisition": "requisition"
+      }
+    },
+    "SAP TM": {
+      "connector": "sor",
+      "objects": {
+        "FreightOrder": "freight_order"
+      }
+    },
+    "SAP TRM": {
+      "connector": "sor",
+      "objects": {
+        "CashPosition": "cash_position"
+      }
+    },
+    "Salesforce": {
+      "connector": "salesforce",
+      "objects": {
+        "Account": "account",
+        "Opportunity": "opportunity",
+        "Case": "case",
+        "Lead": "contact"
+      }
+    },
+    "Salesforce CPQ": {
+      "connector": "sor",
+      "objects": {
+        "Quote": "quote"
+      }
+    },
+    "Schneider ADMS": {
+      "connector": "sor",
+      "objects": {
+        "Outage": "outage"
+      }
+    },
+    "ServiceNow": {
+      "connector": "servicenow",
+      "objects": {
+        "Incident": "incident",
+        "Change": "change_request"
+      }
+    },
+    "SharePoint": {
+      "connector": "sharepoint",
+      "objects": {
+        "Document": "file",
+        "List": "list_item"
+      }
+    },
+    "Siemens Opcenter": {
+      "connector": "sor",
+      "objects": {
+        "WorkOrder": "work_order"
+      }
+    },
+    "Siemens Teamcenter": {
+      "connector": "sor",
+      "objects": {
+        "Item": "item"
+      }
+    },
+    "Slack": {
+      "connector": "sor",
+      "objects": {
+        "Message": "message"
+      }
+    },
+    "Tableau": {
+      "connector": "sor",
+      "objects": {
+        "Workbook": "workbook"
+      }
+    },
+    "Temenos T24": {
+      "connector": "sor",
+      "objects": {
+        "Account": "account",
+        "Loan": "loan"
+      }
+    },
+    "Workday": {
+      "connector": "sor",
+      "objects": {
+        "JobRequisition": "job_requisition",
+        "Position": "position",
+        "Worker": "worker"
+      }
+    },
+    "Workday Payroll": {
+      "connector": "sor",
+      "objects": {
+        "PayRun": "pay_run"
+      }
+    },
+    "Zycus": {
+      "connector": "sor",
+      "objects": {}
+    }
+  },
+  "channels": {
+    "email": {
+      "connector": "email",
+      "entity": "thread"
+    },
+    "ticket": {
+      "connector": "jira",
+      "entity": "issue"
+    },
+    "document": {
+      "connector": "sharepoint",
+      "entity": "file"
+    },
+    "report": {
+      "connector": "sharepoint",
+      "entity": "file"
+    },
+    "minutes": {
+      "connector": "confluence",
+      "entity": "page"
+    },
+    "chat": null,
+    "system_record": null,
+    "workflow_approval": null,
+    "portal_filing": null
+  },
+  "destinations": {
+    "email": {
+      "connector": "email",
+      "entity": "message",
+      "operations": [
+        "draft"
+      ],
+      "formats": [
+        "html"
+      ]
+    },
+    "document": {
+      "connector": "sharepoint",
+      "entity": "file",
+      "operations": [
+        "create",
+        "update"
+      ],
+      "formats": [
+        "docx",
+        "pdf"
+      ]
+    },
+    "report": {
+      "connector": "sharepoint",
+      "entity": "file",
+      "operations": [
+        "create",
+        "update"
+      ],
+      "formats": [
+        "xlsx",
+        "pdf"
+      ]
+    },
+    "minutes": {
+      "connector": "confluence",
+      "entity": "page",
+      "operations": [
+        "create",
+        "update"
+      ],
+      "formats": [
+        "html",
+        "markdown"
+      ]
+    },
+    "ticket": {
+      "connector": "jira",
+      "entity": "issue",
+      "operations": [
+        "create",
+        "update"
+      ],
+      "formats": []
+    }
+  }
+}

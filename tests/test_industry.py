@@ -231,10 +231,11 @@ def test_an_unemulated_system_is_named_never_replaced(
             assert entity in {
                 e.name for e in builtin_registry().connectors[connector].entities
             }
-    assert "SAP S/4HANA" in telecom.summary.unemulated
+    assert "SAP S/4HANA" in emulated and table["products"]["SAP S/4HANA"]["connector"] == "sor"
+    assert not any(name.startswith("SAP") for name in telecom.summary.unemulated)
     assert "channel:system_record" in telecom.summary.unemulated
     unsupported = {line.key for line in telecom.summary.lines if not line.sources}
-    assert set(telecom.summary.unsupported_lines) == unsupported
+    assert set(telecom.summary.unsupported_lines) == unsupported == set()
 
 
 def test_the_emulator_table_names_only_connectors_and_entities_that_exist() -> None:
