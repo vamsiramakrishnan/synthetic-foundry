@@ -85,7 +85,20 @@ table.for_process("10756").key         # "ap": Process accounts payable (AP)
 table.function("ap").tier("support")   # the seats, with O*NET titles
 table.function("ap").sor_classes       # ("ERP-FI", "P2P-suite", "e-invoicing")
 table.for_occupation("13-2011.00")     # every function that seats accountants
+table.function("ap").titles            # head, manager, professional, support titles
 ```
+
+Each function also carries one job title per tier, chosen from the titles
+O*NET holds for the function's seats. The rule is in the file: per tier, the
+shortest title of the seats' occupations that carries the tier's word
+(director, manager, clerk and so on) and one of the function's keywords
+(`Accounts Payable`, `Payroll`), reported titles before alternate ones. A
+tier with no such title gets a title built from the function's name and
+`source: derived` says so; a function with no support title seats no
+support role. Accounts payable: Head of Accounts Payable (derived), Accounts
+Payable Supervisor, Accounts Payable Analyst (derived), Accounts Payable
+Clerk. Treasury's head is the Treasurer and controllership's the Controller,
+both reported titles.
 
 `tools/build_functions.py` holds the three authored tables: process group
 to function (with per-process overrides), function to occupation codes, and

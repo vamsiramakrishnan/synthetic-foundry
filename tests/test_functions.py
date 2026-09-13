@@ -53,6 +53,31 @@ def test_every_seat_is_a_real_occupation_with_its_own_title() -> None:
     assert {f.key for f in table.for_occupation("13-2011.00")} >= {"ap", "billing", "controllership", "tax", "audit"}
 
 
+def test_every_function_carries_titles_and_says_where_each_came_from() -> None:
+    table = functions.load()
+    db = onet.load(table.sources["onet"])
+    for function in table.functions:
+        assert function.keywords
+        assert {"head", "manager", "professional"} <= set(function.titles)
+        for tier, title in function.titles.items():
+            assert title.tier == tier and title.title
+            if title.source == "derived":
+                assert title.code is None
+            else:
+                assert title.source in {"reported", "alternate"}
+                occupation = db.occupation(title.code or "")
+                assert title.title in occupation.titles
+                assert any(word.lower() in title.title.lower() for word in function.keywords)
+    ap = table.function("ap")
+    assert ap.titles["support"].title == "Accounts Payable Clerk" and ap.titles["support"].source == "reported"
+    assert ap.titles["head"].source == "derived" and ap.titles["head"].title == "Head of Accounts Payable"
+    assert table.function("treasury").titles["head"].title == "Treasurer"
+    assert table.function("controllership").title_for("head").title == "Controller"  # type: ignore[union-attr]
+    assert table.function("audit").title_for("support") is None
+    with pytest.raises(KeyError, match="no tier"):
+        table.function("ap").title_for("wizard")
+
+
 def test_systems_of_record_are_catalogue_classes() -> None:
     table = functions.load()
     classes = set(catalogue()["sor_classes"])

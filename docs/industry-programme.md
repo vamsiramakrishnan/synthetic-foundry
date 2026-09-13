@@ -30,9 +30,14 @@ catalogue declares thirty function families (accounts payable, billing, IT
 operations, ...) and three operating models saying which family a business
 unit, a shared service or a group function owns. `industry.derive_lobs` makes
 one `lob.Lob` per family that owns at least one bound activity in the compiled
-company: a head, a manager and an analyst (`billing_head`, `billing_manager`,
-`billing_analyst`), with the head and the manager answerable for the value
-streams the family's activities sit in. Standing is expressed as fact-kind
+company: a head, a manager, an analyst and, where the function seats one, a
+support role (`billing_head`, `billing_manager`, `billing_analyst`,
+`billing_support`), with the head and the manager answerable for the value
+streams the family's activities sit in. The titles come from the function
+table (see [Reference data](reference-data.md)): a billing line is a Head of
+Billing, a Billing Supervisor, a Billing Administrator and a Billing Clerk,
+the last three titles O*NET incumbents and employers report, the first
+derived and marked as such. Standing is expressed as fact-kind
 families, `process.<stream>`, registered from the catalogue's own stream list
 so `lob.asks_about`, the plausibility check and the derived facts read one
 account. Each LOB is rooted at the chief executive (`industry.ROOT`), which is the

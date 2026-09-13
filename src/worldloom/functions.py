@@ -39,6 +39,22 @@ class Seat:
 
 
 @dataclass(frozen=True)
+class Title:
+    """The job title a function's tier carries, and where it came from.
+
+    `source` is `reported` (a title incumbents report to O*NET), `alternate`
+    (a title employers use, from O*NET's alternate titles) or `derived` (no
+    O*NET title of the function's seats carried the tier's word, so the
+    title is built from the function's name).
+    """
+
+    tier: str
+    title: str
+    code: str | None
+    source: str
+
+
+@dataclass(frozen=True)
 class Process:
     """One PCF process a function owns."""
 
@@ -55,11 +71,19 @@ class Function:
     processes: tuple[Process, ...]
     seats: tuple[Seat, ...]
     sor_classes: tuple[str, ...]
+    keywords: tuple[str, ...]
+    titles: dict[str, Title]
 
     def tier(self, tier: str) -> tuple[Seat, ...]:
         if tier not in TIERS:
             raise KeyError(f"no tier {tier!r}; tiers are {', '.join(TIERS)}")
         return tuple(s for s in self.seats if s.tier == tier)
+
+    def title_for(self, tier: str) -> Title | None:
+        """The title for `head`, `manager`, `professional` or `support`; `None` when the function seats none."""
+        if tier not in ("head", *TIERS):
+            raise KeyError(f"no tier {tier!r}; tiers are head, {', '.join(TIERS)}")
+        return self.titles.get(tier)
 
     @property
     def process_ids(self) -> frozenset[str]:
@@ -135,10 +159,15 @@ def load(version: int | None = None) -> Table:
                 for tier in TIERS for seat in row["occupations"].get(tier, [])
             ),
             sor_classes=tuple(row["sor_classes"]),
+            keywords=tuple(row.get("keywords", ())),
+            titles={
+                tier: Title(tier=tier, title=t["title"], code=t.get("code"), source=t["source"])
+                for tier, t in row.get("titles", {}).items()
+            },
         )
         for key, row in document["functions"].items()
     )
     return Table(version=int(document["version"]), sources=dict(document["sources"]), functions=functions)
 
 
-__all__ = ["DATA", "SCHEMA", "TIERS", "Function", "Process", "Seat", "Table", "load", "versions"]
+__all__ = ["DATA", "SCHEMA", "TIERS", "Function", "Process", "Seat", "Table", "Title", "load", "versions"]

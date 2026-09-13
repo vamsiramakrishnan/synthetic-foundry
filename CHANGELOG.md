@@ -11,6 +11,22 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Job titles from O*NET on every derived line of business
+
+- The function table carries one job title per tier (head, manager,
+  professional, support), chosen from the titles O*NET holds for the
+  function's seats by a rule the file states: the shortest title carrying
+  the tier's word and one of the function's keywords, reported titles before
+  alternate ones, a derived title marked `source: derived` where no seat has
+  one (17 of 148). `worldloom.functions.Title` reads them.
+- `industry.derive_lobs` titles each line of business from the table (a
+  Billing Supervisor and a Billing Clerk, not a "Billing Manager" and a
+  "Billing Analyst" typed from the family name) and seats a fourth role,
+  `<family>_support`, where the function has a support title. Generation:
+  every derived programme, Studio project and interview request carries the
+  new titles and the support seats; the seat that asks about an activity
+  (`SEAT_BY_TYPE`) is unchanged, so request counts are unchanged.
+
 ### The catalogue keyed by PCF id, and the parity apparatus retired
 
 - Every activity in the process catalogue now carries the stable APQC

@@ -18,8 +18,11 @@ catalogue's thirty function families (`ap`, `billing`, `it_ops`, ...) and its
 operating models (which family a business unit, a shared service or a group
 function owns) are the LOB table nobody should type per industry.
 `derive_lobs` makes a `lob.Lob` per family that owns at least one bound
-activity: a head, a manager and an analyst, answerable for the value streams
-that family's activities sit in, expressed as fact-kind families
+activity: a head, a manager, an analyst and, where the function seats one, a
+support role, each titled from the function table (`worldloom.functions`:
+the O*NET titles the function's occupations report, or a derived title that
+says so), answerable for the value streams that family's activities sit in,
+expressed as fact-kind families
 (`process.order_to_cash`) so `lob.asks_about`'s standing rule and the
 plausibility check read one account. The kinds are registered from the
 catalogue's own stream list (`register_kinds`), not from a literal here.
@@ -60,7 +63,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from . import factkinds
+from . import factkinds, functions
 from .evals.intents import Intent, intents
 from .ids import Minter
 from .lob import Lob, Responsibility, RoleSpec, lint_lob, may_ask_about
@@ -101,7 +104,8 @@ KIND_PREFIX = "process"
 #: Which seat in the owning family asks about an activity of each type. A
 #: declared rule rather than a draw: the head signs off and decides, the
 #: manager reconciles and reports, the analyst captures, executes, notifies and
-#: escalates. The three suffixes are the three roles `derive_lobs` makes.
+#: escalates. The three suffixes are three of the roles `derive_lobs` makes;
+#: the fourth, `support`, does the transactional work and asks nothing.
 SEAT_BY_TYPE: dict[str, str] = {
     "approve": "head",
     "decide": "head",
@@ -298,7 +302,8 @@ def derive_lobs(
     """One LOB per function family that owns a bound activity.
 
     Three roles per family (head, manager, analyst, keyed `<family>_head` and
-    so on), rooted at *root* (the chief executive, or ``None`` for a LOB whose
+    so on) and a fourth, `<family>_support`, where the function table seats
+    one, rooted at *root* (the chief executive, or ``None`` for a LOB whose
     head reports to nobody, the shape the shipped library uses), and two
     responsibility edges: the head and the manager answer for the
     `process.<stream>` family of every stream the family's activities sit in,
@@ -306,10 +311,16 @@ def derive_lobs(
     and the analyst standing up the line. Nothing outside the family has
     standing over its streams, which is the whole point of deriving the table
     from the operating model rather than typing it.
+
+    Titles come from the function table: the O*NET title the function's
+    occupations report for that tier, or a derived one when none does
+    (`functions.Title.source`). A family the table does not know keeps the
+    catalogue's family name with the generic suffixes.
     """
     cat = catalogue if catalogue is not None else load_catalogue()
     register_kinds(cat)
     titles: dict[str, str] = cat["function_families"]
+    table = functions.load()
     names = stream_names(cat)
     # The LOB rides the company's world, so its engine is the domain that
     # builds it when one does (`retail`, `banking`, `insurance`); otherwise the
@@ -322,11 +333,17 @@ def derive_lobs(
         streams = sorted({row.stream for row in rows})
         owners = sorted({row.owner_bu for row in rows})
         kinds = [f"{KIND_PREFIX}.{stream}" for stream in streams]
-        head, manager, analyst = (
+        head, manager, analyst, support = (
             f"{family}_head",
             f"{family}_manager",
             f"{family}_analyst",
+            f"{family}_support",
         )
+        function = table.get(family)
+        seat_titles = {
+            tier: (function.titles[tier].title if function is not None and tier in function.titles else None)
+            for tier in ("head", "manager", "professional", "support")
+        }
         purpose = (
             f"{title} at {compiled.company}: {len({row.activity_id for row in rows})} activities across"
             f" {', '.join(names.get(s, s) for s in streams)}, owned by {', '.join(owners)}."
@@ -341,21 +358,26 @@ def derive_lobs(
                     *([root] if root is not None else []),
                     RoleSpec(
                         key=head,
-                        title=f"Head of {title}",
+                        title=seat_titles["head"] or f"Head of {title}",
                         function=title,
                         reports_to=root.key if root is not None else None,
                     ),
                     RoleSpec(
                         key=manager,
-                        title=f"{title} Manager",
+                        title=seat_titles["manager"] or f"{title} Manager",
                         function=title,
                         reports_to=head,
                     ),
                     RoleSpec(
                         key=analyst,
-                        title=f"{title} Analyst",
+                        title=seat_titles["professional"] or f"{title} Analyst",
                         function=title,
                         reports_to=manager,
+                    ),
+                    *(
+                        [RoleSpec(key=support, title=seat_titles["support"], function=title, reports_to=manager)]
+                        if seat_titles["support"]
+                        else []
                     ),
                 ],
                 responsibilities=[

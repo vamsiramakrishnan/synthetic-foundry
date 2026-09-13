@@ -53,17 +53,26 @@ def test_a_lob_is_derived_per_function_family_that_owns_a_bound_activity(
         list(telecom.summary.lobs) == families == [spec.name for spec in telecom.lobs]
     )
     titles = resource("catalogue.json")["function_families"]
+    from worldloom import functions
+
+    table = functions.load()
     for spec in telecom.lobs:
         assert spec.title == titles[spec.name]
-        assert [role.key for role in spec.roles] == [
-            "ceo",
-            f"{spec.name}_head",
-            f"{spec.name}_manager",
-            f"{spec.name}_analyst",
-        ]
+        function = table.function(spec.name)
+        expected = ["ceo", f"{spec.name}_head", f"{spec.name}_manager", f"{spec.name}_analyst"]
+        if "support" in function.titles:
+            expected.append(f"{spec.name}_support")
+        assert [role.key for role in spec.roles] == expected
+        by_key = {role.key: role for role in spec.roles}
+        assert by_key[f"{spec.name}_head"].title == function.titles["head"].title
+        assert by_key[f"{spec.name}_analyst"].title == function.titles["professional"].title
+        if f"{spec.name}_support" in by_key:
+            assert by_key[f"{spec.name}_support"].reports_to == f"{spec.name}_manager"
         streams = sorted({row.stream for row in bound if row.function == spec.name})
         for edge in spec.responsibilities:
             assert edge.fact_kinds == [f"process.{stream}" for stream in streams]
+    billing = next(spec for spec in telecom.lobs if spec.name == "billing")
+    assert {role.title for role in billing.roles} >= {"Billing Supervisor", "Billing Clerk"}
 
 
 def test_derived_lobs_are_rooted_at_the_chief_executive_and_lint_clean(

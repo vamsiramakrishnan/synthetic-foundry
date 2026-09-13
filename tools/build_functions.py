@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -149,7 +150,7 @@ OCCUPATIONS: dict[str, dict[str, list[str]]] = {
     "field_service": {"manager": ["49-1011.00"], "professional": ["13-1199.00"], "support": ["49-9071.00"]},
     "hr": {"manager": ["11-3121.00", "11-3111.00", "11-3131.00"],
            "professional": ["13-1071.00", "13-1141.00", "13-1151.00", "13-1075.00"], "support": ["43-4161.00"]},
-    "payroll": {"manager": ["43-1011.00"], "professional": ["13-2011.00"], "support": ["43-3051.00"]},
+    "payroll": {"manager": ["43-1011.00", "11-3111.00", "11-3031.00"], "professional": ["13-2011.00"], "support": ["43-3051.00"]},
     "it_governance": {"manager": ["11-3021.00"], "professional": ["15-1211.00", "15-1299.08", "13-1111.00"], "support": []},
     "it_security": {"manager": ["11-3021.00", "11-3013.01"], "professional": ["15-1212.00", "15-1299.05", "15-1299.04"], "support": []},
     "data": {"manager": ["11-3021.00"],
@@ -158,13 +159,13 @@ OCCUPATIONS: dict[str, dict[str, list[str]]] = {
     "change_mgmt": {"manager": ["15-1299.09", "11-3021.00"], "professional": ["15-1211.00", "13-1082.00"], "support": []},
     "it_ops": {"manager": ["11-3021.00"],
                "professional": ["15-1244.00", "15-1242.00", "15-1241.00", "15-1299.08"], "support": []},
-    "it_service_desk": {"manager": ["11-3021.00"], "professional": ["15-1231.00"], "support": ["15-1232.00"]},
+    "it_service_desk": {"manager": ["11-3021.00", "43-1011.00"], "professional": ["15-1231.00"], "support": ["15-1232.00"]},
     "fpa": {"manager": ["11-3031.00"], "professional": ["13-2031.00", "13-2051.00"], "support": ["43-9111.00"]},
     "credit": {"manager": ["11-3031.00"], "professional": ["13-2041.00"], "support": ["43-4041.00", "43-3011.00"]},
-    "billing": {"manager": ["43-1011.00"], "professional": ["13-2011.00"], "support": ["43-3021.00", "43-3031.00"]},
-    "controllership": {"manager": ["11-3031.01"], "professional": ["13-2011.00"], "support": ["43-3031.00"]},
-    "ap": {"manager": ["43-1011.00"], "professional": ["13-2011.00"], "support": ["43-3031.00", "43-3021.00"]},
-    "treasury": {"manager": ["11-3031.01"], "professional": ["13-2051.00", "13-2054.00"], "support": ["43-3031.00"]},
+    "billing": {"manager": ["43-1011.00", "11-3031.00"], "professional": ["13-2011.00"], "support": ["43-3021.00", "43-3031.00"]},
+    "controllership": {"manager": ["11-3031.01", "11-3031.00"], "professional": ["13-2011.00"], "support": ["43-3031.00"]},
+    "ap": {"manager": ["43-1011.00", "11-3031.00"], "professional": ["13-2011.00"], "support": ["43-3031.00", "43-3021.00"]},
+    "treasury": {"manager": ["11-3031.01", "11-3031.00"], "professional": ["13-2051.00", "13-2054.00"], "support": ["43-3031.00"]},
     "tax": {"manager": ["11-3031.00"], "professional": ["13-2011.00", "13-2082.00"], "support": ["43-3031.00"]},
     "trade_compliance": {"manager": ["11-3071.00"], "professional": ["13-1041.08", "13-1081.00"], "support": ["43-5011.01"]},
     "facilities": {"manager": ["11-3013.00", "11-3012.00"], "professional": ["13-1199.00"],
@@ -180,6 +181,97 @@ OCCUPATIONS: dict[str, dict[str, list[str]]] = {
     "pmo": {"manager": ["15-1299.09", "11-9199.00"], "professional": ["13-1082.00"], "support": []},
     "ehs": {"manager": ["11-1011.03"], "professional": ["17-2111.00", "13-1199.05", "13-1041.01"], "support": []},
 }
+
+# Function -> the words a job title must contain to be that function's title.
+# The titles themselves come from O*NET (the titles incumbents report, then the
+# alternate titles employers use); these words only say which of an
+# occupation's titles belong to which function, since one occupation (financial
+# managers, first-line supervisors of office workers) seats several.
+KEYWORDS: dict[str, list[str]] = {
+    "ap": ["Accounts Payable"], "billing": ["Billing"], "payroll": ["Payroll"],
+    "treasury": ["Treasury", "Treasurer", "Cash Manage"], "tax": ["Tax"],
+    "controllership": ["Controller", "Comptroller", "General Ledger", "Financial Reporting", "Accounting"],
+    "fpa": ["Financial Planning", "Budget", "FP&A", "Financial Analyst"], "credit": ["Credit", "Collection"],
+    "audit": ["Audit"], "risk": ["Risk"], "compliance": ["Compliance"], "legal": ["Counsel", "Legal", "Attorney", "Paralegal"],
+    "hr": ["Human Resources", "HR ", "Talent", "Recruit"], "data": ["Data", "Analytics", "Business Intelligence"],
+    "it_ops": ["Systems Administrator", "Network", "Infrastructure", "Site Reliability", "Systems"],
+    "it_security": ["Information Security", "Cybersecurity", "Security"],
+    "it_service_desk": ["Help Desk", "Service Desk", "Technical Support", "Support"],
+    "it_governance": ["Information Technology", "Information Systems", "Technology", "Enterprise Architect", "IT "],
+    "change_mgmt": ["Release", "Change", "IT Project", "Deployment"], "engineering": ["Software", "Engineering", "Developer", "Engineer"],
+    "product": ["Product"], "marketing": ["Marketing"], "sales": ["Sales", "Account Executive", "Account Manager"],
+    "sales_ops": ["Sales Operations", "Sales Support", "Order", "Sales"], "planning": ["Supply Chain", "Demand Plan", "Planning", "Planner"],
+    "procurement": ["Purchasing", "Procurement", "Buyer", "Sourcing"], "production": ["Production", "Plant", "Manufacturing"],
+    "quality": ["Quality"], "fulfilment": ["Logistics", "Transportation", "Distribution", "Shipping"], "warehouse": ["Warehouse"],
+    "service_delivery": ["Operations", "Service Delivery", "Project"],
+    "customer_service": ["Customer Service", "Customer Care", "Customer Support", "Customer"],
+    "field_service": ["Field Service", "Service Technician", "Maintenance", "Service"],
+    "strategy": ["Strategy", "Strategic", "Executive", "Operations"],
+    "corporate_affairs": ["Communications", "Public Relations", "Public Affairs", "Government Relations"],
+    "investor_relations": ["Investor Relations", "Financial Analyst", "Finance"], "trade_compliance": ["Customs", "Trade", "Export", "Import"],
+    "facilities": ["Facilities", "Facility", "Building"], "capital_projects": ["Construction", "Capital Project", "Project"],
+    "pmo": ["Program", "Project", "PMO"], "process_excellence": ["Process", "Continuous Improvement", "Business Analyst", "Business"],
+    "ehs": ["Safety", "Environmental", "Sustainability"],
+}
+
+# Title selection. A head title carries a head word, a manager title a manager
+# word, a professional title neither a lead word nor a junior one, a support
+# title a support word. Among the candidates the shortest wins, reported titles
+# before alternate ones, because the shortest is the most generic ("Compliance
+# Director" over "Air Pollution Compliance Inspector"). A tier with no
+# candidate gets a derived title built from the function's name and says so.
+HEAD_WORDS = re.compile(r"^Chief\b|\b(Director|Vice President|Head|Treasurer|Controller|Comptroller|Counsel)\b")
+MANAGER_WORDS = re.compile(r"\b(Manager|Supervisor)\b")
+LEAD_WORDS = re.compile(r"\b(Chief|Director|Vice President|Head|Manager|Supervisor|Partner|Treasurer|Controller|Comptroller|Foreman)\b")
+JUNIOR_WORDS = re.compile(r"\b(Clerk|Assistant|Aide|Helper|Intern|Trainee)\b")
+SUPPORT_WORDS = re.compile(r"\b(Clerk|Assistant|Coordinator|Specialist|Associate|Representative|Administrator|Technician|Operator|Worker|Agent|Processor|Aide)\b")
+# Words that mark a title as one employer's rather than the occupation's.
+NARROW_WORDS = re.compile(r"\b(Airport|Judicial|Fractional|Java|Special|Acid|Internet|Fiber|Cloud|Cybersecurity Project|Salesman|Foreman|Exporter)\b")
+DERIVED = {"manager": "{title} Manager", "professional": "{title} Analyst", "support": None, "head": "Head of {title}"}
+
+
+def _titles(db: Any, key: str, seats: dict[str, list[str]]) -> dict[str, dict[str, str | None]]:
+    words = KEYWORDS[key]
+
+    def candidates(codes: list[str], pattern: re.Pattern[str], exclude: re.Pattern[str] | None) -> list[tuple[int, int, str, str, str]]:
+        found = []
+        for rank, attribute in ((0, "reported_titles"), (1, "job_titles")):
+            for code in codes:
+                for title in getattr(db.occupation(code), attribute):
+                    if "(" in title or len(title) >= 40 or NARROW_WORDS.search(title):
+                        continue
+                    if not any(w.lower() in title.lower() for w in words):
+                        continue
+                    if pattern.search(title) and not (exclude and exclude.search(title)):
+                        found.append((rank, len(title), title, code, "reported" if rank == 0 else "alternate"))
+        return sorted(found)
+
+    def pick(codes: list[str], pattern: re.Pattern[str], exclude: re.Pattern[str] | None,
+             taken: tuple[str, ...] = ()) -> tuple[str, str, str] | None:
+        found = [c for c in candidates(codes, pattern, exclude) if c[2] not in taken]
+        return found[0][2:] if found else None
+
+    managers, professionals, support = seats["manager"], seats["professional"], seats["support"]
+    anything = re.compile(r".")
+    not_professional = re.compile(LEAD_WORDS.pattern + "|" + JUNIOR_WORDS.pattern)
+    professional = (pick(professionals, anything, not_professional)
+                    or pick(professionals + managers, anything, not_professional))
+    taken = (professional[0],) if professional else ()
+    chosen = {
+        "head": pick(managers, HEAD_WORDS, MANAGER_WORDS) or pick(managers + professionals, HEAD_WORDS, MANAGER_WORDS),
+        "manager": pick(managers, MANAGER_WORDS, None) or pick(managers + professionals, MANAGER_WORDS, None),
+        "professional": professional,
+        "support": pick(support, SUPPORT_WORDS, LEAD_WORDS, taken) or pick(support, anything, LEAD_WORDS, taken),
+    }
+    out: dict[str, dict[str, str | None]] = {}
+    for tier, found in chosen.items():
+        if found is not None:
+            title, code, source = found
+            out[tier] = {"title": title, "code": code, "source": source}
+        elif DERIVED[tier] is not None:
+            out[tier] = {"title": DERIVED[tier].format(title=TITLES[key]), "code": None, "source": "derived"}
+    return out
+
 
 # Function -> system-of-record classes (keys of the catalogue's sor_classes).
 SOR: dict[str, list[str]] = {
@@ -237,6 +329,8 @@ def build() -> dict[str, Any]:
             for code in codes:
                 if db.get(code) is None:
                     problems.append(f"OCCUPATIONS: {function}.{tier} names unknown O*NET code {code!r}")
+        if function not in KEYWORDS:
+            problems.append(f"KEYWORDS: {function} has no title words")
         for klass in SOR.get(function, []):
             if klass not in sor_classes:
                 problems.append(f"SOR: {function} names unknown sor class {klass!r}")
@@ -264,6 +358,8 @@ def build() -> dict[str, Any]:
         }
         functions[key] = {
             "title": title,
+            "keywords": KEYWORDS[key],
+            "titles": _titles(db, key, OCCUPATIONS[key]),
             "categories": [{"number": c, "pcf_id": cross.at(f"{c}.0").pcf_id, "name": cross.at(f"{c}.0").name} for c in categories],
             "processes": processes,
             "occupations": seated,
@@ -273,6 +369,7 @@ def build() -> dict[str, Any]:
         "schema": SCHEMA,
         "version": VERSION,
         "sources": {"pcf": cross.key, "onet": db.release, "sor_classes": "process-catalogue/catalogue.json"},
+        "title_rule": "Per tier, the shortest O*NET title of the function's seats that carries the tier's word and one of the function's keywords; reported titles before alternate ones; a tier with no such title gets a derived title (source: derived); a function with no support title seats no support role.",
         "tiers": {
             "manager": "runs the function; the head of the function is the senior title in this tier's pool",
             "professional": "does the judgement work: analysis, decisions, approvals",

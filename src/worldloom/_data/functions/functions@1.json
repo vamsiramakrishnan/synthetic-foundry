@@ -8,11 +8,18 @@
      "pcf_id": "17058"
     }
    ],
+   "keywords": [
+    "Accounts Payable"
+   ],
    "occupations": {
     "manager": [
      {
       "code": "43-1011.00",
       "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
      }
     ],
     "professional": [
@@ -54,7 +61,29 @@
     "P2P-suite",
     "e-invoicing"
    ],
-   "title": "Accounts Payable"
+   "title": "Accounts Payable",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Accounts Payable"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "reported",
+     "title": "Accounts Payable Supervisor"
+    },
+    "professional": {
+     "code": null,
+     "source": "derived",
+     "title": "Accounts Payable Analyst"
+    },
+    "support": {
+     "code": "43-3031.00",
+     "source": "reported",
+     "title": "Accounts Payable Clerk"
+    }
+   }
   },
   "audit": {
    "categories": [
@@ -63,6 +92,9 @@
      "number": "12",
      "pcf_id": "10012"
     }
+   ],
+   "keywords": [
+    "Audit"
    ],
    "occupations": {
     "manager": [
@@ -90,7 +122,24 @@
     "DMS",
     "BI"
    ],
-   "title": "Internal Audit"
+   "title": "Internal Audit",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Internal Audit"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Auditing Manager"
+    },
+    "professional": {
+     "code": "13-2011.00",
+     "source": "reported",
+     "title": "Auditor"
+    }
+   }
   },
   "billing": {
    "categories": [
@@ -100,11 +149,18 @@
      "pcf_id": "17058"
     }
    ],
+   "keywords": [
+    "Billing"
+   ],
    "occupations": {
     "manager": [
      {
       "code": "43-1011.00",
       "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
      }
     ],
     "professional": [
@@ -146,7 +202,29 @@
     "ERP-FI",
     "e-invoicing"
    ],
-   "title": "Billing"
+   "title": "Billing",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Billing"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Billing Supervisor"
+    },
+    "professional": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Billing Administrator"
+    },
+    "support": {
+     "code": "43-3021.00",
+     "source": "reported",
+     "title": "Billing Clerk"
+    }
+   }
   },
   "capital_projects": {
    "categories": [
@@ -155,6 +233,11 @@
      "number": "10",
      "pcf_id": "19207"
     }
+   ],
+   "keywords": [
+    "Construction",
+    "Capital Project",
+    "Project"
    ],
    "occupations": {
     "manager": [
@@ -205,7 +288,24 @@
     "ERP-FI",
     "DMS"
    ],
-   "title": "Capital Projects"
+   "title": "Capital Projects",
+   "titles": {
+    "head": {
+     "code": "11-9021.00",
+     "source": "alternate",
+     "title": "Construction Director"
+    },
+    "manager": {
+     "code": "11-9021.00",
+     "source": "reported",
+     "title": "Construction Manager"
+    },
+    "professional": {
+     "code": "17-2051.00",
+     "source": "reported",
+     "title": "Project Engineer"
+    }
+   }
   },
   "change_mgmt": {
    "categories": [
@@ -214,6 +314,12 @@
      "number": "8",
      "pcf_id": "20607"
     }
+   ],
+   "keywords": [
+    "Release",
+    "Change",
+    "IT Project",
+    "Deployment"
    ],
    "occupations": {
     "manager": [
@@ -269,7 +375,24 @@
     "ITSM",
     "Wiki"
    ],
-   "title": "Change & Release"
+   "title": "Change & Release",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Change & Release"
+    },
+    "manager": {
+     "code": "15-1299.09",
+     "source": "alternate",
+     "title": "Release Manager"
+    },
+    "professional": {
+     "code": null,
+     "source": "derived",
+     "title": "Change & Release Analyst"
+    }
+   }
   },
   "compliance": {
    "categories": [
@@ -278,6 +401,9 @@
      "number": "11",
      "pcf_id": "16437"
     }
+   ],
+   "keywords": [
+    "Compliance"
    ],
    "occupations": {
     "manager": [
@@ -348,7 +474,24 @@
     "DMS",
     "ITSM"
    ],
-   "title": "Compliance"
+   "title": "Compliance",
+   "titles": {
+    "head": {
+     "code": "11-9199.01",
+     "source": "reported",
+     "title": "Compliance Director"
+    },
+    "manager": {
+     "code": "11-9199.02",
+     "source": "reported",
+     "title": "Compliance Manager"
+    },
+    "professional": {
+     "code": "13-1041.00",
+     "source": "alternate",
+     "title": "Compliance Analyst"
+    }
+   }
   },
   "controllership": {
    "categories": [
@@ -363,11 +506,22 @@
      "pcf_id": "10012"
     }
    ],
+   "keywords": [
+    "Controller",
+    "Comptroller",
+    "General Ledger",
+    "Financial Reporting",
+    "Accounting"
+   ],
    "occupations": {
     "manager": [
      {
       "code": "11-3031.01",
       "title": "Treasurers and Controllers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
      }
     ],
     "professional": [
@@ -440,7 +594,29 @@
     "Consolidation",
     "DMS"
    ],
-   "title": "Controllership"
+   "title": "Controllership",
+   "titles": {
+    "head": {
+     "code": "11-3031.01",
+     "source": "reported",
+     "title": "Controller"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "reported",
+     "title": "Accounting Supervisor"
+    },
+    "professional": {
+     "code": "13-2011.00",
+     "source": "reported",
+     "title": "Accounting Officer"
+    },
+    "support": {
+     "code": "43-3031.00",
+     "source": "reported",
+     "title": "Accounting Clerk"
+    }
+   }
   },
   "corporate_affairs": {
    "categories": [
@@ -449,6 +625,12 @@
      "number": "12",
      "pcf_id": "10012"
     }
+   ],
+   "keywords": [
+    "Communications",
+    "Public Relations",
+    "Public Affairs",
+    "Government Relations"
    ],
    "occupations": {
     "manager": [
@@ -520,7 +702,24 @@
     "DMS",
     "Email"
    ],
-   "title": "Corporate Affairs"
+   "title": "Corporate Affairs",
+   "titles": {
+    "head": {
+     "code": "11-2032.00",
+     "source": "reported",
+     "title": "Communications Director"
+    },
+    "manager": {
+     "code": "11-2032.00",
+     "source": "reported",
+     "title": "Communications Manager"
+    },
+    "professional": {
+     "code": "27-3031.00",
+     "source": "reported",
+     "title": "Communications Specialist"
+    }
+   }
   },
   "credit": {
    "categories": [
@@ -529,6 +728,10 @@
      "number": "9",
      "pcf_id": "17058"
     }
+   ],
+   "keywords": [
+    "Credit",
+    "Collection"
    ],
    "occupations": {
     "manager": [
@@ -570,7 +773,29 @@
     "ERP-FI",
     "CRM"
    ],
-   "title": "Credit & Collections"
+   "title": "Credit & Collections",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Credit & Collections"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "reported",
+     "title": "Credit Manager"
+    },
+    "professional": {
+     "code": "13-2041.00",
+     "source": "reported",
+     "title": "Credit Analyst"
+    },
+    "support": {
+     "code": "43-3011.00",
+     "source": "reported",
+     "title": "Collection Agent"
+    }
+   }
   },
   "customer_service": {
    "categories": [
@@ -579,6 +804,12 @@
      "number": "6",
      "pcf_id": "20085"
     }
+   ],
+   "keywords": [
+    "Customer Service",
+    "Customer Care",
+    "Customer Support",
+    "Customer"
    ],
    "occupations": {
     "manager": [
@@ -696,7 +927,29 @@
     "ITSM",
     "Chat"
    ],
-   "title": "Customer Service"
+   "title": "Customer Service",
+   "titles": {
+    "head": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Customer Service Director"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "reported",
+     "title": "Customer Service Manager"
+    },
+    "professional": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Customer Service Administrator"
+    },
+    "support": {
+     "code": "43-4051.00",
+     "source": "reported",
+     "title": "Customer Service Agent"
+    }
+   }
   },
   "data": {
    "categories": [
@@ -710,6 +963,11 @@
      "number": "13",
      "pcf_id": "10013"
     }
+   ],
+   "keywords": [
+    "Data",
+    "Analytics",
+    "Business Intelligence"
    ],
    "occupations": {
     "manager": [
@@ -852,7 +1110,29 @@
     "BI",
     "DMS"
    ],
-   "title": "Data & Analytics"
+   "title": "Data & Analytics",
+   "titles": {
+    "head": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Data Operations Director"
+    },
+    "manager": {
+     "code": "11-3021.00",
+     "source": "reported",
+     "title": "Data Processing Manager"
+    },
+    "professional": {
+     "code": "15-1243.00",
+     "source": "reported",
+     "title": "Data Officer"
+    },
+    "support": {
+     "code": "43-9021.00",
+     "source": "reported",
+     "title": "Data Entry Clerk"
+    }
+   }
   },
   "ehs": {
    "categories": [
@@ -861,6 +1141,11 @@
      "number": "13",
      "pcf_id": "10013"
     }
+   ],
+   "keywords": [
+    "Safety",
+    "Environmental",
+    "Sustainability"
    ],
    "occupations": {
     "manager": [
@@ -916,7 +1201,24 @@
     "DMS",
     "ITSM"
    ],
-   "title": "EHS & Sustainability"
+   "title": "EHS & Sustainability",
+   "titles": {
+    "head": {
+     "code": "11-1011.03",
+     "source": "reported",
+     "title": "Sustainability Director"
+    },
+    "manager": {
+     "code": "11-1011.03",
+     "source": "reported",
+     "title": "Sustainability Manager"
+    },
+    "professional": {
+     "code": "17-2111.00",
+     "source": "reported",
+     "title": "Safety Engineer"
+    }
+   }
   },
   "engineering": {
    "categories": [
@@ -930,6 +1232,12 @@
      "number": "8",
      "pcf_id": "20607"
     }
+   ],
+   "keywords": [
+    "Software",
+    "Engineering",
+    "Developer",
+    "Engineer"
    ],
    "occupations": {
     "manager": [
@@ -1021,7 +1329,29 @@
     "PLM",
     "Wiki"
    ],
-   "title": "Engineering"
+   "title": "Engineering",
+   "titles": {
+    "head": {
+     "code": "11-9041.00",
+     "source": "reported",
+     "title": "Engineering Director"
+    },
+    "manager": {
+     "code": "11-9041.00",
+     "source": "reported",
+     "title": "Civil Engineering Manager"
+    },
+    "professional": {
+     "code": "17-2071.00",
+     "source": "reported",
+     "title": "Engineer"
+    },
+    "support": {
+     "code": "15-1251.00",
+     "source": "alternate",
+     "title": "Graphic Engineer"
+    }
+   }
   },
   "facilities": {
    "categories": [
@@ -1030,6 +1360,11 @@
      "number": "10",
      "pcf_id": "19207"
     }
+   ],
+   "keywords": [
+    "Facilities",
+    "Facility",
+    "Building"
    ],
    "occupations": {
     "manager": [
@@ -1159,7 +1494,29 @@
     "ERP-MM",
     "ITSM"
    ],
-   "title": "Facilities & Assets"
+   "title": "Facilities & Assets",
+   "titles": {
+    "head": {
+     "code": "11-3013.00",
+     "source": "reported",
+     "title": "Facilities Director"
+    },
+    "manager": {
+     "code": "11-3013.00",
+     "source": "reported",
+     "title": "Facilities Manager"
+    },
+    "professional": {
+     "code": "11-3013.00",
+     "source": "reported",
+     "title": "Facilities Engineer"
+    },
+    "support": {
+     "code": "49-9071.00",
+     "source": "reported",
+     "title": "Facilities Technician"
+    }
+   }
   },
   "field_service": {
    "categories": [
@@ -1168,6 +1525,12 @@
      "number": "6",
      "pcf_id": "20085"
     }
+   ],
+   "keywords": [
+    "Field Service",
+    "Service Technician",
+    "Maintenance",
+    "Service"
    ],
    "occupations": {
     "manager": [
@@ -1215,7 +1578,29 @@
     "ITSM",
     "CRM"
    ],
-   "title": "After-sales Service"
+   "title": "After-sales Service",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of After-sales Service"
+    },
+    "manager": {
+     "code": "49-1011.00",
+     "source": "reported",
+     "title": "Service Manager"
+    },
+    "professional": {
+     "code": "13-1199.00",
+     "source": "alternate",
+     "title": "Business Service Specialist"
+    },
+    "support": {
+     "code": "49-9071.00",
+     "source": "reported",
+     "title": "Maintenance Worker"
+    }
+   }
   },
   "fpa": {
    "categories": [
@@ -1224,6 +1609,12 @@
      "number": "9",
      "pcf_id": "17058"
     }
+   ],
+   "keywords": [
+    "Financial Planning",
+    "Budget",
+    "FP&A",
+    "Financial Analyst"
    ],
    "occupations": {
     "manager": [
@@ -1276,7 +1667,24 @@
     "BI",
     "ERP-FI"
    ],
-   "title": "FP&A"
+   "title": "FP&A",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of FP&A"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "reported",
+     "title": "Financial Planning Manager"
+    },
+    "professional": {
+     "code": "13-2031.00",
+     "source": "reported",
+     "title": "Budget Analyst"
+    }
+   }
   },
   "fulfilment": {
    "categories": [
@@ -1285,6 +1693,12 @@
      "number": "4",
      "pcf_id": "20022"
     }
+   ],
+   "keywords": [
+    "Logistics",
+    "Transportation",
+    "Distribution",
+    "Shipping"
    ],
    "occupations": {
     "manager": [
@@ -1340,7 +1754,29 @@
     "TMS",
     "WMS"
    ],
-   "title": "Fulfilment & Logistics"
+   "title": "Fulfilment & Logistics",
+   "titles": {
+    "head": {
+     "code": "11-3071.00",
+     "source": "reported",
+     "title": "Logistics Director"
+    },
+    "manager": {
+     "code": "11-3071.00",
+     "source": "reported",
+     "title": "Shipping Manager"
+    },
+    "professional": {
+     "code": "13-1081.02",
+     "source": "reported",
+     "title": "Logistics Analyst"
+    },
+    "support": {
+     "code": "43-5071.00",
+     "source": "reported",
+     "title": "Shipping Clerk"
+    }
+   }
   },
   "hr": {
    "categories": [
@@ -1349,6 +1785,12 @@
      "number": "7",
      "pcf_id": "10007"
     }
+   ],
+   "keywords": [
+    "Human Resources",
+    "HR ",
+    "Talent",
+    "Recruit"
    ],
    "occupations": {
     "manager": [
@@ -1596,7 +2038,29 @@
     "HRIS",
     "DMS"
    ],
-   "title": "Human Resources"
+   "title": "Human Resources",
+   "titles": {
+    "head": {
+     "code": "11-3121.00",
+     "source": "reported",
+     "title": "Recruitment Director"
+    },
+    "manager": {
+     "code": "11-3121.00",
+     "source": "alternate",
+     "title": "Recruiting Manager"
+    },
+    "professional": {
+     "code": "13-1071.00",
+     "source": "reported",
+     "title": "Recruiter"
+    },
+    "support": {
+     "code": "43-4161.00",
+     "source": "alternate",
+     "title": "Recruiting Coordinator"
+    }
+   }
   },
   "investor_relations": {
    "categories": [
@@ -1605,6 +2069,11 @@
      "number": "12",
      "pcf_id": "10012"
     }
+   ],
+   "keywords": [
+    "Investor Relations",
+    "Financial Analyst",
+    "Finance"
    ],
    "occupations": {
     "manager": [
@@ -1646,7 +2115,24 @@
     "DMS",
     "Email"
    ],
-   "title": "Investor Relations"
+   "title": "Investor Relations",
+   "titles": {
+    "head": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Finance Director"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Finance Manager"
+    },
+    "professional": {
+     "code": "13-2051.00",
+     "source": "reported",
+     "title": "Financial Analyst"
+    }
+   }
   },
   "it_governance": {
    "categories": [
@@ -1655,6 +2141,13 @@
      "number": "8",
      "pcf_id": "20607"
     }
+   ],
+   "keywords": [
+    "Information Technology",
+    "Information Systems",
+    "Technology",
+    "Enterprise Architect",
+    "IT "
    ],
    "occupations": {
     "manager": [
@@ -1755,7 +2248,24 @@
     "ITSM",
     "Wiki"
    ],
-   "title": "IT Strategy & Governance"
+   "title": "IT Strategy & Governance",
+   "titles": {
+    "head": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Technology Director"
+    },
+    "manager": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Enterprise Architecture Manager"
+    },
+    "professional": {
+     "code": "15-1211.00",
+     "source": "alternate",
+     "title": "Technology Analyst"
+    }
+   }
   },
   "it_ops": {
    "categories": [
@@ -1764,6 +2274,13 @@
      "number": "8",
      "pcf_id": "20607"
     }
+   ],
+   "keywords": [
+    "Systems Administrator",
+    "Network",
+    "Infrastructure",
+    "Site Reliability",
+    "Systems"
    ],
    "occupations": {
     "manager": [
@@ -1833,7 +2350,24 @@
     "ITSM",
     "Wiki"
    ],
-   "title": "IT Operations / SRE"
+   "title": "IT Operations / SRE",
+   "titles": {
+    "head": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Network Director"
+    },
+    "manager": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Network Manager"
+    },
+    "professional": {
+     "code": "15-1241.00",
+     "source": "reported",
+     "title": "Network Analyst"
+    }
+   }
   },
   "it_security": {
    "categories": [
@@ -1842,6 +2376,11 @@
      "number": "8",
      "pcf_id": "20607"
     }
+   ],
+   "keywords": [
+    "Information Security",
+    "Cybersecurity",
+    "Security"
    ],
    "occupations": {
     "manager": [
@@ -1916,7 +2455,24 @@
     "ITSM",
     "Wiki"
    ],
-   "title": "IT Security & Resilience"
+   "title": "IT Security & Resilience",
+   "titles": {
+    "head": {
+     "code": "11-3013.01",
+     "source": "reported",
+     "title": "Security Director"
+    },
+    "manager": {
+     "code": "11-3013.01",
+     "source": "reported",
+     "title": "Security Manager"
+    },
+    "professional": {
+     "code": "15-1212.00",
+     "source": "reported",
+     "title": "Security Analyst"
+    }
+   }
   },
   "it_service_desk": {
    "categories": [
@@ -1926,11 +2482,21 @@
      "pcf_id": "20607"
     }
    ],
+   "keywords": [
+    "Help Desk",
+    "Service Desk",
+    "Technical Support",
+    "Support"
+   ],
    "occupations": {
     "manager": [
      {
       "code": "11-3021.00",
       "title": "Computer and Information Systems Managers"
+     },
+     {
+      "code": "43-1011.00",
+      "title": "First-Line Supervisors of Office and Administrative Support Workers"
      }
     ],
     "professional": [
@@ -1957,7 +2523,29 @@
     "ITSM",
     "Chat"
    ],
-   "title": "IT Service Desk"
+   "title": "IT Service Desk",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of IT Service Desk"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Support Manager"
+    },
+    "professional": {
+     "code": "15-1231.00",
+     "source": "reported",
+     "title": "Network Support Specialist"
+    },
+    "support": {
+     "code": "15-1232.00",
+     "source": "reported",
+     "title": "Computer Support Specialist"
+    }
+   }
   },
   "legal": {
    "categories": [
@@ -1966,6 +2554,12 @@
      "number": "12",
      "pcf_id": "10012"
     }
+   ],
+   "keywords": [
+    "Counsel",
+    "Legal",
+    "Attorney",
+    "Paralegal"
    ],
    "occupations": {
     "manager": [
@@ -2042,7 +2636,29 @@
     "DMS",
     "Email"
    ],
-   "title": "Legal"
+   "title": "Legal",
+   "titles": {
+    "head": {
+     "code": "23-1011.00",
+     "source": "reported",
+     "title": "Counsel"
+    },
+    "manager": {
+     "code": null,
+     "source": "derived",
+     "title": "Legal Manager"
+    },
+    "professional": {
+     "code": "23-1011.00",
+     "source": "reported",
+     "title": "Counsel"
+    },
+    "support": {
+     "code": "23-2011.00",
+     "source": "reported",
+     "title": "Legal Clerk"
+    }
+   }
   },
   "marketing": {
    "categories": [
@@ -2051,6 +2667,9 @@
      "number": "3",
      "pcf_id": "10004"
     }
+   ],
+   "keywords": [
+    "Marketing"
    ],
    "occupations": {
     "manager": [
@@ -2171,7 +2790,24 @@
     "BI",
     "DMS"
    ],
-   "title": "Marketing"
+   "title": "Marketing",
+   "titles": {
+    "head": {
+     "code": "11-2021.00",
+     "source": "reported",
+     "title": "Marketing Director"
+    },
+    "manager": {
+     "code": "11-2021.00",
+     "source": "reported",
+     "title": "Product Marketing Manager"
+    },
+    "professional": {
+     "code": "13-1161.01",
+     "source": "reported",
+     "title": "Marketing Consultant"
+    }
+   }
   },
   "payroll": {
    "categories": [
@@ -2186,11 +2822,22 @@
      "pcf_id": "17058"
     }
    ],
+   "keywords": [
+    "Payroll"
+   ],
    "occupations": {
     "manager": [
      {
       "code": "43-1011.00",
       "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     },
+     {
+      "code": "11-3111.00",
+      "title": "Compensation and Benefits Managers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
      }
     ],
     "professional": [
@@ -2232,7 +2879,29 @@
     "Payroll",
     "HRIS"
    ],
-   "title": "Payroll"
+   "title": "Payroll",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Payroll"
+    },
+    "manager": {
+     "code": "11-3111.00",
+     "source": "reported",
+     "title": "Payroll Manager"
+    },
+    "professional": {
+     "code": "13-2011.00",
+     "source": "alternate",
+     "title": "Payroll Auditor"
+    },
+    "support": {
+     "code": "43-3051.00",
+     "source": "reported",
+     "title": "Payroll Clerk"
+    }
+   }
   },
   "planning": {
    "categories": [
@@ -2241,6 +2910,12 @@
      "number": "4",
      "pcf_id": "20022"
     }
+   ],
+   "keywords": [
+    "Supply Chain",
+    "Demand Plan",
+    "Planning",
+    "Planner"
    ],
    "occupations": {
     "manager": [
@@ -2307,7 +2982,29 @@
     "ERP-MM",
     "EPM"
    ],
-   "title": "Supply & Demand Planning"
+   "title": "Supply & Demand Planning",
+   "titles": {
+    "head": {
+     "code": "11-3071.04",
+     "source": "reported",
+     "title": "Supply Chain Director"
+    },
+    "manager": {
+     "code": "11-3071.04",
+     "source": "reported",
+     "title": "Supply Chain Manager"
+    },
+    "professional": {
+     "code": "13-1081.00",
+     "source": "reported",
+     "title": "Production Planner"
+    },
+    "support": {
+     "code": "43-5061.00",
+     "source": "alternate",
+     "title": "Planning Technician"
+    }
+   }
   },
   "pmo": {
    "categories": [
@@ -2316,6 +3013,11 @@
      "number": "13",
      "pcf_id": "10013"
     }
+   ],
+   "keywords": [
+    "Program",
+    "Project",
+    "PMO"
    ],
    "occupations": {
     "manager": [
@@ -2357,7 +3059,24 @@
     "Wiki",
     "DMS"
    ],
-   "title": "Portfolio & Programme Office"
+   "title": "Portfolio & Programme Office",
+   "titles": {
+    "head": {
+     "code": "11-9199.00",
+     "source": "alternate",
+     "title": "Project Director"
+    },
+    "manager": {
+     "code": "15-1299.09",
+     "source": "reported",
+     "title": "Transition Program Manager"
+    },
+    "professional": {
+     "code": "13-1082.00",
+     "source": "reported",
+     "title": "Project Management Consultant"
+    }
+   }
   },
   "process_excellence": {
    "categories": [
@@ -2366,6 +3085,12 @@
      "number": "13",
      "pcf_id": "10013"
     }
+   ],
+   "keywords": [
+    "Process",
+    "Continuous Improvement",
+    "Business Analyst",
+    "Business"
    ],
    "occupations": {
     "manager": [
@@ -2452,7 +3177,24 @@
     "Wiki",
     "BI"
    ],
-   "title": "Process Excellence"
+   "title": "Process Excellence",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Process Excellence"
+    },
+    "manager": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Business Manager"
+    },
+    "professional": {
+     "code": "13-1111.00",
+     "source": "reported",
+     "title": "Business Analyst"
+    }
+   }
   },
   "procurement": {
    "categories": [
@@ -2461,6 +3203,12 @@
      "number": "4",
      "pcf_id": "20022"
     }
+   ],
+   "keywords": [
+    "Purchasing",
+    "Procurement",
+    "Buyer",
+    "Sourcing"
    ],
    "occupations": {
     "manager": [
@@ -2513,7 +3261,29 @@
     "ERP-MM",
     "DMS"
    ],
-   "title": "Procurement"
+   "title": "Procurement",
+   "titles": {
+    "head": {
+     "code": "11-3061.00",
+     "source": "reported",
+     "title": "Purchasing Director"
+    },
+    "manager": {
+     "code": "11-3061.00",
+     "source": "reported",
+     "title": "Purchasing Manager"
+    },
+    "professional": {
+     "code": "13-1022.00",
+     "source": "reported",
+     "title": "Buyer"
+    },
+    "support": {
+     "code": "43-3061.00",
+     "source": "reported",
+     "title": "Purchasing Clerk"
+    }
+   }
   },
   "product": {
    "categories": [
@@ -2522,6 +3292,9 @@
      "number": "2",
      "pcf_id": "10003"
     }
+   ],
+   "keywords": [
+    "Product"
    ],
    "occupations": {
     "manager": [
@@ -2583,7 +3356,24 @@
     "PLM",
     "Wiki"
    ],
-   "title": "Product Management"
+   "title": "Product Management",
+   "titles": {
+    "head": {
+     "code": "11-2021.00",
+     "source": "alternate",
+     "title": "Product Management Director"
+    },
+    "manager": {
+     "code": "11-2021.00",
+     "source": "reported",
+     "title": "Product Manager"
+    },
+    "professional": {
+     "code": null,
+     "source": "derived",
+     "title": "Product Management Analyst"
+    }
+   }
   },
   "production": {
    "categories": [
@@ -2592,6 +3382,11 @@
      "number": "4",
      "pcf_id": "20022"
     }
+   ],
+   "keywords": [
+    "Production",
+    "Plant",
+    "Manufacturing"
    ],
    "occupations": {
     "manager": [
@@ -2654,7 +3449,29 @@
     "MES",
     "ERP-MM"
    ],
-   "title": "Production"
+   "title": "Production",
+   "titles": {
+    "head": {
+     "code": "11-3051.00",
+     "source": "alternate",
+     "title": "Manufacturing Director"
+    },
+    "manager": {
+     "code": "11-3051.00",
+     "source": "reported",
+     "title": "Plant Manager"
+    },
+    "professional": {
+     "code": "17-2112.00",
+     "source": "reported",
+     "title": "Plant Engineer"
+    },
+    "support": {
+     "code": "51-9199.00",
+     "source": "alternate",
+     "title": "Production Worker"
+    }
+   }
   },
   "quality": {
    "categories": [
@@ -2673,6 +3490,9 @@
      "number": "13",
      "pcf_id": "10013"
     }
+   ],
+   "keywords": [
+    "Quality"
    ],
    "occupations": {
     "manager": [
@@ -2764,7 +3584,29 @@
     "MES",
     "DMS"
    ],
-   "title": "Quality"
+   "title": "Quality",
+   "titles": {
+    "head": {
+     "code": "11-3051.01",
+     "source": "reported",
+     "title": "Quality Director"
+    },
+    "manager": {
+     "code": "11-3051.01",
+     "source": "reported",
+     "title": "Quality Manager"
+    },
+    "professional": {
+     "code": "17-2112.02",
+     "source": "reported",
+     "title": "Quality Engineer"
+    },
+    "support": {
+     "code": "51-9061.00",
+     "source": "reported",
+     "title": "Quality Technician"
+    }
+   }
   },
   "risk": {
    "categories": [
@@ -2773,6 +3615,9 @@
      "number": "11",
      "pcf_id": "16437"
     }
+   ],
+   "keywords": [
+    "Risk"
    ],
    "occupations": {
     "manager": [
@@ -2839,7 +3684,24 @@
     "BI",
     "DMS"
    ],
-   "title": "Risk"
+   "title": "Risk",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Risk"
+    },
+    "manager": {
+     "code": "11-9199.02",
+     "source": "reported",
+     "title": "Risk Manager"
+    },
+    "professional": {
+     "code": "13-2054.00",
+     "source": "reported",
+     "title": "Risk Analyst"
+    }
+   }
   },
   "sales": {
    "categories": [
@@ -2848,6 +3710,11 @@
      "number": "3",
      "pcf_id": "10004"
     }
+   ],
+   "keywords": [
+    "Sales",
+    "Account Executive",
+    "Account Manager"
    ],
    "occupations": {
     "manager": [
@@ -2927,7 +3794,24 @@
     "CPQ",
     "Email"
    ],
-   "title": "Sales"
+   "title": "Sales",
+   "titles": {
+    "head": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Director"
+    },
+    "manager": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Manager"
+    },
+    "professional": {
+     "code": "41-4012.00",
+     "source": "reported",
+     "title": "Salesperson"
+    }
+   }
   },
   "sales_ops": {
    "categories": [
@@ -2936,6 +3820,12 @@
      "number": "3",
      "pcf_id": "10004"
     }
+   ],
+   "keywords": [
+    "Sales Operations",
+    "Sales Support",
+    "Order",
+    "Sales"
    ],
    "occupations": {
     "manager": [
@@ -2993,7 +3883,29 @@
     "CPQ",
     "ERP-SD"
    ],
-   "title": "Sales Operations"
+   "title": "Sales Operations",
+   "titles": {
+    "head": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Director"
+    },
+    "manager": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Manager"
+    },
+    "professional": {
+     "code": "11-2022.00",
+     "source": "alternate",
+     "title": "Sales Coordinator"
+    },
+    "support": {
+     "code": "43-4151.00",
+     "source": "reported",
+     "title": "Order Clerk"
+    }
+   }
   },
   "service_delivery": {
    "categories": [
@@ -3002,6 +3914,11 @@
      "number": "5",
      "pcf_id": "20025"
     }
+   ],
+   "keywords": [
+    "Operations",
+    "Service Delivery",
+    "Project"
    ],
    "occupations": {
     "manager": [
@@ -3069,7 +3986,24 @@
     "ERP-SD",
     "ITSM"
    ],
-   "title": "Service Delivery"
+   "title": "Service Delivery",
+   "titles": {
+    "head": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Operations Director"
+    },
+    "manager": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Operations Manager"
+    },
+    "professional": {
+     "code": "13-1082.00",
+     "source": "reported",
+     "title": "Project Management Consultant"
+    }
+   }
   },
   "strategy": {
    "categories": [
@@ -3078,6 +4012,12 @@
      "number": "1",
      "pcf_id": "10002"
     }
+   ],
+   "keywords": [
+    "Strategy",
+    "Strategic",
+    "Executive",
+    "Operations"
    ],
    "occupations": {
     "manager": [
@@ -3229,7 +4169,29 @@
     "EPM",
     "DMS"
    ],
-   "title": "Strategy & Corporate Development"
+   "title": "Strategy & Corporate Development",
+   "titles": {
+    "head": {
+     "code": "11-1011.00",
+     "source": "reported",
+     "title": "Executive Director"
+    },
+    "manager": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Operations Manager"
+    },
+    "professional": {
+     "code": "13-1111.00",
+     "source": "alternate",
+     "title": "Operations Analyst"
+    },
+    "support": {
+     "code": "43-6011.00",
+     "source": "reported",
+     "title": "Executive Assistant"
+    }
+   }
   },
   "tax": {
    "categories": [
@@ -3238,6 +4200,9 @@
      "number": "9",
      "pcf_id": "17058"
     }
+   ],
+   "keywords": [
+    "Tax"
    ],
    "occupations": {
     "manager": [
@@ -3279,7 +4244,24 @@
     "ERP-FI",
     "DMS"
    ],
-   "title": "Tax"
+   "title": "Tax",
+   "titles": {
+    "head": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Tax Director"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Tax Manager"
+    },
+    "professional": {
+     "code": "13-2082.00",
+     "source": "reported",
+     "title": "Tax Advisor"
+    }
+   }
   },
   "trade_compliance": {
    "categories": [
@@ -3288,6 +4270,12 @@
      "number": "9",
      "pcf_id": "17058"
     }
+   ],
+   "keywords": [
+    "Customs",
+    "Trade",
+    "Export",
+    "Import"
    ],
    "occupations": {
     "manager": [
@@ -3370,7 +4358,29 @@
     "TMS",
     "DMS"
    ],
-   "title": "Global Trade"
+   "title": "Global Trade",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Global Trade"
+    },
+    "manager": {
+     "code": "11-3071.00",
+     "source": "alternate",
+     "title": "Import Manager"
+    },
+    "professional": {
+     "code": "13-1041.08",
+     "source": "alternate",
+     "title": "Importer"
+    },
+    "support": {
+     "code": "43-5011.01",
+     "source": "reported",
+     "title": "Import Agent"
+    }
+   }
   },
   "treasury": {
    "categories": [
@@ -3380,11 +4390,20 @@
      "pcf_id": "17058"
     }
    ],
+   "keywords": [
+    "Treasury",
+    "Treasurer",
+    "Cash Manage"
+   ],
    "occupations": {
     "manager": [
      {
       "code": "11-3031.01",
       "title": "Treasurers and Controllers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
      }
     ],
     "professional": [
@@ -3460,7 +4479,24 @@
     "Treasury",
     "ERP-FI"
    ],
-   "title": "Treasury"
+   "title": "Treasury",
+   "titles": {
+    "head": {
+     "code": "11-3031.01",
+     "source": "reported",
+     "title": "Treasurer"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Cash Manager"
+    },
+    "professional": {
+     "code": "13-2051.00",
+     "source": "alternate",
+     "title": "Treasury Analyst"
+    }
+   }
   },
   "warehouse": {
    "categories": [
@@ -3469,6 +4505,9 @@
      "number": "4",
      "pcf_id": "20022"
     }
+   ],
+   "keywords": [
+    "Warehouse"
    ],
    "occupations": {
     "manager": [
@@ -3521,7 +4560,29 @@
     "WMS",
     "ERP-MM"
    ],
-   "title": "Warehouse"
+   "title": "Warehouse",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Warehouse"
+    },
+    "manager": {
+     "code": "53-1042.00",
+     "source": "reported",
+     "title": "Warehouse Manager"
+    },
+    "professional": {
+     "code": "53-1042.00",
+     "source": "alternate",
+     "title": "Warehouse Coordinator"
+    },
+    "support": {
+     "code": "53-7062.00",
+     "source": "reported",
+     "title": "Warehouse Worker"
+    }
+   }
   }
  },
  "schema": "worldloom.functions/v1",
@@ -3535,5 +4596,6 @@
   "professional": "does the judgement work: analysis, decisions, approvals",
   "support": "does the transactional work: capture, posting, filing, dispatch"
  },
+ "title_rule": "Per tier, the shortest O*NET title of the function's seats that carries the tier's word and one of the function's keywords; reported titles before alternate ones; a tier with no such title gets a derived title (source: derived); a function with no support title seats no support role.",
  "version": 1
 }
