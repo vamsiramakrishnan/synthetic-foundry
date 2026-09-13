@@ -30,6 +30,7 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Run a corpus against Gemini Enterprise | [Gemini Enterprise](gemini-enterprise.md) | [Agent workflow evals](agent-workflow-evals.md) |
 | Run an agent over a case set and grade plan, trajectory and outcomes | [Eval execution](eval-execution.md) | [Enterprise agent evals](enterprise-agent-evals.md) and [Connector serving](connector-serving.md) |
 | Derive every line of business, process, request and count an industry implies | [Industry programme](industry-programme.md) | [Process bindings](process-bindings.md) and [Worldloom Studio](studio.md) |
+| Read the process, occupation and function tables the company model is built from | [Reference data](reference-data.md) | [Industry programme](industry-programme.md) and [Process catalogue](process-catalogue.md) |
 | Make rendered artifacts read like their real products | [Artifact ecology](artifact-ecology.md) | [Artifact compiler](artifact-compiler.md) |
 | Look up an exact CLI flag | [Generated command reference](../.claude/skills/worldloom/references/commands.md) | The relevant workflow guide above |
 

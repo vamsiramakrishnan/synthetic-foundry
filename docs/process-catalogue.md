@@ -214,6 +214,8 @@ coverage consistency. It reads compiler constants with `ast.literal_eval` and
 never imports or executes the supplied compiler. It records both raw source
 checksums and structural checksums for the archived outputs.
 
-This integration does not finish the earlier external-data acquisition task.
-Official PCF workbooks, full multilingual ESCO records, anonymised Jira
-measurements and filing-derived segment labels remain separate evidence inputs.
+The official PCF workbooks and the O*NET database are now shipped as data;
+see [Reference data](reference-data.md). The catalogue's `apqc` column is
+still the hand-typed index, not the stable `pcf_id`; full multilingual ESCO
+records, anonymised Jira measurements and filing-derived segment labels
+remain separate evidence inputs.

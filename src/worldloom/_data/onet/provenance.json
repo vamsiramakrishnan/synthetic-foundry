@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "file": "occupations@31.0.json.gz",
+      "job_titles": 54269,
+      "occupations": 1016,
+      "release": "31.0",
+      "released": "August 2026",
+      "software_rows": 31821,
+      "source_file": "db_31_0_csv.zip",
+      "source_sha256": "55033fc68b4c13ec23e7f74dc6378660f6e854e75d55d6e333ae0a761d3987cd",
+      "source_url": "https://www.onetcenter.org/database.html",
+      "tasks": 18838,
+      "work_activities": 2087
+    }
+  ],
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+  "schema": "worldloom.onet-provenance/v1"
+}

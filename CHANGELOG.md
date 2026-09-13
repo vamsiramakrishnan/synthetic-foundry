@@ -11,6 +11,27 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Reference data: the PCF, O*NET and the function table
+
+- The APQC Process Classification Framework ships as data: the cross-industry
+  framework 7.4 and seventeen industry frameworks under `_data/pcf/`, each
+  element with APQC's stable `pcf_id`, its hierarchy index, description and
+  benchmarking metrics, and each file carrying the notice APQC's licence
+  requires. `worldloom.pcf` reads them; `tools/ingest_apqc.py` writes them
+  from the workbooks and refuses one without a notice.
+- The O*NET 31.0 database ships as data under `_data/onet/`: 1,016
+  occupations with descriptions, job zones, the titles incumbents report,
+  task statements mapped to detailed work activities, and the software each
+  occupation uses. `worldloom.onet` reads it; `tools/ingest_onet.py` writes
+  it with the CC BY 4.0 credit line.
+- `worldloom.functions` is the crosswalk between the two: every level-3
+  process of the cross-industry PCF assigned to exactly one of 42 business
+  functions, each function seated with O*NET occupations in manager,
+  professional and support tiers and bound to the catalogue's system-of-record
+  classes. `tools/build_functions.py` builds it from three authored tables
+  and resolves every id and name against the shipped sources; the tests do
+  the same against the shipped file. See `docs/reference-data.md`.
+
 ### Industry X, and the whole evaluation programme it implies
 
 - `worldloom industry programme INDUSTRY OUT` (`worldloom.industry`) derives
