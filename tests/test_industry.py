@@ -362,7 +362,10 @@ def test_export_writes_the_programme_and_reads_back(
         "cases.jsonl",
         "use-cases.json",
         "coverage.json",
+        "records.jsonl",
     }
+    records = (tmp_path / "out" / "records.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(records) == telecom.summary.records == len(telecom.records)
     summary = industry.IndustryProgramme.model_validate(
         json.loads((tmp_path / "out" / "programme.json").read_text())
     )
@@ -374,6 +377,37 @@ def test_export_writes_the_programme_and_reads_back(
     assert industry.Request.model_validate_json(lines[0]) == telecom.requests[0]
     cases = (tmp_path / "out" / "cases.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(cases) == telecom.summary.requests
+
+
+def test_record_set_requests_read_their_answers_off_the_records(
+    telecom: industry.Programme,
+) -> None:
+    """An intent whose evidence is a record set is asked about the latest period's
+    records and answered from them; one whose evidence is the declaration is not."""
+    from worldloom import sor
+    from worldloom.evals.intents import intents
+
+    table = intents()
+    by_id = {record.id: record for record in telecom.records}
+    grounded = [r for r in telecom.requests if r.expected_record_ids]
+    assert len(grounded) == telecom.summary.record_requests > 0
+    assert telecom.summary.period == sor.ANCHOR_PERIOD and telecom.summary.periods == sor.DEFAULT_PERIODS
+    grouped = sor.by_binding(telecom.records)
+    for request in telecom.requests:
+        intent = table[request.intent]
+        if "record_set" in intent.evidence_kinds and request.occasion in grouped:
+            assert request.period == sor.ANCHOR_PERIOD and request.expected_record_ids
+            cited = [by_id[i] for i in request.expected_record_ids]
+            assert all(c.fields["binding_id"] == request.occasion and c.fields["period"] == request.period for c in cited)
+            expected, ids = sor.answer(intent.id, intent.answer_shape, grouped[request.occasion][request.period])
+            assert (request.expected_answer, request.expected_record_ids) == (expected, ids)
+            assert f"Period: {request.period}" in request.brief
+            assert "records of" in (request.to_case().reasoning or "")
+        else:
+            assert request.period is None and request.expected_record_ids == ()
+    found = next(r for r in grounded if r.intent == "find_exception")
+    assert "tripped" in found.expected_answer
+    assert len({r.expected_answer for r in telecom.requests}) > 4 * len({industry._answer(row) for row in telecom.compiled.rows})
 
 
 def test_describe_reports_the_headline_numbers() -> None:

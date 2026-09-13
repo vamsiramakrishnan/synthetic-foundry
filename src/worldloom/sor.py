@@ -58,6 +58,16 @@ EXCEPTION_EVERY = 4
 #: the world's period and the five before it, two quarters of work.
 DEFAULT_PERIODS = 6
 
+#: The period a programme's records end at when no world names one. A
+#: declared anchor, so a programme derived without a world and a dataset built
+#: from one agree on the records they cite.
+ANCHOR_PERIOD = "2026-06"
+
+#: Records per binding, record kind and period. Three, so a list answer (the
+#: exceptions among March's purchase orders, the open items to chase) is a
+#: subset of a set rather than a yes or no about one record.
+RECORDS_PER_PERIOD = 3
+
 _PLACEHOLDER = re.compile(r"\{(\d+)d\}|\{(\d+)\}")
 
 
@@ -139,19 +149,20 @@ def records(
             states = states_of.setdefault(kind, _workflow_states(kind))
             model = models.get((row.sor_product, kind), {})
             for period in periods:
-                out.append(_record(row, kind, period, company_id, model, states, currencies, facts_by_binding))
+                for ordinal in range(RECORDS_PER_PERIOD):
+                    out.append(_record(row, kind, period, ordinal, company_id, model, states, currencies, facts_by_binding))
     return out
 
 
 def _record(
-    row: ActivityBinding, kind: str, period: str, company_id: str, model: dict[str, Any],
+    row: ActivityBinding, kind: str, period: str, ordinal: int, company_id: str, model: dict[str, Any],
     states: tuple[str, ...], currencies: dict[str, str], facts_by_binding: dict[str, list[str]],
 ) -> ConnectorRecord:
-    key = content_key(CONNECTOR, company_id, row.id, kind, period)
+    key = content_key(CONNECTOR, company_id, row.id, kind, period, ordinal)
     ident = _ident(model.get("id"), kind, key)
-    ordinal = int(key[16:24], 16)
-    status = states[ordinal % len(states)]
-    tripped = bool(row.exception.strip()) and ordinal % EXCEPTION_EVERY == 0
+    draw = int(key[16:24], 16)
+    status = states[draw % len(states)]
+    tripped = bool(row.exception.strip()) and draw % EXCEPTION_EVERY == 0
     fields: dict[str, Any] = {
         "ident": ident,
         "object": kind,
@@ -174,6 +185,7 @@ def _record(
         "period": period,
         "company_id": company_id,
         "binding_id": row.id,
+        "terminal": status == states[-1],
     }
     if kind in MONEY_KINDS:
         fields["amount"] = round(100.0 * (1 + int(key[24:30], 16) % 9000), 2)
@@ -204,13 +216,67 @@ def projections(
     the world's own connectors project as they did, and every product the
     catalogue names is answered by the `sor` connector beside them.
     """
-    period = str(getattr(world, "period", None) or "2026-01")
-    company_id = str(getattr(getattr(world, "company", None), "id", "") or compiled.company)
-    rows = records(compiled, company_id=company_id, periods=periods_ending(period, periods), facts=facts, catalogue=catalogue)
+    period = str(getattr(world, "period", None) or ANCHOR_PERIOD)
+    rows = records(compiled, company_id=compiled.company, periods=periods_ending(period, periods), facts=facts, catalogue=catalogue)
     return builtin_projections().extended(CONNECTOR, rows)
 
 
+def by_binding(rows: Sequence[ConnectorRecord]) -> dict[str, dict[str, list[ConnectorRecord]]]:
+    """Records by binding id, then by period, in the order they were derived."""
+    out: dict[str, dict[str, list[ConnectorRecord]]] = {}
+    for record in rows:
+        out.setdefault(str(record.fields["binding_id"]), {}).setdefault(str(record.fields["period"]), []).append(record)
+    return out
+
+
+def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -> tuple[str, tuple[str, ...]]:
+    """The expected answer to a record-set intent over one binding's records in one period.
+
+    Derived from the records alone, so an agent that reads the same records
+    reaches the same answer: the exceptions among them for a `list` intent, the
+    open ones in workflow order for a `ranked_list`, the item to chase and its
+    owner for a `message`, the count and statuses for anything else. Returns the
+    text and the ids of the records it cites.
+    """
+    if not rows:
+        raise ValueError("an answer needs at least one record")
+    first = rows[0].fields
+    kind, activity, period, owner = first["object"], first["activity"], first["period"], first["owner_bu"]
+    kinds = sorted({str(r.fields["object"]) for r in rows})
+    what = kind if len(kinds) == 1 else f"{', '.join(kinds)}"
+    ordered = sorted(rows, key=lambda r: (str(r.fields["object"]), str(r.external_id)))
+    tripped = [r for r in ordered if r.fields["exception"]]
+    open_items = [r for r in ordered if not r.fields["terminal"]]
+    if intent_id in {"find_exception", "reconcile"} or answer_shape == "list":
+        if tripped:
+            names = ", ".join(f"{r.fields['object']} {r.external_id} ({r.fields['exception']})" for r in tripped)
+            return (f"{len(tripped)} of {len(ordered)} {what} records for {activity} in {period} tripped the exception: {names}.",
+                    tuple(r.id for r in tripped))
+        return (f"None of the {len(ordered)} {what} records for {activity} in {period} tripped an exception.",
+                tuple(r.id for r in ordered))
+    if answer_shape == "ranked_list" or intent_id == "triage_queue":
+        if not open_items:
+            return (f"Nothing to triage: all {len(ordered)} {what} records for {activity} in {period} are closed.",
+                    tuple(r.id for r in ordered))
+        ranked = sorted(open_items, key=lambda r: (str(r.fields["status"]), str(r.external_id)))
+        names = "; ".join(f"{r.fields['object']} {r.external_id} ({r.fields['status']})" for r in ranked)
+        return (f"{len(ranked)} open of {len(ordered)} {what} records for {activity} in {period}, by workflow stage: {names}.",
+                tuple(r.id for r in ranked))
+    if answer_shape == "message" or intent_id == "chase":
+        targets = tripped or open_items
+        if not targets:
+            return (f"Nothing to chase: every {what} record for {activity} in {period} is closed.",
+                    tuple(r.id for r in ordered))
+        names = ", ".join(f"{r.fields['object']} {r.external_id}" for r in targets)
+        return (f"Chase {owner} for {names}: {activity}, {period}, outstanding in {first['product']}.",
+                tuple(r.id for r in targets))
+    statuses = sorted({str(r.fields["status"]) for r in ordered})
+    names = ", ".join(f"{r.fields['object']} {r.external_id} is {r.fields['status']}" for r in ordered)
+    return (f"{len(ordered)} {what} records for {activity} in {period} ({', '.join(statuses)}): {names}.",
+            tuple(r.id for r in ordered))
+
+
 __all__ = [
-    "CONNECTOR", "DEFAULT_PERIODS", "EXCEPTION_EVERY", "MONEY_KINDS",
-    "entity_name", "periods_ending", "projections", "records",
+    "ANCHOR_PERIOD", "CONNECTOR", "DEFAULT_PERIODS", "EXCEPTION_EVERY", "MONEY_KINDS", "RECORDS_PER_PERIOD",
+    "answer", "by_binding", "entity_name", "periods_ending", "projections", "records",
 ]

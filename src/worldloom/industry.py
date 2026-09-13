@@ -63,7 +63,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from . import factkinds, functions
+from . import factkinds, functions, sor
+from .connector_data import ConnectorRecord
 from .evals.intents import Intent, intents
 from .ids import Minter
 from .lob import Lob, Responsibility, RoleSpec, lint_lob, may_ask_about
@@ -465,6 +466,12 @@ class Request(Model):
     A brief, not a phrasing; phrasing is a later, sampled step."""
     expected_answer: str
     expected_fact_ids: tuple[str, ...] = ()
+    expected_record_ids: tuple[str, ...] = ()
+    """The system-of-record records the answer cites (`sor.records` ids), for
+    an intent whose evidence is a record set; empty when the answer is the
+    catalogue's declaration alone."""
+    period: str | None = None
+    """The period the request is about, when it is about records."""
     grading: EvaluationType
     effect: Literal["read", "write"]
     stream: str
@@ -500,7 +507,12 @@ class Request(Model):
             difficulty="hard"
             if abstains
             else ("medium" if self.effect == "write" else "easy"),
-            reasoning=f"Derived from binding {self.occasion} by {self.intent}; the answer is the catalogue's declaration.",
+            reasoning=(
+                f"Derived from binding {self.occasion} by {self.intent}; the answer is read off"
+                f" {len(self.expected_record_ids)} records of {self.period} in {self.system_of_record}."
+                if self.expected_record_ids
+                else f"Derived from binding {self.occasion} by {self.intent}; the answer is the catalogue's declaration."
+            ),
             asker=self.asker,
             occasion=self.occasion,
             intent=self.intent,
@@ -519,12 +531,14 @@ def _seat(family: str, activity_type: str) -> str:
         ) from None
 
 
-def _brief(intent: Intent, row: ActivityBinding, constraint: str) -> str:
+def _brief(intent: Intent, row: ActivityBinding, constraint: str, period: str | None = None) -> str:
     verb = intent.verb[:1].upper() + intent.verb[1:]
     text = (
         f"{verb}: {row.activity} ({row.stream_name}) for {row.owner_bu}, {row.country}."
         f" The record is in {row.sor_product}."
     )
+    if period:
+        text += f" Period: {period}."
     if constraint:
         text += f" Constraint: {constraint}."
     return text
@@ -544,6 +558,7 @@ def requests(
     fact_ids: dict[str, tuple[str, ...]] | None = None,
     effect: Literal["read", "write"] | None = None,
     limit: int | None = None,
+    records: Sequence[ConnectorRecord] | None = None,
 ) -> Iterator[Request]:
     """Every request the compiled catalogue supports, seated.
 
@@ -552,10 +567,18 @@ def requests(
     to `derive_lobs(compiled)`; a caller passing its own must cover every
     family with bound rows, and a family no LOB covers is refused rather than
     seated with nobody.
+
+    With *records* (`sor.records` for this company), a request whose intent
+    rests on a record set is asked about the binding's records in their
+    latest period and its answer is read off them (`sor.answer`): the
+    purchase orders that tripped the price check, the open items to chase.
+    The earlier periods stay in the records as the distractors a real system
+    holds. Without records every answer is the catalogue's declaration.
     """
     derived = tuple(lobs) if lobs is not None else derive_lobs(compiled)
     by_name = {spec.name: spec for spec in derived}
     ids = fact_ids if fact_ids is not None else fact_index(facts(compiled))
+    grouped = sor.by_binding(records) if records else {}
     table = intents()
     minter = Minter(width=6)
     yielded = 0
@@ -569,9 +592,16 @@ def requests(
         asker = _seat(row.function, row.type)
         if asker not in titles:
             raise ValueError(f"LOB {spec.name!r} declares no role {asker!r}")
+        periods = grouped.get(row.id, {})
+        latest = max(periods) if periods else None
         for situation in situations_for(row, effect=effect):
             intent = table[situation.intent]
             constraint = situation.constraint.strip() or None
+            grounded = latest is not None and "record_set" in intent.evidence_kinds
+            if grounded:
+                expected, record_ids = sor.answer(intent.id, intent.answer_shape, periods[latest])  # type: ignore[index]
+            else:
+                expected, record_ids = _answer(row), ()
             yield Request(
                 id=minter.next("REQ"),
                 lob=spec.name,
@@ -582,9 +612,11 @@ def requests(
                 channel=situation.channel,
                 constraint=constraint,
                 deliverable=intent.deliverable,
-                brief=_brief(intent, row, constraint or ""),
-                expected_answer=_answer(row),
+                brief=_brief(intent, row, constraint or "", latest if grounded else None),
+                expected_answer=expected,
                 expected_fact_ids=ids.get(row.id, ()),
+                expected_record_ids=record_ids,
+                period=latest if grounded else None,
                 grading=EvaluationType(intent.grading),
                 effect=intent.effect,
                 stream=row.stream,
@@ -688,6 +720,13 @@ class IndustryProgramme(Model):
     situations: int
     requests: int
     facts: int
+    records: int = 0
+    """System-of-record records derived for the company (`sor.records`)."""
+    record_requests: int = 0
+    """Requests whose answer is read off those records."""
+    period: str = ""
+    """The period the records end at; the one record requests are about."""
+    periods: int = 0
     reads: int
     writes: int
     unemulated: tuple[str, ...]
@@ -806,6 +845,7 @@ class Programme:
     lobs: tuple[Lob, ...]
     facts: tuple[CanonicalFact, ...]
     requests: tuple[Request, ...]
+    records: tuple[ConnectorRecord, ...] = ()
 
     def cases(self) -> Iterator[EvaluationCase]:
         for request in self.requests:
@@ -831,6 +871,8 @@ def programme(
     catalogue: dict[str, Any] | None = None,
     as_of: datetime = EPOCH,
     root: RoleSpec | None = ROOT,
+    period: str = sor.ANCHOR_PERIOD,
+    periods: int = sor.DEFAULT_PERIODS,
 ) -> Programme:
     """The whole programme for an industry (its default company) or a company spec.
 
@@ -839,6 +881,10 @@ def programme(
     none is. The summary's `findings` carry the LOB lint and the standing
     check; both are empty for every shipped industry, and a caller who edits
     the catalogue reads them before trusting the count.
+
+    The company's system-of-record records are derived for *periods* months
+    ending at *period* (`sor.records`), and every request whose intent rests
+    on a record set is asked about the latest of them.
     """
     from . import domains
 
@@ -847,8 +893,12 @@ def programme(
     compiled = compile_company(company, catalogue=cat)
     lobs = derive_lobs(compiled, engine=engine, catalogue=cat, root=root)
     derived_facts = facts(compiled, as_of=as_of)
+    derived_records = tuple(sor.records(
+        compiled, company_id=compiled.company, periods=sor.periods_ending(period, periods),
+        facts=derived_facts, catalogue=cat,
+    ))
     derived_requests = tuple(
-        requests(compiled, lobs, fact_ids=fact_index(derived_facts))
+        requests(compiled, lobs, fact_ids=fact_index(derived_facts), records=derived_records)
     )
     derived_lines = lines(compiled, lobs, catalogue=cat)
     world_engine = engine if engine is not None else compiled.industry
@@ -869,6 +919,10 @@ def programme(
         situations=sum(line.situations for line in derived_lines),
         requests=len(derived_requests),
         facts=len(derived_facts),
+        records=len(derived_records),
+        record_requests=sum(1 for request in derived_requests if request.expected_record_ids),
+        period=period,
+        periods=periods,
         reads=sum(line.reads for line in derived_lines),
         writes=sum(line.writes for line in derived_lines),
         unemulated=tuple(unemulated),
@@ -883,6 +937,7 @@ def programme(
         lobs=lobs,
         facts=derived_facts,
         requests=derived_requests,
+        records=derived_records,
     )
 
 
@@ -1178,6 +1233,8 @@ def export(derived: Programme, out: str | Path) -> dict[str, str]:
     written["requests.jsonl"] = str(root / "requests.jsonl")
     write_jsonl(root / "cases.jsonl", list(derived.cases()))
     written["cases.jsonl"] = str(root / "cases.jsonl")
+    write_jsonl(root / "records.jsonl", list(derived.records))
+    written["records.jsonl"] = str(root / "records.jsonl")
     json_file(
         "use-cases.json",
         {"use_cases": [case.model_dump(mode="json") for case in derived.use_cases()]},

@@ -11,6 +11,26 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Requests read their answers off the records
+
+- A programme now derives the company's system-of-record records
+  (`sor.records`, six periods ending at `sor.ANCHOR_PERIOD`, three records
+  per binding, kind and period) and every request whose intent rests on a
+  record set (`evidence_kinds` names `record_set`: find the exception,
+  triage a queue, chase, reconcile, respond to a query and the others) is
+  asked about the binding's records in the latest period and answered from
+  them (`sor.answer`): the purchase orders among March's that tripped the
+  price check, the open items to chase and their owner, the statuses of the
+  rest. `Request.expected_record_ids` names the records the answer cites and
+  `Request.period` the period; the earlier periods stay in the records as
+  the distractors a real system holds. A request whose intent rests on the
+  declaration alone still answers with it. One request per situation, as
+  before, so the counts are unchanged; a telecom's 5,550 requests now have
+  903 distinct answers rather than 203. `IndustryProgramme` reports
+  `records`, `record_requests`, `period` and `periods`; `industry export`
+  writes `records.jsonl`. Generation: every programme's requests and cases
+  change where the intent reads records.
+
 ### Every system the catalogue names has records
 
 - `_data/connectors/sor.json`, one system-of-record connector standing in

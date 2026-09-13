@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from worldloom import industry, sor
 from worldloom.connector_definition import (
     REFERENCE_CONNECTORS,
@@ -64,7 +66,7 @@ def test_records_are_derived_from_bindings_and_the_same_every_time() -> None:
     second = sor.records(compiled, company_id="C1", periods=periods)
     assert first == second and first
     bound = [row for row in compiled.rows if row.sor_objects]
-    assert len(first) == sum(len(row.sor_objects) for row in bound) * len(periods)
+    assert len(first) == sum(len(row.sor_objects) for row in bound) * len(periods) * sor.RECORDS_PER_PERIOD
     assert len({record.id for record in first}) == len(first)
     by_kind = {record.fields["object"]: record for record in first}
     po = by_kind["PurchaseOrder"]
@@ -133,3 +135,29 @@ def test_a_frozen_company_build_reads_the_projections(tmp_path: Path) -> None:
     served = registry.project("sor", world)
     assert served and all(record.connector == "sor" for record in served)
     assert any(record.fields["stream"] == "usage_to_bill" for record in served)
+
+
+def test_answers_are_read_off_the_records_by_shape() -> None:
+    compiled = compile_company(default_company("retail"))
+    rows = sor.records(compiled, company_id=compiled.company, periods=("2026-06",))
+    grouped = sor.by_binding(rows)
+    binding = next(b for b, periods in grouped.items()
+                   if any(r.fields["exception"] for r in periods["2026-06"]) and any(not r.fields["terminal"] for r in periods["2026-06"]))
+    period_rows = grouped[binding]["2026-06"]
+    assert len(period_rows) == sor.RECORDS_PER_PERIOD * len({r.fields["object"] for r in period_rows})
+    text, ids = sor.answer("find_exception", "list", period_rows)
+    tripped = [r for r in period_rows if r.fields["exception"]]
+    assert ids == tuple(sorted((r.id for r in tripped), key=lambda i: next(x.external_id for x in tripped if x.id == i)))[:0] or set(ids) == {r.id for r in tripped}
+    assert text.startswith(f"{len(tripped)} of {len(period_rows)}") and "tripped the exception" in text
+    text, ids = sor.answer("triage_queue", "ranked_list", period_rows)
+    assert set(ids) == {r.id for r in period_rows if not r.fields["terminal"]} and "by workflow stage" in text
+    text, ids = sor.answer("chase", "message", period_rows)
+    assert text.startswith("Chase ") and set(ids) == {r.id for r in tripped}
+    text, ids = sor.answer("respond_to_query", "narrative", period_rows)
+    assert set(ids) == {r.id for r in period_rows} and " is " in text
+    closed = [r.model_copy(update={"fields": {**r.fields, "terminal": True, "exception": ""}}) for r in period_rows]
+    assert sor.answer("triage_queue", "ranked_list", closed)[0].startswith("Nothing to triage")
+    assert sor.answer("chase", "message", closed)[0].startswith("Nothing to chase")
+    assert sor.answer("find_exception", "list", closed)[0].startswith("None of the")
+    with pytest.raises(ValueError, match="at least one record"):
+        sor.answer("chase", "message", [])

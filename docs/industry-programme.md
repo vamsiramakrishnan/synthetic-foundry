@@ -89,6 +89,26 @@ no emulator (chat, a workflow approval, a portal filing) is still reported as
 unemulated, and the file is versioned in its name because changing which
 connector stands in for a system changes every programme derived from it.
 
+## Requests read their answers off the records
+
+A programme derives the company's records in every system its bindings name
+(`worldloom.sor`: six periods ending at `sor.ANCHOR_PERIOD`, three records
+per binding, record kind and period, ids in the product's own pattern, a
+status from the kind's workflow, the exception on one record in four). A
+request whose intent rests on a record set, which `evals/intents.json`
+declares with `record_set` among its `evidence_kinds` (find the exception,
+triage a queue, chase, reconcile, respond to a query), is asked about the
+binding's records in the latest period and its expected answer is read off
+them by `sor.answer`: the records that tripped the exception for a list, the
+open ones in workflow order for a ranked list, the item to chase and its
+owner for a message, the count and statuses otherwise. `Request.period`
+names the period and `Request.expected_record_ids` the records the answer
+cites; `industry export` writes them as `records.jsonl` beside the requests.
+A request whose intent rests on the declaration alone (sign off, decide,
+review against policy) still answers with the catalogue's declaration. One
+request per situation either way, so the counts below are unchanged; what
+changes is how many of them have an answer of their own.
+
 `IndustryProgramme.engine` names the registered domain that builds the
 company's world (`retail`, `banking`, `insurance`) and is empty for the nine
 industries no engine builds. For those the programme stands on the catalogue
