@@ -144,10 +144,28 @@ def test_a_world_without_spend_categories_is_refused() -> None:
         stripped.run(PurchaseToPayCycle(period=PERIOD))
 
 
-def test_the_estate_flag_is_refused_with_its_reason() -> None:
-    """Refused rather than served half-way — see ``ProcureToPayWorld.estate``."""
-    with pytest.raises(ValueError, match="no registration seam"):
-        ProcureToPayWorld(seed=SEED, estate="small").build()
+def test_a_contractor_grows_an_estate_in_its_own_words() -> None:
+    """Refused outright until `landscape.PROCUREMENT` existed — see
+    ``ProcureToPayWorld.estate``. A contractor's estate now builds, validates,
+    speaks procurement, and is owned by the three people who own its systems."""
+    from worldloom import landscape
+
+    bare = ProcureToPayWorld(seed=SEED).build()
+    world = ProcureToPayWorld(seed=SEED, estate="small").build().run(
+        PurchaseToPayCycle(period=PERIOD)
+    )
+    report = world.validate()
+    assert report.ok, "\n".join(str(v) for v in report.violations)
+    grown = {s.name for s in world.services} - {s.name for s in bare.services}
+    spoken = {name for pool in landscape.PROCUREMENT.services.values() for name in pool}
+    assert grown and grown <= spoken, sorted(grown - spoken)
+    assert {s.name for s in world.systems} > {s.name for s in bare.systems}
+    assert world.recipe["estate"] == "small"
+    owners = {s.owner_id for s in world.services}
+    allowed = {world._roles[key] for key in ("chief_procurement", "operations_director", "financial_controller")}
+    assert owners <= allowed, owners - allowed
+    # Nothing the cycle itself mints moved: the estate appends after the core.
+    assert [s.name for s in world.systems][: len(bare.systems)] == [s.name for s in bare.systems]
 
 
 # ---------------------------------------------------------------------------

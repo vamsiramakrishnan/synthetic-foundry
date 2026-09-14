@@ -1,0 +1,305 @@
+{
+  "domain": "retail",
+  "about": "The fact kinds this vertical answers for, in the process-global registry (`worldloom.factkinds`) — the fifth registration seam, and the one `lob.lint_responsibilities` and the episode grammar's lint consult. Retail registers the shared vocabularies too: `close.*` and the incident-chain `ops.*` kinds are minted verbatim by banking's and procurement's episodes (\"reuses retail's close.* kinds verbatim\" — `generators/regulatory.py`), and a kind has one declaration whoever's episode mints it — the other verticals register only what is theirs alone.",
+  "fact_kinds": [
+    {
+      "kind": "close.due_date",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The committed close date for the period."
+    },
+    {
+      "kind": "close.revised_date",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The moved close date, when an incident moves it."
+    },
+    {
+      "kind": "close.status",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "Where the close stands; a delayed status is superseded, never edited."
+    },
+    {
+      "kind": "close.delay",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Business days the close slipped."
+    },
+    {
+      "kind": "financial.revenue.actual",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(financial.revenue.actual)"
+      ],
+      "about": "Actual revenue; child subjects sum to their parent's figure exactly."
+    },
+    {
+      "kind": "financial.revenue.budget",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(financial.revenue.budget)"
+      ],
+      "about": "Budgeted revenue, rolled up the same way."
+    },
+    {
+      "kind": "financial.revenue.variance",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(financial.revenue.actual, financial.revenue.budget)"
+      ],
+      "about": "Actual less budget, exactly — validate.financial() recomputes it."
+    },
+    {
+      "kind": "financial.gross_profit.actual",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(financial.gross_profit.actual)"
+      ],
+      "about": "Actual gross profit."
+    },
+    {
+      "kind": "financial.gross_profit.budget",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(financial.gross_profit.budget)"
+      ],
+      "about": "Budgeted gross profit."
+    },
+    {
+      "kind": "financial.gross_profit.variance",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(financial.gross_profit.actual, financial.gross_profit.budget)"
+      ],
+      "about": "Actual less budget on gross profit."
+    },
+    {
+      "kind": "financial.gross_margin_pct.actual",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(financial.gross_profit.actual, financial.revenue.actual)"
+      ],
+      "about": "The stated margin, derived from the amounts beside it."
+    },
+    {
+      "kind": "financial.gross_margin_pct.budget",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(financial.gross_profit.budget, financial.revenue.budget)"
+      ],
+      "about": "The budgeted margin, same derivation."
+    },
+    {
+      "kind": "financial.incident_pl_impact",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The P&L cost the incident is assessed at."
+    },
+    {
+      "kind": "metric.gross_margin_variance",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Margin variance in points, for the memo."
+    },
+    {
+      "kind": "metric.online_conversion_rate.actual",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Online conversion as landed."
+    },
+    {
+      "kind": "metric.online_conversion_rate.forecast",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Online conversion as forecast."
+    },
+    {
+      "kind": "metric.promotional_depth_margin_impact",
+      "generated_by": "generators/finance.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What promotional depth took off margin."
+    },
+    {
+      "kind": "ops.incident_opened",
+      "generated_by": "generators/operations.py (reused by banking's regulatory.py)",
+      "invariants": [
+        "holds-at",
+        "precedes-event"
+      ],
+      "about": "The raised ticket.",
+      "note": "The incident chain. Shared vocabulary: banking's regulatory episode mints most of these kinds too, against its own incident, under this declaration."
+    },
+    {
+      "kind": "ops.cause",
+      "generated_by": "generators/operations.py (reused by banking's regulatory.py)",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "What broke. The confirmed cause supersedes the initial hypothesis; the hypothesis stays on the record as a past belief."
+    },
+    {
+      "kind": "ops.cause_ruled_out",
+      "generated_by": "generators/operations.py (reused by banking's regulatory.py)",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The evidence that dismissed the hypothesis."
+    },
+    {
+      "kind": "ops.feed_status",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The failed feed's state."
+    },
+    {
+      "kind": "ops.valuation_status",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Whether inventory valuation completed."
+    },
+    {
+      "kind": "ops.workaround",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The applied workaround."
+    },
+    {
+      "kind": "ops.mapping_table_owner",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Who owns the mapping table — 'unassigned' is the finding."
+    },
+    {
+      "kind": "ops.previous_similar_incident",
+      "generated_by": "generators/operations.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The named earlier period a comparable failure occurred in."
+    },
+    {
+      "kind": "ops.root_cause_classification",
+      "generated_by": "generators/operations.py (reused by banking's regulatory.py)",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The audit classification of the failure."
+    },
+    {
+      "kind": "ops.remediation",
+      "generated_by": "generators/operations.py (reused by banking's regulatory.py)",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The tickets raised to fix it."
+    },
+    {
+      "kind": "ops.remediation_addresses",
+      "generated_by": "generators/operations.py (reused by banking's regulatory.py)",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Which remediation addresses the control failure."
+    },
+    {
+      "kind": "ops.affected_records",
+      "generated_by": "generators/operations.py (reused by banking's regulatory.py)",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The blast radius the ticket quotes."
+    },
+    {
+      "kind": "overhead.shared_services.cost",
+      "generated_by": "generators/retail_estate.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(overhead.shared_services.cost)"
+      ],
+      "about": "The corporate cost base, by the cost centre that incurs it; the centres sum to the group figure exactly.",
+      "note": "The corporate centre and the distribution network. Both blocks exist because `validate.reachability` measured this vertical's own organisation as decorative: two cost centres declared by every retail company and named by no fact, and — on any archetype with warehouses — an estate of zero-weight sites the store P&L correctly refuses turnover to and nothing else said anything about. `generators/retail_estate.py` opens with the counts."
+    },
+    {
+      "kind": "overhead.shared_services.recharge",
+      "generated_by": "generators/retail_estate.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(overhead.shared_services.recharge)"
+      ],
+      "about": "The same base, by the division it is recharged to. A second decomposition of one figure over a different set of entities, which is what makes either checkable."
+    },
+    {
+      "kind": "overhead.shared_services.recovery_pct",
+      "generated_by": "generators/retail_estate.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(overhead.shared_services.recharge, financial.revenue.actual)"
+      ],
+      "about": "Recharge as a share of the subject's own revenue. A rate: stated at every level it is read at and summed at none."
+    },
+    {
+      "kind": "logistics.throughput",
+      "generated_by": "generators/retail_estate.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(logistics.throughput)"
+      ],
+      "about": "Cartons dispatched through a distribution centre. The measure a site that sells nothing actually owns."
+    },
+    {
+      "kind": "logistics.cost_to_serve",
+      "generated_by": "generators/retail_estate.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(logistics.cost_to_serve)"
+      ],
+      "about": "What moving that volume cost, by the centre that moved it."
+    },
+    {
+      "kind": "logistics.cost_per_carton",
+      "generated_by": "generators/retail_estate.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(logistics.cost_to_serve, logistics.throughput)"
+      ],
+      "about": "Cost over volume at the level it is stated. A rate — the network's figure is its own two amounts divided, never the total of its centres' rates."
+    }
+  ]
+}

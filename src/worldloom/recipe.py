@@ -33,6 +33,7 @@ That works only if the corpus knows how to rebuild itself.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -158,8 +159,10 @@ def build_recipe(
     annual_revenue: int | None = None,
     pack: Any = None,
     estate: str | None = None,
+    landscape: Any = None,
     physics: Any = None,
     role_table: Any = None,
+    unit_roles: Any = None,
     seasonality: Any = None,
     locale: Any = None,
     master_data: Mapping[str, Any] | None = None,
@@ -183,6 +186,11 @@ def build_recipe(
         # a new field in every recipe ever written for a value that changes
         # nothing, and the default-build byte diff is what catches that.
         **({} if estate is None else {"estate": estate}),
+        # The estate's vocabulary, only when one was chosen: a name, or the
+        # pools themselves (`landscape.document_of`). An absent key is the
+        # engine's own vocabulary, which is what every estate built before
+        # a spec could carry one was made of.
+        **({} if landscape is None else {LANDSCAPE_KEY: _landscape_document(landscape)}),
         # Same conditional rule, and here it also carries a stronger claim:
         # the key is written only when a span actually *differs* from the
         # engine's, so a recipe built with `--physics` whose file happened to
@@ -190,6 +198,8 @@ def build_recipe(
         **_physics_payload(physics),
         # Same conditional rule: the whole table, only when one was authored.
         **({} if role_table is None else {"role_table": [list(row) for row in role_table]}),
+        # The per-unit posts beside the table, under the same rule.
+        **({} if unit_roles is None else {UNIT_ROLES_KEY: _unit_roles_payload(unit_roles)}),
         # Written only when a profile was chosen. The engine's own is the
         # general-retail year every corpus before this traded on, so an
         # absent key means exactly that rather than "unknown".
@@ -252,6 +262,16 @@ def _master_data_payload(master_data: Mapping[str, Any]) -> dict[str, int]:
     from .generators.masterdata import check_request
 
     return check_request(master_data)
+
+
+#: Where the estate's vocabulary lives on a recipe, when one was chosen.
+LANDSCAPE_KEY = "landscape"
+
+
+def _landscape_document(landscape: Any) -> Any:
+    from .landscape import document_of
+
+    return document_of(landscape)
 
 
 def _locale_payload(locale: Any) -> dict[str, Any]:
@@ -465,6 +485,120 @@ def _pack_payload(pack: Any) -> dict[str, Any]:
 #: were shaped by a genome the corpus does not record could not be rebuilt.
 STRUCTURE_KEY = "structure"
 
+#: The process company a Studio project was built for (`process_bindings.CompanySpec`):
+#: its industry, operating model, countries, business units and system
+#: landscape. Recorded on the world so its systems of record can be projected
+#: from the world alone (`connector_data.generate_sor`), and carried through a
+#: rebuild like the structural genome. Absent on every world built without one.
+PROCESS_STRUCTURE_KEY = "process_structure"
+
+
+def with_process_structure(recipe: dict[str, Any], structure: Any) -> dict[str, Any]:
+    """A copy of *recipe* recording the process company the world was built for."""
+    payload = structure if isinstance(structure, dict) else structure.model_dump(mode="json")
+    return {**recipe, PROCESS_STRUCTURE_KEY: payload}
+
+
+#: The event that declares a process company on a world: the approved process
+#: structure, dated where the company's process facts begin.
+PROCESS_STRUCTURE_EVENT = "organisation.process_structure"
+
+#: The recipe step that applies a process company, so a rebuild replays it
+#: where it happened among the other steps.
+PROCESS_STRUCTURE_STEP = "ApplyProcessStructure"
+
+
+def apply_process_structure(world: Any, structure: Any) -> Any:
+    """*world* with the process company recorded on its recipe, declared as an event and stated in its facts.
+
+    The company's systems of record are the products its bindings name
+    (`sor.products_for_world`): one `System` each, minted in product order,
+    owned by the leader of the unit that owns most of its bindings, holding
+    the record kinds the catalogue gives it. The declaration is one event
+    (`PROCESS_STRUCTURE_EVENT`, the chief executive its actor, every business
+    unit and every new system its subject) dated where the company's process
+    facts begin, so a world built without an episode has a timeline for
+    constructions to follow. The company's facts (`industry.facts`, one per
+    binding and attribute) join the ledger subjected to the world's own units
+    and systems and caused by that event (`sor.facts_for_world`), so a record
+    that cites them cites facts the world holds. Recorded as a recipe step
+    (`PROCESS_STRUCTURE_STEP`), so `rebuild` replays it in its place; applied
+    to a world that already carries this company it changes nothing, so a
+    snapshot that extends a timeline does not declare the company twice.
+    """
+    import json
+    from copy import deepcopy
+    from dataclasses import replace as _replace
+
+    from .ids import content_key
+    from .models import EnterpriseEvent, System
+    from .sor import facts_for_world, products_for_world
+
+    payload = structure if isinstance(structure, dict) else structure.model_dump(mode="json")
+    if world.recipe.get(PROCESS_STRUCTURE_KEY) == payload:
+        return world
+    recipe = with_step(with_process_structure(world.recipe, structure), PROCESS_STRUCTURE_STEP, structure=payload)
+    extended = world.extend(recipe=recipe)
+    products = products_for_world(extended)
+    if not products:
+        return extended
+    if extended._minter is None:
+        raise ValueError("a process structure needs generation state; apply it to a built world or through rebuild")
+    minter = deepcopy(extended._minter)
+    ceo = extended._roles.get("ceo")
+    leaders = {unit.name: unit.leader_id for unit in extended.business_units}
+    held = {system.name for system in extended.systems}
+    systems = tuple(
+        System(
+            id=minter.next("SYS"), name=use.product,
+            purpose=f"{use.sor_class} system of record for {', '.join(kind.replace('_', ' ') for kind in use.kinds)}",
+            owner_id=leaders.get(use.owner_bu) or ceo or extended.company.id,
+            is_system_of_record_for=list(use.kinds),
+        )
+        for use in products if use.product not in held
+    )
+    extended = _replace(extended, _minter=minter).extend(systems=systems)
+    facts = facts_for_world(extended)
+    event = EnterpriseEvent(
+        id=f"EV-PROCESS-{content_key('process-structure', payload['name'])[:12].upper()}",
+        kind=PROCESS_STRUCTURE_EVENT,
+        occurred_at=min(fact.valid_from for fact in facts),
+        summary=json.dumps({"schema": "worldloom.process-structure/v1", "company": payload["name"],
+                            "industry": payload["industry"], "operating_model": payload["operating_model"],
+                            "countries": list(payload["countries"]),
+                            "units": [unit["name"] for unit in payload["bus"]],
+                            "systems": [system.name for system in systems], "facts": len(facts)},
+                           sort_keys=True, separators=(",", ":")),
+        actors=[identifier for identifier in (ceo,) if identifier],
+        systems=[system.id for system in systems],
+        business_units=[unit.id for unit in extended.business_units],
+    )
+    declared = tuple(fact.model_copy(update={"event_id": event.id}) for fact in facts)
+    return extended.extend(events=(event,), facts=declared)
+
+
+@dataclass(frozen=True)
+class ApplyProcessStructure:
+    """The recipe verb for `apply_process_structure`."""
+
+    structure: dict[str, Any]
+    physics: Any = None
+
+    def run(self, world: Any) -> Any:
+        return apply_process_structure(world, self.structure)
+
+
+def process_structure_of(recipe: Mapping[str, Any] | None) -> Any:
+    """The process company a world was built for, or `None` when it was built without one."""
+    if not recipe:
+        return None
+    payload = recipe.get(PROCESS_STRUCTURE_KEY)
+    if not payload:
+        return None
+    from .process_bindings import CompanySpec
+
+    return CompanySpec.model_validate(payload)
+
 
 def with_structure(recipe: dict[str, Any], genome: Any) -> dict[str, Any]:
     """*recipe* with a structural genome recorded on it.
@@ -598,6 +732,26 @@ def _with_estate(spec: Any, estate: Any) -> Any:
         ) from exc
 
 
+def _with_landscape(spec: Any, landscape: Any) -> Any:
+    """*spec* rebound to a recorded estate vocabulary, or untouched when none.
+
+    ``_with_estate``'s posture exactly: a corpus whose estate spoke an authored
+    vocabulary and rebuilt in the engine's would be a different world reported
+    as the same one, so a spec that cannot carry the recorded one is an error.
+    """
+    if landscape is None:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, landscape=landscape)
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records an estate vocabulary, but {type(spec).__name__}"
+            f" does not accept one: {exc}"
+        ) from exc
+
+
 def _with_seasonality(spec: Any, seasonality: Any) -> Any:
     """*spec* rebound to a recorded trading year, or untouched when there is none."""
     if seasonality is None:
@@ -681,6 +835,41 @@ def _with_master_data(spec: Any, master_data: Any) -> Any:
         raise RecipeError(
             f"this recipe records a master-data request, but"
             f" {type(spec).__name__} does not accept one: {exc}"
+        ) from exc
+
+
+#: Where the per-unit posts live on a recipe, when a build replaced them.
+UNIT_ROLES_KEY = "unit_roles"
+
+
+def _unit_roles_payload(unit_roles: Any) -> list[dict[str, Any]]:
+    from dataclasses import asdict
+
+    return [asdict(spec) for spec in unit_roles]
+
+
+def _unit_roles_from(payload: Any) -> tuple[Any, ...]:
+    from .roles import UnitRole
+
+    try:
+        return tuple(UnitRole(**dict(entry)) for entry in payload)
+    except (TypeError, ValueError) as exc:
+        raise RecipeError(f"this corpus's recorded unit roles do not load: {exc}") from exc
+
+
+def _with_unit_roles(spec: Any, unit_roles: Any) -> Any:
+    """*spec* rebound to recorded per-unit posts, or untouched when none —
+    ``_with_roles``' posture exactly."""
+    if unit_roles is None:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, unit_roles=_unit_roles_from(unit_roles))
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records authored unit roles, but {type(spec).__name__}"
+            f" does not accept them: {exc}"
         ) from exc
 
 
@@ -817,10 +1006,12 @@ def rebuild(
             )
         spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
         spec = _with_estate(spec, recipe.get("estate"))
+        spec = _with_landscape(spec, recipe.get(LANDSCAPE_KEY))
         spec = _with_lore_claims(spec, lore_claims)
         spec = _with_master_data(spec, recipe.get("master_data"))
         spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
+        spec = _with_unit_roles(spec, recipe.get(UNIT_ROLES_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
         try:
@@ -851,10 +1042,12 @@ def rebuild(
         # both branches one path and turns a domain that still does not accept
         # one into a stated error instead of a `TypeError` from a constructor.
         spec = _with_estate(spec, recipe.get("estate"))
+        spec = _with_landscape(spec, recipe.get(LANDSCAPE_KEY))
         spec = _with_lore_claims(spec, lore_claims)
         spec = _with_master_data(spec, recipe.get("master_data"))
         spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
+        spec = _with_unit_roles(spec, recipe.get(UNIT_ROLES_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 
     # Passed to the spec above, and this is the fallback for a spec that could
@@ -1024,8 +1217,13 @@ def has_actor_step(recipe: dict[str, Any]) -> bool:
     return any(step.get("actors") for step in recipe.get("steps", ()))
 
 
+register_step(PROCESS_STRUCTURE_STEP, ("structure",), ApplyProcessStructure)
+
+
 __all__ = [
-    "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "RecipeError", "STEPS", "build_recipe",
-    "has_actor_step", "locale_of", "presentation_of", "rebuild", "register_step",
-    "with_locale", "with_presentation", "with_prior_receipts", "with_step",
+    "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "PROCESS_STRUCTURE_EVENT", "PROCESS_STRUCTURE_KEY",
+    "PROCESS_STRUCTURE_STEP", "RecipeError", "STEPS",
+    "apply_process_structure", "build_recipe", "has_actor_step", "locale_of", "presentation_of",
+    "process_structure_of", "rebuild", "register_step", "with_locale", "with_presentation",
+    "with_prior_receipts", "with_process_structure", "with_step",
 ]

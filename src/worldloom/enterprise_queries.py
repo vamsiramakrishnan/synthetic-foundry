@@ -38,9 +38,19 @@ class SourceRequirement(Model):
     required_fields: tuple[str, ...] = ()
     field_definitions: tuple[ConnectorFieldDefinition, ...] = ()
     predicate: Predicate | None = None
+    #: How the compiled search finds its records. ``fixture`` (the default,
+    #: and what every corpus before this compiled to) binds the search to the
+    #: fixture's exact identities (``id IN [...]``); ``predicate`` compiles
+    #: the requirement's own predicate instead, so an agent that reads the
+    #: request's rule can search by it, and the reads it must return are still
+    #: the fixture's. Only meaningful with a predicate; the validator refuses
+    #: the other combination.
+    bind: Literal["fixture", "predicate"] = "fixture"
 
     @model_validator(mode="after")
     def _context_free_predicate(self) -> SourceRequirement:
+        if self.bind == "predicate" and self.predicate is None:
+            raise ValueError("bind='predicate' needs a predicate to bind the search to")
         if self.predicate is not None and (
             self.predicate.joins or self.predicate.as_of is not None
             or any(isinstance(item.value, RelativeTime) for item in self.predicate.where)
@@ -55,6 +65,8 @@ class SourceRequirement(Model):
         data: dict[str, Any] = handler(self)
         if self.predicate is None:
             data.pop("predicate", None)
+        if self.bind == "fixture":
+            data.pop("bind", None)
         return data
 
 

@@ -20,17 +20,20 @@ and everything else falls on one side or the other:
   coordinate or an interval graph, and filling them in would be this module
   inventing a company and signing an author's name to it. So the skeleton
   path marks them ``packs.PLACEHOLDER`` and ``packs.lint`` names every one.
-* **A pack has no field for physics, a role table, or an estate.** Deliberately
-  — see ``packs``'s module docstring and ``worldloom pack params``, which sends
-  an author to ``build --physics`` rather than to a pack field. The recipe
-  agrees: it carries ``pack``, ``physics``, ``role_table``, ``estate`` and
-  ``seasonality`` as five siblings, because they are five different claims.
+* **A pack has no field for physics.** Deliberately — see ``packs``'s module
+  docstring and ``worldloom pack params``, which sends an author to ``build
+  --physics`` rather than to a pack field. The organisation and the estate
+  *are* pack fields now (``Pack.roles``, ``Pack.estate``): a role table is a
+  claim about what the company is, and a derivation writes it straight into
+  the pack. The recipe still carries ``pack``, ``physics``, ``role_table``,
+  ``estate`` and ``seasonality`` as siblings, because they are different
+  claims; the pack-borne ones resolve through ``from_pack``.
 
-So an export is a *bundle*, not a pack: the pack, plus the sidecars the pack is
-not allowed to hold, plus a list of what nobody filled in. Widening ``Pack``
-with a ``physics`` block would have been the shorter route and the wrong one —
-it would give a pack two ways to say the same thing (its own field and
-``--physics``), and a build would then have to decide which wins.
+So an export is a *bundle*, not a pack: the pack, plus the physics sidecar the
+pack is not allowed to hold, plus a list of what nobody filled in. Widening
+``Pack`` with a ``physics`` block would have been the shorter route and the
+wrong one — it would give a pack two ways to say the same thing (its own field
+and ``--physics``), and a build would then have to decide which wins.
 
 **Two shapes, because two things happen in practice.**
 
@@ -104,15 +107,11 @@ class Derived:
         return {"source": "worldloom pack_export", "overrides": self.physics}
 
     def shape_document(self) -> dict[str, Any]:
-        """The org shape and estate — everything with no home in a pack *or* a
-        pack-build flag today. Written as data so the information survives the
-        gap rather than being lost until a flag exists."""
-        document: dict[str, Any] = {}
-        if self.role_table is not None:
-            document["role_table"] = [list(row) for row in self.role_table]
-        if self.estate is not None:
-            document["estate"] = self.estate
-        return document
+        """The org shape and estate as a sidecar: empty since both found a
+        home in the pack (``Pack.roles``, ``Pack.estate``). Kept so a bundle
+        written before that lands still reads back through ``write``'s
+        contract, which skips an empty sidecar."""
+        return {}
 
     def apply(self, spec: Any) -> Any:
         """*spec* — a world builder — rebound to the sidecars this carries.
@@ -216,14 +215,14 @@ def from_variant(variant: Variant, *, name: str = "", onto: Pack | None = None) 
         f"physics: {len(physics)} parameter range(s) — a pack has no physics field"
         " (see `worldloom pack params`), so these are written as a `--physics`"
         " sidecar and are not part of the pack",
-        f"role_table: {len(role_table)} role(s) at headcount {variant.headcount},"
-        f" span {variant.span}, {variant.levels} level(s) — a pack cannot state an"
-        " org shape and `build` has no flag for one; carried in the shape sidecar",
+    ]
+    notes_shape = [
+        f"roles.table: {len(role_table)} role(s) at headcount {variant.headcount},"
+        f" span {variant.span}, {variant.levels} level(s), written into the pack;"
+        " the generator's per-unit posts are appended at build",
     ]
     if variant.estate is not None:
-        unfilled.append(
-            f"estate: {variant.estate!r} — `build --estate` takes it; a pack cannot"
-        )
+        notes_shape.append(f"estate: {variant.estate!r}, written into the pack")
     if not varies_calendar:
         unfilled.append(
             f"seasonality: the {engine} mosaic varies no trading year, so none is"
@@ -237,7 +236,7 @@ def from_variant(variant: Variant, *, name: str = "", onto: Pack | None = None) 
             " numbers and one is not substituted for the other"
         )
 
-    notes = [f"mosaic world {variant.index}, seed {variant.seed}: {variant.summary()}"]
+    notes = [f"mosaic world {variant.index}, seed {variant.seed}: {variant.summary()}", *notes_shape]
     # Said out loud rather than merged quietly. `seasonality` is the one field
     # where the derivation and the base pack can both have an opinion, and the
     # derivation winning is the whole point of `onto=` — but an author whose
@@ -250,10 +249,10 @@ def from_variant(variant: Variant, *, name: str = "", onto: Pack | None = None) 
         )
 
     pack = (
-        _applied(onto, seasonality=seasonality)
+        _applied(onto, seasonality=seasonality, role_table=role_table, estate=variant.estate)
         if onto is not None
         else _skeleton(name or f"mosaic-{variant.index:02d}", engine,
-                       seasonality=seasonality)
+                       seasonality=seasonality, role_table=role_table, estate=variant.estate)
     )
     return Derived(
         pack=pack,
@@ -348,16 +347,37 @@ def _engine(engine: str, onto: Pack | None) -> str:
     return onto.base
 
 
-def _applied(base: Pack, *, seasonality: str | None) -> Pack:
+def _applied(
+    base: Pack, *, seasonality: str | None,
+    role_table: tuple[Row, ...] | None = None, estate: str | None = None,
+) -> Pack:
     """*base* with the derived pack-level fields applied, re-validated.
 
     Re-validated rather than ``model_copy``-d, because a copy skips every
     validator on ``Pack`` and the whole point of handing this back is that it
-    is a pack somebody can load.
+    is a pack somebody can load. The organisation and the estate go into the
+    pack's own fields now that it has them; a base pack's own `roles` is
+    replaced by the derivation's, the same precedence `seasonality` has.
     """
-    if seasonality is None:
+    changes: dict[str, Any] = {}
+    if seasonality is not None:
+        changes["seasonality"] = seasonality
+    changes.update(_shape_fields(role_table, estate))
+    if not changes:
         return base
-    return Pack.model_validate({**base.model_dump(), "seasonality": seasonality})
+    return Pack.model_validate({**base.model_dump(), **changes})
+
+
+def _shape_fields(role_table: tuple[Row, ...] | None, estate: str | None) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    if role_table is not None:
+        fields["roles"] = {"table": [
+            {"key": key, "title": title, "function": function, "reports_to": manager}
+            for key, title, function, manager in role_table
+        ]}
+    if estate is not None:
+        fields["estate"] = estate
+    return fields
 
 
 def _default_shape(engine: str) -> Archetype:
@@ -372,7 +392,10 @@ def _default_shape(engine: str) -> Archetype:
     return archetypes.get(domain.default_archetype)
 
 
-def _skeleton(name: str, engine: str, *, seasonality: str | None) -> Pack:
+def _skeleton(
+    name: str, engine: str, *, seasonality: str | None,
+    role_table: tuple[Row, ...] | None = None, estate: str | None = None,
+) -> Pack:
     """A pack with the identity placeheld and the scale borrowed, on purpose.
 
     Two different kinds of blank, kept different:
@@ -433,6 +456,7 @@ def _skeleton(name: str, engine: str, *, seasonality: str | None) -> Pack:
             for index, unit in enumerate(shape.units, start=1)
         ],
         **({} if seasonality is None else {"seasonality": seasonality}),
+        **_shape_fields(role_table, estate),
     )
 
 

@@ -37,13 +37,15 @@ does not exist yet.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ..compiler.plan import SizeClass
 from ..compiler.style import StyleGenome, genome
 from ..locales import DEFAULT as DEFAULT_LOCALE
 from ..locales import Locale
-from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Row, Table
+from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Row, SizeBudget, Table
 from ..narrative import references
 from ..presentation import DEFAULT as DEFAULT_PRESENTATION
 from ..presentation import Presentation as PresentationProfile
@@ -58,12 +60,25 @@ if TYPE_CHECKING:  # pragma: no cover
 
 MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
-#: Artifact types this renderer spells. Per 14.A the vertical slice targets one
-#: artifact — the executive summary the retail-close episode already emits —
-#: rather than the wider ``HANDLES`` set `docx.py` covers. Widening this is
-#: 14.B work (component registry extraction, more layout families), not this
-#: slice's job.
-HANDLES = frozenset({"executive_summary"})
+#: Artifact types this renderer spells. Seeded with the one artifact the
+#: vertical slice (14.A) targeted — the executive summary the retail-close
+#: episode already emits — and mutable for the same reason `docx.HANDLES` is:
+#: a document type declares that it is a deck (``doctypes.DocumentType.deck``)
+#: and `register` adds it here at install, so a pack can ship a board pack
+#: without this module hearing of it. The compiler already composes every
+#: prose- and table-shaped component for ``pptx``; what was missing was the
+#: door.
+HANDLES: set[str] = {"executive_summary"}
+
+
+def register(*artifact_types: str) -> None:
+    """Claim *artifact_types* as decks.
+
+    Called from ``doctypes.install`` beside ``docx.register``, so a corpus
+    renders the same set of decks in every process and a scope
+    (``registries.scoped``) puts the set back as it found it.
+    """
+    HANDLES.update(artifact_types)
 
 #: Same wording DOCX and Markdown use for a section still awaiting prose. One
 #: string, so a reader comparing all three formats of an unfinished corpus sees
@@ -214,7 +229,7 @@ class SlidePlan:
     this plan came from — never something the component id invents.
     """
 
-    kind: str  # "cover" | "divider" | "content" | "closing"
+    kind: str  # "cover" | "agenda" | "divider" | "content" | "closing"
     component_id: str
     heading: str
     body: str | None = None
@@ -224,6 +239,9 @@ class SlidePlan:
     """Charts declared over `table` — a view of it, never a source of data of
     its own (see `Chart`'s own docstring). Drawn onto their own slide(s) after
     whatever `table`/`body` produces, by `_draw_content`."""
+    items: tuple[str, ...] = ()
+    """An agenda slide's lines — the visible section headings, verbatim off
+    the IR. Empty on every other kind."""
 
 
 @dataclass(frozen=True)
@@ -236,17 +254,28 @@ class PresentationPlan:
     slides: tuple[SlidePlan, ...]
 
 
-#: The size class and density profile handed to the compiler. Not read off the
-#: originating ``ArtifactIntent`` — ``render(ir, facts)`` carries the same
-#: signature as every other format here and the IR itself does not carry a
-#: size class, so threading the intent through would widen this module's
-#: surface for a value that is already implied: every ``executive_summary`` in
-#: `generators/planning.py` is planned as ``"small"``, because it is an
-#: executive committee's one-pager, not a workbook. If a future
-#: ``executive_summary`` ever grows past the four beats that implies,
-#: ``compose`` raises rather than silently overflowing a slide — see `_plan`.
-_SIZE_CLASS = "small"
+#: The defaults `_plan` composes under when a caller hands it nothing but an
+#: IR — the shape the vertical slice pinned: every ``executive_summary`` in
+#: `generators/planning.py` is planned ``"small"``, an executive committee's
+#: one-pager. `render_all` reads the real type, size and budget off the
+#: originating ``ArtifactIntent`` and passes them; the bare ``render(ir,
+#: facts)`` every other format also offers keeps these, so a deck rendered in
+#: isolation is the deck it always was.
+_ARTIFACT_TYPE = "executive_summary"
+_SIZE_CLASS: SizeClass = "small"
 _DENSITY_PROFILE = "balanced"
+
+#: A deck opens with an agenda once it has more visible sections than this. A
+#: three-beat executive summary is read in one sitting and an agenda would be
+#: a slide announcing three headings; a board pack with a dozen sections is
+#: not, and `framing.agenda`'s own purpose text names the threshold in words:
+#: "once an artifact is long enough that a reader benefits from knowing its
+#: shape before starting". Strictly greater, so the shipped summaries and
+#: every deck an old size class could hold are unchanged.
+_AGENDA_FROM = 6
+
+#: Agenda lines per slide before the list itself continues onto another.
+_MAX_AGENDA_ITEMS_PER_SLIDE = 12
 
 
 def _density_profile(ir: ArtifactIR) -> str:
@@ -264,30 +293,63 @@ def _density_profile(ir: ArtifactIR) -> str:
 
 
 def _plan(ir: ArtifactIR,
-          profile: PresentationProfile = DEFAULT_PRESENTATION) -> PresentationPlan:
+          profile: PresentationProfile = DEFAULT_PRESENTATION,
+          *,
+          artifact_type: str = _ARTIFACT_TYPE,
+          size_class: SizeClass = _SIZE_CLASS,
+          budget: SizeBudget | None = None) -> PresentationPlan:
     """``ArtifactIR`` -> ``PresentationPlan``, by way of the compiler.
 
     ``compose`` decides which component family presents each section and
     checks the resulting sequence reads as a document a company would issue
     (``docs/artifact-compiler.md`` section 4). This function's only job is to
     turn that validated sequence into slides, adding the structural slides —
-    cover, appendix divider, closing — that the compiler has no opinion about
-    because they carry no beat of the argument.
+    cover, agenda, appendix divider, closing — that the compiler has no
+    opinion about because they carry no beat of the argument.
+
+    *artifact_type*, *size_class* and *budget* are the intent's: the grammar
+    the sequence is checked against and the component cap it composes under
+    (``sizing``). A type with no grammar composes freely, which is the honest
+    default `grammar.py` states; a type over its budget is refused here with
+    the composer's own reason rather than silently spilling off the deck.
     """
-    board = build_storyboard(
-        ir,
-        artifact_type="executive_summary",
-        fmt="pptx",
-        size_class=_SIZE_CLASS,
-        density_profile=_density_profile(ir),
-    )
+    try:
+        board = build_storyboard(
+            ir,
+            artifact_type=artifact_type,
+            fmt="pptx",
+            size_class=size_class,
+            density_profile=_density_profile(ir),
+            budget=budget,
+        )
+    except ValueError as exc:
+        # `CompositionError` is a `ValueError`; surfaced as this renderer's
+        # own refusal, the way `pdf.py::_plan` does, with the composer's
+        # code (`over_budget`, `no_fitting_component`) named so a caller
+        # can group refusals without parsing the sentence.
+        code = getattr(exc, "code", "composition")
+        raise RenderError(f"{ir.id}: cannot compose a deck ({code}): {exc}") from exc
     if not board.ok:
         raise RenderError(
-            f"{ir.id}: component sequence is not a grammatical executive_summary: "
+            f"{ir.id}: component sequence is not a grammatical {artifact_type}: "
             + "; ".join(str(v) for v in board.composition.violations)
         )
 
     slides: list[SlidePlan] = [SlidePlan(kind="cover", component_id="cover", heading=ir.title)]
+    visible = [
+        beat.heading for beat in board.beats
+        if not ir.sections[beat.section_index].hidden
+    ]
+    if len(visible) > _AGENDA_FROM:
+        # The headings verbatim, never numbered: a renderer that typed "1."
+        # would be typing a figure the IR never gave it, and the bare-number
+        # rule does not stop applying to furniture.
+        for start in range(0, len(visible), _MAX_AGENDA_ITEMS_PER_SLIDE):
+            slides.append(SlidePlan(
+                kind="agenda", component_id="framing.agenda",
+                heading="Contents" if start == 0 else "Contents (continued)",
+                items=tuple(visible[start:start + _MAX_AGENDA_ITEMS_PER_SLIDE]),
+            ))
     appendix_opened = False
     for beat in board.beats:
         section = ir.sections[beat.section_index]
@@ -681,13 +743,83 @@ _PROSE_STYLE: dict[str, dict] = {
 _DEFAULT_PROSE_STYLE = {"band": _TS_BODY}
 
 
+#: How much of a line one character takes, in em, and how tall a line is.
+#: Conservative on purpose: a proportional face averages nearer 0.5em, and
+#: PowerPoint's single-spaced line is about 1.2em, so a chunk this estimate
+#: says fits has room to spare. The estimate decides only *where prose breaks
+#: onto the next slide*; a box that had room for one more line shows a little
+#: air, a box that did not would have clipped — and `_textbox` sets
+#: ``MSO_AUTO_SIZE.NONE`` precisely so nothing downstream can grow the box to
+#: hide that.
+_CHAR_WIDTH_EM = 0.55
+_LINE_HEIGHT_EM = 1.3
+
+#: A sentence ends at terminal punctuation followed by whitespace. Used only
+#: when one paragraph alone is taller than a slide, to break it somewhere a
+#: reader would.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def _prose_lines(box: Box, size_pt: float) -> tuple[int, int]:
+    """``(characters per line, lines)`` a box holds at *size_pt*, by estimate."""
+    inner_w = (box.cx - 2 * _in(0.12)) / _EMU_PER_INCH * 72
+    inner_h = (box.cy - 2 * _in(0.06)) / _EMU_PER_INCH * 72
+    per_line = max(1, int(inner_w / (_CHAR_WIDTH_EM * size_pt)))
+    lines = max(1, int(inner_h / (_LINE_HEIGHT_EM * size_pt)))
+    return per_line, lines
+
+
+def _prose_chunks(paragraphs: list[str], *, per_line: int, lines: int) -> list[list[str]]:
+    """*paragraphs* split into the slides they need, at paragraph boundaries.
+
+    The pptx analogue of `_draw_table_content`'s row pagination, for the same
+    reason: a slide is a fixed canvas, and a 420-word section (``xlong``'s
+    brief) at a 15pt subheading is taller than one. Each paragraph costs the
+    lines it wraps to plus one for the space after it; a paragraph that alone
+    exceeds a slide is broken at sentence ends, greedily, so the text is never
+    cut mid-sentence and never silently clipped. Every section this renderer
+    had ever drawn fits one slide under this estimate, which is what keeps
+    the shipped decks byte-identical.
+    """
+    def cost(text: str) -> int:
+        return max(1, -(-len(text) // per_line)) + 1
+
+    def pieces(text: str) -> list[str]:
+        if cost(text) <= lines:
+            return [text]
+        out: list[str] = []
+        current = ""
+        for sentence in _SENTENCE_END.split(text):
+            candidate = f"{current} {sentence}".strip() if current else sentence
+            if current and cost(candidate) > lines:
+                out.append(current)
+                current = sentence
+            else:
+                current = candidate
+        if current:
+            out.append(current)
+        return out
+
+    chunks: list[list[str]] = [[]]
+    used = 0
+    for paragraph in paragraphs:
+        for piece in pieces(paragraph):
+            need = cost(piece)
+            if chunks[-1] and used + need > lines:
+                chunks.append([])
+                used = 0
+            chunks[-1].append(piece)
+            used += need
+    return chunks
+
+
 def _draw_prose_content(prs, slide_plan, facts, footer_text: str,
                         g: StyleGenome = _HOUSE_GENOME,
                         locale: Locale = DEFAULT_LOCALE,
                         profile: PresentationProfile = DEFAULT_PRESENTATION) -> None:  # type: ignore[no-untyped-def]
     """A section whose content is prose — ``core.position``, ``core.narrative``
-    and the rest of the text-shaped components in the registry."""
-    slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
+    and the rest of the text-shaped components in the registry. Prose taller
+    than one slide continues onto the next, the way a long table does."""
     resolved = (references.substitute(slide_plan.body, facts, locale=locale,
                                      presentation=profile)
                 if facts else slide_plan.body)
@@ -697,17 +829,38 @@ def _draw_prose_content(prs, slide_plan, facts, footer_text: str,
     paragraphs = [block.strip() for block in resolved.split("\n\n") if block.strip()]
 
     style = _PROSE_STYLE.get(slide_plan.component_id, _DEFAULT_PROSE_STYLE)
+    size = _clamped_pt(g.type_scale[style["band"]])
     box = BODY
-    if style.get("accent"):
-        bar_w = _in(0.08)
-        _textbox(slide, Box(BODY.x, BODY.y, bar_w, BODY.cy), fill=g.colour_roles["accent"])
+    accent = bool(style.get("accent"))
+    bar_w = _in(0.08)
+    if accent:
         box = Box(BODY.x + bar_w + _GUTTER, BODY.y, BODY.cx - bar_w - _GUTTER, BODY.cy)
 
-    text = _textbox(slide, box)
+    per_line, lines = _prose_lines(box, size)
+    for index, chunk in enumerate(_prose_chunks(paragraphs, per_line=per_line, lines=lines)):
+        # No digit in the continuation heading, as with a paginated table.
+        heading = slide_plan.heading if index == 0 else f"{slide_plan.heading} (continued)"
+        slide = _new_slide(prs, heading, footer_text=footer_text, g=g)
+        if accent:
+            _textbox(slide, Box(BODY.x, BODY.y, bar_w, BODY.cy), fill=g.colour_roles["accent"])
+        text = _textbox(slide, box)
+        _write(
+            text.text_frame, chunk, size=size,
+            colour=g.colour_roles["body_text"], bold=style.get("bold", False),
+            space_after_pt=_space_pt(g, _SP_PARAGRAPH),
+            face=fonts.named(g.typeface).body,
+        )
+
+
+def _draw_agenda(prs, plan: PresentationPlan, slide_plan, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
+    """The agenda — ``framing.agenda``: the visible headings, one per line,
+    in deck order. Structural, like the cover: it carries no beat."""
+    footer_text = f"{plan.metadata.get('company', '')} · {plan.title}"
+    slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
+    body = _textbox(slide, BODY)
     _write(
-        text.text_frame, paragraphs, size=_clamped_pt(g.type_scale[style["band"]]),
-        colour=g.colour_roles["body_text"], bold=style.get("bold", False),
-        space_after_pt=_space_pt(g, _SP_PARAGRAPH),
+        body.text_frame, list(slide_plan.items), size=_clamped_pt(g.type_scale[_TS_SUBHEADING]),
+        colour=g.colour_roles["body_text"], space_after_pt=_space_pt(g, _SP_PARAGRAPH),
         face=fonts.named(g.typeface).body,
     )
 
@@ -1197,8 +1350,15 @@ def render(
     *,
     locale: Locale = DEFAULT_LOCALE,
     profile: PresentationProfile = DEFAULT_PRESENTATION,
+    artifact_type: str = _ARTIFACT_TYPE,
+    size_class: SizeClass = _SIZE_CLASS,
+    budget: SizeBudget | None = None,
 ) -> bytes:
     """Render one IR to PPTX bytes.
+
+    *artifact_type*, *size_class* and *budget* reach the compiler through
+    `_plan`; ``render_all`` passes the intent's, and the defaults are the
+    executive summary's, so a bare ``render(ir, facts)`` is unchanged.
 
     Prose carries ``{{fact:ID}}`` references; *facts* resolves them at render
     time. Without it the references stay visible, which is the right failure —
@@ -1211,7 +1371,7 @@ def render(
     in another is a table that overflows its box for no visible reason.
     """
     pptx_pkg = _require_pptx()
-    plan = _plan(ir, profile)
+    plan = _plan(ir, profile, artifact_type=artifact_type, size_class=size_class, budget=budget)
     g = _genome_for(ir)
 
     presentation = pptx_pkg.Presentation()
@@ -1221,6 +1381,8 @@ def render(
     for slide_plan in plan.slides:
         if slide_plan.kind == "cover":
             _draw_cover(presentation, plan, g)
+        elif slide_plan.kind == "agenda":
+            _draw_agenda(presentation, plan, slide_plan, g)
         elif slide_plan.kind == "divider":
             _draw_divider(presentation, slide_plan.heading, g)
         elif slide_plan.kind == "closing":
@@ -1253,7 +1415,7 @@ def render(
 
 
 def render_all(world: World) -> list[Rendered]:
-    """Render every executive-summary-shaped artifact in *world*."""
+    """Render every artifact of a type in ``HANDLES`` in *world*."""
     facts = {fact.id: fact for fact in world.facts}
     locale = corpus_locale(world)
     profile = presentation_of(world)
@@ -1268,7 +1430,10 @@ def render_all(world: World) -> list[Rendered]:
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.pptx",
                 media_type=MEDIA_TYPE,
                 payload=render(ir, facts, locale=locale,
-                               profile=profile.for_doctype(intent.artifact_type)),
+                               profile=profile.for_doctype(intent.artifact_type),
+                               artifact_type=intent.artifact_type,
+                               size_class=intent.size_profile,
+                               budget=intent.budget),
             )
         )
     return out

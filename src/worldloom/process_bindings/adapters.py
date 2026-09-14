@@ -54,8 +54,8 @@ def tool_surface(compiled: CompiledCatalogue) -> ToolSurface:
 def lexicon_records(compiled: CompiledCatalogue) -> tuple[LexiconRecord, ...]:
     """One activity concept, not one concept per BU/country Cartesian expansion.
 
-    APQC hints never become canonical IDs. Two authored activities can share a
-    hint without becoming synonyms for each other.
+    The PCF id is not the concept id. Two authored activities can belong to
+    the same process without becoming synonyms for each other.
     """
     unique = {row.activity_id: row for row in compiled.rows}
     count = max(len(unique), 1)
@@ -64,7 +64,7 @@ def lexicon_records(compiled: CompiledCatalogue) -> tuple[LexiconRecord, ...]:
         canonical=f"{row.source}:{compiled.industry}:activity:{activity_id}",
         industry=compiled.industry, weight=1 / count, source=row.source, license=row.license,
         evidence=EvidenceClass.AUTHORED_PRIOR,
-        description=f"{row.stream_name}; APQC hint {row.apqc} is unverified.")
+        description=f"{row.stream_name}; PCF {row.pcf_hierarchy_id} {row.pcf_name} ({row.pcf_framework}).")
         for activity_id, row in sorted(unique.items()))
 
 
@@ -82,7 +82,7 @@ def authoring_brief(compiled: CompiledCatalogue, *, stream: str) -> Brief:
     return Brief(stage="steps", asks=(
         "Author executable process steps and role slots using these activity bindings. "
         "Use Worldloom's process.accept/resolve validation. Control descriptions are not executable "
-        "predicates; APQC hints are not validated IDs; calibration targets are not measurements. "
+        "predicates; PCF ids name the process, not a validated control; calibration targets are not measurements. "
         "Do not invent missing schemas, policy thresholds or statistical calibration."),
         context={"company":compiled.company, "industry":compiled.industry,
                  "compilation_digest":compiled.digest, "stream":stream,

@@ -37,6 +37,25 @@ for (const page of ["overview", "creation", "company", "interview", "usecases", 
 }
 await vm.runInContext("caseEditor();", context);
 assert.ok(document.querySelector("#dialog-content").innerHTML.includes('id="case-form"'));
+vm.runInContext("state.page='evals'; render();", context);
+assert.ok(document.querySelector("#app").innerHTML.includes("Agent grades"), "the evaluations page grades agents");
+vm.runInContext(`state.company=structuredClone(state.company);state.company.jobs=[{id:'agent-test',revision:state.company.revision,options:{operation:'evalrun',evalrun_agent:'reference',evalrun_mode:'run',evalrun_split:''},status:'complete',result:{cases:4,agent:'run:reference',summary:{pass_rate:1,graded:4,errors:0,passed:4,means:{plan:1,trajectory:1,outcomes:1,overall:1},by_shape:[{key:'fan_in',passed:4,graded:4,means:{overall:1}}]}}},{id:'plan-test',revision:state.company.revision,options:{operation:'evalrun',evalrun_agent:'harness',evalrun_mode:'plan',evalrun_split:'test'},status:'running',progress:{graded:1,total:3}}];render();`, context);
+let agents=document.querySelector("#app").innerHTML;
+assert.ok(agents.includes("4 / 4 passed") && agents.includes("fan_in: 4/4"), "a completed agent run shows its per-axis summary");
+assert.ok(agents.includes("1 / 3 graded so far"), "a running agent run shows its progress");
+assert.ok(agents.includes("Plan only · connected harness · test split"), "the run is labelled by agent, mode and split");
+await vm.runInContext("action('evalrun-harness',{});", context);
+assert.equal(requests.findLast(r=>r.path.endsWith("/run")).body.options.evalrun_agent,"harness","the harness button names the harness agent");
+await vm.runInContext("action('evalrun-plan',{});", context);
+assert.equal(requests.findLast(r=>r.path.endsWith("/run")).body.options.evalrun_mode,"plan","the plan button asks for plan-only grading");
+await vm.runInContext("action('load-agent-results',{dataset:{id:'agent-test'}});", context);
+assert.ok(requests.some(r=>r.path.includes("/agent-results?job=agent-test")), "graded cases are fetched from the authenticated results route");
+vm.runInContext(`state.company=structuredClone(state.company);state.company.jobs=[{id:'agent-test',revision:state.company.revision,options:{operation:'evalrun',evalrun_agent:'reference',evalrun_mode:'run',evalrun_split:''},status:'complete',result:{cases:1,agent:'run:reference',summary:{pass_rate:0,graded:1,errors:0,passed:0,means:{plan:.5,trajectory:.75,outcomes:1,overall:.75},by_shape:[]}}}];state.agent={job:'agent-test',offset:0,total:1,verdict:'',rows:[{case_id:'abcdef123456',query:'<script>evil()</script>',shape:'fan_in',use_case:'operations-review',split:'train',failure:'none',status:'graded',error:null,passed:false,plan:{score:.5,missing_nodes:['verify'],extra_writes:0},trajectory:{score:.75,failures:'0/0',safety:['duplicate_write']},outcomes:{score:1,structured:'1/1',collateral:0}}]};state.page='evals';render();`, context);
+agents=document.querySelector("#app").innerHTML;
+assert.ok(agents.includes("missing verify") && agents.includes("duplicate_write") && agents.includes("Failed"), "a graded row names what it lost on each axis");
+assert.ok(!agents.includes("<script>evil"), "agent answers and queries must be escaped");
+vm.runInContext("state.page='changes'; render();", context);
+assert.ok(document.querySelector("#app").innerHTML.includes("Run · reference agent"), "the run list labels agent runs");
 vm.runInContext("state.page='foundry'; render();", context);
 assert.ok(document.querySelector("#app").innerHTML.includes("Publication pending"));
 assert.ok(document.querySelector("#app").innerHTML.includes("No target-agent measurements recorded"));

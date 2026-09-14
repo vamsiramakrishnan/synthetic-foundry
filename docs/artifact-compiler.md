@@ -482,7 +482,7 @@ ArtifactIR
 → optional raster validation
 ```
 
-The renderer should initially target one artifact: the executive summary already emitted by the retail-close episode. That creates a direct cross-format test against Markdown and DOCX.
+The renderer initially targeted one artifact: the executive summary already emitted by the retail-close episode, which gave a direct cross-format test against Markdown and DOCX. It now renders any type whose document declares `deck: true` (`doctypes.DocumentType.deck`), composing under the intent's own size budget, with an agenda once a deck has more than six visible sections and prose that outgrows one slide continuing onto the next.
 
 ### 9.2 DOCX
 

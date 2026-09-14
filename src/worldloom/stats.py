@@ -655,7 +655,8 @@ def census(world: World) -> ShapeCensus:
         else:
             continue
         plan = plan_from_ir(
-            ir, artifact_type=intent.artifact_type, size_class=intent.size_profile
+            ir, artifact_type=intent.artifact_type, size_class=intent.size_profile,
+            budget=intent.budget,
         )
         composed = try_compose(plan, fmt=fmt)
         if isinstance(composed, Composition):

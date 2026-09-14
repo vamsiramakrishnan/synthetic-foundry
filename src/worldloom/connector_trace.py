@@ -34,10 +34,12 @@ _KNOWN_ASSERTIONS = frozenset(
         "per_item",
         "branch_exclusive",
         "state_equals",
+        "per_record_state",
         "deleted",
         "denial_surfaced",
         "report_not_found",
         "clarify_before_write",
+        "question_required",
         "no_write",
         "continue_on_branch_failure",
         "confirm_before",
@@ -255,6 +257,9 @@ def grade_trace(
         for assertion in assertions if assertion.get("type") == "failure_at"
     }
     failure_stopped: set[str] = set()
+    # Nodes an observed designed failure blocked, apart from the failing node
+    # itself: an expected error on one of them cannot be observed either.
+    failure_blocked: set[str] = set()
     for assertion in assertions:
         if assertion.get("type") != "failure_at":
             continue
@@ -263,6 +268,7 @@ def grade_trace(
             if not assertion.get("writes_persist"):
                 failure_stopped.add(node_id)
             failure_stopped.update(str(value) for value in assertion.get("blocked_nodes", ()))
+            failure_blocked.update(str(value) for value in assertion.get("blocked_nodes", ()))
     branch = next(
         (assertion for assertion in assertions if assertion.get("type") == "branch_exclusive"),
         None,
@@ -299,7 +305,7 @@ def grade_trace(
             # never applied.
             fails.append(f"unknown_assertion:{kind}")
             continue
-        if kind in {"artifact_created", "state_equals", "deleted", "reads_contain", "fields_used", "fact_coverage"} and str(assertion.get("node")) in failure_stopped:
+        if kind in {"artifact_created", "state_equals", "per_record_state", "deleted", "reads_contain", "fields_used", "fact_coverage"} and str(assertion.get("node")) in failure_stopped:
             continue
         if kind == "execution_contract":
             from .enterprise_dag_trace import grade_execution_contract
@@ -330,6 +336,11 @@ def grade_trace(
             node_id = str(assertion.get("node"))
             if node_id not in nodes_by_id:
                 fails.append(f"unknown_node:{node_id}")
+                continue
+            if node_id in failure_blocked:
+                # A delete chain expects `not_found` on its last readback; when
+                # the write before it met its own designed failure, the chain
+                # never reached the readback and there is no error to observe.
                 continue
             node_spans = by_node.get(node_id, ())
             if not node_spans and nodes_by_id[node_id].get("condition") and any(item.get("type") == "execution_contract" for item in assertions):
@@ -470,8 +481,40 @@ def grade_trace(
             if node_id not in skipped and node_id not in stopped:
                 if post_state is None:
                     fails.append(f"deletion_unverified:{node_id}")
+                elif assertion.get("created_by"):
+                    # The record to be gone is whichever the named write
+                    # created in this run: every successful write of that
+                    # node must be absent afterwards, and a write that never
+                    # happened leaves nothing that could have been deleted.
+                    created = [str(fid) for span in by_node.get(str(assertion["created_by"]), ())
+                               if not span.get("error") for fid in span.get("writes", ())]
+                    if not created or any(fid in post_state for fid in created):
+                        fails.append(f"not_deleted:{node_id}")
+                elif assertion.get("records"):
+                    # A mapped delete names every record it must remove.
+                    for fid in assertion["records"]:
+                        if str(fid) in post_state:
+                            fails.append(f"not_deleted:{node_id}:{fid}")
                 elif not assertion.get("per_item") and str(assertion["fixture"]) in post_state:
                     fails.append(f"not_deleted:{node_id}")
+        elif kind == "per_record_state":
+            # Every record a mapped write iterates must end with the stated
+            # fields, by fid: the assertion anchors on the row's own list,
+            # never on what the agent wrote (`state_equals`'s rule).
+            node_id = str(assertion["node"])
+            if node_id in skipped or node_id in stopped:
+                continue
+            if post_state is None:
+                fails.append(f"state_unavailable:{node_id}")
+                continue
+            for fid in assertion.get("records", ()):
+                record = post_state.get(str(fid))
+                if record is None:
+                    fails.append(f"record_missing:{node_id}:{fid}")
+                    continue
+                for field, value in dict(assertion.get("fields", {})).items():
+                    if record.get(field) != value:
+                        fails.append(f"record_state_mismatch:{node_id}:{fid}:{field}")
         elif kind == "denial_surfaced":
             if not any(error.get("code") == 403 for error in errors.values()) and "denial_surfaced" not in behavior_set:
                 fails.append("no_denial")
@@ -485,6 +528,14 @@ def grade_trace(
                 span.get("writes") for span in materialized
             ):
                 fails.append("write_after_clarify")
+        elif kind == "question_required":
+            # The service records the questions a run asked and matches each
+            # to the row's points; a matched point arrives here as the
+            # behaviour `question:<id>`. The trajectory axis grades timing
+            # and the reply; this decides only that the question was asked.
+            point_id = str(assertion.get("id") or "")
+            if point_id and f"question:{point_id}" not in behavior_set:
+                fails.append(f"no_question:{point_id}")
         elif kind == "no_write":
             if adversarial in {
                 "ambiguity",

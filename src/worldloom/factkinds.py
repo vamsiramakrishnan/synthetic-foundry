@@ -21,13 +21,24 @@ Invariants are recorded as strings in a closed vocabulary (``head`` or
 registry documents what the validators already enforce, it does not enforce
 anything itself. ``episodes.py`` is where an invariant declaration becomes a
 derived check; here it is the honest index of who checks what.
+
+The four engines' own vocabularies are versioned data: each vertical's kinds
+live in ``_data/factkinds/<engine>@1.json`` and are registered at import by
+``register_catalogue``, the same file-in-the-name lineage rule the artifact
+catalogues follow (``doctypes.ENGINE_CATALOGUES``). A kind is what its file
+says it is; the argument that stood as a comment beside a literal travels as
+its ``note``. The core kinds — minted by the shared generators before any
+scenario runs, and by the actor tools — stay declared here, because no
+vertical owns them.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from typing import Any
 
 #: The invariant vocabulary. Closed for lore's reason (``ConstraintKind``):
 #: an invariant the engine cannot check is a claim wearing a rule's clothes.
@@ -91,6 +102,10 @@ class FactKind:
     episode grammar's lint exists to refuse."""
     about: str = ""
     """What a fact of this kind states, in a sentence."""
+    note: str = ""
+    """The argument for declaring it as it is — why an invariant is claimed, or
+    why the kind is registered here rather than by the vertical whose prefix it
+    wears. Read by maintainers and pack authors; nothing dispatches on it."""
 
 
 def _parse(invariant: str) -> tuple[str, tuple[str, ...]]:
@@ -123,6 +138,49 @@ def parse_invariant(invariant: str) -> tuple[str, tuple[str, ...]]:
 _KINDS: dict[str, FactKind] = {}
 
 
+#: The family the process catalogue's kinds live under: `process.<stream>`.
+PROCESS_PREFIX = "process"
+
+_PROCESS_REGISTERED = False
+
+
+def process_kinds(catalogue: dict[str, Any] | None = None) -> tuple[FactKind, ...]:
+    """`process.<stream>` for every value stream the process catalogue declares.
+
+    From data: the streams are the catalogue's, so a catalogue that adds a
+    stream adds the kind a line of business may answer for. `holds-at` is the
+    floor invariant the registry demands; a derived fact states what the
+    catalogue declares at a moment, which is exactly what `holds-at` claims.
+    """
+    from .process_bindings import stream_names
+
+    return tuple(
+        FactKind(
+            kind=f"{PROCESS_PREFIX}.{stream}",
+            domain="process",
+            generated_by="worldloom.industry",
+            invariants=("holds-at",),
+            about=f"Who owns, records and controls the activities of {name}, as the process catalogue declares.",
+        )
+        for stream, name in stream_names(catalogue).items()
+    )
+
+
+def _ensure_process_kinds() -> None:
+    """Register the shipped catalogue's process kinds before the registry is read.
+
+    The registry is module state so that every process answers alike; the
+    process kinds are catalogue data every process ships, so they are in the
+    registry whether or not `worldloom.industry` was imported. A project
+    written by one process and read by another lints the same.
+    """
+    global _PROCESS_REGISTERED
+    if _PROCESS_REGISTERED:
+        return
+    _PROCESS_REGISTERED = True
+    register(process_kinds())
+
+
 def register(kinds: Sequence[FactKind]) -> None:
     """Register *kinds*. Identical re-registration is a harmless reload; a
     different declaration under a known kind is refused, because a lint that
@@ -153,16 +211,19 @@ def register(kinds: Sequence[FactKind]) -> None:
 
 def get(kind: str) -> FactKind | None:
     """The declaration for *kind*, or ``None`` for an unregistered one."""
+    _ensure_process_kinds()
     return _KINDS.get(kind)
 
 
 def known() -> dict[str, FactKind]:
     """Every registered kind, by name. A copy; the registry is not a surface."""
+    _ensure_process_kinds()
     return dict(_KINDS)
 
 
 def names() -> list[str]:
     """Every registered kind name, sorted."""
+    _ensure_process_kinds()
     return sorted(_KINDS)
 
 
@@ -175,6 +236,7 @@ def resolvable(name: str) -> bool:
     three times would invite the three to disagree. The boundary is a dot, so
     ``financial.rev`` does not resolve — a truncation is a typo, not a family.
     """
+    _ensure_process_kinds()
     if name in _KINDS:
         return True
     prefix = name + "."
@@ -192,6 +254,72 @@ def covers(name: str, kind: str) -> bool:
     derives who participates cannot disagree about what a prefix means.
     """
     return kind == name or kind.startswith(name + ".")
+
+
+#: Where an engine's own vocabulary lives, as versioned data. ``<engine>@1``:
+#: the version is in the file name because a registry is a lineage component
+#: — every lint a corpus passed, it passed against one set of declarations —
+#: and the rule for every versioned file under ``_data/`` is a new version,
+#: never an edit in place.
+CATALOGUES = "_data/factkinds"
+
+_FIELDS = frozenset(field.name for field in fields(FactKind))
+
+
+def _from_document(document: Any, *, where: str) -> tuple[FactKind, ...]:
+    if not isinstance(document, dict) or not isinstance(document.get("fact_kinds"), list):
+        raise ValueError(f"{where}: expected an object with a `fact_kinds` list")
+    domain = document.get("domain")
+    if not isinstance(domain, str) or not domain:
+        raise ValueError(f"{where}: expected a `domain` naming the vertical that answers for these kinds")
+    kinds: list[FactKind] = []
+    for index, row in enumerate(document["fact_kinds"]):
+        row_where = f"{where}.fact_kinds[{index}]"
+        if not isinstance(row, dict):
+            raise ValueError(f"{row_where}: expected an object")
+        unknown = sorted(set(row) - _FIELDS)
+        if unknown:
+            raise ValueError(f"{row_where}: unknown field(s) {unknown}; a fact kind has {sorted(_FIELDS)}")
+        if "domain" in row and row["domain"] != domain:
+            raise ValueError(
+                f"{row_where}: domain {row['domain']!r} disagrees with the catalogue's {domain!r}"
+            )
+        try:
+            kinds.append(FactKind(
+                kind=row["kind"], domain=domain, generated_by=row["generated_by"],
+                invariants=tuple(row.get("invariants", ())), about=row.get("about", ""),
+                note=row.get("note", ""),
+            ))
+        except KeyError as exc:
+            raise ValueError(f"{row_where}: missing field {exc.args[0]!r}") from None
+    return tuple(kinds)
+
+
+def catalogue(name: str) -> tuple[FactKind, ...]:
+    """The kinds an engine answers for, read from ``_data/factkinds/<name>.json``.
+
+    The file is ``{"domain", "about", "fact_kinds": [...]}``; every row is one
+    ``FactKind`` with the catalogue's domain, and a row naming a field the
+    dataclass does not have is refused rather than ignored, because a typo in
+    ``invariants`` that silently dropped the rules is the exact defect this
+    registry exists to catch.
+    """
+    from importlib.resources import files
+
+    resource = files("worldloom").joinpath(CATALOGUES, f"{name}.json")
+    return _from_document(json.loads(resource.read_text(encoding="utf-8")), where=f"{CATALOGUES}/{name}.json")
+
+
+def register_catalogue(name: str) -> tuple[FactKind, ...]:
+    """Register an engine's catalogue at package import, from its data file.
+
+    ``register``'s contract exactly: identical re-registration is a reload, a
+    different declaration under a known kind is refused. Returns what it
+    registered so a caller can hold the vocabulary it just declared.
+    """
+    kinds = catalogue(name)
+    register(kinds)
+    return kinds
 
 
 # ---------------------------------------------------------------------------
@@ -322,13 +450,16 @@ register([
 
 
 __all__ = [
+    "CATALOGUES",
     "FactKind",
     "INVARIANT_HEADS",
+    "catalogue",
     "covers",
     "get",
     "known",
     "names",
     "parse_invariant",
     "register",
+    "register_catalogue",
     "resolvable",
 ]

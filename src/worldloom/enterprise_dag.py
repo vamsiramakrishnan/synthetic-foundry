@@ -66,7 +66,7 @@ class EnterpriseDagNode(Model):
             "read": {"read", "get", "extract", "download"},
             "search": {"search"},
             "verify": {"read", "get", "download", "readback", "cross_system"},
-            "write": {"create", "draft", "send", "post", "upload", "update", "patch", "upsert", "reply", "forward", "comment", "transition", "delete"},
+            "write": {"create", "draft", "send", "post", "upload", "update", "patch", "upsert", "reply", "forward", "comment", "transition", "delete", "move"},
             "transform": {"collect", "project", "unique"},
         }
         if self.operation not in admitted[self.kind]:

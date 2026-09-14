@@ -281,6 +281,14 @@ class InsuranceWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    landscape: Any = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered name, a document of pools, or a ``Landscape``. ``None`` is
+    insurance's own, which is what every estate built before this field
+    existed was made of, so an un-set landscape is byte-identical rather than
+    close. A pack's ``landscape`` arrives here through ``from_pack``; a
+    blueprint's through ``estate(vocabulary=)``; the recipe records it beside
+    the size, so the estate rebuilds in the same words."""
     estate: str | None = None
     """Grow a technology landscape: ``"small"``, ``"medium"`` or ``"large"``
     (``landscape.INSURANCE.profiles``).
@@ -304,6 +312,11 @@ class InsuranceWorld:
     from, for the reason the pack is embedded whole: a corpus that could only
     be rebuilt by whoever still had the probe that derived it would fail the
     reason recipes exist."""
+    unit_roles: tuple[Any, ...] | None = None
+    """The posts minted for every business unit (``roles.UnitRole``), replaced.
+    ``None`` is the engine's own, which is what every world built before this
+    field existed minted; a pack's ``roles.unit_roles`` arrives here through
+    ``from_pack``, and the recipe records it beside ``role_table``."""
 
     physics: Parameters = DEFAULT
     """The world physics the organisation is drawn under. Separate from
@@ -369,7 +382,14 @@ class InsuranceWorld:
         """
         from . import packs as packs_module
 
-        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
+                   # The estate the pack asks for, in the words it asks for it;
+                   # `None` on both when it says nothing — `RetailWorld.from_pack`.
+                   estate=pack.estate or None, landscape=pack.landscape,
+                   # The organisation the pack authored, reviewed on the way in;
+                   # `None` on both when it says nothing.
+                   role_table=packs_module.role_table_of(pack),
+                   unit_roles=packs_module.unit_roles_of(pack))
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
@@ -400,8 +420,10 @@ class InsuranceWorld:
             annual_revenue=self.annual_revenue,
             pack=self.pack,
             estate=self.estate,
+            landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
             master_data=self.master_data,
@@ -413,7 +435,7 @@ class InsuranceWorld:
             archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
-            voices=dict(self.pack.voices) if self.pack is not None else None,
+            voices=packs_module.voices_of(self.pack) if self.pack is not None else None,
             # The three the siblings have always forwarded and this one never
             # did. Their absence read as a decision and was an omission: the
             # generator has taken all three since it was written, so a pack
@@ -425,18 +447,19 @@ class InsuranceWorld:
             locale=locale,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             employees_total=self.employees,
         )
 
         systems, services = org.systems, org.services
         if self.estate is not None:
+            from . import landscape as landscape_module
             from .generators import estate as estate_module
-            from .landscape import INSURANCE
 
             grown = estate_module.generate(
                 rng.derive("estate"), minter,
                 profile=self.estate,
-                landscape=INSURANCE,
+                landscape=landscape_module.resolve(self.landscape, default=landscape_module.INSURANCE),
                 # Empty, and legitimately so: this is the one vertical whose
                 # core services are `()`, which makes every generated node's
                 # layer come out of the systems alone. `core_layers` handles it
@@ -857,113 +880,12 @@ register_domain(Domain(
     evaluation_text=tuple(_INSURANCE_EVAL_TEXT.items()),
 ))
 
-# Insurance's own fact kinds, in the process-global registry — the `close.*`
-# kinds the reserving episode reuses are declared once, by retail. The
-# invariants restate what `_checks` above enforces.
-from .factkinds import FactKind
-from .factkinds import register as _register_kinds
+# Insurance's own fact kinds, in the process-global registry, read from
+# `_data/factkinds/insurance@1.json`. The invariants restate what `_checks`
+# above enforces; the file's `about` says why `financial.revenue.*` is absent.
+from .factkinds import register_catalogue as _register_kinds
 
-_register_kinds([
-    FactKind(kind="reserves.philosophy", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at", "standing"),
-             about="The reserving philosophy; set once, reused every quarter."),
-    FactKind(kind="reserves.risk_margin_policy_pct", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at", "standing"),
-             about="The board's margin policy, standing beside the philosophy."),
-    # `rolls-up-to` is registered here ahead of the authored spec that will
-    # declare it: the registry is the cross-module truth about a kind, and
-    # `episodes.lint` refuses a spec claiming an invariant the registry does
-    # not hold. Registering it now means the reserving pack can state the rule
-    # its cells already keep — the cohort ultimates sum to the central
-    # estimate — rather than the lint and the pack disagreeing about what the
-    # kind means.
-    FactKind(kind="reserves.ultimate", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at", "rolls-up-to"), about="A cohort's ultimate claims cost."),
-    FactKind(kind="reserves.ibnr", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="Incurred-but-not-reported for a cohort."),
-    FactKind(kind="reserves.central_estimate_total", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The actuary's central estimate."),
-    FactKind(kind="reserves.margin_released", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The margin release the quarter booked."),
-    FactKind(kind="reserves.risk_margin_remaining", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="What margin stands after the release."),
-    FactKind(kind="reserves.committee_recommendation", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="What the reserving committee recommended."),
-    FactKind(kind="reserves.booked_strengthening", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The strengthening actually booked."),
-    FactKind(kind="reserves.booked_total", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at", "never-superseded"),
-             about="What was carried at the valuation, permanently — closing or"
-                   " superseding it is `booked_total_touched`."),
-    FactKind(kind="reserves.held_vs_central_gap", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at", "standing", "carries-forward-as(reuse)"),
-             about="The standing gap phase 1 opens; a later quarter reuses it"
-                   " rather than minting a second."),
-    FactKind(kind="reserves.attribution_deterioration", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The genuine-deterioration share of the movement."),
-    FactKind(kind="reserves.attribution_pattern_change", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The benign pattern-change share."),
-    # The diagonal, and `never-superseded` is not new behaviour here: check (a)
-    # above (`triangle_touched`) has refused a closed or superseded reading of
-    # either kind since this vertical shipped. What was missing was the
-    # *declaration* — so a pack authoring the same diagonal was refused for
-    # claiming a rule the registry did not hold, while the engine enforced that
-    # exact rule two hundred lines up. Declared now, which is what lets an
-    # authored observation grid mint append-only cells (`episodes.run`) instead
-    # of chaining them and then failing check (a).
-    FactKind(kind="claims.incurred_to_date", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at", "never-superseded"),
-             about="A cohort's incurred position, as read at one valuation."),
-    FactKind(kind="claims.paid_to_date", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at", "never-superseded"),
-             about="A cohort's paid position, as read at one valuation."),
-    FactKind(kind="claims.actual_vs_expected", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at",), about="The quarter's development against the calibrated pattern."),
-    # -- the book, cut by the organisation that wrote it ---------------------
-    # `financial.revenue.*` is deliberately absent from this list: it is
-    # retail's registration and shared vocabulary, the way `close.*` is, and
-    # re-declaring it here under `domain="insurance"` would be two modules
-    # disagreeing about one kind — exactly what `factkinds.register` refuses.
-    # See `generators/insurance_book.generate` for why the book is minted into
-    # that vocabulary rather than a private one.
-    FactKind(kind="portfolio.policies_in_force", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(portfolio.policies_in_force)"),
-             about="The policy book one office, unit or group carries into the"
-                   " valuation. Sites sum to their unit and units to the group."),
-    FactKind(kind="claims_ops.notified_count", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(claims_ops.notified_count)"),
-             about="Claims notified in the quarter. Deliberately a separate"
-                   " prefix from `claims.*`: the triangle's diagonals are keyed"
-                   " by accident cohort over the period field, and an"
-                   " operational count keyed by the reporting quarter under the"
-                   " same prefix would make that pun ambiguous."),
-    FactKind(kind="claims_ops.settled_count", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(claims_ops.settled_count)"),
-             about="Claims settled in the quarter, by claims centre, unit and group."),
-    FactKind(kind="expense.operating", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(expense.operating)"),
-             about="Operating expense. Cost centres sum to the group; the"
-                   " expense *ratio* is never minted, because a ratio of totals"
-                   " is not the total of ratios."),
-    FactKind(kind="data.records_of_record", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at",),
-             about="How many records a system holds for what it is the system of"
-                   " record for. No roll-up: five systems of record for five"
-                   " different things do not add to anything anybody reports."),
-])
+_register_kinds("insurance@1")
 
 
 __all__ = [

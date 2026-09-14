@@ -265,6 +265,14 @@ class BankingWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    landscape: Any = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered name, a document of pools, or a ``Landscape``. ``None`` is
+    banking's own, which is what every estate built before this field
+    existed was made of, so an un-set landscape is byte-identical rather than
+    close. A pack's ``landscape`` arrives here through ``from_pack``; a
+    blueprint's through ``estate(vocabulary=)``; the recipe records it beside
+    the size, so the estate rebuilds in the same words."""
     estate: str | None = None
     """Grow a technology landscape around the capital-return episode's own four
     services: ``"small"``, ``"medium"`` or ``"large"``
@@ -291,6 +299,11 @@ class BankingWorld:
     from, for the reason the pack is embedded whole: a corpus that could only
     be rebuilt by whoever still had the probe that derived it would fail the
     reason recipes exist."""
+    unit_roles: tuple[Any, ...] | None = None
+    """The posts minted for every business unit (``roles.UnitRole``), replaced.
+    ``None`` is the engine's own, which is what every world built before this
+    field existed minted; a pack's ``roles.unit_roles`` arrives here through
+    ``from_pack``, and the recipe records it beside ``role_table``."""
 
     physics: Parameters = DEFAULT
     """The world physics ``build`` draws the organisation from.
@@ -352,7 +365,14 @@ class BankingWorld:
         """
         from . import packs as packs_module
 
-        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
+                   # The estate the pack asks for, in the words it asks for it;
+                   # `None` on both when it says nothing — `RetailWorld.from_pack`.
+                   estate=pack.estate or None, landscape=pack.landscape,
+                   # The organisation the pack authored, reviewed on the way in;
+                   # `None` on both when it says nothing.
+                   role_table=packs_module.role_table_of(pack),
+                   unit_roles=packs_module.unit_roles_of(pack))
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
@@ -384,8 +404,10 @@ class BankingWorld:
             annual_revenue=self.annual_revenue,
             pack=self.pack,
             estate=self.estate,
+            landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
             master_data=self.master_data,
@@ -397,20 +419,21 @@ class BankingWorld:
             archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
-            voices=dict(self.pack.voices) if self.pack is not None else None,
+            voices=packs_module.voices_of(self.pack) if self.pack is not None else None,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
             locale=locale,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             employees_total=self.employees,
         )
 
         systems, services = org.systems, org.services
         if self.estate is not None:
+            from . import landscape as landscape_module
             from .generators import estate as estate_module
-            from .landscape import BANKING
 
             # Appended after the core, never mixed into it. The capital-return
             # episode's causality runs through `collateral-valuation-sync` and
@@ -422,7 +445,7 @@ class BankingWorld:
             grown = estate_module.generate(
                 rng.derive("estate"), minter,
                 profile=self.estate,
-                landscape=BANKING,
+                landscape=landscape_module.resolve(self.landscape, default=landscape_module.BANKING),
                 core_services=org.services,
                 core_systems=org.systems,
                 # The two roles that already own this bank's own services. A
@@ -998,137 +1021,13 @@ register_domain(Domain(
     evaluation_text=tuple(_BANKING_EVAL_TEXT.items()),
 ))
 
-# Banking's own fact kinds, in the process-global registry. Only what this
-# vertical alone mints: the `close.*` and incident-chain `ops.*` kinds the
-# regulatory episode reuses verbatim are declared once, by retail, and a second
-# declaration here would be refused. The invariants restate what `_checks`
-# above already enforces — the registry is the index of those rules, and the
-# episode grammar derives checks from the same strings.
-from .factkinds import FactKind
-from .factkinds import register as _register_kinds
+# Banking's own fact kinds, in the process-global registry, read from
+# `_data/factkinds/banking@1.json`: only what this vertical alone mints, the
+# `close.*` and `ops.*` kinds the regulatory episode reuses being retail's
+# declaration. The invariants restate what `_checks` above already enforces.
+from .factkinds import register_catalogue as _register_kinds
 
-_register_kinds([
-    FactKind(kind="capital.rwa_total", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "sums-to(capital.rwa_by_book)", "supersedes-prior"),
-             about="Risk-weighted assets; the books holding at any moment sum to it"
-                   " exactly, and the corrected total supersedes the filed one."),
-    FactKind(kind="capital.rwa_by_book", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="One book's RWA; only the affected book's figure is ever corrected."),
-    FactKind(kind="capital.cet1_capital", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",),
-             about="CET1 capital, unchanged by the restatement — the error was in RWA."),
-    FactKind(kind="capital.cet1_ratio", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "supersedes-prior",
-                         "reconciles-against(capital.cet1_capital, capital.rwa_total)"),
-             about="The stated ratio; `_checks` recomputes the division it states."),
-    FactKind(kind="capital.cet1_ratio_as_filed", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "never-superseded",
-                         "reconciles-against(capital.cet1_capital, capital.rwa_total)"),
-             about="What the filing reported, permanently — closing it would erase"
-                   " what the bank believed and when (`as_filed_touched`)."),
-    FactKind(kind="capital.minimum_cet1_requirement", domain="banking",
-             generated_by="generators/regulatory.py",
-             invariants=("holds-at", "standing", "carries-forward-as(reuse)"),
-             about="The standard's floor. No period, minted once, reused by every"
-                   " later quarter — a duplicate is what `contested_at_equal_authority` catches."),
-    FactKind(kind="capital.rwa_understatement", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="How much the filed RWA understated the truth."),
-    FactKind(kind="capital.cet1_delta", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="The ratio movement of the correction, in bps."),
-    FactKind(kind="capital.collateral_treatment", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="The contested treatment: working paper and review coexist at"
-                   " different authority; the confirmed statement supersedes only the working one."),
-    FactKind(kind="capital.return_due_date", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="The lodgement due date."),
-    FactKind(kind="capital.return_approval", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="The CFO's approval over the open challenge."),
-    FactKind(kind="capital.return_filed_at", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="When the return was lodged."),
-    FactKind(kind="capital.return_status", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="filed, then restated — the restated status supersedes the filed one."),
-    FactKind(kind="capital.error_materiality", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="Whether the error forces a restatement."),
-    FactKind(kind="capital.affected_book", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="Which book the error sat in."),
-    FactKind(kind="capital.restatement_reason", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="Why the figures moved."),
-    FactKind(kind="review.challenge", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="The second line's on-the-record challenge."),
-    FactKind(kind="review.challenge_status", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="open, then upheld — the ruling supersedes the open status."),
-    FactKind(kind="regulatory.notification", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at",), about="The material-error notification to the regulator."),
-    FactKind(kind="liquidity.lcr", domain="banking", generated_by="generators/regulatory.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="A daily observation in a gapless supersession chain; each quarter's"
-                   " chain starts fresh (`liquidity_cadence_gap` walks the chains)."),
-    FactKind(kind="liquidity.reconciliation_break", domain="banking",
-             generated_by="generators/regulatory.py",
-             invariants=("holds-at", "precedes-event"),
-             about="The daily path's flag against the collateral register."),
-    FactKind(kind="ops.collateral_mapping_owner", domain="banking",
-             generated_by="generators/regulatory.py",
-             invariants=("holds-at",),
-             about="Who owns the revaluation schedule — 'unassigned' is the control failure."),
-    # The branch network. Every one of these decomposes group → division →
-    # branch by largest remainder, so `sums-to` is the invariant that matters
-    # and check group (h) in `_checks` above is what enforces it, refusing as
-    # `network_does_not_reconcile`. The kind is
-    # its own child kind because the decomposition runs across *subjects* at one
-    # period, exactly as retail's `financial.revenue.actual` does — unlike
-    # `capital.rwa_total`, whose children are a different kind because a book is
-    # not a smaller bank.
-    FactKind(kind="banking.deposits.balance", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at", "sums-to(banking.deposits.balance)"),
-             about="Customer deposit balances at quarter end. Branches sum to their"
-                   " division and divisions to the group, exactly; a division with no"
-                   " branch network states none."),
-    FactKind(kind="banking.lending.balance", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at", "sums-to(banking.lending.balance)"),
-             about="Lending balances at quarter end, derived from the quarter's filed"
-                   " RWA at an average risk weight so the book and the capital held"
-                   " against it are one number seen twice."),
-    FactKind(kind="banking.lending.settled", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at", "sums-to(banking.lending.settled)"),
-             about="New lending settled during the quarter — the flow beside the"
-                   " balance, allocated on the same lending weights."),
-    FactKind(kind="banking.net_operating_income", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at", "sums-to(banking.net_operating_income)"),
-             about="The quarter's net operating income by division and branch. Every"
-                   " division states one, including those with no estate."),
-    FactKind(kind="banking.network.fte", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at", "sums-to(banking.network.fte)"),
-             about="Front-line headcount. The one measure a site that trades nothing"
-                   " still carries — an operations centre holds work, not income."),
-    FactKind(kind="banking.loan_to_deposit_pct", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at",
-                         "reconciles-against(banking.lending.balance,"
-                         " banking.deposits.balance)"),
-             about="Lending over deposits, derived from the rounded amounts it"
-                   " describes. A rate: it is stated at group and division and never"
-                   " summed, because a group ratio is not the total of three."),
-    FactKind(kind="banking.shared_services_cost", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at", "sums-to(banking.shared_services_cost)"),
-             about="What finance, treasury, risk and the data platform cost, by the"
-                   " cost centre that incurs it. The centres sum to the group figure."),
-    FactKind(kind="banking.shared_services_recharge", domain="banking",
-             generated_by="generators/banking_network.py",
-             invariants=("holds-at", "sums-to(banking.shared_services_cost)"),
-             about="The same total carried by the divisions it is recharged to — a"
-                   " second decomposition of one number across a different set of"
-                   " entities, which is what makes either of them checkable."),
-])
+_register_kinds("banking@1")
 
 
 __all__ = [

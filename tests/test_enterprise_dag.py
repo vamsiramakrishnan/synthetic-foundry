@@ -72,6 +72,28 @@ def test_every_authored_shape_compiles_executes_and_grades(shape):
     assert result.spans
     assert any(span.writes for span in result.spans)
     assert row == compiled(shape)[0]
+    # The only error a shipped shape expects is the readback after a delete.
+    errors = [(span.node, span.error["kind"]) for span in result.spans if span.error]
+    assert errors == ([("verify-deleted", "not_found")] if shape == "delete_chain" else [])
+
+
+def test_the_delete_chain_grades_the_record_gone_and_the_readback_failing():
+    row, records = compiled("delete_chain")
+    assertions = {assertion["type"]: assertion for assertion in row["assertions"]}
+    assert assertions["deleted"] == {"type": "deleted", "node": "delete", "created_by": "write"}
+    assert assertions["failure_at"]["node"] == "verify-deleted" and assertions["failure_at"]["kind"] == "not_found"
+    result = run_eval_row(row, records)
+    created = next(span for span in result.spans if span.node == "write").writes
+    assert created and not any(fid in result.post_state for fid in created)
+    # Without the delete the record persists and the last readback succeeds: both are fails.
+    kept = tuple(span for span in result.spans if span.node not in {"delete", "verify-deleted"})
+    post_state = {**result.post_state, created[0]: {"entity": "docx", "name": "kept"}}
+    fails = grade_trace(kept, row, post_state=post_state)["fails"]
+    assert "not_deleted:delete" in fails and "failure_not_observed:verify-deleted:not_found" in fails
+    # A readback that succeeds after the delete is an unexpected success, not a pass.
+    readback = next(span for span in result.spans if span.node == "verify-deleted")
+    forged = tuple(replace(span, error=None, reads=tuple(created)) if span is readback else span for span in result.spans)
+    assert "failure_not_observed:verify-deleted:not_found" in grade_trace(forged, row, post_state=result.post_state)["fails"]
 
 
 def test_shapes_change_structure_and_measured_depth():
@@ -268,7 +290,7 @@ def test_wrong_bound_identity_and_created_entity_are_rejected():
     assert "entity_mismatch:write" in grade_trace(wrong_entity, row, post_state=result.post_state)["fails"]
 
 
-@pytest.mark.parametrize("shape", ["fan_in", "fan_out", "conditional", "map_read"])
+@pytest.mark.parametrize("shape", ["fan_in", "fan_out", "conditional", "map_read", "delete_chain"])
 @pytest.mark.parametrize("kind", ["permission_denied", "version_conflict", "partial_write", "missing_stable_id"])
 def test_designed_failures_keep_control_flow_and_independent_branches(shape, kind):
     from worldloom.enterprise_corpus import StateOverride

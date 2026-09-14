@@ -29,7 +29,11 @@ and two — ``jira_issues`` and ``servicenow_incident`` — because their render
 own the structure and the generic outline would fight them.
 
 That is the honest split, and this module draws its boundary on it: **an
-authored type may say everything except how to compute a table**. A type that
+authored type may say everything except how to compute a table**. The three
+verticals beyond retail now declare their own catalogues on exactly that
+line: ``_data/artifact-types/<engine>@1.json`` carries every type's standing,
+lag, outline and format flags, ``register_engine`` reads it at import, and
+the compilers are passed in beside it. A type that
 needs a compiler needs Python, and the lint says so by name rather than letting
 somebody author a ``reserve_triangle_workbook`` that comes out as an empty
 outline.
@@ -106,12 +110,18 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 
 from . import columns as columns_module
-from . import documents, registries, templating
+from . import documents, registries, sizing, templating
 from .documents import FilingPlan, SectionPlan
-from .models import Authority, FormulaKind, Lifecycle
+from .models import Authority, FormulaKind, Lifecycle, SizeBudget
 from .roles import parse_unit_role
 
 #: Headings ``outline()`` appends itself, after the authored sections.
@@ -206,6 +216,21 @@ class SectionSpec(DocModel):
     would not find the absence strange, because the section that carried a
     required fact going missing is a narration rejection, not variety."""
 
+    note: str = ""
+    """Why the section is shaped as it is — most often why it is optional.
+    Documentation carried beside the data rather than lost when a catalogue
+    moved out of Python, where the same sentence was a comment; read by
+    nobody at build time, left off the wire when empty."""
+
+    repeat: Literal["", "unit"] = ""
+    """``"unit"`` makes this one step a section per business unit with facts
+    for it, each handed only that unit's facts and each with
+    ``{{var:unit.name}}`` in its heading and purpose resolved — see
+    ``documents.SectionPlan.repeat``. The way an authored document grows to a
+    division-by-division review without an author writing a section per
+    division, or a pack knowing how many divisions a company has. Left off
+    the wire when empty."""
+
     def as_plan(self) -> SectionPlan:
         return SectionPlan(
             heading=self.heading,
@@ -213,7 +238,18 @@ class SectionSpec(DocModel):
             scope=self.scope,
             purpose=self.purpose,
             required=self.required,
+            repeat=self.repeat,
         )
+
+    @model_serializer(mode="wrap")
+    def _repeat_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # A section is embedded in every pack-built corpus's recipe; an unset
+        # repeat or note stays off it so those recipes keep their exact bytes.
+        data: dict[str, Any] = handler(self)
+        for key in ("repeat", "note"):
+            if not getattr(self, key):
+                data.pop(key, None)
+        return data
 
 
 class FilingSpec(DocModel):
@@ -228,7 +264,16 @@ class FilingSpec(DocModel):
     fallback_role: str = ""
     domain: str = Field(default="finance", min_length=1)
     audience: str = Field(default="all_staff", min_length=1)
-    size: Literal["small", "medium", "long"] = "medium"
+    size: Literal["small", "medium", "long", "xlong"] = "medium"
+    """A named budget — ``sizing.PRESETS`` — for how many sections the document
+    may compose to and how many words each is written to. ``xlong`` is the
+    size a report with chapters needs; the other three are what every engine
+    type has always been."""
+    budget: SizeBudget | None = None
+    """The numbers outright, when no preset fits: ``{"components": 60,
+    "words": 450}`` is an annual report. Wins over ``size``, which then
+    describes rather than binds. Left off the wire when unset, so a type
+    authored before budgets existed dumps byte for byte as it did."""
     facts: list[str] = Field(min_length=1)
     """Which of the planner's fact bundles the document is given. Closed
     vocabulary — see ``generators/planning.FILING_BUNDLES``."""
@@ -246,7 +291,18 @@ class FilingSpec(DocModel):
             size=self.size,
             rationale=self.rationale,
             facts=tuple(self.facts),
+            budget=self.budget,
         )
+
+    @model_serializer(mode="wrap")
+    def _budget_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # `ArtifactIntent._budget_wire`'s rule: `to_document` and `pack export`
+        # dump this model, and an authored type that never declared a budget
+        # must keep the exact document it had.
+        data: dict[str, Any] = handler(self)
+        if self.budget is None:
+            data.pop("budget", None)
+        return data
 
 
 class DocumentType(DocModel):
@@ -272,7 +328,31 @@ class DocumentType(DocModel):
     is *silently skipped* by both renderers and survives only as Markdown,
     which is the exact bug ``docx.py``'s own comment records the seven
     conditional filings having shipped with."""
+    deck: bool = False
+    """Whether this is also a slide deck. Registering into ``render.pptx.HANDLES``
+    is what makes it one — the deck renderer composes every prose- and
+    table-shaped component the compiler declares for ``pptx``, so a board
+    pack, a steering-committee update or a results presentation needs no
+    Python, only this flag and an outline. Off by default and left off the
+    wire when off, so every type authored before decks were declarable dumps
+    byte for byte as it did."""
     filing: FilingSpec | None = None
+    note: str = ""
+    """Why the type stands where it does — the argument for its authority or
+    its lag, carried as data for the same reason ``SectionSpec.note`` is."""
+
+    @model_serializer(mode="wrap")
+    def _deck_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # `word` has always been on the wire; `deck` and `note` arrived later
+        # and are embedded in every pack-built corpus's recipe, so an unset
+        # one stays off it — the rule every additive field in this package
+        # follows.
+        data: dict[str, Any] = handler(self)
+        if not self.deck:
+            data.pop("deck", None)
+        if not self.note:
+            data.pop("note", None)
+        return data
 
     def title(self) -> str:
         """The document heading this type will carry — ``documents._title``'s
@@ -417,6 +497,7 @@ def describe(artifact_type: str) -> DocumentType:
     """
     authority, lifecycle = documents.standing(artifact_type)
     from .render import docx as docx_render
+    from .render import pptx as pptx_render
 
     return DocumentType(
         key=artifact_type,
@@ -424,6 +505,7 @@ def describe(artifact_type: str) -> DocumentType:
         lifecycle=lifecycle,
         lag=Lag.of(documents._LAG.get(artifact_type, timedelta(hours=1))),
         word=artifact_type in docx_render.HANDLES,
+        deck=artifact_type in pptx_render.HANDLES,
         sections=[
             SectionSpec(
                 heading=plan.heading,
@@ -431,6 +513,7 @@ def describe(artifact_type: str) -> DocumentType:
                 scope=plan.scope,  # type: ignore[arg-type]
                 purpose=plan.purpose,
                 required=plan.required,
+                repeat=plan.repeat,  # type: ignore[arg-type]
             )
             for plan in documents._OUTLINES.get(artifact_type, ())
         ],
@@ -451,7 +534,63 @@ def _filing_spec(plan: FilingPlan | None) -> FilingSpec | None:
         size=plan.size,  # type: ignore[arg-type]
         facts=list(plan.facts),
         rationale=plan.rationale,
+        budget=plan.budget,
     )
+
+
+#: Where an engine's own catalogue lives, as versioned data. ``<engine>@1``:
+#: the version is in the file name because a catalogue is a lineage
+#: component — a corpus built under one set of outlines replays under that
+#: set — and the rule for every versioned file under ``_data/`` is a new
+#: version, never an edit in place.
+ENGINE_CATALOGUES = "_data/artifact-types"
+
+
+def engine_catalogue(name: str) -> tuple[DocumentType, ...]:
+    """The types an engine ships, read from ``_data/artifact-types/<name>.json``.
+
+    The same schema an authored pack type uses, which is the point of the
+    port: the thirty types the engines declare were always expressible as
+    data (this module's docstring measures it), and keeping three of the
+    four verticals' catalogues as Python literals meant a pack author copying
+    from them read a different shape from the one they were writing.
+    """
+    from importlib.resources import files
+
+    resource = files("worldloom").joinpath(ENGINE_CATALOGUES, f"{name}.json")
+    return load(json.loads(resource.read_text(encoding="utf-8")))
+
+
+def register_engine(name: str, *, compilers: dict[str, Any] | None = None) -> None:
+    """Register an engine's catalogue at package import, from its data file.
+
+    Registration, not installation: these types are the process's, declared
+    once when the vertical is imported (`register_artifact_types`' contract),
+    never scoped per corpus and never recorded in ``_INSTALLED``. The
+    compilers stay Python and are passed in beside the data, because a
+    compiler is the one thing the schema cannot carry.
+
+    A compiled type keeps its standing and lag in the file and its sections
+    empty, exactly as `describe` reports it; the outline table is written only
+    for types that declare sections, the rule `install` follows for the same
+    reason (a missing key falls through to the default outline, an empty
+    tuple does not).
+    """
+    types = engine_catalogue(name)
+    documents.register_artifact_types(
+        standing={s.key: (s.authority, s.lifecycle) for s in types},
+        lags={s.key: s.lag.as_timedelta() for s in types},
+        outlines={
+            s.key: tuple(section.as_plan() for section in s.sections)
+            for s in types if s.sections
+        },
+        compilers=compilers,
+    )
+    from .render import docx as docx_render
+    from .render import pptx as pptx_render
+
+    docx_render.register(*[s.key for s in types if s.word])
+    pptx_render.register(*[s.key for s in types if s.deck])
 
 
 #: Every authored type this process has installed, by key. Read only to make a
@@ -530,6 +669,19 @@ registries.declare(
     why="a leftover name makes Word and PDF claim a type nothing in this world"
     " can build",
 )
+registries.declare(
+    lambda: _pptx_handles(),
+    owner="doctypes",
+    name="render.pptx.HANDLES",
+    why="a leftover name makes the deck renderer claim a type nothing in this"
+    " world can build, and render a deck the next world never planned",
+)
+
+
+def _pptx_handles() -> set[str]:
+    from .render import pptx as pptx_render
+
+    return pptx_render.HANDLES
 
 
 def _docx_handles() -> set[str]:
@@ -592,11 +744,13 @@ def install(types: Sequence[DocumentType]) -> None:
     )
 
     from .render import docx as docx_render
+    from .render import pptx as pptx_render
 
     # Registered after the tables, not before: `docx.register` cannot fail, and
     # a type that reached the renderer but not the compiler would be a type
     # Word claims and nothing can build.
     docx_render.register(*[s.key for s in fresh if s.word])
+    pptx_render.register(*[s.key for s in fresh if s.deck])
 
     for spec in fresh:
         _INSTALLED[spec.key] = spec
@@ -795,6 +949,26 @@ def lint(
         for position, section in enumerate(spec.sections):
             at = f"{where}.sections[{position}] ({section.heading!r})"
 
+            # -- repetition ------------------------------------------------
+            unit_variable = documents.UNIT_NAME_VARIABLE[len("{{var:"):-2]
+            if section.repeat == "unit" and unit_variable not in templating.referenced(section.heading):
+                findings.append(
+                    f"{at}: repeats over business units but its heading never names"
+                    f" the unit — put `{documents.UNIT_NAME_VARIABLE}` in it, or every"
+                    " repeated section carries the same heading and a reader cannot"
+                    " tell which division a paragraph is about."
+                )
+            if section.repeat == "unit" and section.scope == "group":
+                findings.append(
+                    f"{at}: repeats over business units at scope 'group' — a group"
+                    " figure has no unit to repeat over, so the step expands to"
+                    " nothing. Repeated sections read unit-level facts; scope 'unit'"
+                    " or 'any'."
+                )
+            section_variables = (
+                valid_variables | {unit_variable} if section.repeat == "unit" else valid_variables
+            )
+
             # Check for malformed variables in heading and purpose
             malformed_heading = templating.unresolved(section.heading)
             if malformed_heading:
@@ -817,7 +991,7 @@ def lint(
             # Check for unknown variables
             unknown_heading = [
                 var for var in templating.referenced(section.heading)
-                if var not in valid_variables
+                if var not in section_variables
             ]
             if unknown_heading:
                 findings.append(
@@ -828,7 +1002,7 @@ def lint(
 
             unknown_purpose = [
                 var for var in templating.referenced(section.purpose)
-                if var not in valid_variables
+                if var not in section_variables
             ]
             if unknown_purpose:
                 findings.append(
@@ -914,6 +1088,21 @@ def lint(
                 " only Markdown. That is a real choice for a chat log or a ticket;"
                 " it is a bug for anything a reader would call a document."
             )
+
+        # -- the budget ----------------------------------------------------
+        if spec.filing is not None:
+            required_sections = sum(1 for section in spec.sections if section.required)
+            budget = sizing.budget_for(spec.filing.size, override=spec.filing.budget)
+            if required_sections > budget.components:
+                findings.append(
+                    f"{where}.filing: size {spec.filing.size!r}"
+                    + (" with a declared budget" if spec.filing.budget is not None else "")
+                    + f" allows {budget.components} component(s), but the outline"
+                    f" declares {required_sections} required section(s). The composer"
+                    " refuses that as `over_budget` on every document of this type —"
+                    " it never drops a required section — so raise the budget or"
+                    " mark sections optional."
+                )
 
         # -- the filing --------------------------------------------------
         if spec.filing is None:
@@ -1099,8 +1288,9 @@ def to_document(types: Iterable[DocumentType]) -> dict[str, Any]:
 
 
 __all__ = [
-    "ACCESS_CLASSES", "ColumnSpec", "DerivationSpec", "DocumentType", "DocumentTypes",
-    "FILING_LAG_CEILING", "FilingSpec", "Lag", "RESERVED_HEADINGS", "SectionSpec",
-    "SheetSpec", "audit", "describe", "install", "install_sheets", "installed",
-    "lint", "lint_sheets", "load", "to_document",
+    "ACCESS_CLASSES", "ENGINE_CATALOGUES", "ColumnSpec", "DerivationSpec", "DocumentType",
+    "DocumentTypes", "FILING_LAG_CEILING", "FilingSpec", "Lag", "RESERVED_HEADINGS",
+    "SectionSpec", "SheetSpec", "audit", "describe", "engine_catalogue", "install",
+    "install_sheets", "installed", "lint", "lint_sheets", "load", "register_engine",
+    "to_document",
 ]

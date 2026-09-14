@@ -407,6 +407,28 @@ def test_a_unit_role_spec_mints_the_row_the_generator_used_to_inline() -> None:
     )
 
 
+def test_a_unit_role_may_be_minted_for_some_unit_kinds_only() -> None:
+    """`kinds` narrows a post to the units of those kinds; empty keeps every engine's own posts on every unit."""
+    from worldloom import archetypes
+    from worldloom.generators import organisation
+    from worldloom.ids import Minter
+    from worldloom.rng import Rng
+
+    every = roles_module.UnitRole("_ops", "Operations Manager, {unit}", "ServiceOperations", manager_suffix="_md")
+    assert every.minted_for("supermarkets") and every.minted_for("online")
+    some = roles_module.UnitRole("_ops", "Operations Manager, {unit}", "ServiceOperations",
+                                 manager_suffix="_md", kinds=("online",))
+    assert some.minted_for("online") and not some.minted_for("supermarkets")
+    archetype = archetypes.get("omnichannel_retailer")
+    org = organisation.generate(Rng(8128, "organisation"), Minter(), archetype=archetype,
+                                unit_roles=(*organisation._UNIT_ROLES, some))
+    online = [unit for unit in archetype.units if unit.kind == "online"]
+    others = [unit for unit in archetype.units if unit.kind != "online"]
+    assert online and others
+    assert all(f"{unit.key}_ops" in org.roles for unit in online)
+    assert not any(f"{unit.key}_ops" in org.roles for unit in others)
+
+
 def test_the_minted_unit_rows_match_what_the_engines_publish() -> None:
     """`Domain.unit_role_suffixes` is the published claim and `_UNIT_ROLES` is
     what actually gets minted; the same drift-closing comparison

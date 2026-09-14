@@ -37,6 +37,7 @@ REFERENCE_CONNECTORS = (
     "slack",
     "teamwork_graph",
     "rovo",
+    "sor",
 )
 
 ConnectorMaturity = Literal["ga", "beta", "eap", "product_surface"]
@@ -66,6 +67,7 @@ ConnectorOperation = Literal[
     "transition",
     "transform",
     "delete",
+    "move",
     "send",
     "reply",
     "forward",

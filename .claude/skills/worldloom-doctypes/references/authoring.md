@@ -41,6 +41,34 @@ a duration string, so two packs cannot disagree about what `P1DT15H` means),
   nothing maps falls to the world's narrowest policy: if that excludes the
   author, the corpus fails `author_cannot_see_own_artifact`. Name the receiver
   in the purposes.
+- **`sections[].repeat: "unit"`** makes one authored step a section per
+  business unit that has facts for it, each handed only that unit's facts
+  (the unit, its categories, its sites) and each with `{{var:unit.name}}` in
+  its heading and purpose resolved. This is how a document grows to a
+  division-by-division review from facts rather than filler; each expanded
+  section is its own narration request. The lint refuses a repeated step
+  whose heading never names the unit, or one at scope `group`. Once a
+  document has more than eight visible sections, every section's request
+  carries the outline as standing context (the sections in order, and where
+  this one sits) so writers stop restating each other.
+- **Long documents get chapters.** Past eight visible sections, Word and PDF
+  open every section on its own page, Word's running head names the current
+  section, the hidden sections gather under one `Appendix` heading, and the
+  Markdown twin opens with a linked contents list. Nothing to declare; the
+  outline's length decides, and a shorter document renders as it always did.
+- **`deck: true`** makes the type a slide deck as well: the same outline
+  composes through the compiler's `pptx` components, opens with an agenda
+  once it has more than six visible sections, and continues prose or a table
+  that outgrows one slide onto the next. `word` still decides Word and PDF;
+  a type may be both.
+- **`filing.size`** names how long the document may be: `small`, `medium`,
+  `long` or `xlong` (`worldloom.sizing.PRESETS`, each a component cap the
+  composer enforces and a word brief every section's writer is given). When
+  no preset fits, declare **`filing.budget`** outright,
+  `{"components": 60, "words": 450}`, and it wins over the word. The budget
+  rides the planned intent, so a process that only loads the corpus narrates
+  and renders to it without the pack. The lint refuses a budget smaller than
+  the outline's required sections, since the composer never drops one.
 - **`lag`** is how long after its newest cited fact the document is written.
   Keep it at or under a day and fifteen hours: `scenarios._period_boundary`
   places a departure eight business days after period end and chose eight

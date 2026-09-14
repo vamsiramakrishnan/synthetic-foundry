@@ -313,22 +313,22 @@ class ProcureToPayWorld:
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
     estate: str | None = None
-    """Refused, and stated rather than silently ignored.
+    """Grow a technology landscape around the cycle's own five systems:
+    ``"small"``, ``"medium"`` or ``"large"`` (``landscape.PROCUREMENT.profiles``).
 
-    ``--estate`` grows a technology landscape out of a named vocabulary in
-    ``worldloom.landscape``, and ``landscape.LANDSCAPES`` is a literal dict in
-    a core module with **no registration seam** — the same gap
-    ``parameters.DEFAULTS`` has. This module could define a ``Landscape`` of
-    its own and pass it to ``generators.estate`` directly, which is what a
-    fifth vertical will want to do, but it would then be invisible to
-    ``worldloom pack landscapes`` and unreachable from ``--pack``: an estate
-    vocabulary only one code path knows about is the "carried, citable and
-    inert" failure this repository keeps finding.
-
-    So the flag is refused with its reason rather than served half-way. The
-    field exists at all because ``cli.py`` forwards ``estate=`` to whichever
-    world a domain registered, and a ``TypeError`` out of a dataclass
-    constructor is a worse answer than a sentence."""
+    Refused outright until the vocabulary existed: this module carried the
+    sentence "``landscape.LANDSCAPES`` is a closed core table with no
+    registration seam" for a year after ``landscape.register`` did, and a
+    purchase-to-pay corpus had no technology graph at all — which document
+    gates the three-way match was unanswerable rather than thin.
+    ``procurement_org.generate`` mints no services, so like insurance every
+    generated node's layer comes out of the systems alone. ``None`` still
+    mints nothing, which is what keeps every contractor built before this
+    field was honoured byte-identical."""
+    landscape: Any = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered name, a document of pools, or a ``Landscape``. ``None`` is
+    procurement's own — ``RetailWorld.landscape``, same contract."""
 
     role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
     """Who exists in this organisation (``worldloom.roles``).
@@ -342,6 +342,11 @@ class ProcureToPayWorld:
     from, for the reason the pack is embedded whole: a corpus that could only
     be rebuilt by whoever still had the probe that derived it would fail the
     reason recipes exist."""
+    unit_roles: tuple[Any, ...] | None = None
+    """The posts minted for every business unit (``roles.UnitRole``), replaced.
+    ``None`` is the engine's own, which is what every world built before this
+    field existed minted; a pack's ``roles.unit_roles`` arrives here through
+    ``from_pack``, and the recipe records it beside ``role_table``."""
 
     physics: Parameters = DEFAULT
     """The world physics the organisation is drawn under.
@@ -412,22 +417,20 @@ class ProcureToPayWorld:
         """
         from . import packs as packs_module
 
-        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
+                   # The estate the pack asks for, in the words it asks for it;
+                   # `None` on both when it says nothing — `RetailWorld.from_pack`.
+                   estate=pack.estate or None, landscape=pack.landscape,
+                   # The organisation the pack authored, reviewed on the way in;
+                   # `None` on both when it says nothing.
+                   role_table=packs_module.role_table_of(pack),
+                   unit_roles=packs_module.unit_roles_of(pack))
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
         from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import procurement_org
-
-        if self.estate is not None:
-            raise ValueError(
-                "the procurement vertical has no estate vocabulary: `landscape.LANDSCAPES`"
-                " is a closed table in core with no registration seam, so a procurement"
-                " landscape would be invisible to `worldloom pack landscapes` and"
-                " unreachable from a pack. Build without --estate, or register a"
-                " landscape seam first."
-            )
 
         rng = Rng(self.seed)
         minter = Minter()
@@ -451,8 +454,11 @@ class ProcureToPayWorld:
             employees=self.employees,
             annual_revenue=self.annual_revenue,
             pack=self.pack,
+            estate=self.estate,
+            landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
             master_data=self.master_data,
@@ -464,22 +470,49 @@ class ProcureToPayWorld:
             archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
-            voices=dict(self.pack.voices) if self.pack is not None else None,
+            voices=packs_module.voices_of(self.pack) if self.pack is not None else None,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
             locale=locale,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             employees_total=self.employees,
         )
+
+        systems, services = org.systems, org.services
+        if self.estate is not None:
+            from . import landscape as landscape_module
+            from .generators import estate as estate_module
+
+            grown = estate_module.generate(
+                rng.derive("estate"), minter,
+                profile=self.estate,
+                landscape=landscape_module.resolve(self.landscape, default=landscape_module.PROCUREMENT),
+                # Empty, as insurance's are: this organisation mints systems and
+                # no services, so every generated node's layer comes out of the
+                # systems alone (`core_layers`).
+                core_services=org.services,
+                core_systems=org.systems,
+                # A contractor's role table has no technology roles, so
+                # ownership goes to the three people who already own its
+                # systems of record — the CPO owns sourcing and the P2P suite,
+                # the operations director the sites that receipt, the
+                # controller the ledgers. `InsuranceWorld.build`'s answer.
+                owner_ids=estate_module.owners(
+                    org.roles, "chief_procurement", "operations_director", "financial_controller",
+                ),
+            )
+            systems = (*systems, *grown.systems)
+            services = (*services, *grown.services)
 
         world = World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
-            _systems=org.systems,
-            _services=org.services,
+            _systems=systems,
+            _services=services,
             _cost_centres=org.cost_centres,
             _categories=org.categories,
             _sites=org.sites,
@@ -1051,14 +1084,13 @@ from .generators.procurement_evaluation import (
 from .generators.procurement_org import _ROLES as _PROCUREMENT_ROLES
 from .procurement_scenarios import PurchaseToPayCycle
 
-# Structure minus the estate axis: `ProcureToPayWorld` refuses `estate=` by
-# design — `landscape.LANDSCAPES` is a closed core table with no registration
-# seam, and a procurement landscape would be invisible to `pack landscapes` —
-# so a mosaic axis dealing estates to this engine would build worlds the world
-# builder itself rejects. The axis is dropped rather than the guard loosened.
-_mosaic_module.register_engine("procurement", tuple(
-    axis for axis in _mosaic_module.STRUCTURE if axis.name != "estate"
-) + (
+# The whole structure, estate axis included. The axis was dropped while
+# `ProcureToPayWorld` refused `estate=` — a mosaic dealing estates to an engine
+# whose builder rejects them would have built nothing — and restored with
+# `landscape.PROCUREMENT`: a contractor's landscape now varies in size the way
+# a bank's does. A procurement mosaic dealt before this carried one axis
+# fewer, so its coordinates do not replay (CHANGELOG, Generation).
+_mosaic_module.register_engine("procurement", _mosaic_module.STRUCTURE + (
     _mosaic_module.Axis(
         "tolerance", 0.6, 4.5, parameter="procurement.tolerance.pct",
         about="The approval tolerance as a share of committed order value — how"
@@ -1105,138 +1137,12 @@ register_domain(Domain(
     evaluation_text=tuple(_PROCUREMENT_EVAL_TEXT.items()),
 ))
 
-# Procurement's own fact kinds, in the process-global registry. This vertical
-# carries the project's only period-keyed carry-forward (`p2p.open_shortfall_*`),
-# so it is where `carries-forward-as(derive)` is a measured fact rather than a
-# design intention. `financial.accrual.grni` is registered here, not by retail,
-# despite the prefix: the procurement cycle mints it and answers for it.
-from .factkinds import FactKind
-from .factkinds import register as _register_kinds
+# Procurement's own fact kinds, in the process-global registry, read from
+# `_data/factkinds/procurement@1.json` — including `financial.accrual.grni`,
+# registered here despite the prefix because the procurement cycle mints it.
+from .factkinds import register_catalogue as _register_kinds
 
-_register_kinds([
-    FactKind(kind="p2p.contract_rate", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at", "standing"), about="The contracted unit rate."),
-    FactKind(kind="p2p.contract_counterparty", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at", "standing"), about="Who the contract is with."),
-    FactKind(kind="p2p.approval_tolerance_pct", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at", "standing"), about="The match tolerance, in per cent."),
-    FactKind(kind="p2p.approval_tolerance", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at",), about="The tolerance in currency at this order's size."),
-    FactKind(kind="p2p.ordered_quantity", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at",), about="What was committed."),
-    FactKind(kind="p2p.ordered_value", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at", "reconciles-against(p2p.ordered_quantity, p2p.contract_rate)"),
-             about="Quantity times rate, exactly."),
-    FactKind(kind="p2p.received_quantity", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="What arrived."),
-    FactKind(kind="p2p.received_value", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="What arrived, valued at contract."),
-    FactKind(kind="p2p.invoiced_quantity", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="What was billed."),
-    FactKind(kind="p2p.invoiced_unit_price", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="The billed unit price the match disputes."),
-    FactKind(kind="p2p.invoiced_value", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at", "reconciles-against(p2p.invoiced_quantity, p2p.invoiced_unit_price)"),
-             about="Billed quantity times billed price."),
-    FactKind(kind="p2p.match_price_variance", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="The price leg of the failed match."),
-    FactKind(kind="p2p.match_quantity_variance", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="The quantity leg of the failed match."),
-    FactKind(kind="p2p.match_total_variance", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at", "reconciles-against(p2p.match_price_variance, p2p.match_quantity_variance)"),
-             about="The two legs, summed — `_checks` recomputes the accrual arithmetic."),
-    FactKind(kind="p2p.exception_status", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="The exception's state chain; exactly one status is open at a time."),
-    FactKind(kind="p2p.exception_approved_by", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="Who approved paying over the tolerance."),
-    FactKind(kind="p2p.approved_payment_value", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="What was actually paid."),
-    FactKind(kind="p2p.credit_note_value", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at",), about="The credit note that settles the price leg."),
-    FactKind(kind="p2p.vendor_change_status", domain="procurement",
-             generated_by="generators/procurement_match.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="The vendor-master change request's state chain."),
-    FactKind(kind="p2p.open_shortfall_quantity", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at", "carries-forward-as(derive)"),
-             about="Undelivered quantity at close; next month's is derived from it."),
-    FactKind(kind="p2p.open_shortfall_value", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at", "carries-forward-as(derive)"),
-             about="Undelivered value at close — the balance the accrual carries."),
-    FactKind(kind="p2p.shortfall_released_quantity", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at",), about="Prior shortfall cleared by this month's receipts."),
-    FactKind(kind="p2p.shortfall_released_value", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at",), about="The released balance, valued."),
-    FactKind(kind="financial.accrual.grni", domain="procurement",
-             generated_by="generators/procurement_cycle.py",
-             invariants=("holds-at", "reconciles-against(p2p.open_shortfall_value, p2p.match_total_variance)"),
-             about="Goods-received-not-invoiced accrual the close books."),
-    # The estate's three, and the reason each carries `sums-to` against itself:
-    # like retail's `financial.revenue.actual`, one kind is stated at four
-    # levels — group, division, spend category or site, and (for commitment)
-    # cost centre — and the roll-up is between facts of the same kind rather
-    # than between two kinds.
-    FactKind(kind="p2p.third_party_spend", domain="procurement",
-             generated_by="generators/procurement_estate.py",
-             invariants=("holds-at", "sums-to(p2p.third_party_spend)"),
-             about="Third-party spend receipted in the period, at contracted rates —"
-                   " by division, by spend category, and by the depots that took delivery."),
-    FactKind(kind="p2p.open_commitment", domain="procurement",
-             invariants=("holds-at", "sums-to(p2p.open_commitment)",
-                         "carries-forward-as(derive)"),
-             generated_by="generators/procurement_estate.py",
-             about="Purchase-order commitment placed and not yet received at close — by"
-                   " division, by depot and project office, and by the cost centre it is"
-                   " coded to. Doubles as the commitment movement's closing balance:"
-                   " next period's p2p.commitment.opening is resolved from it."),
-    # The movement's two other legs. Two kinds, not four: the closing balance
-    # is `p2p.open_commitment` above and the received leg is
-    # `p2p.third_party_spend` below — each already registered to mean exactly
-    # that — and a `p2p.commitment.closing` or `p2p.commitment.received`
-    # stating the same figures under new names would be the copy-that-can-drift
-    # this corpus refuses at every level.
-    FactKind(kind="p2p.commitment.opening", domain="procurement",
-             generated_by="generators/procurement_estate.py",
-             invariants=("holds-at", "carries-forward-as(derive)"),
-             about="The order book brought forward at the period's open — the previous"
-                   " close's p2p.open_commitment, restated so one period's record"
-                   " carries its whole movement. The first period on record draws it."),
-    FactKind(kind="p2p.commitment.placed", domain="procurement",
-             generated_by="generators/procurement_estate.py",
-             invariants=("holds-at",
-                         "reconciles-against(p2p.commitment.opening, p2p.open_commitment)"),
-             about="Purchase-order value placed in the period — the movement's inflow."
-                   " Closing less opening plus receipts, exactly; `stockflow.verify`"
-                   " recomputes it."),
-    FactKind(kind="p2p.materials_on_hand", domain="procurement",
-             generated_by="generators/procurement_estate.py",
-             invariants=("holds-at", "sums-to(p2p.materials_on_hand)"),
-             about="Materials held in the yards at close. Only a yard holds any: the"
-                   " archetype gives one no revenue weight for exactly that reason."),
-])
+_register_kinds("procurement@1")
 
 
 __all__ = [

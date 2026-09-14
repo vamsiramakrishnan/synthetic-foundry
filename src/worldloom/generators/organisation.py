@@ -300,6 +300,11 @@ def generate(
     # was made of, so an un-passed locale is byte-identical rather than close.
     locale: Locale = DEFAULT_LOCALE,
     estate_profile: str | None = None,
+    # The estate's vocabulary (``worldloom.landscape``). ``None`` is the
+    # engine's own — retail's pools, which every estate this generator grew
+    # before the argument existed was made of — so an unpassed landscape is
+    # byte-identical rather than close. A pack or a blueprint supplies one.
+    landscape: Any = None,
     # Authoritative total workforce. The named roster remains the bounded
     # decision-making graph; see ``org_builder.stated_headcount``.
     employees_total: int | None = None,
@@ -383,7 +388,8 @@ def generate(
         )
     for unit in units:
         for spec in unit_role_specs:
-            role_table.append(spec.row(unit.key, unit.name))
+            if spec.minted_for(unit.kind):
+                role_table.append(spec.row(unit.key, unit.name))
     role_table, depth_of = sorted_roles(role_table)
 
     finance_cc = minter.next("CC")
@@ -452,7 +458,10 @@ def generate(
         rng.derive("hierarchy"), minter,
         units=units,
         unit_ids=unit_ids,
-        buyers={unit.key: role_ids[unit_role_key(unit.key, "_buyer")] for unit in units},
+        # A unit whose kind the buyer post is not minted for has no buyer;
+        # the hierarchy leaves its categories without one.
+        buyers={unit.key: role_ids[unit_role_key(unit.key, "_buyer")] for unit in units
+                if unit_role_key(unit.key, "_buyer") in role_ids},
         # Forwarded as-is, both of them. This used to read
         # `regions if regions else hierarchy.REGIONS`, which looked like a
         # harmless restatement of the callee's own default and was not: it
@@ -510,9 +519,10 @@ def generate(
     if estate_profile is not None:
         from . import estate as estate_module
 
-        landscape = estate_module.generate(
+        grown = estate_module.generate(
             rng.derive("estate"), minter,
             profile=estate_profile,
+            **({} if landscape is None else {"landscape": landscape}),
             core_services=services,
             core_systems=systems,
             # Who may own a service. Engineering and platform roles only: a
@@ -523,8 +533,8 @@ def generate(
                 if key in role_ids
             )) or (role_ids[next(iter(role_ids))],),
         )
-        systems = (*systems, *landscape.systems)
-        services = (*services, *landscape.services)
+        systems = (*systems, *grown.systems)
+        services = (*services, *grown.services)
 
     personas = tuple(
         Persona(

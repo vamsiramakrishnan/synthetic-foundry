@@ -11,6 +11,608 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The programme's record requests run as evalrun cases
+
+- Every record request of a programme is an `evalrun` case
+  (`Programme.evalrun_cases`, `industry.evalrun_cases`, `industry.evalrun_row`):
+  its plan searches the `sor` connector per record kind the binding holds
+  in the request's period, its outcome is the records the search must
+  return (`reads_contain`) and the answer read off them under the request's
+  own rubric, and its dimensions carry line, stream, intent, channel and
+  activity type. `industry export` writes them as `evalrun-cases.jsonl`
+  beside `records.jsonl`; `worldloom evalrun run` and `EvalSession.from_export`
+  take such a case set in place of an enterprise corpus
+  (`evalrun.contract.read_case_set`, `is_case_set`). The reference agent
+  states a row's `expected_answer` when the row carries one, so its run is
+  the ceiling on the answer axis too; rows without one are unchanged. A
+  telecom's 2,927 record requests are 2,927 cases, and the reference run
+  passes every one the grounded rater can grade. The Studio's `evalrun`
+  job takes `evalrun_source` (`dataset`, the default; `programme`; `both`):
+  a project with a process structure grades the programme's record requests
+  for the lines it seats, grouped under the line's use case, over the
+  company's own records, with or without the dataset's cases
+  (`worldloom studio evalrun --source`).
+
+### The commercial seats take the company's revenue function
+
+- A project of an industry no engine builds rides the retail shape with
+  the shape's commercial seats (`merch_lead`, `merch_analyst`, the per-unit
+  `_buyer` post) retitled and refunctioned from the company's revenue
+  function: the operating function, in APQC's sense, that the industry's
+  own value streams bind most in its revenue units
+  (`industry.revenue_function`), titled from the function
+  table (`industry.role_table`, passed to the world as the pack's roles). A
+  telecom seats a Customer Service Director, a logistics company Fulfilment.
+  A per-unit post may name the unit kinds it is minted for
+  (`roles.UnitRole.kinds`, `PackUnitRole.kinds`; empty mints it everywhere,
+  as every engine's own posts do), and the commercial post is minted in the
+  revenue units only. `sdk.Blueprint.role_table` takes a pack's authored table over the
+  engine's shipped one when lines of business attach, which a pack that
+  authored its organisation lost before. Generation: worlds of catalogue
+  projects for engine-less industries change titles and functions on those
+  seats; retail, banking and insurance worlds are unchanged.
+
+### The interview describes the company, the catalogue derives the rest
+
+- `industry.project` takes a `CompanySpec` in place of an industry name:
+  the company as an interview settles it (units, countries, operating
+  model, landscape) yields its divisions, LOBs and use cases the way the
+  industry's default company did. `industry.rederive` does the same for an
+  existing project, keeping its seed, episodes and plans and the families
+  it seats where the new company still supports them. An interview reply
+  sets `derive` to ask for it, and the Studio derives before recording the
+  revision (the reply must carry a structure). `worldloom industry project`
+  writes a project from an industry or a company spec for `studio init`.
+  The locale follows the company's first country that has one
+  (`industry.geo_for`), `australia` otherwise. The catalogue's
+  `process.<stream>` fact kinds are registered the first time any process
+  consults the fact-kind registry (`factkinds.process_kinds`), so a project
+  written by `worldloom industry project` lints the same under `studio
+  init` in a process that never imported `worldloom.industry`.
+
+### A catalogue project compiles and grades end to end
+
+- A Studio project derived from the catalogue (`industry.project`) now
+  builds a world of its own company and compiles its dataset. The world's
+  business units are the company's declared units (`industry.divisions`:
+  one pack unit per declared unit, named as declared, its kind the unit's
+  archetype), so a process fact can be about the unit that owns the work.
+  The process company rides the snapshot world's recipe under
+  `process_structure` (`recipe.apply_process_structure`, recorded as the
+  recipe step `ApplyProcessStructure` so a rebuild replays it in its
+  place). The company's systems of record are the products its bindings
+  name (`sor.products_for_world`): one system each, owned by the leader of
+  the unit that owns most of its bindings, holding the record kinds the
+  catalogue gives it (a telecom gains nineteen, SAP S/4HANA and Amdocs
+  among them). The company is declared as one event
+  (`organisation.process_structure`, the chief executive its actor, the
+  units and the new systems its subjects, dated where the company's facts
+  begin) and stated in the ledger: the programme's facts join the world
+  subjected to its units, sourced on its systems and caused by that event
+  (`sor.facts_for_world`), so a record that cites them cites facts the
+  world holds. From the recipe the builtin projections derive the
+  company's records on `sor` (`connector_data.generate_sor`) and its channel
+  evidence on the emulated channels (`sor.channel_records`: one email
+  thread, Jira issue, SharePoint file or Confluence page per bound activity,
+  declared channel and period, scoped to the line's LOB, stream and owning
+  unit, naming the period's records and the one that tripped the
+  exception). A use case declares one hard requirement and one read step
+  per source entity, a selector scoped to a value stream covers the use
+  case's activities, and support ownership forms nothing for a world built
+  from the structure it is given, so construction checks the line's
+  evidence against the world and finds it. A world built without a process
+  company projects nothing new, so every existing corpus is unchanged.
+  Materialising a corpus memoises the connector entity alias check, which
+  was parsing a connector definition once per record. Generation: worlds
+  and datasets of catalogue projects change (units, the declaration event,
+  the process facts, `sor` records and channel evidence).
+
+### Requests read their answers off the records
+
+- A programme now derives the company's system-of-record records
+  (`sor.records`, six periods ending at `sor.ANCHOR_PERIOD`, three records
+  per binding, kind and period) and every request whose intent rests on a
+  record set (`evidence_kinds` names `record_set`: find the exception,
+  triage a queue, chase, reconcile, respond to a query and the others) is
+  asked about the binding's records in the latest period and answered from
+  them (`sor.answer`): the purchase orders among March's that tripped the
+  price check, the open items to chase and their owner, the statuses of the
+  rest. `Request.expected_record_ids` names the records the answer cites and
+  `Request.period` the period; the earlier periods stay in the records as
+  the distractors a real system holds. A request whose intent rests on the
+  declaration alone still answers with it. One request per situation, as
+  before, so the counts are unchanged; a telecom's 5,550 requests now have
+  903 distinct answers rather than 203. `IndustryProgramme` reports
+  `records`, `record_requests`, `period` and `periods`; `industry export`
+  writes `records.jsonl`. Generation: every programme's requests and cases
+  change where the intent reads records.
+
+### Every system the catalogue names has records
+
+- `_data/connectors/sor.json`, one system-of-record connector standing in
+  for every product the catalogue names and no emulator of its own covers
+  (61 of 67 products: SAP S/4HANA, Workday, Temenos T24, Guidewire, Epic,
+  Amdocs and the rest). Its 73 entities are the catalogue's record kinds,
+  each with a workflow (a purchase order is created, approved, sent,
+  received, invoiced, closed), searchable on the fields a binding gives a
+  record, created under an idempotency key on the activity, period and
+  owner. `tools/build_sor_connector.py` builds it and
+  `emulated-systems@2.json` from the catalogue; only the workflow table is
+  authored, and the tests check the shipped files against a rebuild.
+- `worldloom.sor` derives the records: one per bound activity, record kind
+  and period, id in the product's own pattern (SAP's `45{8d}`), status from
+  the kind's workflow, an amount in the country's currency where the kind
+  carries money, the binding's exception on one record in four, every
+  record linked to the programme's facts about its binding. No draw and no
+  clock: the record is a function of the binding, the kind and the period.
+- The programme reports every line of every industry as supported; what
+  stays unemulated is the three channels with no emulator (chat, workflow
+  approval, portal filing). A Studio dataset built from a catalogue project
+  serves the records through `FrozenCompanyBuilder(projections=...)`, so a
+  request about a March invoice in SAP has March invoices in SAP to be asked
+  over. Generation: datasets of catalogue projects gain `sor` records; the
+  emulator mints ids for any `{Nd}` pattern.
+
+### A project seats every line of business
+
+- `industry.project` seats every family with a supported process line, not
+  the four largest: a bank is twenty-five lines and over a hundred people.
+  The cap was the composed pack's name pool, cut to the organisation the
+  description mints before any line attached; `sdk.Blueprint.lob` now
+  re-cuts the pools from the locale to the people the lines add (identical
+  draws while the count fits the base pool, the extended pool past it) and
+  leaves a pool an author wrote alone for `packs.lint` to report. A
+  blueprint with attached lines and no shape takes the engine's own role
+  table, so a line attached to a bank joins the bank's organisation instead
+  of displacing it with retail's. Generation: every derived Studio project
+  and interview request carries every line and its people.
+
+### Job titles from O*NET on every derived line of business
+
+- The function table carries one job title per tier (head, manager,
+  professional, support), chosen from the titles O*NET holds for the
+  function's seats by a rule the file states: the shortest title carrying
+  the tier's word and one of the function's keywords, reported titles before
+  alternate ones, a derived title marked `source: derived` where no seat has
+  one (17 of 148). `worldloom.functions.Title` reads them.
+- `industry.derive_lobs` titles each line of business from the table (a
+  Billing Supervisor and a Billing Clerk, not a "Billing Manager" and a
+  "Billing Analyst" typed from the family name) and seats a fourth role,
+  `<family>_support`, where the function has a support title. Generation:
+  every derived programme, Studio project and interview request carries the
+  new titles and the support seats; the seat that asks about an activity
+  (`SEAT_BY_TYPE`) is unchanged, so request counts are unchanged.
+
+### The catalogue keyed by PCF id, and the parity apparatus retired
+
+- Every activity in the process catalogue now carries the stable APQC
+  `pcf_id` of the process it belongs to, in place of a hand-typed hierarchy
+  hint (`3.4.1`, `5.x`). Universal streams resolve in the cross-industry
+  framework; each industry overlay names its own (`pcf_framework`: banking,
+  property and casualty insurance, retail, utilities, healthcare provider,
+  city government), and overlays for industries APQC publishes no framework
+  for resolve in the cross-industry one. A compiled binding carries the
+  resolved `pcf_hierarchy_id`, `pcf_name` and `pcf_framework`; an id its
+  framework does not have refuses the compile by activity name.
+  `tools/check_catalogue_pcf.py` prints the join, with the function that owns
+  each process beside the function the row names.
+- The second compiler (`worldloom.process_planning`), the source-reference
+  importer (`worldloom.process_catalogue`), the archived upload they replayed
+  against (`_data/processes/`, `defaults.zip`, `coverage.csv`, the parity
+  fingerprints in `bindings-provenance.json`) and their tools, tests and
+  workflow are gone. The catalogue is versioned data checked against the
+  shipped frameworks, not a mirror of an upload.
+  `process.open_from_catalogue` takes a `CompiledCatalogue` and carries the
+  stream's bindings through `authoring_brief`.
+- Generation: the activity bindings that feed the industry programme and the
+  `process_catalogue` connector records carry the four PCF fields and no
+  `apqc` or `pcf_status`; the default corpora do not read them and are
+  unchanged.
+
+### Reference data: the PCF, O*NET and the function table
+
+- The APQC Process Classification Framework ships as data: the cross-industry
+  framework 7.4 and seventeen industry frameworks under `_data/pcf/`, each
+  element with APQC's stable `pcf_id`, its hierarchy index, description and
+  benchmarking metrics, and each file carrying the notice APQC's licence
+  requires. `worldloom.pcf` reads them; `tools/ingest_apqc.py` writes them
+  from the workbooks and refuses one without a notice.
+- The O*NET 31.0 database ships as data under `_data/onet/`: 1,016
+  occupations with descriptions, job zones, the titles incumbents report,
+  task statements mapped to detailed work activities, and the software each
+  occupation uses. `worldloom.onet` reads it; `tools/ingest_onet.py` writes
+  it with the CC BY 4.0 credit line.
+- `worldloom.functions` is the crosswalk between the two: every level-3
+  process of the cross-industry PCF assigned to exactly one of 42 business
+  functions, each function seated with O*NET occupations in manager,
+  professional and support tiers and bound to the catalogue's system-of-record
+  classes. `tools/build_functions.py` builds it from three authored tables
+  and resolves every id and name against the shipped sources; the tests do
+  the same against the shipped file. See `docs/reference-data.md`.
+
+### Industry X, and the whole evaluation programme it implies
+
+- `worldloom industry programme INDUSTRY OUT` (`worldloom.industry`) derives
+  everything an interview used to leave to be typed: a line of business per
+  function family the operating model owns (a head, a manager and an analyst
+  answerable for the family's value streams as `process.<stream>` kinds,
+  registered from the catalogue's own stream list), a seated request per
+  situation (the seat chosen by activity type, `SEAT_BY_TYPE`, so every asker
+  has standing under the same rule `evals.plausibility` applies and
+  `standing_findings` proves it), a fact per declared attribute of every bound
+  activity (owner, system of record, control, exception) that the request's
+  expected answer names and `Request.to_case` cites, and a `ProcessLine` per
+  LOB × stream carrying the derived count. `use_cases` turns each supported
+  line into a Studio `UseCase` whose `count` is the line's situations rather
+  than an authored twelve, with sources from the connectors that emulate the
+  line's systems and channels and a construction `EvalSpec` bound to the line.
+  Twelve industries, 189,346 requests, each counted where it belongs;
+  `worldloom industry list` prints the table.
+- `_data/process-catalogue/emulated-systems@1.json` says which systems of
+  record and evidence channels a connector emulator stands in for. A product
+  it does not list is reported on the line and the programme as unemulated and
+  its bindings draw evidence from the declared channels only; a line with no
+  emulated source is listed under `unsupported_lines` with its count intact.
+  `IndustryProgramme.engine` is empty for the nine industries no engine
+  builds, and the programme says so rather than dressing a retail world as a
+  telecom.
+- `evals.coverage.report` accepts anything carrying the request tuple
+  (`coverage.Requested`), so a programme is measured before any case enters a
+  world with the code that measures the world afterwards. A full programme
+  uses every situation the catalogue offers.
+- `industry.project(industry, name)` is a Studio `ProjectSpec` derived from
+  the programme, and the Studio preset accepts any industry the catalogue
+  knows: the four largest lines of business as LOBs (rooted at the chief
+  executive, `industry.ROOT`, so they lint clean and ride the world), every
+  supported process line of theirs as a use case with the line's count, the
+  company's limitations acknowledged. The interview request carries the
+  programme's headline numbers under `programme` and its instructions say a
+  count is derived from a process line, never written as a round number.
+- `archetypes.matched` reports whether a description named a registered shape
+  at all, and `company.resolve` reads it: a retailer is recognised without the
+  caveat every retail description used to carry; an industry the catalogue
+  knows but no engine builds (`industry.industry_of`: overlay keys, crosswalk
+  codes, sector frameworks and a declared word table, longest phrase at word
+  boundaries) is reported as exactly that, naming `worldloom industry
+  programme <industry>` as what does exist; an unrecognised business is
+  reported as a miss.
+
+### Eval execution: a question is a turn
+
+- Every request in the shipped corpora was complete and safe to act on as
+  written, and the turn protocol had two replies, a call or an answer. An
+  agent that should stop and ask (the request is ambiguous, a parameter is
+  missing, a delete needs the user's word) had no way to, and no grade for
+  it. `QuestionPoint` is to clarification what `FailurePoint` is to a
+  designed error: a row declares the questions its request requires
+  (`question_required`: the reason, the tokens the question must mention,
+  the user's reply, the nodes that may not run first; `confirm_before` on a
+  delete derives one per destructive write), `ToolSurface.ask` records what
+  the agent asked and where (the `ask` reply of the `worldloom.evalrun-turn/v2`
+  document, the `eval_ask` tool over MCP, an `["ask", {...}]` entry in a
+  responses document), the service answers from the row and never says
+  whether the question was expected, and the trajectory grade counts the
+  points honoured under four laws named once in `QUESTION_LAWS`:
+  `acted_without_asking`, `asked_too_late`, `ignored_the_answer`,
+  `asked_without_need`. One more score term beside the designed failures,
+  absent when a case requires no question and none is asked, so every
+  existing ledger scores as it did. The reference agent asks what the row
+  requires; the questions ride the ledger (`CaseResult.questions`) and the
+  summary; `axis_coverage` reports `questions_expected` and the reasons.
+
+### Hero use cases: organise my drive, my inbox, my chats
+
+- `worldloom enterprise-evals housekeeping WORLD OUT --kind drive|inbox|chats
+  --connector ... --records N --mess --stale --duplicates` builds a corpus
+  that needs tidying and the cases that grade the tidying
+  (`worldloom.housekeeping`). The corpus is in the world's own words: a
+  folder tree per business unit and period (Drive, SharePoint, OneDrive), a
+  mailbox with subject-tagged categories and mail folders (email, Outlook),
+  or a channel list per unit (Slack, Teams), with a stated share of items
+  misfiled, mislabelled, stale or duplicated. Nothing on a record says where
+  it should be; the rule is in the request and the ground truth in the row.
+  Each case is one rule, one group of records that share a destination: a
+  search bound to the rule's own predicate, a mapped write per record (a
+  move, an update, an archive, a delete) and a mapped readback, in the
+  executable DAG grammar and compiled through `compile_dag_row` like every
+  other row. The reference agent passes every case on every connector, and
+  the count is the point: a corpus of five thousand items is one flag away.
+- Scoring a reorganisation. A mapped write over a pinned search now carries
+  a `per_record_state` assertion (or a `deleted` one listing its records),
+  graded in `grade_trace` by fid, and `evalrun`'s outcome grade holds the
+  same list on `StructuredOutcome.records`: the match is the fraction of
+  records that landed (`OutcomeMatch.ratio`), so three hundred files with
+  one left behind score 0.997 on that expectation rather than 0.
+- `SourceRequirement.bind = "predicate"` compiles a search to the
+  requirement's own predicate instead of the fixture's `id IN [...]`, so an
+  agent that reads the rule can search by it; the reads it must return are
+  still exactly the fixture's, and the cap on a bound search rises from
+  100 to the grammar's 1000, paged at the tool's page size. Off the wire
+  when unset, so every existing row compiles byte for byte.
+- The emulator's search under an alias entity (`file` over docx, xlsx, ...)
+  matched nothing when it carried a `where` predicate, because the
+  predicate kept the alias name and every member record failed the entity
+  test. The pool already holds exactly the alias's members, so the
+  predicate now drops the alias. The served surface's per-run call limit
+  rises to 4096 so a mapped reorganisation of a thousand records fits.
+
+### Connectors: a record can be moved, and mail and chat can be tidied
+
+- Every file connector declared its `move_file`/`move_item` tool as an
+  `update` on the folder entity alone, so `tool_for("docx", "move")` had
+  nothing to answer and no hero use case (organise my drive, my inbox, my
+  chats) could be planned, executed or graded as what it is. `move` is now
+  a connector operation of its own (`connector_definition.ConnectorOperation`,
+  the DAG grammar's write vocabulary, `enterprise_specs.Operation.MOVE`):
+  Drive, SharePoint and OneDrive move files and folders between folders
+  with `{id, parent}`, Outlook moves messages between mail folders
+  (`move_message`) and creates folders (`create_folder`), the native email
+  connector updates a message's labels and read state (`update_message`),
+  and Slack creates and archives channels (`create_conversation`,
+  `archive_conversation`) through the workflow its definition always
+  declared. The emulator's `_op_move` re-parents the record it leaves
+  intact and refuses a destination that is not a container (validation)
+  or does not exist (not found). `evalrun` grades a move as an update
+  outcome on the record's `parent`, and `safety` classifies it as a
+  reversible, naturally idempotent mutation, never destructive.
+
+### Packs: the organisation as pack data
+
+- The rung of the de-hardcoding ladder left open the longest. `voices`
+  proved that an engine can publish its role keys and lint against them,
+  and the role table itself stayed a literal in each engine's organisation
+  generator: a pack could re-voice the CFO and could not give the company a
+  chief risk officer. `Pack.roles` now carries the whole table (`table`,
+  in `lob.RoleSpec`'s `reports_to` spelling, a `voice` attachable on the
+  row) and the posts minted per business unit (`unit_roles`), both off the
+  wire when unset. The table is reviewed on the way into every builder
+  (`packs.role_table_of`: `roles.review` with stand-ins for the per-unit
+  posts, refused rather than warned about because a missing spine key is a
+  `KeyError` mid-episode) and reaches the build as the builder's
+  `role_table`; the posts reach it as a new `unit_roles` field on all four
+  builders, which the banking, insurance and procurement generators now
+  accept beside retail's, and the recipe records beside the table. `pack
+  check` names every review rejection, a post set missing an engine
+  suffix, a post the table already declares, a role voiced twice, and a
+  LOB role the table does not contain; the voices, name-pool and episode
+  author-role lints read the company's own keys. `worldloom pack targets
+  --json` prints each engine's organisation as data (`roles.published`):
+  the spine a table must keep, the shipped rows and posts to start from.
+  `pack export` writes a derived role table and estate into the pack
+  instead of a sidecar. Every baseline build is byte-identical.
+
+### Procurement: an estate of its own (Generation)
+
+- `ProcureToPayWorld` refused `--estate` outright, and three modules carried
+  the sentence "`landscape.LANDSCAPES` is a closed core table with no
+  registration seam" for as long as `landscape.register` has existed. The
+  contractor's vocabulary is now `landscape.PROCUREMENT`, the fourth shipped
+  landscape (`worldloom pack landscapes`): sourcing, orders, site receipting,
+  the three-way match and the accrual it books, gated on the
+  site-connectivity gateway and identity. A purchase-to-pay corpus built
+  with `--estate` grows a technology graph around the five systems the
+  cycle mints, owned by the people who own those systems; built without
+  one it is byte-identical. The pack's `estate` and `landscape` reach this
+  engine too, and `evolve` no longer refuses an estate on a contractor.
+- **Generation**: the procurement mosaic (`worldloom mosaic --engine
+  procurement`) regains the estate axis it dropped while the builder
+  refused estates, so its variants carry one more coordinate; a
+  procurement mosaic dealt before this does not replay. Every other build
+  is unchanged.
+
+### Packs: the estate's vocabulary as pack data
+
+- `landscape.named`'s error message promised that "a pack may also supply
+  pools of its own" for as long as the module existed, and no pack field
+  read it; the SDK's `estate(vocabulary=)` was carried and applied nowhere.
+  A pack now states `estate` (the size) and `landscape` (a registered
+  vocabulary by name, or pools of its own: services per layer, systems of
+  record, purposes and size profiles), both left off the wire when unset so
+  every pack corpus already built embeds the exact document it did. The
+  retail, banking and insurance builders carry one `landscape` field,
+  resolved through `landscape.resolve` with the engine's own vocabulary as
+  the default; `Blueprint.estate(vocabulary=)` reaches it; and the recipe
+  records the vocabulary beside the size (`landscape`, a name or the pools
+  themselves, `landscape.document_of`) so the estate rebuilds in the same
+  words from the corpus alone. `pack check` names an unknown vocabulary, a
+  size the vocabulary lacks, and an estate asked of an engine that grows
+  none. A typed `--estate` wins over the pack's size. Every baseline build
+  is byte-identical.
+
+### Fact kinds: the engines' vocabularies as versioned data
+
+- Retail, banking, insurance and procurement each registered their fact
+  kinds as a Python literal: 115 declarations across four modules, the
+  vocabulary every pack's `fact_kinds`, every LOB responsibility and every
+  sheet column has to match. Each vertical's kinds now live in
+  `_data/factkinds/<engine>@1.json` (`domain`, `about`, and one row per
+  kind), read at import by `factkinds.register_catalogue`; the version is
+  in the file name because a registry is a lineage component. A row naming
+  a field the kind does not have is refused rather than ignored. The
+  arguments that stood as comments beside the literals (why a diagonal is
+  `never-superseded`, why `financial.accrual.grni` is procurement's)
+  travel as `note` fields and as each file's `about`. The registry's
+  content and order are identical to what the literals produced, and every
+  baseline build is byte-identical.
+
+### Documents: the engines' catalogues as versioned data
+
+- Banking, insurance and procurement registered their artifact types as
+  Python literals (`register_artifact_types` with standing, lag and outline
+  tables) while retail's thirty had long been proven expressible as
+  `doctypes` JSON. Each catalogue now lives in
+  `_data/artifact-types/<engine>@1.json`, read at import by
+  `doctypes.register_engine` with the compilers passed in beside it; the
+  version is in the file name because a catalogue is a lineage component.
+  The argument that stood as comments beside each literal (why a section is
+  optional, why a type stands where it does) travels as `note` fields on
+  `SectionSpec` and `DocumentType`, left off the wire when empty. Narrated
+  banking, insurance and procurement builds are byte-identical.
+
+### Documents: chapter furniture past eight sections
+
+- A document with more than eight visible sections (`render.chaptered`,
+  the same threshold that frames its writers) renders with chapters: Word
+  and PDF open every section on its own page, Word's running head carries
+  the current section as a `STYLEREF` field beside the title, the hidden
+  sections gather under one `Appendix` heading on their own page, and the
+  Markdown twin opens with a linked contents list and the same `Appendix`
+  heading. The threshold sits above every outline the engines ship, so
+  every existing document renders byte for byte.
+
+### Documents: sections that repeat over units, and framed long documents
+
+- A section plan may declare `repeat: "unit"` (`doctypes.SectionSpec`,
+  `documents.SectionPlan`): one authored step becomes a section per
+  business unit with facts for it, each handed only that unit's facts (the
+  unit, its categories, its sites), each with `{{var:unit.name}}` resolved
+  in its heading and purpose, and each its own narration request under the
+  same per-section validator. A long document now grows from facts rather
+  than from a longer brief. Unset, the field stays off the wire.
+- Once a document has more than eight visible sections, every section's
+  narration request carries the outline as standing context: the sections
+  in order, and where this one sits between its neighbours, with the
+  instruction to refer to another section by heading rather than restate
+  it. Built from the compiled outline, not asked of a model, so no ledger
+  gains a call site; the threshold sits above every outline the engines
+  ship, so every existing request digest and ledger is unchanged.
+
+### Documents: decks for any document type
+
+- The deck renderer handled one artifact type, pinned its size class to
+  `small` and its grammar to the executive summary's, so no pack could ship
+  a board pack and no deck could exceed four content slides. `render.pptx`
+  now composes under the intent's own type, size and budget, and a document
+  type declares `deck: true` to be rendered as one (`doctypes.install`
+  registers it, `registries.scoped` restores the set, `describe` reads it
+  back, and the core port marks the executive summary). A deck opens with an
+  agenda once it has more than six visible sections; prose that outgrows one
+  slide continues onto the next at paragraph or sentence boundaries, as a
+  long table already did. Every deck an old size class could hold renders
+  byte for byte: the agenda threshold is strictly above the shipped
+  summaries and no section they carry exceeds one slide's estimate.
+
+### Documents: declared size budgets
+
+- The component cap `compiler.compose` enforced per size class and the word
+  brief `narrative.compiler` gave each section's writer were two literal
+  tables two modules apart, with no flag, no pack field and no fourth entry;
+  the longest document a corpus could carry was twelve sections of three
+  hundred words. Both now read one table, `sizing.PRESETS`, which holds the
+  old numbers verbatim (so every default build composes and narrates exactly
+  as before) and adds `xlong` (40 components, a 420-word brief) for a report
+  with chapters.
+- A document type may declare its budget outright: `filing.budget` on an
+  authored type and `budget` on an episode artifact take
+  `{"components", "words"}` and win over the size word. The planner copies it
+  onto `ArtifactIntent.budget`, so a process that only loads the corpus
+  narrates and renders to it without the pack that declared it; the plan
+  handshake attaches the intent's budget to every accepted plan. An unset
+  budget is left off the wire of the intent, the plan and the doctype, so
+  every corpus, ledger and port built before this serialises byte for byte.
+- `doctypes.lint` refuses a budget smaller than the outline's required
+  sections, naming the `over_budget` refusal the composer would otherwise
+  raise on every document of the type.
+
+### Generation: planned deletes in the DAG grammar
+
+- Add the `delete_chain` shape to `enterprise-dag@1`: write, read back,
+  delete that exact returned record, read it back expecting `not_found`. The
+  compiled row carries a `deleted` assertion naming the write that created
+  the record and a `failure_at` expecting the error on the final readback,
+  so the record being gone and the readback failing are both graded. Opt-in
+  through `--dag-shape`; a build without it is byte-identical.
+- Serve `delete_file` on SharePoint and Drive file entities. The specs
+  declared `DELETE` on both; the definitions served no tool for it, so no
+  destination in the builtin registry could host a delete. `MUTATE` still
+  excludes delete, so the legacy planner's output is unchanged and
+  `--dag-shape '*'` now includes `delete_chain` wherever a file destination
+  admits it.
+- Graders learn about records that existed only during a run: the
+  execution contract stops reading a deleted record's fields and entity from
+  the post-state, aliases an id through the results the trace recorded, and
+  skips an expected failure on a node an earlier designed failure blocked;
+  the served surface attributes a readback by the id a deleted record
+  answered to; the outcome axis meets a create and a delete on the same
+  transient record from the spans and grounds the artifact on the write the
+  service saw.
+
+### Eval execution: three-axis agent runs
+
+- Review findings closed: the service records every call it refuses
+  (unknown tool, undeclared argument, a limit) and the trajectory axis
+  counts them as attempts against precision, the budget and its pass, on
+  the local and the served path alike; a mapped (`for_each`) write claims
+  every record it produced rather than one, so a fan-out of creates is no
+  longer collateral; `compare` computes a case's overall delta over the
+  axes both runs observed and gives two runs with no axis in common no
+  verdict; the summary's trajectory rates are absent rather than zero where
+  no trajectory was observed.
+- Add Anvil's mutation battery for the graders (`tests/test_evalrun_mutations.py`):
+  each case weakens one control on a passing reference trajectory and
+  asserts the score drops on the right axis. It found and closed two gaps:
+  a successful write the service could not attribute to a node now counts
+  as leaking past a designed failure, and an unchanged retry of the refused
+  call no longer counts as honouring it (a keyed create makes that retry
+  safe under Anvil's law, not honoured).
+- Studio grades agents on the company's connector cases: an `evalrun` job
+  (`worldloom studio evalrun`, `studio run --operation evalrun`, the
+  console's Evaluations page, the workflow's next step once the queryset
+  exists) runs the reference agent or the connected coding harness over
+  the revision's verified dataset with lineage attached, appends every
+  graded case to a durable ledger a retried job resumes from, seals the run
+  with a receipt the results route authenticates, and pages per-case grades
+  with what each lost on which axis. The run directory is an ordinary
+  `evalrun` run, so `summarize` and `compare` read it.
+- Add `worldloom evalrun plan`, `EvalSession.plan`, the `evalrun_plan` MCP
+  tool and `worldloom.evalrun.plans`: the plan axis graded alone. A planner
+  receives the request and the tool catalog and returns a DAG of tool calls;
+  nothing executes, and the DAG is graded by tool name and dependency
+  reachability with `grade_plan`'s formula. Planners: `reference`,
+  `--exec <command>` (a `worldloom.evalrun-plan/v1` document per case) and
+  `scripted:<plans.json>` (`worldloom.evalrun-plans/v1`, written against
+  `evalrun requests --for plan`). Scores now record which axes they
+  observed; a summary reports no mean and `compare` no delta on an axis a
+  run did not observe.
+
+- Add `worldloom evalrun` and `worldloom.evalrun`: run any agent against a
+  compiled enterprise case set, one isolated connector state per case, and
+  grade three axes separately. Plan (the DAG the request should produce),
+  trajectory (order, budget, designed failures honoured, retry storms,
+  Anvil's `duplicate_write`, `unsafe_retry` and `destructive_without_read`
+  laws) and outcomes (records created, updated and deleted as a state diff
+  with collateral writes named; artifact grounding on the pinned source
+  records; a rated answer). `grade_trace`'s verdict rides beside them.
+- Ship a reference agent that walks each expected DAG through the same tool
+  surface an external agent gets, a scripted agent, and a callable seam. An
+  agent that raises is an error row excluded from every mean. Runs are
+  byte-reproducible unless `--timed` records latency.
+- Adapt Gemini Enterprise Eval Studio's judge prompt, score parser (clamped,
+  with "no number" as an error), latency fields and ±0.10 comparison bands;
+  import its results CSV as an answer-axis-only run. Port Anvil's effect,
+  risk, idempotency and closed error-code vocabulary as `evalrun.safety`, and
+  expose the same MCP annotations from the service's `tool_catalog`.
+- Fix `ConnectorEvaluationService` grammar attribution, which demanded an
+  `entity` argument on tools that do not declare one and so could not
+  attribute any email-source search made through the served surface. Add
+  `spans`, `snapshot` and `tool_catalog` to the SDK path.
+- The Studio interview now states that evaluation is not retrieval and asks
+  which axes and write operations each use case exercises.
+- Make the run drivable by any harness: `evalrun run --exec` runs an
+  executable as the agent one subprocess per turn over the existing seam
+  (`worldloom.evalrun-turn/v1`); `evalrun requests` writes cases and tool
+  catalogs as a document a harness answers offline
+  (`worldloom.evalrun-requests/v1`, `-responses/v1`); `EvalSession` is the
+  SDK entry; `worldloom mcp` gains `evalrun_*` tools; `evalrun` is a declared
+  seam in `worldloom seams`; the `worldloom-evalrun` skill and
+  `/worldloom-evalrun` command carry the procedure.
+- Close the MCP transport: the served surface snapshots state at
+  `eval_begin` and gains `eval_score`, which returns the three-axis case
+  result for an external agent's run; `evalrun import-served` collects those
+  documents into a comparable run. Add `--rater exec:<command>`, a judge
+  over the `--exec` seam (`worldloom.evalrun-rating/v1`), so the answer axis
+  can be model-rated without this package importing a model SDK.
+
 ### Generation: reviewed company-data sizing
 
 - Add opt-in data creation proposals that reuse the canonical retail inventory,

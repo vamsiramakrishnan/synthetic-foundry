@@ -47,10 +47,7 @@ and carried by nothing anybody could open:
 
 from __future__ import annotations
 
-from datetime import timedelta
-
-from . import documents
-from .documents import SectionPlan
+from . import doctypes, documents
 from .generators.insurance_book import UnderwritingBook
 from .generators.reserving import ReservingEpisode
 from .ids import Minter
@@ -58,7 +55,6 @@ from .models import (
     ArtifactIntent,
     ArtifactIR,
     ArtifactSection,
-    Authority,
     Cell,
     Chart,
     ChartKind,
@@ -66,7 +62,6 @@ from .models import (
     ErrorType,
     FormulaKind,
     IntentionalError,
-    Lifecycle,
     Row,
     Table,
 )
@@ -889,130 +884,17 @@ def _latest_of(facts, kind: str):  # type: ignore[no-untyped-def]
 # Registration
 # ---------------------------------------------------------------------------
 
-from .render import docx as _docx
 from .render import markdown as _markdown
 from .render import xlsx as _xlsx
 
 _xlsx.register("reserve_triangle_workbook", "underwriting_performance_pack")
 _markdown.own_elsewhere("reserve_triangle_workbook", "underwriting_performance_pack")
-_docx.register(
-    "claims_emergence_note",
-    "actuarial_valuation_report",
-    "margin_decision_memo",
-    "underwriting_result_commentary",
-)
-
-documents.register_artifact_types(
-    standing={
-        "reserve_triangle_workbook": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
-        "claims_emergence_note": (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT),
-        "actuarial_valuation_report": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-        "margin_decision_memo": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-        # The pack is the ledger's own statement of the quarter's book, so it
-        # is SYSTEM_OF_RECORD beside the triangle. The commentary is an
-        # approved report *about* the pack, one authority below it: when a
-        # managing director's page and the pack disagree, the pack wins.
-        "underwriting_performance_pack": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
-        "underwriting_result_commentary": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-    },
-    lags={
-        "reserve_triangle_workbook": timedelta(hours=1),
-        "claims_emergence_note": timedelta(hours=4),
-        "actuarial_valuation_report": timedelta(days=1),
-        "margin_decision_memo": timedelta(days=1, hours=6),
-        "underwriting_performance_pack": timedelta(hours=2),
-        # After the pack it argues from, and by more than the pack's own lag,
-        # so a commentary can never be dated before the grid it reads.
-        "underwriting_result_commentary": timedelta(days=1, hours=2),
-    },
-    outlines={
-        "claims_emergence_note": (
-            SectionPlan(
-                "Actual versus expected", ("claims.actual_vs_expected", "claims.incurred_to_date"), "any",
-                "State the deviation by cohort: what incurred was expected to be under the "
-                "prior pattern, and what it actually was. Working-paper register — this is "
-                "the low-authority document that happens to be right.",
-            ),
-        ),
-        "actuarial_valuation_report": (
-            SectionPlan(
-                "Central estimate", ("reserves.central_estimate_total", "reserves.ultimate",
-                                      "reserves.ibnr"), "any",
-                "State the strengthened central estimate by cohort and in total, plainly. "
-                "This is the actuary's own report; it does not soften the figure for the "
-                "committee that will decide how much of it to book.",
-            ),
-            SectionPlan(
-                "Attribution", ("reserves.attribution_pattern_change",
-                                 "reserves.attribution_deterioration"), "any",
-                "The split between pattern change and genuine deterioration, and that the "
-                "two do not resolve into one figure — both are on the record.",
-            ),
-            SectionPlan(
-                "Recommendation and the booked position",
-                ("reserves.committee_recommendation", "reserves.booked_total"), "any",
-                "State the committee's recommendation, then — quoting the figure exactly as "
-                "finance's own decision memo states it — what was actually booked. The gap "
-                "between the two is not this report's decision to explain; it is the "
-                "memo's.",
-            ),
-            SectionPlan(
-                "Basis of valuation", ("reserves.philosophy", "reserves.risk_margin_policy_pct"), "any",
-                "One paragraph: the standing margin policy this valuation was performed "
-                "under.",
-                # The standing policy, restated. It is the same paragraph in
-                # every valuation this actuary signs, and its absence reads as a
-                # report that assumed its reader knows the house philosophy —
-                # not as a report missing a figure. The central estimate, the
-                # attribution and the booked position stay required; they are
-                # what the committee is measured against.
-                required=False,
-            ),
-        ),
-        "underwriting_result_commentary": (
-            SectionPlan(
-                "The quarter against plan", ("financial.revenue.",), "unit",
-                "State this division's written premium against its own plan and say "
-                "plainly whether the quarter was acceptable. Lead with the position, "
-                "not with the first figure in the list — the reader runs the division "
-                "and already knows its shape.",
-            ),
-            SectionPlan(
-                "The book and the claims behind it",
-                ("portfolio.policies_in_force", "claims_ops."), "unit",
-                "Connect the policy book to the claims coming off it: whether the "
-                "division is writing more business, and whether its claims function is "
-                "closing what it opens. Not every division has a claims operation of "
-                "its own; do not invent one for a division whose figures are absent.",
-                # An investment function has no policy book and notifies no
-                # claims, and a division that genuinely has neither should not
-                # carry an empty heading. `outline` drops a section with no
-                # facts assigned; marking it optional is what says that is
-                # intended rather than a section somebody lost.
-                required=False,
-            ),
-        ),
-        "margin_decision_memo": (
-            SectionPlan(
-                "The decision", ("reserves.booked_strengthening", "reserves.margin_released"), "any",
-                "State what was booked and what margin was released to cover the "
-                "difference, under the standing combined-ratio target.",
-            ),
-            SectionPlan(
-                "The central estimate", ("reserves.central_estimate_total",
-                                          "reserves.committee_recommendation"), "any",
-                "Quote the actuarial central estimate exactly as the valuation report "
-                "states it — this memo's decision is measured against that figure, not "
-                "against a paraphrase of it.",
-            ),
-            SectionPlan(
-                "The standing gap", ("reserves.held_vs_central_gap",), "any",
-                "State that the booked reserve now sits below the central estimate, by how "
-                "much, and that the policy basis for the release is the standing margin "
-                "philosophy, not an exception to it.",
-            ),
-        ),
-    },
+doctypes.register_engine(
+    # The catalogue as versioned data — standing, lag, outline and the Word
+    # flag for every type, with the argument for each carried as a note. The
+    # compilers stay here: a compiler is the one thing the schema cannot
+    # express (`doctypes`' module docstring measures where the line falls).
+    "insurance@1",
     compilers={
         "reserve_triangle_workbook": reserve_triangle_ir,
         "underwriting_performance_pack": underwriting_pack_ir,

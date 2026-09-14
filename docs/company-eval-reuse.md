@@ -15,7 +15,7 @@ information or validation was lost.
 | Responsibility | Existing implementation | Reuse decision |
 | --- | --- | --- |
 | Company interview output | `company.CompanySpec`, `resolve`, `sdk.from_resolution` | Keep one company document; retain conflicts and `unmet` findings. |
-| Business authoring | `cascade`, `process`, `process_planning`, `episodes`, `packs` | Reuse bounded authoring and domain episode execution. No second episode grammar. |
+| Business authoring | `cascade`, `process`, `process_bindings`, `episodes`, `packs` | Reuse bounded authoring and domain episode execution. No second episode grammar. |
 | Orchestration | `pipeline.Pipeline`, typed `Stage`s, `sdk.Blueprint` | `evals.candidate_builder` applies the candidate seed to an existing blueprint and runs these stages. |
 | Eval design and construction | `evals.EvalCampaign`, demand compiler, tactics, witness recipe verbs | Reuse the eval-first path; do not introduce a competing campaigns package. |
 | Independent acceptance | `eval_candidates.validate_candidate`, World validation | Check declared shape against observed records/artifacts/threads. Unsupported constraints explicitly fail acceptance. |

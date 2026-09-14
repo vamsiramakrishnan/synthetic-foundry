@@ -414,6 +414,39 @@ compiles if needed, projects the requested native formats, and exports the
 result. Structured Jira, Confluence, and ServiceNow bundles are most commonly
 driven through the CLI renderer path.
 
+## Executing agents against a case set
+
+`worldloom.evalrun.EvalSession` holds a compiled case set, the service that
+executes it, and the runs it has produced. Open one from an exported
+`enterprise-evals` directory or an `EnterpriseCorpus`, read the coverage, run
+the reference agent for the ceiling, run yours, compare, write.
+
+```python
+from worldloom.evalrun import AgentResponse, EvalSession, ExecAgent, ExecPlanner
+
+session = EvalSession.from_export("./cases")
+print(session.coverage().model_dump())      # per-axis counts; a zero is a gap
+session.reference()                          # label "reference"
+
+
+class Mine:
+    name = "mine"
+
+    def run(self, task, tools):
+        page = tools.call("jira.search_issues", max_results=5)
+        return AgentResponse(answer=f"{len(page['items'])} issue(s)")
+
+
+session.run(Mine(), label="mine")
+session.run(ExecAgent("python3 my_agent.py"), label="exec")
+print(session.compare("reference", "mine").axis_deltas)
+session.write("mine", "./runs/mine")
+session.plan(ExecPlanner("python3 my_planner.py"), label="planner")   # plan axis only, nothing runs
+```
+
+Every run begins its cases on fresh forks of the same records; the session
+holds nothing a run can change. See [eval execution](eval-execution.md).
+
 ## Direct world classes
 
 The top-level package exports the four shipped builders and episodes:

@@ -19,4 +19,5 @@ Individual steps, if you want to drive it yourself:
 /worldloom-build      build a world from a seed
 /worldloom-narrate    fetch requests, write prose, submit until accepted
 /worldloom-render     materialise and validate
+/worldloom-evalrun    run an agent against a case set; grade plan, trajectory, outcomes
 ```

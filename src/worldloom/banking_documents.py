@@ -23,10 +23,7 @@ Nine artifacts, and the relationships between them are the syllabus:
 
 from __future__ import annotations
 
-from datetime import timedelta
-
-from . import documents
-from .documents import SectionPlan
+from . import doctypes, documents
 from .generators.banking_network import Network
 from .generators.regulatory import ReturnEpisode
 from .ids import Minter
@@ -34,14 +31,12 @@ from .models import (
     ArtifactIntent,
     ArtifactIR,
     ArtifactSection,
-    Authority,
     CanonicalFact,
     Cell,
     Column,
     ErrorType,
     FormulaKind,
     IntentionalError,
-    Lifecycle,
     Row,
     Table,
 )
@@ -831,180 +826,17 @@ def divisional_performance_ir(world, intent: ArtifactIntent, minter: Minter) -> 
 # same dual treatment retail's memos get. Import here is safe on a bare
 # install: renderer modules import their optional dependency lazily, at render
 # time, precisely so registration costs nothing.
-from .render import docx as _docx
 from .render import markdown as _markdown
 from .render import xlsx as _xlsx
 
 _xlsx.register("capital_return", "divisional_performance_pack")
 _markdown.own_elsewhere("capital_return", "divisional_performance_pack")
-_docx.register(
-    "rwa_working_paper",
-    "second_line_challenge_memo",
-    "internal_audit_review",
-    "board_risk_committee_summary",
-)
-
-documents.register_artifact_types(
-    standing={
-        # Both lodgements of a return sit at SYSTEM_OF_RECORD — the rank tie is
-        # the design, so no resolver can shortcut past `restates` and validity.
-        "capital_return": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
-        "rwa_working_paper": (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT),
-        "second_line_challenge_memo": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-        "internal_audit_review": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-        "board_risk_committee_summary": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-        # An approved management report, not a filing: it is read inside the
-        # bank, it may be revised, and nothing in `FILING_TYPES` covers it.
-        "divisional_performance_pack": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-    },
-    lags={
-        "capital_return": timedelta(minutes=30),
-        "rwa_working_paper": timedelta(minutes=90),
-        "second_line_challenge_memo": timedelta(hours=3),
-        "internal_audit_review": timedelta(hours=4),
-        # After the audit review it summarises (and derives from): the summary
-        # is written for the committee meeting, not the lodgement day.
-        "board_risk_committee_summary": timedelta(days=4),
-        # Two days after the ledger locks — a divisional pack is assembled from
-        # the close, not on the day of it, and it is out well before the return
-        # it sits beside is lodged.
-        "divisional_performance_pack": timedelta(days=2),
-    },
-    outlines={
-        "rwa_working_paper": (
-            SectionPlan(
-                "Methodology and treatment", ("capital.collateral_treatment",), "any",
-                "State the treatment applied to each material book, and the basis for "
-                "it. Written with a working paper's confidence — this is the document "
-                "whose treatment the second line will dispute, and it does not know "
-                "that yet.",
-            ),
-            SectionPlan(
-                "Capital position", ("capital.cet1_ratio", "capital.rwa_total"), "any",
-                "The computed position as the paper states it. Figures only as "
-                "references; the paper argues method, not outcome.",
-            ),
-            SectionPlan(
-                "Correction", ("ops.cause", "capital.rwa_understatement",
-                               "capital.error_materiality"), "any",
-                "Version two only: what the confirmed cause changed about the "
-                "treatment and the position. State it as a correction of this "
-                "paper's own earlier method, plainly.",
-            ),
-            SectionPlan(
-                "Basis of preparation", ("close.",), "any",
-                "One line: prepared from the locked ledger for the quarter.",
-                # Standing boilerplate a reader skips: it restates the basis
-                # every working paper in the bank is prepared on. The paper
-                # argues method and position, so nothing about its purpose
-                # rests on the close facts this section is scoped to — the
-                # correction and the position, which do, stay required.
-                required=False,
-            ),
-        ),
-        "second_line_challenge_memo": (
-            SectionPlan(
-                "Finding", ("review.challenge",), "any",
-                "The challenge, on the record: what was sampled, what could not be "
-                "confirmed, and what the reviewer requires before sign-off. Formal, "
-                "insistent, precise — this memo exists to be citable later.",
-            ),
-            SectionPlan(
-                "Treatment under challenge", ("capital.collateral_treatment",), "any",
-                "State the preparer's treatment and the reviewer's position beside "
-                "each other, without resolving them — the disagreement is the "
-                "content.",
-            ),
-            SectionPlan(
-                "Status", ("review.challenge_status",), "any",
-                "The challenge's standing under the filing norm: logged, open, not "
-                "blocking. State the norm as the memo's author sees it — a "
-                "precondition the deadline does not waive.",
-            ),
-            SectionPlan(
-                "Position as drafted", ("capital.cet1_ratio", "capital.rwa_total"), "any",
-                "The figures the draft return would file if lodged unaltered.",
-                # Context rather than content. The memo exists to put a
-                # challenge on the record — Finding, Treatment and Status carry
-                # that and stay required — and the drafted position is the
-                # working paper's own statement, quoted here for convenience.
-                # A challenge memo that cites the paper instead of restating it
-                # is the ordinary second-line memo.
-                required=False,
-            ),
-        ),
-        "internal_audit_review": (
-            SectionPlan(
-                "Ruling", ("review.challenge_status", "review.challenge"), "any",
-                "The finding first: the second-line challenge is upheld. Audit writes "
-                "rulings, not observations.",
-            ),
-            SectionPlan(
-                "The challenge and the filing decision",
-                ("capital.return_approval", "capital.return_filed_at"), "any",
-                "Establish the sequence on the record: the challenge predated the "
-                "approval, and the return was lodged with the challenge open. State "
-                "it neutrally; the sequence itself is the finding.",
-            ),
-            SectionPlan(
-                "Root cause and classification",
-                ("ops.cause", "ops.root_cause_classification",
-                 "ops.collateral_mapping_owner"), "any",
-                "The confirmed cause and the control failure beneath it. An "
-                "unregistered owner is itself a finding and is stated as one.",
-            ),
-            SectionPlan(
-                "Treatment", ("capital.collateral_treatment",), "any",
-                "What the collateral actually was, against what the working paper "
-                "assumed.",
-                # Evidence for the ruling rather than the ruling. Audit's
-                # finding is the sequence and the cause, both required; a
-                # review that establishes those and leaves the treatment
-                # comparison to the papers it cites is a shorter review, not an
-                # incomplete one.
-                required=False,
-            ),
-            SectionPlan(
-                "Remediation", ("ops.remediation",), "any",
-                "Which action fixes the control and which only improves detection. "
-                "A reader must not be able to mistake one for the other.",
-            ),
-            SectionPlan(
-                "Restatement", ("capital.restatement_reason",), "any",
-                "The correction as lodged, in one paragraph, for the committee's "
-                "record.",
-                # What finance then did, not what audit found — the Ruling is
-                # the review's result and it is first and required. Audit
-                # reviews routinely stop at the remediation and leave the
-                # lodgement to the return. Safe under rule 3 as well: the
-                # restatement reason is stated in prose by
-                # `board_risk_committee_summary` too, so dropping it here
-                # cannot take the corpus's only account of the correction.
-                required=False,
-            ),
-        ),
-        "board_risk_committee_summary": (
-            SectionPlan(
-                "Position", ("capital.cet1_ratio", "capital.cet1_delta",
-                             "capital.minimum_cet1_requirement"), "group",
-                "Three sentences: the restated ratio, the movement, and that the "
-                "bank remains above the minimum. Confident register; the committee "
-                "wants the outcome.",
-            ),
-            SectionPlan(
-                "Restatement", ("capital.return_status", "capital.restatement_reason",
-                                "capital.error_materiality"), "group",
-                "What was restated and why, briefly. Write only what the facts "
-                "given support — this paper deliberately does not raise the "
-                "control-failure classification or the review history.",
-            ),
-            SectionPlan(
-                "Regulator engagement", ("regulatory.notification",), "group",
-                "That the regulator was notified within the window. Nothing about "
-                "any response — none is recorded.",
-            ),
-        ),
-    },
+doctypes.register_engine(
+    # The catalogue as versioned data — standing, lag, outline and the Word
+    # flag for every type, with the argument for each carried as a note. The
+    # compilers stay here: a compiler is the one thing the schema cannot
+    # express (`doctypes`' module docstring measures where the line falls).
+    "banking@1",
     compilers={
         "capital_return": capital_return_ir,
         "divisional_performance_pack": divisional_performance_ir,

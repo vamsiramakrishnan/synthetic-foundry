@@ -94,6 +94,11 @@ enterprise_evals_app = typer.Typer(
     help="Plan, generate, and validate multi-connector enterprise agent evaluations.",
 )
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
+industry_app = typer.Typer(
+    no_args_is_help=True,
+    help="Derive the whole evaluation programme an industry implies: its lines of business, processes, requests and counts.",
+)
+app.add_typer(industry_app, name="industry")
 
 from .connector_serving_cli import serve_command
 from .dataset_cli import dataset_app
@@ -107,6 +112,7 @@ evals_app.add_typer(calibration_app, name="calibration")
 evals_app.add_typer(dataset_app, name="dataset")
 
 # Keep operational generation in its own command module, not this monolith.
+from .evalrun.cli import app as evalrun_app
 from .gemini_enterprise.cli import app as gemini_enterprise_app
 from .seams_cli import seams_command
 from .studio_cli import studio_app
@@ -116,6 +122,7 @@ app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
 app.add_typer(studio_app, name="studio")
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
+app.add_typer(evalrun_app, name="evalrun")
 
 
 @enterprise_evals_app.command("space")
@@ -209,6 +216,143 @@ def enterprise_evals_plan(
             handle.write(query.model_dump_json() + "\n")
     if report is not None:
         typer.echo(report.model_dump_json())
+
+
+@enterprise_evals_app.command("housekeeping")
+def enterprise_evals_housekeeping(
+    world_path: Path = typer.Argument(..., help="A built world directory."),
+    output: Path = typer.Argument(..., help="Where to write the corpus `evalrun` reads."),
+    kind: str = typer.Option("drive", "--kind", help="What to tidy: drive, inbox or chats."),
+    connector: str = typer.Option(None, "--connector", help="Whose tools tidy it; default is the kind's first connector."),
+    records: int = typer.Option(120, "--records", min=4, max=5000, help="How many files, messages or channels the corpus holds."),
+    mess: float = typer.Option(0.35, "--mess", min=0.0, max=1.0, help="The share of items in the wrong place."),
+    stale: float = typer.Option(0.15, "--stale", min=0.0, max=1.0, help="The share of items past the archive rule."),
+    duplicates: float = typer.Option(0.1, "--duplicates", min=0.0, max=1.0, help="Drive only: the share of files with a stray copy."),
+    salt: str = typer.Option("", "--salt", help="Vary the draw without changing the seed."),
+) -> None:
+    """Build a hero use case: a drive, inbox or channel list that needs tidying, and the cases that grade it.
+
+    The corpus is in the world's own words (its units, periods and people),
+    with a stated share of items misfiled, mislabelled, stale or duplicated.
+    Each case is one rule the request states — every Finance file for
+    2026-03 belongs in Finance/2026-03; a channel silent since a date is
+    archived — compiled into the executable DAG grammar as a search bound to
+    that rule and a mapped write per record, so `worldloom evalrun` grades
+    the reorganisation by how many records landed. Deterministic from the
+    world's seed and these knobs.
+    """
+    from . import housekeeping
+    from .enterprise_io import export_corpus
+    from .world import World
+
+    try:
+        spec = housekeeping.HousekeepingSpec(
+            kind=kind, connector=connector or housekeeping.CONNECTORS.get(kind, ("",))[0],
+            records=records, mess=mess, stale=stale, duplicates=duplicates, salt=salt,
+        )
+    except ValueError as exc:
+        _refuse("bad_housekeeping_spec", f"[red]error:[/red] {escape(str(exc))}")
+    world = World.load(world_path)
+    built = housekeeping.plan(world, spec)
+    corpus = housekeeping.corpus(world, spec)
+    export_corpus(corpus, output)
+    console.print(
+        f"[green]✓[/green] {spec.kind} on {spec.connector}: {len(built.records)} records,"
+        f" {len(corpus.queries)} cases, {built.moves} records to move or relabel,"
+        f" {built.deletions} to delete → {output}"
+    )
+
+
+@industry_app.command("list")
+def industry_list() -> None:
+    """The industries the process catalogue knows, with each default company's headline count."""
+    from .industry import programme
+    from .process_bindings.compiler import resource
+
+    rows = []
+    for name in sorted(resource("defaults.json")["DEFAULT_ORGS"]):
+        summary = programme(name).summary
+        rows.append({
+            "industry": name, "company": summary.company, "engine": summary.engine or None,
+            "lobs": len(summary.lobs), "lines": len(summary.lines), "situations": summary.situations,
+            "writes": summary.writes, "unsupported_lines": len(summary.unsupported_lines),
+        })
+    typer.echo(json.dumps({"industries": rows}, indent=2, sort_keys=True))
+
+
+@industry_app.command("programme")
+def industry_programme(
+    industry: str = typer.Argument(..., help="An industry the catalogue knows (`worldloom industry list`), or a path to a company spec JSON."),
+    output: Path | None = typer.Argument(None, help="Directory to write programme.json, lobs.json, facts.jsonl, requests.jsonl, cases.jsonl, use-cases.json and coverage.json into."),
+    engine: str | None = typer.Option(None, "--engine", help="The registered domain whose world the derived LOBs ride. Default: the industry's own name when a domain is registered under it."),
+    describe_only: bool = typer.Option(False, "--describe", help="Print the headline numbers and stop; write nothing."),
+) -> None:
+    """Derive the programme for one industry: LOBs, process lines, seated requests, facts and use cases with derived counts.
+
+    Every number is a function of the compiled catalogue and the versioned
+    emulator table: the same industry yields the same programme. The summary
+    names every system no connector emulates and every line no emulated source
+    can carry, so a count is never quietly padded.
+    """
+    from .industry import describe, programme
+    from .process_bindings import CompanySpec
+
+    spec: str | CompanySpec = industry
+    if industry.endswith(".json") and Path(industry).exists():
+        spec = CompanySpec.model_validate_json(Path(industry).read_text(encoding="utf-8"))
+    if describe_only or output is None:
+        if isinstance(spec, str):
+            typer.echo(json.dumps(describe(spec), indent=2, sort_keys=True))
+        else:
+            derived = programme(spec, engine=engine)
+            typer.echo(json.dumps(derived.summary.model_dump(mode="json"), indent=2, sort_keys=True))
+        return
+    derived = programme(spec, engine=engine)
+    written = derived.export(output)
+    summary = derived.summary
+    typer.echo(json.dumps({
+        "industry": summary.industry, "company": summary.company, "engine": summary.engine or None,
+        "lobs": len(summary.lobs), "lines": len(summary.lines), "situations": summary.situations,
+        "reads": summary.reads, "writes": summary.writes, "facts": summary.facts,
+        "use_cases": len(summary.lines) - len(summary.unsupported_lines),
+        "unemulated": list(summary.unemulated), "unsupported_lines": list(summary.unsupported_lines),
+        "findings": list(summary.findings), "files": sorted(written),
+    }, indent=2, sort_keys=True))
+
+
+@industry_app.command("project")
+def industry_project(
+    industry: str = typer.Argument(..., help="An industry the catalogue knows (`worldloom industry list`), or a path to a company spec JSON describing the company itself."),
+    output: Path | None = typer.Argument(None, help="File to write the Studio project (`worldloom.project/v1`) into; printed when omitted."),
+    name: str | None = typer.Option(None, "--name", help="The company's name. Required for an industry; a company spec carries its own."),
+    lob: list[str] = typer.Option([], "--lob", help="A function family to seat (repeatable). Default: every family with a supported process line."),
+    seed: int = typer.Option(8128, "--seed", help="The world seed."),
+) -> None:
+    """Derive a Studio project for one company: its divisions, lines of business and use cases from the process catalogue.
+
+    The company is an industry's default company renamed, or a company spec
+    as an interview settles it (units, countries, operating model, landscape).
+    Everything else is derived: the same company yields the same project.
+    `worldloom studio init` accepts the file.
+    """
+    from .industry import project
+    from .process_bindings import CompanySpec
+
+    spec: str | CompanySpec = industry
+    if industry.endswith(".json") and Path(industry).exists():
+        spec = CompanySpec.model_validate_json(Path(industry).read_text(encoding="utf-8"))
+    elif name is None:
+        raise typer.BadParameter("a project from an industry needs --name")
+    derived = project(spec, name, lobs=tuple(lob) or None, seed=seed)
+    text = json.dumps(derived.model_dump(mode="json"), indent=2, sort_keys=True)
+    if output is None:
+        typer.echo(text)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text + "\n", encoding="utf-8")
+    typer.echo(json.dumps({"company": derived.structure.name if derived.structure else None,
+                           "divisions": len(derived.divisions), "lobs": [item.name for item in derived.lobs],
+                           "use_cases": len(derived.use_cases), "file": str(output)}, indent=2, sort_keys=True))
 
 
 @enterprise_evals_app.command("validate")
@@ -376,14 +520,20 @@ def enterprise_evals_simulate(
                         str(assertion["node"]): assertion["kind"]
                         for assertion in row["assertions"] if assertion["type"] == "failure_at"
                     }
-                    designed_write = (
-                        failed is not None and failed.node in write_nodes
-                        and (failed.error or {}).get("kind") == expected_failures.get(str(failed.node))
-                    )
+                    blocking = {
+                        str(assertion["node"]): bool(assertion.get("blocked_nodes"))
+                        for assertion in row["assertions"] if assertion["type"] == "failure_at"
+                    }
+                    met = failed is not None and (failed.error or {}).get("kind") == expected_failures.get(str(failed.node))
+                    designed_write = met and failed is not None and failed.node in write_nodes
+                    # An expected error that blocks nothing (the readback after a
+                    # planned delete) is the trajectory reaching its end, not stopping.
+                    terminal = met and failed is not None and not blocking.get(str(failed.node), False)
+                    completed = failed is None or terminal
                     results.append({
                         "query_id": query.id,
-                        "outcome": "completed" if failed is None else "blocked_at_designed_write" if designed_write else "stopped_before_failure_point",
-                        "finding": None if failed is None else f"node {failed.node} failed: {(failed.error or {}).get('kind')}",
+                        "outcome": "completed" if completed else "blocked_at_designed_write" if designed_write else "stopped_before_failure_point",
+                        "finding": None if completed else f"node {failed.node} failed: {(failed.error or {}).get('kind')}",
                         "failed_node": None if failed is None else failed.node,
                         # Assertion grades and the legacy weighted semantic score
                         # have different denominators. Never average them together.
@@ -571,6 +721,16 @@ _REFUSALS: dict[str, str] = {
     "resume_invalid": "a completed world does not validate for resume",
     "scenario_profile_rejected": "the enterprise scenario profile names something this registry does not hold, or selects nothing",
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
+    # `worldloom evalrun`.
+    "corpus_unreadable": "the enterprise-evals directory cannot be read or is not one",
+    "cases_uncompilable": "the row compiler refused a query in the corpus; the message names the first reasons",
+    "no_cases": "the corpus compiled to no cases, so there is nothing to run",
+    "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",
+    "unknown_rater": "the --rater value is not one this package ships",
+    "script_unreadable": "the scripted agent's JSON file cannot be read",
+    "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",
+    "service_unbuildable": "the connector evaluation service refused the case set; the message is the serving error",
+    "run_unreadable": "the run directory is missing run.json or results.jsonl, or is not an eval run",
     "results_unreadable": "an external harness's results file cannot be read",
     "schema_version": "the corpus's schema version cannot be carried to this engine's by the migration chain",
     "shard_state_error": "the shard state on disk cannot be read or does not match this plan",
@@ -1669,10 +1829,11 @@ def build(
     # It mattered most for the estate nobody asked for. Three facet values imply
     # `estate=large` — `maturity=legacy`, `scale=enterprise`,
     # `scale=multinational`, one of which appears in AGENTS.md's own example —
-    # and on procurement that reached `ProcureToPayWorld.build` and died with an
-    # unhandled `ValueError` whose remediation was "build without `--estate`", a
-    # flag the caller had not typed. Every other vertical-inapplicable flag on
-    # this branch prints a clean `error:` line; this one printed a stack.
+    # and while procurement had no vocabulary that reached its builder and died
+    # with an unhandled `ValueError` whose remediation was "build without
+    # `--estate`", a flag the caller had not typed. Every shipped vertical
+    # registers a vocabulary now; the refusal stays for an out-of-tree engine,
+    # and prints a clean `error:` line rather than a stack.
     from . import landscape
 
     if estate is not None and domain is not None and domain.name not in landscape.LANDSCAPES:
@@ -6914,14 +7075,37 @@ def pack_locales(
 @pack_app.command("targets")
 def pack_targets(
     engine: str = typer.Argument(None, help="Engine name; omit to list every engine."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit as data, with the engine's organisation: the spine a `roles.table`"
+             " must keep, the shipped table and per-unit posts to start from.",
+    ),
 ) -> None:
     """List the lore targets each engine consults, and what each one changes.
 
     This is the pack author's contract: a lore constraint aimed at one of
     these targets changes generation; aimed anywhere else it is carried,
     citable, and inert. Persona traits are always consulted, as ROLE/trait.
+    With --json the organisation is printed as data (`roles.published`): the
+    spine keys a pack's `roles.table` may retitle but not remove, every
+    shipped row in `PackRole`'s spelling, and the per-unit posts in
+    `PackUnitRole`'s — a starting document for authoring the company's roles.
     """
-    from . import domains
+    from . import domains, roles
+
+    if as_json:
+        document = {}
+        for name in domains.names():
+            if engine is not None and name != engine:
+                continue
+            domain = domains.by_name(name)
+            document[name] = {
+                "lore_targets": [{"target": t, "effect": e} for t, e in domain.consulted_targets],
+                "system_slots": [{"slot": s_, "what": w} for s_, w in domain.system_slots],
+                "roles": roles.published(name),
+            }
+        typer.echo(json.dumps(document, indent=2))
+        return
 
     for name in domains.names():
         if engine is not None and name != engine:
@@ -7177,10 +7361,15 @@ def pack_template(
     ``evaluation_text``, and the locale trio: ``name_pools`` (given/family
     name pools for the people the engine mints), ``headquarters`` (the
     company's one location), and ``regions`` (labels for the site estate,
-    e.g. the abbreviations behind a stock site's "Branch NSW 001"). The
-    shipped examples are the fuller reference: examples/packs/ carries a
-    general insurer on the retail engine and a mutual bank on the banking
-    one, and the insurer sets all three locale fields.
+    e.g. the abbreviations behind a stock site's "Branch NSW 001"); the
+    estate pair: ``estate`` (how much technology the company runs: a size
+    from ``worldloom pack landscapes``) and ``landscape`` (whose words it is
+    built out of: a registered vocabulary by name, or pools of the pack's
+    own); and ``roles`` (the company's organisation: its whole role table and
+    the posts minted per unit, started from ``worldloom pack targets
+    --json``). The shipped examples are the fuller reference: examples/packs/
+    carries a general insurer on the retail engine and a mutual bank on the
+    banking one, and the insurer sets all three locale fields.
     """
     import json as json_module
 

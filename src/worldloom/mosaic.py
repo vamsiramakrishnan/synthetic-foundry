@@ -381,10 +381,10 @@ def _candidate(
         overrides=overrides,
         coordinates=tuple(coordinates),
         engine=engine,
-        # An engine may register without the estate axis — procurement's world
-        # builder refuses `estate=` outright, so dealing it one would build
-        # worlds the builder rejects. Absent axis, no estate, same as the
-        # `calendar` fallback two lines up.
+        # An engine may register without the estate axis — procurement's did
+        # while its world builder refused `estate=`, and an out-of-tree
+        # vertical with no landscape vocabulary still would. Absent axis, no
+        # estate, same as the `calendar` fallback two lines up.
         estate=_ESTATES[int(values["estate"])] if "estate" in values else None,
     )
     try:

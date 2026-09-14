@@ -66,7 +66,7 @@ answer it and both are used here rather than described:
    unrepresentable rather than merely unlikely. This is exact and costs nothing
    but a wider axis.
 2. **Project, then measure what projection cost.** Where a constraint is between
-   *different* axes — an estate on a vertical with no landscape vocabulary — the
+   *different* axes — an estate on an engine with no landscape vocabulary — the
    caller collapses the row to what that engine can build, exactly as
    ``sweep._config`` already does, and then calls `holes` on the projected rows.
    That second step is the one nothing here could do before: projection silently
@@ -269,8 +269,8 @@ def holes(
     knows only its own coordinates.
 
     Pass rows in whatever shape the fleet actually has, including partial ones.
-    A configuration that was *projected* — an estate dropped because the engine
-    has no landscape vocabulary — should carry the value it was projected to,
+    A configuration that was *projected* — an estate dropped because an engine
+    registers no landscape vocabulary — should carry the value it was projected to,
     not the one that was asked for, because the pair the fleet covered is the
     pair it built.
     """

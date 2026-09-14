@@ -28,6 +28,9 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Calibrate physics from real data, drive archive mess from a cause, or measure fidelity | [Extension seams](extension-seams.md) | [Architecture and invariants](architecture.md) |
 | Score an agent against multi-connector workflows | [Agent workflow evals](agent-workflow-evals.md) | [Enterprise agent evals](enterprise-agent-evals.md) and [Eval-first generation](eval-first.md) |
 | Run a corpus against Gemini Enterprise | [Gemini Enterprise](gemini-enterprise.md) | [Agent workflow evals](agent-workflow-evals.md) |
+| Run an agent over a case set and grade plan, trajectory and outcomes | [Eval execution](eval-execution.md) | [Enterprise agent evals](enterprise-agent-evals.md) and [Connector serving](connector-serving.md) |
+| Derive every line of business, process, request and count an industry implies | [Industry programme](industry-programme.md) | [Process bindings](process-bindings.md) and [Worldloom Studio](studio.md) |
+| Read the process, occupation and function tables the company model is built from | [Reference data](reference-data.md) | [Industry programme](industry-programme.md) and [Process catalogue](process-catalogue.md) |
 | Make rendered artifacts read like their real products | [Artifact ecology](artifact-ecology.md) | [Artifact compiler](artifact-compiler.md) |
 | Look up an exact CLI flag | [Generated command reference](../.claude/skills/worldloom/references/commands.md) | The relevant workflow guide above |
 
@@ -169,12 +172,16 @@ failing check forces that decision into the change that caused it.
 
 ## Authored industry process planning
 
-[Compile company process plans](process-catalogue.md) from the supplied 12-industry factors. Bind activities to owners, countries, systems and seeded channels; inspect coverage and evidence boundaries; replay pinned exports; feed the existing process authoring cascade. The source-reference catalogue API remains unchanged.
+[Read the process catalogue](process-catalogue.md): value streams and activities keyed by APQC process id, compiled against a company into owners, countries, systems and seeded channels, then carried into the process authoring cascade.
 
 
 ## Audited process bindings
 
-[Inspect activity bindings and evidence](process-bindings.md): shared-predicate search, structural ownership proofs, explicit coverage gaps and full export replay. The source-reference and operational planning APIs remain available.
+[Inspect activity bindings and evidence](process-bindings.md): shared-predicate search, structural ownership proofs, explicit coverage gaps and full export replay.
+
+## The programme an industry implies
+
+[Derive the whole evaluation programme](industry-programme.md) from a compiled catalogue: a line of business per owning function family, a request per situation with an asker who has standing, a fact per declared attribute, and a Studio use case per LOB × process whose count is derived rather than authored. Every system no connector emulates is named, never replaced.
 
 
 ## Reusable narration

@@ -50,13 +50,14 @@ from ..models import (
     FlowDiagram,
     MagnitudeBand,
     Quotation,
+    SizeBudget,
     Table,
 )
 from ..narrative import references
 from ..presentation import DEFAULT as DEFAULT_PRESENTATION
 from ..presentation import Presentation
 from ..presentation import of as presentation_of
-from . import Rendered, RenderError, fonts, ooxml, slug_for
+from . import Rendered, RenderError, chaptered, fonts, ooxml, slug_for
 from .docx import HANDLES
 from .values import corpus_locale, format_value
 
@@ -213,7 +214,8 @@ class DocumentPlan:
     """
 
 
-def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> DocumentPlan:
+def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass,
+          budget: SizeBudget | None = None) -> DocumentPlan:
     """Derive a page plan from *ir* via the artifact compiler.
 
     Composed against ``pdf`` in its own right. This originally borrowed
@@ -223,7 +225,7 @@ def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> Document
     spellable in Word is spellable in a fixed-page projection of the same IR,
     so the registry now says so, and this asks for what it actually renders.
     """
-    plan = plan_from_ir(ir, artifact_type=artifact_type, size_class=size_class)
+    plan = plan_from_ir(ir, artifact_type=artifact_type, size_class=size_class, budget=budget)
     try:
         composition = compose(plan, fmt="pdf")
     except ValueError as exc:
@@ -1022,6 +1024,7 @@ def render(
     size_class: SizeClass = "medium",
     locale: Locale = DEFAULT_LOCALE,
     presentation: Presentation = DEFAULT_PRESENTATION,
+    budget: SizeBudget | None = None,
 ) -> bytes:
     """Render one IR to PDF bytes.
 
@@ -1037,10 +1040,16 @@ def render(
     the same way and for the same reason; ``render_all`` passes the corpus's.
     """
     _require_reportlab()
-    from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph
+    from reportlab.platypus import (
+        BaseDocTemplate,
+        Frame,
+        PageBreak,
+        PageTemplate,
+        Paragraph,
+    )
     from reportlab.platypus.doctemplate import LayoutError
 
-    plan = _plan(ir, artifact_type, size_class)
+    plan = _plan(ir, artifact_type, size_class, budget)
     g = _genome_for(ir)
     faces = fonts.named(g.typeface)
     styles = _styles(g)
@@ -1062,9 +1071,22 @@ def render(
         styles["notice"],
     ))
 
+    chapters = chaptered(ir)
+    visible_seen = 0
+    appendix_opened = False
     for section in plan.sections:
         if section.hidden and presentation.appendix != "append":
             continue
+        if chapters and not section.hidden:
+            # Each chapter on its own page, as `render/docx.py` does; the
+            # first follows the front matter on the opening page.
+            if visible_seen:
+                story.append(PageBreak())
+            visible_seen += 1
+        if chapters and section.hidden and not appendix_opened:
+            story.append(PageBreak())
+            story.append(Paragraph(_escape("Appendix"), styles["heading"]))
+            appendix_opened = True
         story.extend(_section_flowables(section, facts, styles, frame_width, locale,
                                         presentation,
                                         component_id=plan.components.get(section.heading),
@@ -1159,6 +1181,7 @@ def render_all(world: World) -> list[Rendered]:
                     ir, facts, artifact_type=intent.artifact_type,
                     size_class=intent.size_profile, locale=locale,
                     presentation=profile.for_doctype(intent.artifact_type),
+                    budget=intent.budget,
                 ),
             )
         )

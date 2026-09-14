@@ -30,7 +30,7 @@ from worldloom.synthesis.connectors import operational_profile
 
 
 @pytest.mark.parametrize("vertical", ("retail", "banking"))
-@pytest.mark.parametrize("dag_shape", (None, "map_read", "conditional", "write_chain"))
+@pytest.mark.parametrize("dag_shape", (None, "map_read", "conditional", "write_chain", "delete_chain"))
 def test_operational_evidence_produces_verified_outcomes(vertical: str, dag_shape: str | None, tmp_path: Path) -> None:
     if vertical == "retail":
         world = RetailWorld(seed=8128).build()
@@ -52,6 +52,17 @@ def test_operational_evidence_produces_verified_outcomes(vertical: str, dag_shap
         scenario = scenario.model_copy(update={
             "additional_workflows": (workflow,),
             "connectors": (*scenario.connectors, "confluence"),
+        })
+    elif dag_shape == "delete_chain":
+        # A delete chain needs a destination whose connector can remove what it
+        # created; SharePoint files declare it in the spec and the definition.
+        workflow = scenario.additional_workflows[0].model_copy(update={
+            "destinations": (DestinationRole(connector="sharepoint", entities=("file",),
+                                             operations=(Operation.CREATE,), formats=("docx",)),),
+        })
+        scenario = scenario.model_copy(update={
+            "additional_workflows": (workflow,),
+            "connectors": (*scenario.connectors, "sharepoint"),
         })
     harness = (
         EnterpriseEvalHarness.from_world(world)
@@ -76,7 +87,9 @@ def test_operational_evidence_produces_verified_outcomes(vertical: str, dag_shap
         result = run_eval_row(row, records)
         assert result.grade["status"] in {"ok", "behavior"}, (row["id"], result.grade)
         assert result.grade["fails"] == []
-        assert all(span.error is None for span in result.spans)
+        # The readback after a planned delete is the one error a clean run carries.
+        errors = [(span.node, span.error["kind"]) for span in result.spans if span.error]
+        assert errors == ([("verify-deleted", "not_found")] if dag_shape == "delete_chain" else [])
     if dag_shape is not None:
         response = CliRunner().invoke(app, ["enterprise-evals", "simulate", str(tmp_path)])
         assert response.exit_code == 0, response.output

@@ -1,0 +1,207 @@
+{
+  "frameworks": [
+    {
+      "described": 1900,
+      "elements": 2318,
+      "file": "aerospace_and_defense@7.2.2.json.gz",
+      "framework": "aerospace_and_defense",
+      "generated_on": "4/30/2025",
+      "metrics": 0,
+      "source_file": "K06637_Aerospace_and_Defense_v722_vsAerospace_and_Defense_v721_2025.xlsx",
+      "source_sha256": "8da3cab766a8636c502ad86b729c4d1947fbc55b23034040c3279601d23214de",
+      "version": "7.2.2"
+    },
+    {
+      "described": 1931,
+      "elements": 2058,
+      "file": "airline@7.2.2.json.gz",
+      "framework": "airline",
+      "generated_on": "5/5/2025",
+      "metrics": 0,
+      "source_file": "K06638_Airline_v722_vsAirline_v721_2025.xlsx",
+      "source_sha256": "464aa053352f60635e4fccbe08bb3ddc53fecf1585676800763edb736cf72460",
+      "version": "7.2.2"
+    },
+    {
+      "described": 1771,
+      "elements": 2179,
+      "file": "automotive@7.2.2.json.gz",
+      "framework": "automotive",
+      "generated_on": "5/7/2025",
+      "metrics": 0,
+      "source_file": "K06639_Automotive_v722_vsAutomotive_v721_2025.xlsx",
+      "source_sha256": "9a30f4f3b6f07ec047051fbb5169dea48d198a45e695626ab34ffdb04c2af442",
+      "version": "7.2.2"
+    },
+    {
+      "described": 1867,
+      "elements": 2027,
+      "file": "banking@7.2.1.json.gz",
+      "framework": "banking",
+      "generated_on": "1/9/2020",
+      "metrics": 0,
+      "source_file": "K06640_ Banking_v721_vs_Banking_v610-202001_2025.xlsx",
+      "source_sha256": "39cb6064d8542d5c01758e89f74436a3a0b3eaa4bffa570a751215352ae53fee",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1778,
+      "elements": 2019,
+      "file": "broadcasting@7.2.2.json.gz",
+      "framework": "broadcasting",
+      "generated_on": "5/19/2025",
+      "metrics": 0,
+      "source_file": "K06641_Broadcasting_v722_vsBroadcasting_v721_2025.xlsx",
+      "source_sha256": "b9397bf27a4f37d082ded9f45ff81df4899e9ed0e0fcd840f13ddf1ddf97c2eb",
+      "version": "7.2.2"
+    },
+    {
+      "described": 1849,
+      "elements": 2100,
+      "file": "city_government@7.2.1.json.gz",
+      "framework": "city_government",
+      "generated_on": "1/9/2020",
+      "metrics": 0,
+      "source_file": "K07121_City_Government_v721_vs_City_Government_v610_April 2023.xlsx",
+      "source_sha256": "041877772ed5fbd8da68bb401d08ec8fd443ed09fa23097db922741eb94beeda",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1879,
+      "elements": 2021,
+      "file": "consumer_electronics@7.2.1.json.gz",
+      "framework": "consumer_electronics",
+      "generated_on": "1/9/2020",
+      "metrics": 0,
+      "source_file": "K07123_Consumer Electronics_v721_vs_Consumer Electronics_v611_April 2023.xlsx",
+      "source_sha256": "178bc51758bb54496c9efb4dfc15378a1a2f48c7e70f9af5d9dff1b71dfccba2",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1808,
+      "elements": 1997,
+      "file": "consumer_products@7.2.2.json.gz",
+      "framework": "consumer_products",
+      "generated_on": "5/16/2025",
+      "metrics": 0,
+      "source_file": "K09277_Consumer_Products_v722_vsConsumer_Products_721.xlsx",
+      "source_sha256": "cbb7e95fe47705c5d6525f2f4d1c573a4b153cbd3ac37163990f4d298af04634",
+      "version": "7.2.2"
+    },
+    {
+      "described": 1921,
+      "elements": 1921,
+      "file": "cross_industry@7.4.json.gz",
+      "framework": "cross_industry",
+      "generated_on": "8/6/2024",
+      "metrics": 3910,
+      "source_file": "K014749_APQC Process Classification Framework (PCF) - Cross-Industry - Excel Version 7.4.xlsx",
+      "source_sha256": "0e6e24b6cabe795cee9aa0a23912bd323257e419eb96a74a17ad328a08f97d24",
+      "version": "7.4"
+    },
+    {
+      "described": 1076,
+      "elements": 1470,
+      "file": "education@7.2.1.json.gz",
+      "framework": "education",
+      "generated_on": "1/9/2020",
+      "metrics": 0,
+      "source_file": "K06710_Education_v721_April 2023.xlsx",
+      "source_sha256": "537c7a62f17a9e198f0e815c587ca2ddab018edaccbf808b347f98f2378a6d7c",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1848,
+      "elements": 2142,
+      "file": "health_insurance_payor@7.2.1.json.gz",
+      "framework": "health_insurance_payor",
+      "generated_on": "1/9/2020",
+      "metrics": 0,
+      "source_file": "K07130_Health Insurance Payor_721_vs_Health Insurance Payor_611_April 2023.xlsx",
+      "source_sha256": "82194ecfdcbc145dadd4c98dd549c432cbf0dedd6ca671921c26100797d308b3",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1931,
+      "elements": 1985,
+      "file": "healthcare_provider@7.2.1.json.gz",
+      "framework": "healthcare_provider",
+      "generated_on": "1/9/2020",
+      "metrics": 0,
+      "source_file": "K07128_Healthcare Provider_v721_vs_Healthcare Provider_v611_April 2023.xlsx",
+      "source_sha256": "33090248c189ef76dbc488d37da26077a00b4284b2cd6d6e33b8611875c1660c",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1854,
+      "elements": 1950,
+      "file": "life_sciences@7.2.2.json.gz",
+      "framework": "life_sciences",
+      "generated_on": "5/19/2025",
+      "metrics": 0,
+      "source_file": "K07122_Life_Sciences_v722_vsLife_Sciences_v721_2025.xlsx",
+      "source_sha256": "60fb8add4a1ad2c488c6156e8c31f3b7fc59f5a91a94d4ff29ae914322d18b59",
+      "version": "7.2.2"
+    },
+    {
+      "described": 1870,
+      "elements": 2012,
+      "file": "petroleum_downstream@7.2.2.json.gz",
+      "framework": "petroleum_downstream",
+      "generated_on": "5/19/2025",
+      "metrics": 0,
+      "source_file": "K07126_Petroleum_Downstream_v722_vsPetroleum_Downstream_v721_2025.xlsx",
+      "source_sha256": "3fc37ca4de218a1915f0cf6b5e7763db9610bd374f35ade42e057ad7179a40b0",
+      "version": "7.2.2"
+    },
+    {
+      "described": 1663,
+      "elements": 1810,
+      "file": "petroleum_upstream@7.2.1.json.gz",
+      "framework": "petroleum_upstream",
+      "generated_on": "4/9/2020",
+      "metrics": 0,
+      "source_file": "K07127_Petroleum_Upstream_v721_vs_Petroleum_Upstream_v610_2025.xlsx",
+      "source_sha256": "cb65105711ba4a09c2badb0b3aa52ff6aed2040caafc3fcd54d06861f6ec39ce",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1745,
+      "elements": 1997,
+      "file": "property_and_casualty_insurance@7.2.1.json.gz",
+      "framework": "property_and_casualty_insurance",
+      "generated_on": "4/9/2020",
+      "metrics": 0,
+      "source_file": "K07129_Property and Casualty Insurance_v721_vs_Property and Casualty Insurance_v610_0_2025.xlsx",
+      "source_sha256": "6e72a8ca586ddba8430cdf6a2a8e84099cbadeb89d2476a84814eed30f02c1bc",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1462,
+      "elements": 1708,
+      "file": "retail@7.2.1.json.gz",
+      "framework": "retail",
+      "generated_on": "1/9/2020",
+      "metrics": 0,
+      "source_file": "K09276_Retail_v721_vs_Retail_v611_April 2023.xlsx",
+      "source_sha256": "0afeca1ecb7e63f5a2f760ff64835e28755af3400424cd3d6ae5c8a0496104fc",
+      "version": "7.2.1"
+    },
+    {
+      "described": 1865,
+      "elements": 2073,
+      "file": "utilities@7.2.1.json.gz",
+      "framework": "utilities",
+      "generated_on": "4/9/2020",
+      "metrics": 0,
+      "source_file": "K07220_Utilities_v721_vs_Utilities_v610_2025.xlsx",
+      "source_sha256": "f86c67043a46e6c26834e23c710f7257453ae88d31882a5f6fcb7fe2f8e9792f",
+      "version": "7.2.1"
+    }
+  ],
+  "licence": "APQC PCF notice embedded in every file; see `notice`.",
+  "schema": "worldloom.pcf-provenance/v1",
+  "skipped": [
+    "K05756_BE_APQC Process Classification Framework - Telecommunications - Excel Version 5.0.1_2025.xls: not an xlsx workbook"
+  ]
+}

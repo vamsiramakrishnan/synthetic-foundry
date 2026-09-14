@@ -635,9 +635,14 @@ The measured retail coupling, for whichever is chosen:
       lint and at build, published by `worldloom pack texts`. Machine values
       (statuses, dates, "unassigned") are deliberately not templates,
       because other checks match on them.
-   2. *Role tables as pack data*: engines publish required role keys
-      (episodes index by them); packs add or retitle the rest. The voices
-      surface already proved the publish-and-lint half.
+   2. *Role tables as pack data*: **done.** Engines publish their required
+      role keys (`roles.SPINE`, `worldloom pack targets --json`); a pack's
+      `roles.table` retitles, moves and adds around them and may not remove
+      one, and `roles.unit_roles` replaces the posts minted per unit. Both
+      reach every builder through `from_pack` and ride the recipe as the
+      table always did. What stays code: the spine itself, because generator
+      code looks those keys up by name; and each engine's persona
+      temperaments, which a voice inherits and never authors.
    3. *Evaluation phrasing*: **done.** Every question and authored answer
       is a keyed template in the engine's `EVAL_TEXT` table (same verbatim
       extraction, same stash-diff proof); packs override through
@@ -683,6 +688,34 @@ The measured retail coupling, for whichever is chosen:
       DSL stays unjustified until the committed follow-on (a second episode
       interleaved on the retail engine, same decision record) produces the
       second data point.
+   6. *Artifact catalogues as data*: **done.** Banking, insurance and
+      procurement registered their document types as Python literals two
+      years after retail's thirty were proven expressible as `doctypes`
+      JSON. Each vertical's catalogue is now
+      `_data/artifact-types/<engine>@1.json` (standing, lag, outline, the
+      Word and deck flags, and the argument for each carried as a `note`),
+      read at import by `doctypes.register_engine` with the compilers passed
+      in beside it; the three narrated builds are byte-identical. What stays
+      code: the compilers, and each engine's `approved_by` table, which is an
+      argument about who signs, not about the document.
+   7. *Fact kinds as data*: **done.** The vocabulary a pack has to match
+      was four Python literals. Each vertical's kinds are now
+      `_data/factkinds/<engine>@1.json`, read at import by
+      `factkinds.register_catalogue`, with the argument for each declaration
+      carried as a `note`; the registry's content and order are unchanged.
+      What stays code: the core kinds (`lore.*`, `org.*`, `estate.*`, the
+      actor tools' `close.*`/`ops.*`), which no vertical owns, and the
+      `INVARIANT_HEADS` vocabulary itself, which is closed for lore's reason.
+   8. *The estate's vocabulary as pack data*: **done.** `Pack.landscape`
+      (a registered vocabulary or pools of the pack's own) and `Pack.estate`
+      (the size) reach the build through one builder field, recorded on the
+      recipe beside the size; procurement registered the fourth vocabulary
+      (`landscape.PROCUREMENT`) and stopped refusing `--estate`. What stays code: the estate's construction
+      (`generators/estate.py`), which decides the graph's shape and is what
+      keeps an authored vocabulary from authoring a cyclic estate; and the
+      physics and locale a company runs under, which ride the company
+      specification (`worldloom pack spec`) rather than the pack, because a
+      pack is what the company *is* and those are what a build was *asked*.
 
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 

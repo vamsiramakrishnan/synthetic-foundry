@@ -8,6 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from .. import pcf
 from ..ids import content_key
 from .models import (
     Activity,
@@ -24,9 +25,9 @@ from .models import (
     StreamKind,
 )
 
-COLS = ("id", "name", "apqc", "function", "sor_class", "type", "control", "exception", "tags")
+COLS = ("id", "name", "pcf_id", "function", "sor_class", "type", "control", "exception", "tags")
 BU_ARCHETYPES = {"product_line", "geography", "customer_segment", "channel", "legal_entity"}
-SOURCE = "user-process-catalogue-0.1"
+SOURCE = "worldloom-process-catalogue-0.2"
 
 
 def canonical(value: Any) -> str:
@@ -54,6 +55,16 @@ def load_catalogue(path: Path | None = None) -> dict[str, Any]:
     if required - set(value):
         raise ValueError(f"missing catalogue sections: {sorted(required - set(value))}")
     return value
+
+
+def stream_names(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every value stream the catalogue declares, universal and industry-specific, key to name."""
+    cat = catalogue if catalogue is not None else load_catalogue()
+    names = {key: value["name"] for key, value in cat["value_streams"].items()}
+    for overlay in cat["industry_overlays"].values():
+        for key, value in overlay.get("specific", {}).items():
+            names.setdefault(key, value["name"])
+    return dict(sorted(names.items()))
 
 
 def default_company(industry: str, *, name: str | None = None) -> CompanySpec:
@@ -119,7 +130,10 @@ def compile_company(spec: CompanySpec | Mapping[str, Any], *, catalogue: dict[st
     if len(set(template_ids)) != len(template_ids):
         raise ValueError("duplicate eval template id")
     findings: list[Finding] = [Finding(code="authored_source", severity="warning", subject=SOURCE,
-        message="APQC hints, channel priors, controls, vendor and regional claims are authored and unverified; license is NOASSERTION.")]
+        message="Channel priors, controls, vendor and regional claims are authored and unverified; license is NOASSERTION. "
+                "PCF ids are resolved against the shipped APQC frameworks.")]
+    frameworks = {"universal": pcf.load(cat["meta"]["pcf_framework"]),
+                  "industry_specific": pcf.load(overlay.get("pcf_framework") or cat["meta"]["pcf_framework"])}
     coverage: list[CoverageCell] = []
     rows: list[ActivityBinding] = []
     seen: set[str] = set()
@@ -161,6 +175,10 @@ def compile_company(spec: CompanySpec | Mapping[str, Any], *, catalogue: dict[st
             if status != "bound":
                 findings.append(Finding(code=f"sor_{status}", severity="warning" if status == "objects_unspecified" else "error",
                     subject=activity.id, message=f"{activity.sor_class}/{product}: {status}; no object schema was invented."))
+            framework = frameworks[kind]
+            element = framework.get(activity.pcf_id)
+            if element is None:
+                raise ValueError(f"{sid}/{activity.id}: {framework.key} has no element with PCF id {activity.pcf_id!r}")
             priors = tuple(ChannelPrior(channel=c, probability=p) for c, p in sorted(cat["channel_priors"][activity.type].items()))
             for owner in owners:
                 for country in sorted(owner.countries or spec.countries):
@@ -171,7 +189,8 @@ def compile_company(spec: CompanySpec | Mapping[str, Any], *, catalogue: dict[st
                     rows.append(ActivityBinding(
                         id="PCA-" + content_key("process-catalogue/v1", spec.name, spec.industry, sid, activity.id, owner.name, country)[:24].upper(),
                         company=spec.name, industry=spec.industry, activity_id=activity.id,
-                        stream=sid, stream_name=stream["name"], activity=activity.name, apqc=activity.apqc,
+                        stream=sid, stream_name=stream["name"], activity=activity.name, pcf_id=activity.pcf_id,
+                        pcf_hierarchy_id=element.hierarchy_id, pcf_name=element.name, pcf_framework=framework.key,
                         function=activity.function, owner_kind=owner_kind, owner_bu=owner.name,
                         bu_archetype=owner.archetype, country=country, owner_resolution=resolution,
                         sor_class=activity.sor_class, sor_product=product, sor_objects=objects, binding_status=status,

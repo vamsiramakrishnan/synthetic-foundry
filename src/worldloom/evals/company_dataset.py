@@ -13,6 +13,7 @@ from pydantic import (
     model_validator,
 )
 
+from ..connector_data import ConnectorProjectionRegistry
 from ..corpus import write_json
 from ..enterprise_sdk import EnterpriseEvalHarness
 from ..providers import digest
@@ -78,11 +79,17 @@ class FrozenCompanyBuilder:
 
     def __init__(self, world: World, *, seed: int = 8128,
                  query_transforms: Mapping[str, Callable[[Any], Any]] | None = None,
-                 bind_cases: bool = False) -> None:
+                 bind_cases: bool = False,
+                 projections: ConnectorProjectionRegistry | None = None) -> None:
         self.world = world
         self.seed = seed
         self.query_transforms = query_transforms or {}
         self.bind_cases = bind_cases
+        self.projections = projections
+        """The connector projections every harness reads, when the company's
+        records live beyond the world's own connectors: a catalogue-derived
+        project passes `sor.projections`, so every product its bindings name
+        answers through the `sor` connector."""
         self._harnesses: dict[str, EnterpriseEvalHarness] = {}
 
     def __call__(self, request: DatasetRequest) -> DatasetBuild:
@@ -94,6 +101,8 @@ class FrozenCompanyBuilder:
                       source.incident_rule.model_dump(mode="json") if source.incident_rule else None])
         if key not in self._harnesses:
             harness = EnterpriseEvalHarness.from_world(self.world)
+            if self.projections is not None:
+                harness = harness.with_projections(self.projections)
             if self.bind_cases:
                 harness = harness.with_operational_case_binding()
             if source.simulation is not None and source.incident_rule is not None:

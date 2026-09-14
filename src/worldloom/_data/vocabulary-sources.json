@@ -14,10 +14,18 @@
       "access": "manual-license",
       "license": "APQC PCF terms; attribution required; verify terms included with download",
       "take": [
-        "process",
-        "activity",
-        "hierarchy"
-      ]
+        "pcf_id",
+        "hierarchy",
+        "name",
+        "description",
+        "metrics",
+        "notice"
+      ],
+      "ingested": {
+        "tool": "tools/ingest_apqc.py",
+        "data": "src/worldloom/_data/pcf/",
+        "reader": "worldloom.pcf"
+      }
     },
     {
       "id": "apqc-banking",
@@ -27,10 +35,18 @@
       "access": "manual-license",
       "license": "APQC/IBM PCF terms included with download",
       "take": [
-        "process",
-        "activity",
-        "hierarchy"
-      ]
+        "pcf_id",
+        "hierarchy",
+        "name",
+        "description",
+        "metrics",
+        "notice"
+      ],
+      "ingested": {
+        "tool": "tools/ingest_apqc.py",
+        "data": "src/worldloom/_data/pcf/",
+        "reader": "worldloom.pcf"
+      }
     },
     {
       "id": "apqc-industry-pcfs",
@@ -47,10 +63,42 @@
         "life-sciences"
       ],
       "take": [
-        "process",
-        "activity",
-        "hierarchy"
-      ]
+        "pcf_id",
+        "hierarchy",
+        "name",
+        "description",
+        "metrics",
+        "notice"
+      ],
+      "ingested": {
+        "tool": "tools/ingest_apqc.py",
+        "data": "src/worldloom/_data/pcf/",
+        "reader": "worldloom.pcf"
+      }
+    },
+    {
+      "id": "onet-31.0",
+      "kind": "taxonomy",
+      "url": "https://www.onetcenter.org/database.html",
+      "direct_csv": "https://www.onetcenter.org/dl_files/database/db_31_0_csv.zip",
+      "format": "csv-zip",
+      "access": "public",
+      "license": "CC BY 4.0; credit line required; modifications must be declared",
+      "take": [
+        "occupation",
+        "description",
+        "job-zone",
+        "reported-title",
+        "alternate-title",
+        "task",
+        "detailed-work-activity",
+        "software"
+      ],
+      "ingested": {
+        "tool": "tools/ingest_onet.py",
+        "data": "src/worldloom/_data/onet/",
+        "reader": "worldloom.onet"
+      }
     },
     {
       "id": "esco-1.2.1",

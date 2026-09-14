@@ -1,0 +1,4601 @@
+{
+ "functions": {
+  "ap": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Accounts Payable"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "43-1011.00",
+      "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2011.00",
+      "title": "Accountants and Auditors"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-3031.00",
+      "title": "Bookkeeping, Accounting, and Auditing Clerks"
+     },
+     {
+      "code": "43-3021.00",
+      "title": "Billing and Posting Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.6.1",
+     "name": "Process accounts payable (AP)",
+     "pcf_id": "10756"
+    },
+    {
+     "hierarchy_id": "9.6.2",
+     "name": "Process expense reimbursements",
+     "pcf_id": "10757"
+    },
+    {
+     "hierarchy_id": "9.6.3",
+     "name": "Manage corporate credit cards",
+     "pcf_id": "20929"
+    }
+   ],
+   "sor_classes": [
+    "ERP-FI",
+    "P2P-suite",
+    "e-invoicing"
+   ],
+   "title": "Accounts Payable",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Accounts Payable"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "reported",
+     "title": "Accounts Payable Supervisor"
+    },
+    "professional": {
+     "code": null,
+     "source": "derived",
+     "title": "Accounts Payable Analyst"
+    },
+    "support": {
+     "code": "43-3031.00",
+     "source": "reported",
+     "title": "Accounts Payable Clerk"
+    }
+   }
+  },
+  "audit": {
+   "categories": [
+    {
+     "name": "Manage External Relationships",
+     "number": "12",
+     "pcf_id": "10012"
+    }
+   ],
+   "keywords": [
+    "Audit"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2011.00",
+      "title": "Accountants and Auditors"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "12.3.2",
+     "name": "Report audit findings",
+     "pcf_id": "11043"
+    }
+   ],
+   "sor_classes": [
+    "DMS",
+    "BI"
+   ],
+   "title": "Internal Audit",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Internal Audit"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Auditing Manager"
+    },
+    "professional": {
+     "code": "13-2011.00",
+     "source": "reported",
+     "title": "Auditor"
+    }
+   }
+  },
+  "billing": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Billing"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "43-1011.00",
+      "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2011.00",
+      "title": "Accountants and Auditors"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-3021.00",
+      "title": "Billing and Posting Clerks"
+     },
+     {
+      "code": "43-3031.00",
+      "title": "Bookkeeping, Accounting, and Auditing Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.2.2",
+     "name": "Invoice customer",
+     "pcf_id": "10743"
+    },
+    {
+     "hierarchy_id": "9.2.3",
+     "name": "Process accounts receivable (AR)",
+     "pcf_id": "10744"
+    },
+    {
+     "hierarchy_id": "9.2.5",
+     "name": "Manage and process adjustments/deductions",
+     "pcf_id": "10746"
+    }
+   ],
+   "sor_classes": [
+    "ERP-SD",
+    "ERP-FI",
+    "e-invoicing"
+   ],
+   "title": "Billing",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Billing"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Billing Supervisor"
+    },
+    "professional": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Billing Administrator"
+    },
+    "support": {
+     "code": "43-3021.00",
+     "source": "reported",
+     "title": "Billing Clerk"
+    }
+   }
+  },
+  "capital_projects": {
+   "categories": [
+    {
+     "name": "Acquire, Construct, and Manage Assets",
+     "number": "10",
+     "pcf_id": "19207"
+    }
+   ],
+   "keywords": [
+    "Construction",
+    "Capital Project",
+    "Project"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-9021.00",
+      "title": "Construction Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "17-2051.00",
+      "title": "Civil Engineers"
+     },
+     {
+      "code": "13-1051.00",
+      "title": "Cost Estimators"
+     },
+     {
+      "code": "13-1082.00",
+      "title": "Project Management Specialists"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "10.2.1",
+     "name": "Manage capital program for assets",
+     "pcf_id": "19209"
+    },
+    {
+     "hierarchy_id": "10.2.2",
+     "name": "Design and plan asset construction",
+     "pcf_id": "20139"
+    },
+    {
+     "hierarchy_id": "10.2.3",
+     "name": "Schedule and perform construction work",
+     "pcf_id": "19229"
+    },
+    {
+     "hierarchy_id": "10.2.4",
+     "name": "Manage asset construction",
+     "pcf_id": "19224"
+    }
+   ],
+   "sor_classes": [
+    "ERP-FI",
+    "DMS"
+   ],
+   "title": "Capital Projects",
+   "titles": {
+    "head": {
+     "code": "11-9021.00",
+     "source": "alternate",
+     "title": "Construction Director"
+    },
+    "manager": {
+     "code": "11-9021.00",
+     "source": "reported",
+     "title": "Construction Manager"
+    },
+    "professional": {
+     "code": "17-2051.00",
+     "source": "reported",
+     "title": "Project Engineer"
+    }
+   }
+  },
+  "change_mgmt": {
+   "categories": [
+    {
+     "name": "Manage Information Technology (IT)",
+     "number": "8",
+     "pcf_id": "20607"
+    }
+   ],
+   "keywords": [
+    "Release",
+    "Change",
+    "IT Project",
+    "Deployment"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "15-1299.09",
+      "title": "Information Technology Project Managers"
+     },
+     {
+      "code": "11-3021.00",
+      "title": "Computer and Information Systems Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-1211.00",
+      "title": "Computer Systems Analysts"
+     },
+     {
+      "code": "13-1082.00",
+      "title": "Project Management Specialists"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "8.6.1",
+     "name": "Develop and manage service/solution deployment strategy",
+     "pcf_id": "20825"
+    },
+    {
+     "hierarchy_id": "8.6.2",
+     "name": "Plan service and solution implementation",
+     "pcf_id": "20832"
+    },
+    {
+     "hierarchy_id": "8.6.3",
+     "name": "Manage change deployment control",
+     "pcf_id": "20840"
+    },
+    {
+     "hierarchy_id": "8.6.4",
+     "name": "Implement technology solutions",
+     "pcf_id": "20848"
+    },
+    {
+     "hierarchy_id": "8.6.5",
+     "name": "Perform service and solution rollout",
+     "pcf_id": "20858"
+    }
+   ],
+   "sor_classes": [
+    "ITSM",
+    "Wiki"
+   ],
+   "title": "Change & Release",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Change & Release"
+    },
+    "manager": {
+     "code": "15-1299.09",
+     "source": "alternate",
+     "title": "Release Manager"
+    },
+    "professional": {
+     "code": null,
+     "source": "derived",
+     "title": "Change & Release Analyst"
+    }
+   }
+  },
+  "compliance": {
+   "categories": [
+    {
+     "name": "Manage Enterprise Risk, Compliance, Remediation, and Resiliency",
+     "number": "11",
+     "pcf_id": "16437"
+    }
+   ],
+   "keywords": [
+    "Compliance"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-9199.02",
+      "title": "Compliance Managers"
+     },
+     {
+      "code": "11-9199.01",
+      "title": "Regulatory Affairs Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1041.00",
+      "title": "Compliance Officers"
+     },
+     {
+      "code": "13-1041.07",
+      "title": "Regulatory Affairs Specialists"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "11.2.1",
+     "name": "Establish compliance framework and policies",
+     "pcf_id": "17468"
+    },
+    {
+     "hierarchy_id": "11.2.2",
+     "name": "Manage regulatory compliance",
+     "pcf_id": "16463"
+    },
+    {
+     "hierarchy_id": "11.3.1",
+     "name": "Create remediation plans",
+     "pcf_id": "11201"
+    },
+    {
+     "hierarchy_id": "11.3.2",
+     "name": "Contact and confer with experts",
+     "pcf_id": "11202"
+    },
+    {
+     "hierarchy_id": "11.3.3",
+     "name": "Identify/dedicate resources",
+     "pcf_id": "11203"
+    },
+    {
+     "hierarchy_id": "11.3.4",
+     "name": "Investigate legal aspects",
+     "pcf_id": "11204"
+    },
+    {
+     "hierarchy_id": "11.3.5",
+     "name": "Investigate damage cause",
+     "pcf_id": "11205"
+    },
+    {
+     "hierarchy_id": "11.3.6",
+     "name": "Amend or create policy",
+     "pcf_id": "11206"
+    }
+   ],
+   "sor_classes": [
+    "DMS",
+    "ITSM"
+   ],
+   "title": "Compliance",
+   "titles": {
+    "head": {
+     "code": "11-9199.01",
+     "source": "reported",
+     "title": "Compliance Director"
+    },
+    "manager": {
+     "code": "11-9199.02",
+     "source": "reported",
+     "title": "Compliance Manager"
+    },
+    "professional": {
+     "code": "13-1041.00",
+     "source": "alternate",
+     "title": "Compliance Analyst"
+    }
+   }
+  },
+  "controllership": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    },
+    {
+     "name": "Manage External Relationships",
+     "number": "12",
+     "pcf_id": "10012"
+    }
+   ],
+   "keywords": [
+    "Controller",
+    "Comptroller",
+    "General Ledger",
+    "Financial Reporting",
+    "Accounting"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3031.01",
+      "title": "Treasurers and Controllers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2011.00",
+      "title": "Accountants and Auditors"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-3031.00",
+      "title": "Bookkeeping, Accounting, and Auditing Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.3.1",
+     "name": "Manage financial policies and procedures",
+     "pcf_id": "10747"
+    },
+    {
+     "hierarchy_id": "9.3.2",
+     "name": "Perform general accounting",
+     "pcf_id": "10748"
+    },
+    {
+     "hierarchy_id": "9.3.3",
+     "name": "Perform fixed-asset accounting",
+     "pcf_id": "10749"
+    },
+    {
+     "hierarchy_id": "9.3.4",
+     "name": "Perform financial reporting",
+     "pcf_id": "10750"
+    },
+    {
+     "hierarchy_id": "9.4.1",
+     "name": "Perform capital planning and project approval",
+     "pcf_id": "10751"
+    },
+    {
+     "hierarchy_id": "9.4.2",
+     "name": "Perform capital project accounting",
+     "pcf_id": "10752"
+    },
+    {
+     "hierarchy_id": "9.8.1",
+     "name": "Establish internal controls, policies, and procedures",
+     "pcf_id": "10762"
+    },
+    {
+     "hierarchy_id": "9.8.2",
+     "name": "Operate controls and monitor compliance with internal controls policies and procedures",
+     "pcf_id": "21574"
+    },
+    {
+     "hierarchy_id": "9.8.3",
+     "name": "Report on internal controls compliance",
+     "pcf_id": "10764"
+    },
+    {
+     "hierarchy_id": "12.3.1",
+     "name": "Report financial results",
+     "pcf_id": "11042"
+    }
+   ],
+   "sor_classes": [
+    "ERP-FI",
+    "Consolidation",
+    "DMS"
+   ],
+   "title": "Controllership",
+   "titles": {
+    "head": {
+     "code": "11-3031.01",
+     "source": "reported",
+     "title": "Controller"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "reported",
+     "title": "Accounting Supervisor"
+    },
+    "professional": {
+     "code": "13-2011.00",
+     "source": "reported",
+     "title": "Accounting Officer"
+    },
+    "support": {
+     "code": "43-3031.00",
+     "source": "reported",
+     "title": "Accounting Clerk"
+    }
+   }
+  },
+  "corporate_affairs": {
+   "categories": [
+    {
+     "name": "Manage External Relationships",
+     "number": "12",
+     "pcf_id": "10012"
+    }
+   ],
+   "keywords": [
+    "Communications",
+    "Public Relations",
+    "Public Affairs",
+    "Government Relations"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-2032.00",
+      "title": "Public Relations Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "27-3031.00",
+      "title": "Public Relations Specialists"
+     },
+     {
+      "code": "27-3043.00",
+      "title": "Writers and Authors"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "12.2.1",
+     "name": "Manage government relations",
+     "pcf_id": "11038"
+    },
+    {
+     "hierarchy_id": "12.2.2",
+     "name": "Manage relations with quasi-government bodies",
+     "pcf_id": "11039"
+    },
+    {
+     "hierarchy_id": "12.2.3",
+     "name": "Manage relations with trade or industry groups",
+     "pcf_id": "11040"
+    },
+    {
+     "hierarchy_id": "12.2.4",
+     "name": "Manage lobby activities",
+     "pcf_id": "11041"
+    },
+    {
+     "hierarchy_id": "12.5.1",
+     "name": "Manage community relations",
+     "pcf_id": "11066"
+    },
+    {
+     "hierarchy_id": "12.5.2",
+     "name": "Manage media relations",
+     "pcf_id": "11067"
+    },
+    {
+     "hierarchy_id": "12.5.3",
+     "name": "Promote political stability",
+     "pcf_id": "11068"
+    },
+    {
+     "hierarchy_id": "12.5.4",
+     "name": "Create press releases",
+     "pcf_id": "11069"
+    },
+    {
+     "hierarchy_id": "12.5.5",
+     "name": "Issue press releases",
+     "pcf_id": "11070"
+    }
+   ],
+   "sor_classes": [
+    "DMS",
+    "Email"
+   ],
+   "title": "Corporate Affairs",
+   "titles": {
+    "head": {
+     "code": "11-2032.00",
+     "source": "reported",
+     "title": "Communications Director"
+    },
+    "manager": {
+     "code": "11-2032.00",
+     "source": "reported",
+     "title": "Communications Manager"
+    },
+    "professional": {
+     "code": "27-3031.00",
+     "source": "reported",
+     "title": "Communications Specialist"
+    }
+   }
+  },
+  "credit": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Credit",
+    "Collection"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2041.00",
+      "title": "Credit Analysts"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-4041.00",
+      "title": "Credit Authorizers, Checkers, and Clerks"
+     },
+     {
+      "code": "43-3011.00",
+      "title": "Bill and Account Collectors"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.2.1",
+     "name": "Process customer credit",
+     "pcf_id": "10742"
+    },
+    {
+     "hierarchy_id": "9.2.4",
+     "name": "Manage and process collections",
+     "pcf_id": "10745"
+    }
+   ],
+   "sor_classes": [
+    "ERP-FI",
+    "CRM"
+   ],
+   "title": "Credit & Collections",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Credit & Collections"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "reported",
+     "title": "Credit Manager"
+    },
+    "professional": {
+     "code": "13-2041.00",
+     "source": "reported",
+     "title": "Credit Analyst"
+    },
+    "support": {
+     "code": "43-3011.00",
+     "source": "reported",
+     "title": "Collection Agent"
+    }
+   }
+  },
+  "customer_service": {
+   "categories": [
+    {
+     "name": "Manage Customer Service",
+     "number": "6",
+     "pcf_id": "20085"
+    }
+   ],
+   "keywords": [
+    "Customer Service",
+    "Customer Care",
+    "Customer Support",
+    "Customer"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "43-1011.00",
+      "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1199.00",
+      "title": "Business Operations Specialists, All Other"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-4051.00",
+      "title": "Customer Service Representatives"
+     },
+     {
+      "code": "43-4021.00",
+      "title": "Correspondence Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "6.1.1",
+     "name": "Define customer service requirements across the enterprise",
+     "pcf_id": "20086"
+    },
+    {
+     "hierarchy_id": "6.1.2",
+     "name": "Define customer service experience",
+     "pcf_id": "20087"
+    },
+    {
+     "hierarchy_id": "6.1.3",
+     "name": "Define and manage customer service channel strategy",
+     "pcf_id": "20088"
+    },
+    {
+     "hierarchy_id": "6.1.4",
+     "name": "Define customer service policies and procedures",
+     "pcf_id": "10382"
+    },
+    {
+     "hierarchy_id": "6.1.5",
+     "name": "Establish target service level for each customer segment",
+     "pcf_id": "10383"
+    },
+    {
+     "hierarchy_id": "6.1.6",
+     "name": "Define warranty claims",
+     "pcf_id": "20089"
+    },
+    {
+     "hierarchy_id": "6.1.7",
+     "name": "Develop recall strategy",
+     "pcf_id": "20092"
+    },
+    {
+     "hierarchy_id": "6.2.1",
+     "name": "Plan and manage customer service work force",
+     "pcf_id": "10387"
+    },
+    {
+     "hierarchy_id": "6.2.2",
+     "name": "Manage customer service problems, requests, and inquiries",
+     "pcf_id": "10388"
+    },
+    {
+     "hierarchy_id": "6.2.3",
+     "name": "Manage customer complaints",
+     "pcf_id": "10389"
+    },
+    {
+     "hierarchy_id": "6.2.4",
+     "name": "Process returns",
+     "pcf_id": "20094"
+    },
+    {
+     "hierarchy_id": "6.2.5",
+     "name": "Report incidents and risks to regulatory bodies",
+     "pcf_id": "12840"
+    },
+    {
+     "hierarchy_id": "6.5.1",
+     "name": "Measure customer satisfaction with customer problems, requests, and inquiries handling",
+     "pcf_id": "10401"
+    },
+    {
+     "hierarchy_id": "6.5.2",
+     "name": "Measure customer satisfaction with customer- complaint handling and resolution",
+     "pcf_id": "10402"
+    },
+    {
+     "hierarchy_id": "6.5.3",
+     "name": "Measure customer satisfaction with products and services",
+     "pcf_id": "10403"
+    },
+    {
+     "hierarchy_id": "6.5.4",
+     "name": "Evaluate and manage warranty performance",
+     "pcf_id": "12672"
+    },
+    {
+     "hierarchy_id": "6.5.5",
+     "name": "Evaluate recall performance",
+     "pcf_id": "20121"
+    }
+   ],
+   "sor_classes": [
+    "CRM",
+    "ITSM",
+    "Chat"
+   ],
+   "title": "Customer Service",
+   "titles": {
+    "head": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Customer Service Director"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "reported",
+     "title": "Customer Service Manager"
+    },
+    "professional": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Customer Service Administrator"
+    },
+    "support": {
+     "code": "43-4051.00",
+     "source": "reported",
+     "title": "Customer Service Agent"
+    }
+   }
+  },
+  "data": {
+   "categories": [
+    {
+     "name": "Manage Information Technology (IT)",
+     "number": "8",
+     "pcf_id": "20607"
+    },
+    {
+     "name": "Develop and Manage Business Capabilities",
+     "number": "13",
+     "pcf_id": "10013"
+    }
+   ],
+   "keywords": [
+    "Data",
+    "Analytics",
+    "Business Intelligence"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3021.00",
+      "title": "Computer and Information Systems Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-2051.00",
+      "title": "Data Scientists"
+     },
+     {
+      "code": "15-2051.01",
+      "title": "Business Intelligence Analysts"
+     },
+     {
+      "code": "15-1243.00",
+      "title": "Database Architects"
+     },
+     {
+      "code": "15-1243.01",
+      "title": "Data Warehousing Specialists"
+     },
+     {
+      "code": "15-2041.00",
+      "title": "Statisticians"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-9111.00",
+      "title": "Statistical Assistants"
+     },
+     {
+      "code": "43-9021.00",
+      "title": "Data Entry Keyers"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "8.4.1",
+     "name": "Define business information and analytics strategy",
+     "pcf_id": "20766"
+    },
+    {
+     "hierarchy_id": "8.4.2",
+     "name": "Define and maintain business information architecture",
+     "pcf_id": "20770"
+    },
+    {
+     "hierarchy_id": "8.4.3",
+     "name": "Define and execute business information lifecycle planning and control",
+     "pcf_id": "20776"
+    },
+    {
+     "hierarchy_id": "8.4.4",
+     "name": "Manage business information",
+     "pcf_id": "20779"
+    },
+    {
+     "hierarchy_id": "13.5.1",
+     "name": "Develop KM strategy",
+     "pcf_id": "11095"
+    },
+    {
+     "hierarchy_id": "13.5.2",
+     "name": "Assess KM capabilities",
+     "pcf_id": "11096"
+    },
+    {
+     "hierarchy_id": "13.5.3",
+     "name": "Design and implement KM capabilities",
+     "pcf_id": "20965"
+    },
+    {
+     "hierarchy_id": "13.5.4",
+     "name": "Evolve and sustain KM capabilities",
+     "pcf_id": "20969"
+    },
+    {
+     "hierarchy_id": "13.7.1",
+     "name": "Identify needs from stakeholders",
+     "pcf_id": "21459"
+    },
+    {
+     "hierarchy_id": "13.7.2",
+     "name": "Scope analytics project",
+     "pcf_id": "21460"
+    },
+    {
+     "hierarchy_id": "13.7.3",
+     "name": "Develop and manage hypotheses",
+     "pcf_id": "20960"
+    },
+    {
+     "hierarchy_id": "13.7.4",
+     "name": "Collect data",
+     "pcf_id": "20961"
+    },
+    {
+     "hierarchy_id": "13.7.5",
+     "name": "Prepare data",
+     "pcf_id": "21461"
+    },
+    {
+     "hierarchy_id": "13.7.6",
+     "name": "Analyze data",
+     "pcf_id": "20962"
+    },
+    {
+     "hierarchy_id": "13.7.7",
+     "name": "Create data models",
+     "pcf_id": "21462"
+    },
+    {
+     "hierarchy_id": "13.7.8",
+     "name": "Review data models with stakeholders",
+     "pcf_id": "21463"
+    },
+    {
+     "hierarchy_id": "13.7.9",
+     "name": "Refine data models",
+     "pcf_id": "21464"
+    },
+    {
+     "hierarchy_id": "13.7.10",
+     "name": "Report on analysis",
+     "pcf_id": "20963"
+    },
+    {
+     "hierarchy_id": "13.7.11",
+     "name": "Identify remedial actions",
+     "pcf_id": "20964"
+    }
+   ],
+   "sor_classes": [
+    "BI",
+    "DMS"
+   ],
+   "title": "Data & Analytics",
+   "titles": {
+    "head": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Data Operations Director"
+    },
+    "manager": {
+     "code": "11-3021.00",
+     "source": "reported",
+     "title": "Data Processing Manager"
+    },
+    "professional": {
+     "code": "15-1243.00",
+     "source": "reported",
+     "title": "Data Officer"
+    },
+    "support": {
+     "code": "43-9021.00",
+     "source": "reported",
+     "title": "Data Entry Clerk"
+    }
+   }
+  },
+  "ehs": {
+   "categories": [
+    {
+     "name": "Develop and Manage Business Capabilities",
+     "number": "13",
+     "pcf_id": "10013"
+    }
+   ],
+   "keywords": [
+    "Safety",
+    "Environmental",
+    "Sustainability"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-1011.03",
+      "title": "Chief Sustainability Officers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "17-2111.00",
+      "title": "Health and Safety Engineers, Except Mining Safety Engineers and Inspectors"
+     },
+     {
+      "code": "13-1199.05",
+      "title": "Sustainability Specialists"
+     },
+     {
+      "code": "13-1041.01",
+      "title": "Environmental Compliance Inspectors"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "13.8.1",
+     "name": "Determine environmental health and safety impacts",
+     "pcf_id": "11180"
+    },
+    {
+     "hierarchy_id": "13.8.2",
+     "name": "Develop EHS program",
+     "pcf_id": "11181"
+    },
+    {
+     "hierarchy_id": "13.8.3",
+     "name": "Monitor and manage EHS program",
+     "pcf_id": "21587"
+    },
+    {
+     "hierarchy_id": "13.9.1",
+     "name": "Develop sustainability capability",
+     "pcf_id": "21589"
+    },
+    {
+     "hierarchy_id": "13.9.2",
+     "name": "Manage sustainability capability",
+     "pcf_id": "21598"
+    }
+   ],
+   "sor_classes": [
+    "DMS",
+    "ITSM"
+   ],
+   "title": "EHS & Sustainability",
+   "titles": {
+    "head": {
+     "code": "11-1011.03",
+     "source": "reported",
+     "title": "Sustainability Director"
+    },
+    "manager": {
+     "code": "11-1011.03",
+     "source": "reported",
+     "title": "Sustainability Manager"
+    },
+    "professional": {
+     "code": "17-2111.00",
+     "source": "reported",
+     "title": "Safety Engineer"
+    }
+   }
+  },
+  "engineering": {
+   "categories": [
+    {
+     "name": "Develop and Manage Products and Services",
+     "number": "2",
+     "pcf_id": "10003"
+    },
+    {
+     "name": "Manage Information Technology (IT)",
+     "number": "8",
+     "pcf_id": "20607"
+    }
+   ],
+   "keywords": [
+    "Software",
+    "Engineering",
+    "Developer",
+    "Engineer"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-9041.00",
+      "title": "Architectural and Engineering Managers"
+     },
+     {
+      "code": "11-3021.00",
+      "title": "Computer and Information Systems Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-1252.00",
+      "title": "Software Developers"
+     },
+     {
+      "code": "15-1253.00",
+      "title": "Software Quality Assurance Analysts and Testers"
+     },
+     {
+      "code": "15-1254.00",
+      "title": "Web Developers"
+     },
+     {
+      "code": "17-2112.00",
+      "title": "Industrial Engineers"
+     },
+     {
+      "code": "17-2141.00",
+      "title": "Mechanical Engineers"
+     },
+     {
+      "code": "17-2071.00",
+      "title": "Electrical Engineers"
+     }
+    ],
+    "support": [
+     {
+      "code": "15-1251.00",
+      "title": "Computer Programmers"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "2.3.1",
+     "name": "Design and prototype products and services",
+     "pcf_id": "19993"
+    },
+    {
+     "hierarchy_id": "2.3.2",
+     "name": "Test market for new or revised products and services",
+     "pcf_id": "19996"
+    },
+    {
+     "hierarchy_id": "2.3.3",
+     "name": "Prepare for production/service delivery",
+     "pcf_id": "19997"
+    },
+    {
+     "hierarchy_id": "8.5.1",
+     "name": "Develop service/solution and integration strategy",
+     "pcf_id": "20785"
+    },
+    {
+     "hierarchy_id": "8.5.2",
+     "name": "Manage service/solution lifecycle planning",
+     "pcf_id": "20793"
+    },
+    {
+     "hierarchy_id": "8.5.3",
+     "name": "Develop and manage service/solution architecture",
+     "pcf_id": "20799"
+    },
+    {
+     "hierarchy_id": "8.5.4",
+     "name": "Execute IT service/solution creation and testing",
+     "pcf_id": "20808"
+    },
+    {
+     "hierarchy_id": "8.5.5",
+     "name": "Perform service/solution maintenance and testing",
+     "pcf_id": "20817"
+    }
+   ],
+   "sor_classes": [
+    "PLM",
+    "Wiki"
+   ],
+   "title": "Engineering",
+   "titles": {
+    "head": {
+     "code": "11-9041.00",
+     "source": "reported",
+     "title": "Engineering Director"
+    },
+    "manager": {
+     "code": "11-9041.00",
+     "source": "reported",
+     "title": "Civil Engineering Manager"
+    },
+    "professional": {
+     "code": "17-2071.00",
+     "source": "reported",
+     "title": "Engineer"
+    },
+    "support": {
+     "code": "15-1251.00",
+     "source": "alternate",
+     "title": "Graphic Engineer"
+    }
+   }
+  },
+  "facilities": {
+   "categories": [
+    {
+     "name": "Acquire, Construct, and Manage Assets",
+     "number": "10",
+     "pcf_id": "19207"
+    }
+   ],
+   "keywords": [
+    "Facilities",
+    "Facility",
+    "Building"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3013.00",
+      "title": "Facilities Managers"
+     },
+     {
+      "code": "11-3012.00",
+      "title": "Administrative Services Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1199.00",
+      "title": "Business Operations Specialists, All Other"
+     }
+    ],
+    "support": [
+     {
+      "code": "49-9071.00",
+      "title": "Maintenance and Repair Workers, General"
+     },
+     {
+      "code": "43-9061.00",
+      "title": "Office Clerks, General"
+     },
+     {
+      "code": "43-4171.00",
+      "title": "Receptionists and Information Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "10.1.1",
+     "name": "Develop property strategy and long term vision",
+     "pcf_id": "10941"
+    },
+    {
+     "hierarchy_id": "10.1.2",
+     "name": "Plan facility",
+     "pcf_id": "10943"
+    },
+    {
+     "hierarchy_id": "10.1.3",
+     "name": "Provide workspace and facilities",
+     "pcf_id": "10944"
+    },
+    {
+     "hierarchy_id": "10.1.4",
+     "name": "Manage facilities operations",
+     "pcf_id": "10949"
+    },
+    {
+     "hierarchy_id": "10.3.1",
+     "name": "Plan asset maintenance",
+     "pcf_id": "19239"
+    },
+    {
+     "hierarchy_id": "10.3.2",
+     "name": "Manage asset maintenance",
+     "pcf_id": "19245"
+    },
+    {
+     "hierarchy_id": "10.3.3",
+     "name": "Perform asset maintenance",
+     "pcf_id": "19253"
+    },
+    {
+     "hierarchy_id": "10.4.1",
+     "name": "Develop exit strategy",
+     "pcf_id": "10952"
+    },
+    {
+     "hierarchy_id": "10.4.2",
+     "name": "Decommission productive assets",
+     "pcf_id": "19258"
+    },
+    {
+     "hierarchy_id": "10.4.3",
+     "name": "Perform sale or trade",
+     "pcf_id": "10953"
+    },
+    {
+     "hierarchy_id": "10.4.4",
+     "name": "Manage take-back centers",
+     "pcf_id": "12717"
+    },
+    {
+     "hierarchy_id": "10.4.5",
+     "name": "Dismantle assets",
+     "pcf_id": "21579"
+    },
+    {
+     "hierarchy_id": "10.4.6",
+     "name": "Track parts",
+     "pcf_id": "21580"
+    },
+    {
+     "hierarchy_id": "10.4.7",
+     "name": "Recycle parts",
+     "pcf_id": "21581"
+    },
+    {
+     "hierarchy_id": "10.4.8",
+     "name": "Ship hazardous material",
+     "pcf_id": "12721"
+    },
+    {
+     "hierarchy_id": "10.4.9",
+     "name": "Provide government reporting",
+     "pcf_id": "12722"
+    },
+    {
+     "hierarchy_id": "10.4.10",
+     "name": "Perform abandonment",
+     "pcf_id": "21582"
+    },
+    {
+     "hierarchy_id": "10.4.11",
+     "name": "Perform waste and hazardous goods management",
+     "pcf_id": "21583"
+    }
+   ],
+   "sor_classes": [
+    "ERP-MM",
+    "ITSM"
+   ],
+   "title": "Facilities & Assets",
+   "titles": {
+    "head": {
+     "code": "11-3013.00",
+     "source": "reported",
+     "title": "Facilities Director"
+    },
+    "manager": {
+     "code": "11-3013.00",
+     "source": "reported",
+     "title": "Facilities Manager"
+    },
+    "professional": {
+     "code": "11-3013.00",
+     "source": "reported",
+     "title": "Facilities Engineer"
+    },
+    "support": {
+     "code": "49-9071.00",
+     "source": "reported",
+     "title": "Facilities Technician"
+    }
+   }
+  },
+  "field_service": {
+   "categories": [
+    {
+     "name": "Manage Customer Service",
+     "number": "6",
+     "pcf_id": "20085"
+    }
+   ],
+   "keywords": [
+    "Field Service",
+    "Service Technician",
+    "Maintenance",
+    "Service"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "49-1011.00",
+      "title": "First-Line Supervisors of Mechanics, Installers, and Repairers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1199.00",
+      "title": "Business Operations Specialists, All Other"
+     }
+    ],
+    "support": [
+     {
+      "code": "49-9071.00",
+      "title": "Maintenance and Repair Workers, General"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "6.3.1",
+     "name": "Register products",
+     "pcf_id": "20605"
+    },
+    {
+     "hierarchy_id": "6.3.2",
+     "name": "Process warranty claims",
+     "pcf_id": "12669"
+    },
+    {
+     "hierarchy_id": "6.3.3",
+     "name": "Manage supplier recovery",
+     "pcf_id": "20106"
+    },
+    {
+     "hierarchy_id": "6.3.4",
+     "name": "Service products",
+     "pcf_id": "10218"
+    }
+   ],
+   "sor_classes": [
+    "ITSM",
+    "CRM"
+   ],
+   "title": "After-sales Service",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of After-sales Service"
+    },
+    "manager": {
+     "code": "49-1011.00",
+     "source": "reported",
+     "title": "Service Manager"
+    },
+    "professional": {
+     "code": "13-1199.00",
+     "source": "alternate",
+     "title": "Business Service Specialist"
+    },
+    "support": {
+     "code": "49-9071.00",
+     "source": "reported",
+     "title": "Maintenance Worker"
+    }
+   }
+  },
+  "fpa": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Financial Planning",
+    "Budget",
+    "FP&A",
+    "Financial Analyst"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2031.00",
+      "title": "Budget Analysts"
+     },
+     {
+      "code": "13-2051.00",
+      "title": "Financial and Investment Analysts"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-9111.00",
+      "title": "Statistical Assistants"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.1.1",
+     "name": "Perform planning/budgeting/forecasting",
+     "pcf_id": "10738"
+    },
+    {
+     "hierarchy_id": "9.1.2",
+     "name": "Perform cost accounting and control",
+     "pcf_id": "10739"
+    },
+    {
+     "hierarchy_id": "9.1.3",
+     "name": "Perform cost management",
+     "pcf_id": "10740"
+    },
+    {
+     "hierarchy_id": "9.1.4",
+     "name": "Evaluate and manage financial performance",
+     "pcf_id": "10741"
+    }
+   ],
+   "sor_classes": [
+    "EPM",
+    "BI",
+    "ERP-FI"
+   ],
+   "title": "FP&A",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of FP&A"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "reported",
+     "title": "Financial Planning Manager"
+    },
+    "professional": {
+     "code": "13-2031.00",
+     "source": "reported",
+     "title": "Budget Analyst"
+    }
+   }
+  },
+  "fulfilment": {
+   "categories": [
+    {
+     "name": "Manage Supply Chain for Physical Products",
+     "number": "4",
+     "pcf_id": "20022"
+    }
+   ],
+   "keywords": [
+    "Logistics",
+    "Transportation",
+    "Distribution",
+    "Shipping"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3071.00",
+      "title": "Transportation, Storage, and Distribution Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1081.00",
+      "title": "Logisticians"
+     },
+     {
+      "code": "13-1081.02",
+      "title": "Logistics Analysts"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-5011.00",
+      "title": "Cargo and Freight Agents"
+     },
+     {
+      "code": "43-5032.00",
+      "title": "Dispatchers, Except Police, Fire, and Ambulance"
+     },
+     {
+      "code": "43-5071.00",
+      "title": "Shipping, Receiving, and Inventory Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "4.4.1",
+     "name": "Provide logistics governance",
+     "pcf_id": "10338"
+    },
+    {
+     "hierarchy_id": "4.4.2",
+     "name": "Plan and manage inbound material flow",
+     "pcf_id": "20936"
+    },
+    {
+     "hierarchy_id": "4.4.4",
+     "name": "Operate outbound transportation",
+     "pcf_id": "10341"
+    }
+   ],
+   "sor_classes": [
+    "ERP-SD",
+    "TMS",
+    "WMS"
+   ],
+   "title": "Fulfilment & Logistics",
+   "titles": {
+    "head": {
+     "code": "11-3071.00",
+     "source": "reported",
+     "title": "Logistics Director"
+    },
+    "manager": {
+     "code": "11-3071.00",
+     "source": "reported",
+     "title": "Shipping Manager"
+    },
+    "professional": {
+     "code": "13-1081.02",
+     "source": "reported",
+     "title": "Logistics Analyst"
+    },
+    "support": {
+     "code": "43-5071.00",
+     "source": "reported",
+     "title": "Shipping Clerk"
+    }
+   }
+  },
+  "hr": {
+   "categories": [
+    {
+     "name": "Develop and Manage Human Capital",
+     "number": "7",
+     "pcf_id": "10007"
+    }
+   ],
+   "keywords": [
+    "Human Resources",
+    "HR ",
+    "Talent",
+    "Recruit"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3121.00",
+      "title": "Human Resources Managers"
+     },
+     {
+      "code": "11-3111.00",
+      "title": "Compensation and Benefits Managers"
+     },
+     {
+      "code": "11-3131.00",
+      "title": "Training and Development Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1071.00",
+      "title": "Human Resources Specialists"
+     },
+     {
+      "code": "13-1141.00",
+      "title": "Compensation, Benefits, and Job Analysis Specialists"
+     },
+     {
+      "code": "13-1151.00",
+      "title": "Training and Development Specialists"
+     },
+     {
+      "code": "13-1075.00",
+      "title": "Labor Relations Specialists"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-4161.00",
+      "title": "Human Resources Assistants, Except Payroll and Timekeeping"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "7.1.1",
+     "name": "Develop human resources strategy",
+     "pcf_id": "20958"
+    },
+    {
+     "hierarchy_id": "7.1.2",
+     "name": "Develop and implement workforce strategy and policies",
+     "pcf_id": "17045"
+    },
+    {
+     "hierarchy_id": "7.1.3",
+     "name": "Monitor and update strategy, plans, and policies",
+     "pcf_id": "10417"
+    },
+    {
+     "hierarchy_id": "7.1.4",
+     "name": "Develop competency management models",
+     "pcf_id": "17046"
+    },
+    {
+     "hierarchy_id": "7.2.1",
+     "name": "Manage employee requisitions",
+     "pcf_id": "10439"
+    },
+    {
+     "hierarchy_id": "7.2.2",
+     "name": "Recruit/Source candidates",
+     "pcf_id": "10440"
+    },
+    {
+     "hierarchy_id": "7.2.3",
+     "name": "Screen and select candidates",
+     "pcf_id": "20123"
+    },
+    {
+     "hierarchy_id": "7.2.4",
+     "name": "Manage new hire/re-hire",
+     "pcf_id": "10443"
+    },
+    {
+     "hierarchy_id": "7.2.5",
+     "name": "Manage applicant information",
+     "pcf_id": "10444"
+    },
+    {
+     "hierarchy_id": "7.3.1",
+     "name": "Manage employee orientation and deployment",
+     "pcf_id": "10469"
+    },
+    {
+     "hierarchy_id": "7.3.2",
+     "name": "Manage employee performance",
+     "pcf_id": "10470"
+    },
+    {
+     "hierarchy_id": "7.3.3",
+     "name": "Manage employee career development",
+     "pcf_id": "10472"
+    },
+    {
+     "hierarchy_id": "7.3.4",
+     "name": "Develop and train employees",
+     "pcf_id": "10473"
+    },
+    {
+     "hierarchy_id": "7.4.1",
+     "name": "Manage labor relations",
+     "pcf_id": "10483"
+    },
+    {
+     "hierarchy_id": "7.4.2",
+     "name": "Manage collective bargaining process",
+     "pcf_id": "10484"
+    },
+    {
+     "hierarchy_id": "7.4.3",
+     "name": "Manage labor management partnerships",
+     "pcf_id": "10485"
+    },
+    {
+     "hierarchy_id": "7.4.4",
+     "name": "Manage employee grievances",
+     "pcf_id": "10531"
+    },
+    {
+     "hierarchy_id": "7.4.5",
+     "name": "Monitor legal and regulatory environment",
+     "pcf_id": "21437"
+    },
+    {
+     "hierarchy_id": "7.5.1",
+     "name": "Develop and manage reward, recognition, and motivation programs",
+     "pcf_id": "21438"
+    },
+    {
+     "hierarchy_id": "7.5.2",
+     "name": "Manage and administer benefits",
+     "pcf_id": "10495"
+    },
+    {
+     "hierarchy_id": "7.5.3",
+     "name": "Manage employee assistance and retention",
+     "pcf_id": "21439"
+    },
+    {
+     "hierarchy_id": "7.6.1",
+     "name": "Manage promotion and demotion process",
+     "pcf_id": "10512"
+    },
+    {
+     "hierarchy_id": "7.6.2",
+     "name": "Manage separation",
+     "pcf_id": "10513"
+    },
+    {
+     "hierarchy_id": "7.6.3",
+     "name": "Manage retirement",
+     "pcf_id": "10514"
+    },
+    {
+     "hierarchy_id": "7.6.4",
+     "name": "Manage leave of absence",
+     "pcf_id": "10515"
+    },
+    {
+     "hierarchy_id": "7.6.5",
+     "name": "Develop and implement employee outplacement",
+     "pcf_id": "10516"
+    },
+    {
+     "hierarchy_id": "7.6.6",
+     "name": "Manage workforce scheduling",
+     "pcf_id": "20132"
+    },
+    {
+     "hierarchy_id": "7.6.7",
+     "name": "Relocate employees and manage assignments",
+     "pcf_id": "17055"
+    },
+    {
+     "hierarchy_id": "7.7.1",
+     "name": "Manage reporting processes",
+     "pcf_id": "10522"
+    },
+    {
+     "hierarchy_id": "7.7.2",
+     "name": "Manage employee inquiry process",
+     "pcf_id": "10523"
+    },
+    {
+     "hierarchy_id": "7.7.3",
+     "name": "Manage and maintain employee data",
+     "pcf_id": "10524"
+    },
+    {
+     "hierarchy_id": "7.7.4",
+     "name": "Manage human resource information systems HRIS",
+     "pcf_id": "10525"
+    },
+    {
+     "hierarchy_id": "7.7.5",
+     "name": "Develop and manage employee measures",
+     "pcf_id": "10526"
+    },
+    {
+     "hierarchy_id": "7.7.6",
+     "name": "Develop and manage time and attendance systems",
+     "pcf_id": "10527"
+    },
+    {
+     "hierarchy_id": "7.7.7",
+     "name": "Develop workforce analytics",
+     "pcf_id": "21441"
+    },
+    {
+     "hierarchy_id": "7.7.8",
+     "name": "Implement workforce analytics",
+     "pcf_id": "21447"
+    },
+    {
+     "hierarchy_id": "7.7.9",
+     "name": "Manage/Collect employee suggestions and perform employee research",
+     "pcf_id": "10530"
+    },
+    {
+     "hierarchy_id": "7.8.1",
+     "name": "Develop employee communication plan",
+     "pcf_id": "10529"
+    },
+    {
+     "hierarchy_id": "7.8.2",
+     "name": "Conduct employee engagement surveys",
+     "pcf_id": "16944"
+    },
+    {
+     "hierarchy_id": "7.8.3",
+     "name": "Deliver employee communications",
+     "pcf_id": "10532"
+    }
+   ],
+   "sor_classes": [
+    "HRIS",
+    "DMS"
+   ],
+   "title": "Human Resources",
+   "titles": {
+    "head": {
+     "code": "11-3121.00",
+     "source": "reported",
+     "title": "Recruitment Director"
+    },
+    "manager": {
+     "code": "11-3121.00",
+     "source": "alternate",
+     "title": "Recruiting Manager"
+    },
+    "professional": {
+     "code": "13-1071.00",
+     "source": "reported",
+     "title": "Recruiter"
+    },
+    "support": {
+     "code": "43-4161.00",
+     "source": "alternate",
+     "title": "Recruiting Coordinator"
+    }
+   }
+  },
+  "investor_relations": {
+   "categories": [
+    {
+     "name": "Manage External Relationships",
+     "number": "12",
+     "pcf_id": "10012"
+    }
+   ],
+   "keywords": [
+    "Investor Relations",
+    "Financial Analyst",
+    "Finance"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2051.00",
+      "title": "Financial and Investment Analysts"
+     },
+     {
+      "code": "27-3031.00",
+      "title": "Public Relations Specialists"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "12.1.1",
+     "name": "Plan, build, and manage lender relations",
+     "pcf_id": "11035"
+    },
+    {
+     "hierarchy_id": "12.1.2",
+     "name": "Plan, build, and manage analyst relations",
+     "pcf_id": "11036"
+    },
+    {
+     "hierarchy_id": "12.1.3",
+     "name": "Communicate with shareholders",
+     "pcf_id": "11037"
+    }
+   ],
+   "sor_classes": [
+    "DMS",
+    "Email"
+   ],
+   "title": "Investor Relations",
+   "titles": {
+    "head": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Finance Director"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Finance Manager"
+    },
+    "professional": {
+     "code": "13-2051.00",
+     "source": "reported",
+     "title": "Financial Analyst"
+    }
+   }
+  },
+  "it_governance": {
+   "categories": [
+    {
+     "name": "Manage Information Technology (IT)",
+     "number": "8",
+     "pcf_id": "20607"
+    }
+   ],
+   "keywords": [
+    "Information Technology",
+    "Information Systems",
+    "Technology",
+    "Enterprise Architect",
+    "IT "
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3021.00",
+      "title": "Computer and Information Systems Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-1211.00",
+      "title": "Computer Systems Analysts"
+     },
+     {
+      "code": "15-1299.08",
+      "title": "Computer Systems Engineers/Architects"
+     },
+     {
+      "code": "13-1111.00",
+      "title": "Management Analysts"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "8.1.1",
+     "name": "Understand IT customer needs",
+     "pcf_id": "20609"
+    },
+    {
+     "hierarchy_id": "8.1.2",
+     "name": "Identify IT customer transformation needs",
+     "pcf_id": "20612"
+    },
+    {
+     "hierarchy_id": "8.1.3",
+     "name": "Plan and communicate IT services",
+     "pcf_id": "20617"
+    },
+    {
+     "hierarchy_id": "8.1.4",
+     "name": "Provide IT transformation guidance",
+     "pcf_id": "20623"
+    },
+    {
+     "hierarchy_id": "8.1.5",
+     "name": "Develop and manage IT service levels",
+     "pcf_id": "20632"
+    },
+    {
+     "hierarchy_id": "8.1.6",
+     "name": "Manage IT customer relationships",
+     "pcf_id": "20641"
+    },
+    {
+     "hierarchy_id": "8.1.7",
+     "name": "Analyze service performance",
+     "pcf_id": "20648"
+    },
+    {
+     "hierarchy_id": "8.2.1",
+     "name": "Define business technology and governance strategy",
+     "pcf_id": "20653"
+    },
+    {
+     "hierarchy_id": "8.2.2",
+     "name": "Manage IT portfolio strategy",
+     "pcf_id": "20660"
+    },
+    {
+     "hierarchy_id": "8.2.3",
+     "name": "Define and maintain enterprise architecture",
+     "pcf_id": "20668"
+    },
+    {
+     "hierarchy_id": "8.2.4",
+     "name": "Define IT service management strategy",
+     "pcf_id": "20674"
+    },
+    {
+     "hierarchy_id": "8.2.5",
+     "name": "Control IT management system",
+     "pcf_id": "20682"
+    },
+    {
+     "hierarchy_id": "8.2.6",
+     "name": "Manage IT value portfolio",
+     "pcf_id": "20693"
+    },
+    {
+     "hierarchy_id": "8.2.7",
+     "name": "Define and manage technology innovation",
+     "pcf_id": "20699"
+    }
+   ],
+   "sor_classes": [
+    "ITSM",
+    "Wiki"
+   ],
+   "title": "IT Strategy & Governance",
+   "titles": {
+    "head": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Technology Director"
+    },
+    "manager": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Enterprise Architecture Manager"
+    },
+    "professional": {
+     "code": "15-1211.00",
+     "source": "alternate",
+     "title": "Technology Analyst"
+    }
+   }
+  },
+  "it_ops": {
+   "categories": [
+    {
+     "name": "Manage Information Technology (IT)",
+     "number": "8",
+     "pcf_id": "20607"
+    }
+   ],
+   "keywords": [
+    "Systems Administrator",
+    "Network",
+    "Infrastructure",
+    "Site Reliability",
+    "Systems"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3021.00",
+      "title": "Computer and Information Systems Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-1244.00",
+      "title": "Network and Computer Systems Administrators"
+     },
+     {
+      "code": "15-1242.00",
+      "title": "Database Administrators"
+     },
+     {
+      "code": "15-1241.00",
+      "title": "Computer Network Architects"
+     },
+     {
+      "code": "15-1299.08",
+      "title": "Computer Systems Engineers/Architects"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "8.7.1",
+     "name": "Define and establish service delivery strategy",
+     "pcf_id": "20867"
+    },
+    {
+     "hierarchy_id": "8.7.2",
+     "name": "Define and develop service support strategy",
+     "pcf_id": "20873"
+    },
+    {
+     "hierarchy_id": "8.7.3",
+     "name": "Plan and manage service delivery control",
+     "pcf_id": "20880"
+    },
+    {
+     "hierarchy_id": "8.7.4",
+     "name": "Develop and manage infrastructure resource planning",
+     "pcf_id": "20888"
+    },
+    {
+     "hierarchy_id": "8.7.5",
+     "name": "Define service support planning",
+     "pcf_id": "20895"
+    },
+    {
+     "hierarchy_id": "8.7.6",
+     "name": "Develop and manage service delivery operations",
+     "pcf_id": "20905"
+    },
+    {
+     "hierarchy_id": "8.7.7",
+     "name": "Manage infrastructure resource administration",
+     "pcf_id": "20914"
+    }
+   ],
+   "sor_classes": [
+    "ITSM",
+    "Wiki"
+   ],
+   "title": "IT Operations / SRE",
+   "titles": {
+    "head": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Network Director"
+    },
+    "manager": {
+     "code": "11-3021.00",
+     "source": "alternate",
+     "title": "Network Manager"
+    },
+    "professional": {
+     "code": "15-1241.00",
+     "source": "reported",
+     "title": "Network Analyst"
+    }
+   }
+  },
+  "it_security": {
+   "categories": [
+    {
+     "name": "Manage Information Technology (IT)",
+     "number": "8",
+     "pcf_id": "20607"
+    }
+   ],
+   "keywords": [
+    "Information Security",
+    "Cybersecurity",
+    "Security"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3021.00",
+      "title": "Computer and Information Systems Managers"
+     },
+     {
+      "code": "11-3013.01",
+      "title": "Security Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-1212.00",
+      "title": "Information Security Analysts"
+     },
+     {
+      "code": "15-1299.05",
+      "title": "Information Security Engineers"
+     },
+     {
+      "code": "15-1299.04",
+      "title": "Penetration Testers"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "8.3.1",
+     "name": "Develop IT compliance, risk, and security strategy",
+     "pcf_id": "20707"
+    },
+    {
+     "hierarchy_id": "8.3.2",
+     "name": "Develop IT resilience strategy",
+     "pcf_id": "20716"
+    },
+    {
+     "hierarchy_id": "8.3.3",
+     "name": "Control IT risk, compliance, and security",
+     "pcf_id": "20721"
+    },
+    {
+     "hierarchy_id": "8.3.4",
+     "name": "Plan and manage IT continuity",
+     "pcf_id": "20731"
+    },
+    {
+     "hierarchy_id": "8.3.5",
+     "name": "Develop and manage IT security, privacy, and data protection",
+     "pcf_id": "20735"
+    },
+    {
+     "hierarchy_id": "8.3.6",
+     "name": "Conduct and analyze IT compliance assessments",
+     "pcf_id": "20743"
+    },
+    {
+     "hierarchy_id": "8.3.7",
+     "name": "Develop and execute IT resilience and continuity operations",
+     "pcf_id": "20749"
+    },
+    {
+     "hierarchy_id": "8.3.8",
+     "name": "Manage IT user identity and authorization",
+     "pcf_id": "20756"
+    }
+   ],
+   "sor_classes": [
+    "ITSM",
+    "Wiki"
+   ],
+   "title": "IT Security & Resilience",
+   "titles": {
+    "head": {
+     "code": "11-3013.01",
+     "source": "reported",
+     "title": "Security Director"
+    },
+    "manager": {
+     "code": "11-3013.01",
+     "source": "reported",
+     "title": "Security Manager"
+    },
+    "professional": {
+     "code": "15-1212.00",
+     "source": "reported",
+     "title": "Security Analyst"
+    }
+   }
+  },
+  "it_service_desk": {
+   "categories": [
+    {
+     "name": "Manage Information Technology (IT)",
+     "number": "8",
+     "pcf_id": "20607"
+    }
+   ],
+   "keywords": [
+    "Help Desk",
+    "Service Desk",
+    "Technical Support",
+    "Support"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3021.00",
+      "title": "Computer and Information Systems Managers"
+     },
+     {
+      "code": "43-1011.00",
+      "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-1231.00",
+      "title": "Computer Network Support Specialists"
+     }
+    ],
+    "support": [
+     {
+      "code": "15-1232.00",
+      "title": "Computer User Support Specialists"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "8.7.8",
+     "name": "Operate IT user support",
+     "pcf_id": "20921"
+    }
+   ],
+   "sor_classes": [
+    "ITSM",
+    "Chat"
+   ],
+   "title": "IT Service Desk",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of IT Service Desk"
+    },
+    "manager": {
+     "code": "43-1011.00",
+     "source": "alternate",
+     "title": "Support Manager"
+    },
+    "professional": {
+     "code": "15-1231.00",
+     "source": "reported",
+     "title": "Network Support Specialist"
+    },
+    "support": {
+     "code": "15-1232.00",
+     "source": "reported",
+     "title": "Computer Support Specialist"
+    }
+   }
+  },
+  "legal": {
+   "categories": [
+    {
+     "name": "Manage External Relationships",
+     "number": "12",
+     "pcf_id": "10012"
+    }
+   ],
+   "keywords": [
+    "Counsel",
+    "Legal",
+    "Attorney",
+    "Paralegal"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "23-1011.00",
+      "title": "Lawyers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "23-1011.00",
+      "title": "Lawyers"
+     }
+    ],
+    "support": [
+     {
+      "code": "23-2011.00",
+      "title": "Paralegals and Legal Assistants"
+     },
+     {
+      "code": "43-6012.00",
+      "title": "Legal Secretaries and Administrative Assistants"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "12.4.1",
+     "name": "Create ethics policies",
+     "pcf_id": "11044"
+    },
+    {
+     "hierarchy_id": "12.4.2",
+     "name": "Manage corporate governance policies",
+     "pcf_id": "11045"
+    },
+    {
+     "hierarchy_id": "12.4.3",
+     "name": "Develop and perform preventive law programs",
+     "pcf_id": "11046"
+    },
+    {
+     "hierarchy_id": "12.4.4",
+     "name": "Ensure compliance",
+     "pcf_id": "11047"
+    },
+    {
+     "hierarchy_id": "12.4.5",
+     "name": "Manage outside counsel",
+     "pcf_id": "11048"
+    },
+    {
+     "hierarchy_id": "12.4.6",
+     "name": "Protect intellectual property",
+     "pcf_id": "11049"
+    },
+    {
+     "hierarchy_id": "12.4.7",
+     "name": "Resolve disputes and litigations",
+     "pcf_id": "11050"
+    },
+    {
+     "hierarchy_id": "12.4.8",
+     "name": "Provide legal advice/counseling",
+     "pcf_id": "11051"
+    },
+    {
+     "hierarchy_id": "12.4.9",
+     "name": "Negotiate and document agreements/contracts",
+     "pcf_id": "11052"
+    }
+   ],
+   "sor_classes": [
+    "DMS",
+    "Email"
+   ],
+   "title": "Legal",
+   "titles": {
+    "head": {
+     "code": "23-1011.00",
+     "source": "reported",
+     "title": "Counsel"
+    },
+    "manager": {
+     "code": null,
+     "source": "derived",
+     "title": "Legal Manager"
+    },
+    "professional": {
+     "code": "23-1011.00",
+     "source": "reported",
+     "title": "Counsel"
+    },
+    "support": {
+     "code": "23-2011.00",
+     "source": "reported",
+     "title": "Legal Clerk"
+    }
+   }
+  },
+  "marketing": {
+   "categories": [
+    {
+     "name": "Market and Sell Products and Services",
+     "number": "3",
+     "pcf_id": "10004"
+    }
+   ],
+   "keywords": [
+    "Marketing"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-2021.00",
+      "title": "Marketing Managers"
+     },
+     {
+      "code": "11-2011.00",
+      "title": "Advertising and Promotions Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1161.00",
+      "title": "Market Research Analysts and Marketing Specialists"
+     },
+     {
+      "code": "13-1161.01",
+      "title": "Search Marketing Strategists"
+     },
+     {
+      "code": "27-3031.00",
+      "title": "Public Relations Specialists"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "3.1.1",
+     "name": "Perform customer and market intelligence analysis",
+     "pcf_id": "10106"
+    },
+    {
+     "hierarchy_id": "3.1.2",
+     "name": "Evaluate and prioritize market opportunities",
+     "pcf_id": "10107"
+    },
+    {
+     "hierarchy_id": "3.2.1",
+     "name": "Define offering and customer value proposition",
+     "pcf_id": "11168"
+    },
+    {
+     "hierarchy_id": "3.2.2",
+     "name": "Define pricing strategy",
+     "pcf_id": "10123"
+    },
+    {
+     "hierarchy_id": "3.2.3",
+     "name": "Define and manage channel strategy",
+     "pcf_id": "20000"
+    },
+    {
+     "hierarchy_id": "3.2.4",
+     "name": "Analyze and manage channel performance",
+     "pcf_id": "20006"
+    },
+    {
+     "hierarchy_id": "3.2.5",
+     "name": "Develop marketing communication strategy",
+     "pcf_id": "16848"
+    },
+    {
+     "hierarchy_id": "3.2.6",
+     "name": "Design and manage customer loyalty program",
+     "pcf_id": "18924"
+    },
+    {
+     "hierarchy_id": "3.3.1",
+     "name": "Establish goals, objectives, and measures for products/services by channel/segment",
+     "pcf_id": "10148"
+    },
+    {
+     "hierarchy_id": "3.3.2",
+     "name": "Establish marketing budgets",
+     "pcf_id": "10149"
+    },
+    {
+     "hierarchy_id": "3.3.3",
+     "name": "Develop and manage pricing",
+     "pcf_id": "20593"
+    },
+    {
+     "hierarchy_id": "3.3.4",
+     "name": "Develop and manage promotional activities",
+     "pcf_id": "20010"
+    },
+    {
+     "hierarchy_id": "3.3.5",
+     "name": "Track customer management measures",
+     "pcf_id": "10153"
+    },
+    {
+     "hierarchy_id": "3.3.6",
+     "name": "Analyze and respond to customer insight",
+     "pcf_id": "16613"
+    },
+    {
+     "hierarchy_id": "3.3.7",
+     "name": "Develop and manage packaging strategy",
+     "pcf_id": "10154"
+    },
+    {
+     "hierarchy_id": "3.3.8",
+     "name": "Develop go-to-market strategy",
+     "pcf_id": "21425"
+    },
+    {
+     "hierarchy_id": "3.3.9",
+     "name": "Manage product marketing material",
+     "pcf_id": "16629"
+    }
+   ],
+   "sor_classes": [
+    "CRM",
+    "BI",
+    "DMS"
+   ],
+   "title": "Marketing",
+   "titles": {
+    "head": {
+     "code": "11-2021.00",
+     "source": "reported",
+     "title": "Marketing Director"
+    },
+    "manager": {
+     "code": "11-2021.00",
+     "source": "reported",
+     "title": "Product Marketing Manager"
+    },
+    "professional": {
+     "code": "13-1161.01",
+     "source": "reported",
+     "title": "Marketing Consultant"
+    }
+   }
+  },
+  "payroll": {
+   "categories": [
+    {
+     "name": "Develop and Manage Human Capital",
+     "number": "7",
+     "pcf_id": "10007"
+    },
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Payroll"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "43-1011.00",
+      "title": "First-Line Supervisors of Office and Administrative Support Workers"
+     },
+     {
+      "code": "11-3111.00",
+      "title": "Compensation and Benefits Managers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2011.00",
+      "title": "Accountants and Auditors"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-3051.00",
+      "title": "Payroll and Timekeeping Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "7.5.4",
+     "name": "Administer payroll",
+     "pcf_id": "10497"
+    },
+    {
+     "hierarchy_id": "9.5.1",
+     "name": "Report time",
+     "pcf_id": "10753"
+    },
+    {
+     "hierarchy_id": "9.5.2",
+     "name": "Manage pay",
+     "pcf_id": "10754"
+    },
+    {
+     "hierarchy_id": "9.5.3",
+     "name": "Manage and process payroll taxes",
+     "pcf_id": "10755"
+    }
+   ],
+   "sor_classes": [
+    "Payroll",
+    "HRIS"
+   ],
+   "title": "Payroll",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Payroll"
+    },
+    "manager": {
+     "code": "11-3111.00",
+     "source": "reported",
+     "title": "Payroll Manager"
+    },
+    "professional": {
+     "code": "13-2011.00",
+     "source": "alternate",
+     "title": "Payroll Auditor"
+    },
+    "support": {
+     "code": "43-3051.00",
+     "source": "reported",
+     "title": "Payroll Clerk"
+    }
+   }
+  },
+  "planning": {
+   "categories": [
+    {
+     "name": "Manage Supply Chain for Physical Products",
+     "number": "4",
+     "pcf_id": "20022"
+    }
+   ],
+   "keywords": [
+    "Supply Chain",
+    "Demand Plan",
+    "Planning",
+    "Planner"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3071.04",
+      "title": "Supply Chain Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1081.00",
+      "title": "Logisticians"
+     },
+     {
+      "code": "15-2031.00",
+      "title": "Operations Research Analysts"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-5061.00",
+      "title": "Production, Planning, and Expediting Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "4.1.1",
+     "name": "Develop production and materials strategies",
+     "pcf_id": "10221"
+    },
+    {
+     "hierarchy_id": "4.1.2",
+     "name": "Manage demand for products",
+     "pcf_id": "10222"
+    },
+    {
+     "hierarchy_id": "4.1.3",
+     "name": "Create materials plan",
+     "pcf_id": "10223"
+    },
+    {
+     "hierarchy_id": "4.1.4",
+     "name": "Create and manage master production schedule",
+     "pcf_id": "10224"
+    },
+    {
+     "hierarchy_id": "4.1.5",
+     "name": "Plan distribution requirements",
+     "pcf_id": "17042"
+    },
+    {
+     "hierarchy_id": "4.1.6",
+     "name": "Establish distribution planning constraints",
+     "pcf_id": "10226"
+    },
+    {
+     "hierarchy_id": "4.1.7",
+     "name": "Review distribution planning policies",
+     "pcf_id": "10227"
+    }
+   ],
+   "sor_classes": [
+    "ERP-MM",
+    "EPM"
+   ],
+   "title": "Supply & Demand Planning",
+   "titles": {
+    "head": {
+     "code": "11-3071.04",
+     "source": "reported",
+     "title": "Supply Chain Director"
+    },
+    "manager": {
+     "code": "11-3071.04",
+     "source": "reported",
+     "title": "Supply Chain Manager"
+    },
+    "professional": {
+     "code": "13-1081.00",
+     "source": "reported",
+     "title": "Production Planner"
+    },
+    "support": {
+     "code": "43-5061.00",
+     "source": "alternate",
+     "title": "Planning Technician"
+    }
+   }
+  },
+  "pmo": {
+   "categories": [
+    {
+     "name": "Develop and Manage Business Capabilities",
+     "number": "13",
+     "pcf_id": "10013"
+    }
+   ],
+   "keywords": [
+    "Program",
+    "Project",
+    "PMO"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "15-1299.09",
+      "title": "Information Technology Project Managers"
+     },
+     {
+      "code": "11-9199.00",
+      "title": "Managers, All Other"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1082.00",
+      "title": "Project Management Specialists"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "13.2.1",
+     "name": "Manage portfolio",
+     "pcf_id": "16401"
+    },
+    {
+     "hierarchy_id": "13.2.2",
+     "name": "Manage programs",
+     "pcf_id": "16405"
+    },
+    {
+     "hierarchy_id": "13.2.3",
+     "name": "Manage projects",
+     "pcf_id": "16410"
+    }
+   ],
+   "sor_classes": [
+    "Wiki",
+    "DMS"
+   ],
+   "title": "Portfolio & Programme Office",
+   "titles": {
+    "head": {
+     "code": "11-9199.00",
+     "source": "alternate",
+     "title": "Project Director"
+    },
+    "manager": {
+     "code": "15-1299.09",
+     "source": "reported",
+     "title": "Transition Program Manager"
+    },
+    "professional": {
+     "code": "13-1082.00",
+     "source": "reported",
+     "title": "Project Management Consultant"
+    }
+   }
+  },
+  "process_excellence": {
+   "categories": [
+    {
+     "name": "Develop and Manage Business Capabilities",
+     "number": "13",
+     "pcf_id": "10013"
+    }
+   ],
+   "keywords": [
+    "Process",
+    "Continuous Improvement",
+    "Business Analyst",
+    "Business"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-1021.00",
+      "title": "General and Operations Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1111.00",
+      "title": "Management Analysts"
+     },
+     {
+      "code": "17-2112.00",
+      "title": "Industrial Engineers"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "13.1.1",
+     "name": "Establish and maintain process management governance",
+     "pcf_id": "16379"
+    },
+    {
+     "hierarchy_id": "13.1.2",
+     "name": "Define and manage process frameworks",
+     "pcf_id": "16384"
+    },
+    {
+     "hierarchy_id": "13.1.3",
+     "name": "Define processes",
+     "pcf_id": "16387"
+    },
+    {
+     "hierarchy_id": "13.1.4",
+     "name": "Manage process performance",
+     "pcf_id": "16392"
+    },
+    {
+     "hierarchy_id": "13.1.5",
+     "name": "Improve processes",
+     "pcf_id": "21453"
+    },
+    {
+     "hierarchy_id": "13.4.1",
+     "name": "Plan for change",
+     "pcf_id": "21457"
+    },
+    {
+     "hierarchy_id": "13.4.2",
+     "name": "Design the change",
+     "pcf_id": "11135"
+    },
+    {
+     "hierarchy_id": "13.4.3",
+     "name": "Implement change",
+     "pcf_id": "11136"
+    },
+    {
+     "hierarchy_id": "13.4.4",
+     "name": "Sustain improvement",
+     "pcf_id": "11137"
+    },
+    {
+     "hierarchy_id": "13.6.1",
+     "name": "Define and manage organizational performance strategy",
+     "pcf_id": "21585"
+    },
+    {
+     "hierarchy_id": "13.6.2",
+     "name": "Benchmark performance",
+     "pcf_id": "11072"
+    },
+    {
+     "hierarchy_id": "13.6.3",
+     "name": "Evaluate performance",
+     "pcf_id": "20147"
+    }
+   ],
+   "sor_classes": [
+    "Wiki",
+    "BI"
+   ],
+   "title": "Process Excellence",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Process Excellence"
+    },
+    "manager": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Business Manager"
+    },
+    "professional": {
+     "code": "13-1111.00",
+     "source": "reported",
+     "title": "Business Analyst"
+    }
+   }
+  },
+  "procurement": {
+   "categories": [
+    {
+     "name": "Manage Supply Chain for Physical Products",
+     "number": "4",
+     "pcf_id": "20022"
+    }
+   ],
+   "keywords": [
+    "Purchasing",
+    "Procurement",
+    "Buyer",
+    "Sourcing"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3061.00",
+      "title": "Purchasing Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1023.00",
+      "title": "Purchasing Agents, Except Wholesale, Retail, and Farm Products"
+     },
+     {
+      "code": "13-1022.00",
+      "title": "Wholesale and Retail Buyers, Except Farm Products"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-3061.00",
+      "title": "Procurement Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "4.2.1",
+     "name": "Provide sourcing governance and perform category management",
+     "pcf_id": "10277"
+    },
+    {
+     "hierarchy_id": "4.2.2",
+     "name": "Select suppliers and develop/maintain contracts",
+     "pcf_id": "10278"
+    },
+    {
+     "hierarchy_id": "4.2.3",
+     "name": "Order materials and services",
+     "pcf_id": "10279"
+    },
+    {
+     "hierarchy_id": "4.2.4",
+     "name": "Manage suppliers",
+     "pcf_id": "10280"
+    }
+   ],
+   "sor_classes": [
+    "P2P-suite",
+    "ERP-MM",
+    "DMS"
+   ],
+   "title": "Procurement",
+   "titles": {
+    "head": {
+     "code": "11-3061.00",
+     "source": "reported",
+     "title": "Purchasing Director"
+    },
+    "manager": {
+     "code": "11-3061.00",
+     "source": "reported",
+     "title": "Purchasing Manager"
+    },
+    "professional": {
+     "code": "13-1022.00",
+     "source": "reported",
+     "title": "Buyer"
+    },
+    "support": {
+     "code": "43-3061.00",
+     "source": "reported",
+     "title": "Purchasing Clerk"
+    }
+   }
+  },
+  "product": {
+   "categories": [
+    {
+     "name": "Develop and Manage Products and Services",
+     "number": "2",
+     "pcf_id": "10003"
+    }
+   ],
+   "keywords": [
+    "Product"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-2021.00",
+      "title": "Marketing Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1161.00",
+      "title": "Market Research Analysts and Marketing Specialists"
+     },
+     {
+      "code": "13-1111.00",
+      "title": "Management Analysts"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "2.1.1",
+     "name": "Manage product and service portfolio",
+     "pcf_id": "10061"
+    },
+    {
+     "hierarchy_id": "2.1.2",
+     "name": "Manage product and service life cycle",
+     "pcf_id": "10067"
+    },
+    {
+     "hierarchy_id": "2.1.3",
+     "name": "Manage patents, copyrights, and regulatory requirements",
+     "pcf_id": "19985"
+    },
+    {
+     "hierarchy_id": "2.1.4",
+     "name": "Manage product and service master data",
+     "pcf_id": "11740"
+    },
+    {
+     "hierarchy_id": "2.2.1",
+     "name": "Perform discovery research",
+     "pcf_id": "10065"
+    },
+    {
+     "hierarchy_id": "2.2.2",
+     "name": "Generate new product/service concepts",
+     "pcf_id": "19669"
+    },
+    {
+     "hierarchy_id": "2.2.3",
+     "name": "Define product/service development requirements",
+     "pcf_id": "19990"
+    }
+   ],
+   "sor_classes": [
+    "PLM",
+    "Wiki"
+   ],
+   "title": "Product Management",
+   "titles": {
+    "head": {
+     "code": "11-2021.00",
+     "source": "alternate",
+     "title": "Product Management Director"
+    },
+    "manager": {
+     "code": "11-2021.00",
+     "source": "reported",
+     "title": "Product Manager"
+    },
+    "professional": {
+     "code": null,
+     "source": "derived",
+     "title": "Product Management Analyst"
+    }
+   }
+  },
+  "production": {
+   "categories": [
+    {
+     "name": "Manage Supply Chain for Physical Products",
+     "number": "4",
+     "pcf_id": "20022"
+    }
+   ],
+   "keywords": [
+    "Production",
+    "Plant",
+    "Manufacturing"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3051.00",
+      "title": "Industrial Production Managers"
+     },
+     {
+      "code": "51-1011.00",
+      "title": "First-Line Supervisors of Production and Operating Workers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "17-2112.03",
+      "title": "Manufacturing Engineers"
+     },
+     {
+      "code": "17-2112.00",
+      "title": "Industrial Engineers"
+     }
+    ],
+    "support": [
+     {
+      "code": "51-9198.00",
+      "title": "Helpers--Production Workers"
+     },
+     {
+      "code": "51-9111.00",
+      "title": "Packaging and Filling Machine Operators and Tenders"
+     },
+     {
+      "code": "51-9161.00",
+      "title": "Computer Numerically Controlled Tool Operators"
+     },
+     {
+      "code": "51-9199.00",
+      "title": "Production Workers, All Other"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "4.3.1",
+     "name": "Schedule production",
+     "pcf_id": "10303"
+    },
+    {
+     "hierarchy_id": "4.3.2",
+     "name": "Produce/Assemble product",
+     "pcf_id": "10304"
+    },
+    {
+     "hierarchy_id": "4.3.4",
+     "name": "Maintain production records and manage lot traceability",
+     "pcf_id": "10370"
+    }
+   ],
+   "sor_classes": [
+    "MES",
+    "ERP-MM"
+   ],
+   "title": "Production",
+   "titles": {
+    "head": {
+     "code": "11-3051.00",
+     "source": "alternate",
+     "title": "Manufacturing Director"
+    },
+    "manager": {
+     "code": "11-3051.00",
+     "source": "reported",
+     "title": "Plant Manager"
+    },
+    "professional": {
+     "code": "17-2112.00",
+     "source": "reported",
+     "title": "Plant Engineer"
+    },
+    "support": {
+     "code": "51-9199.00",
+     "source": "alternate",
+     "title": "Production Worker"
+    }
+   }
+  },
+  "quality": {
+   "categories": [
+    {
+     "name": "Manage Supply Chain for Physical Products",
+     "number": "4",
+     "pcf_id": "20022"
+    },
+    {
+     "name": "Manage Customer Service",
+     "number": "6",
+     "pcf_id": "20085"
+    },
+    {
+     "name": "Develop and Manage Business Capabilities",
+     "number": "13",
+     "pcf_id": "10013"
+    }
+   ],
+   "keywords": [
+    "Quality"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3051.01",
+      "title": "Quality Control Systems Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "19-4099.01",
+      "title": "Quality Control Analysts"
+     },
+     {
+      "code": "17-2112.02",
+      "title": "Validation Engineers"
+     }
+    ],
+    "support": [
+     {
+      "code": "51-9061.00",
+      "title": "Inspectors, Testers, Sorters, Samplers, and Weighers"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "4.1.8",
+     "name": "Develop quality standards and procedures",
+     "pcf_id": "10368"
+    },
+    {
+     "hierarchy_id": "4.3.3",
+     "name": "Perform quality testing",
+     "pcf_id": "10369"
+    },
+    {
+     "hierarchy_id": "6.4.1",
+     "name": "Initiate recall",
+     "pcf_id": "20111"
+    },
+    {
+     "hierarchy_id": "6.4.2",
+     "name": "Assess the likelihood and consequences of occurrence of any hazards",
+     "pcf_id": "20112"
+    },
+    {
+     "hierarchy_id": "6.4.3",
+     "name": "Manage recall related communications",
+     "pcf_id": "20113"
+    },
+    {
+     "hierarchy_id": "6.4.4",
+     "name": "Submit regulatory reports",
+     "pcf_id": "20114"
+    },
+    {
+     "hierarchy_id": "6.4.5",
+     "name": "Monitor and audit recall effectiveness",
+     "pcf_id": "20115"
+    },
+    {
+     "hierarchy_id": "6.4.6",
+     "name": "Manage recall termination",
+     "pcf_id": "20116"
+    },
+    {
+     "hierarchy_id": "13.3.1",
+     "name": "Establish quality requirements",
+     "pcf_id": "17472"
+    },
+    {
+     "hierarchy_id": "13.3.2",
+     "name": "Evaluate performance to requirements",
+     "pcf_id": "17482"
+    },
+    {
+     "hierarchy_id": "13.3.3",
+     "name": "Manage non-conformance",
+     "pcf_id": "17492"
+    },
+    {
+     "hierarchy_id": "13.3.4",
+     "name": "Implement and maintain the enterprise quality management system (EQMS)",
+     "pcf_id": "17498"
+    }
+   ],
+   "sor_classes": [
+    "MES",
+    "DMS"
+   ],
+   "title": "Quality",
+   "titles": {
+    "head": {
+     "code": "11-3051.01",
+     "source": "reported",
+     "title": "Quality Director"
+    },
+    "manager": {
+     "code": "11-3051.01",
+     "source": "reported",
+     "title": "Quality Manager"
+    },
+    "professional": {
+     "code": "17-2112.02",
+     "source": "reported",
+     "title": "Quality Engineer"
+    },
+    "support": {
+     "code": "51-9061.00",
+     "source": "reported",
+     "title": "Quality Technician"
+    }
+   }
+  },
+  "risk": {
+   "categories": [
+    {
+     "name": "Manage Enterprise Risk, Compliance, Remediation, and Resiliency",
+     "number": "11",
+     "pcf_id": "16437"
+    }
+   ],
+   "keywords": [
+    "Risk"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-9199.02",
+      "title": "Compliance Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2054.00",
+      "title": "Financial Risk Specialists"
+     },
+     {
+      "code": "13-1199.04",
+      "title": "Business Continuity Planners"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "11.1.1",
+     "name": "Establish the enterprise risk framework and policies",
+     "pcf_id": "16439"
+    },
+    {
+     "hierarchy_id": "11.1.2",
+     "name": "Oversee and coordinate enterprise risk management activities",
+     "pcf_id": "16445"
+    },
+    {
+     "hierarchy_id": "11.1.3",
+     "name": "Manage business unit and function risk",
+     "pcf_id": "17462"
+    },
+    {
+     "hierarchy_id": "11.4.1",
+     "name": "Develop the business resilience strategy",
+     "pcf_id": "11221"
+    },
+    {
+     "hierarchy_id": "11.4.2",
+     "name": "Perform continuous business operations planning",
+     "pcf_id": "11222"
+    },
+    {
+     "hierarchy_id": "11.4.3",
+     "name": "Test continuous business operations",
+     "pcf_id": "11223"
+    },
+    {
+     "hierarchy_id": "11.4.4",
+     "name": "Maintain continuous business operations",
+     "pcf_id": "11224"
+    },
+    {
+     "hierarchy_id": "11.4.5",
+     "name": "Share knowledge of specific risks across other parts of the organization",
+     "pcf_id": "16471"
+    }
+   ],
+   "sor_classes": [
+    "BI",
+    "DMS"
+   ],
+   "title": "Risk",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Risk"
+    },
+    "manager": {
+     "code": "11-9199.02",
+     "source": "reported",
+     "title": "Risk Manager"
+    },
+    "professional": {
+     "code": "13-2054.00",
+     "source": "reported",
+     "title": "Risk Analyst"
+    }
+   }
+  },
+  "sales": {
+   "categories": [
+    {
+     "name": "Market and Sell Products and Services",
+     "number": "3",
+     "pcf_id": "10004"
+    }
+   ],
+   "keywords": [
+    "Sales",
+    "Account Executive",
+    "Account Manager"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-2022.00",
+      "title": "Sales Managers"
+     },
+     {
+      "code": "41-1012.00",
+      "title": "First-Line Supervisors of Non-Retail Sales Workers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "41-4012.00",
+      "title": "Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products"
+     },
+     {
+      "code": "41-4011.00",
+      "title": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products"
+     },
+     {
+      "code": "41-3091.00",
+      "title": "Sales Representatives of Services, Except Advertising, Insurance, Financial Services, and Travel"
+     },
+     {
+      "code": "41-9031.00",
+      "title": "Sales Engineers"
+     }
+    ],
+    "support": []
+   },
+   "processes": [
+    {
+     "hierarchy_id": "3.4.2",
+     "name": "Develop sales partner/alliance relationships",
+     "pcf_id": "10130"
+    },
+    {
+     "hierarchy_id": "3.5.1",
+     "name": "Manage leads/opportunities",
+     "pcf_id": "10182"
+    },
+    {
+     "hierarchy_id": "3.5.2",
+     "name": "Manage customers and accounts",
+     "pcf_id": "10183"
+    },
+    {
+     "hierarchy_id": "3.5.3",
+     "name": "Develop and manage sales proposals, bids, and quotes",
+     "pcf_id": "11779"
+    },
+    {
+     "hierarchy_id": "3.5.5",
+     "name": "Manage sales partners and alliances",
+     "pcf_id": "10187"
+    },
+    {
+     "hierarchy_id": "3.5.6",
+     "name": "Perform sales at physical outlets",
+     "pcf_id": "21427"
+    },
+    {
+     "hierarchy_id": "3.5.7",
+     "name": "Perform field sales",
+     "pcf_id": "21428"
+    },
+    {
+     "hierarchy_id": "3.5.8",
+     "name": "Perform digital sales",
+     "pcf_id": "21429"
+    }
+   ],
+   "sor_classes": [
+    "CRM",
+    "CPQ",
+    "Email"
+   ],
+   "title": "Sales",
+   "titles": {
+    "head": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Director"
+    },
+    "manager": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Manager"
+    },
+    "professional": {
+     "code": "41-4012.00",
+     "source": "reported",
+     "title": "Salesperson"
+    }
+   }
+  },
+  "sales_ops": {
+   "categories": [
+    {
+     "name": "Market and Sell Products and Services",
+     "number": "3",
+     "pcf_id": "10004"
+    }
+   ],
+   "keywords": [
+    "Sales Operations",
+    "Sales Support",
+    "Order",
+    "Sales"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-2022.00",
+      "title": "Sales Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "15-2031.00",
+      "title": "Operations Research Analysts"
+     },
+     {
+      "code": "13-1199.00",
+      "title": "Business Operations Specialists, All Other"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-4151.00",
+      "title": "Order Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "3.4.1",
+     "name": "Develop sales forecast",
+     "pcf_id": "10129"
+    },
+    {
+     "hierarchy_id": "3.4.3",
+     "name": "Establish overall sales budgets",
+     "pcf_id": "10131"
+    },
+    {
+     "hierarchy_id": "3.4.4",
+     "name": "Establish sales goals and measures",
+     "pcf_id": "10132"
+    },
+    {
+     "hierarchy_id": "3.4.5",
+     "name": "Establish customer management measures",
+     "pcf_id": "10133"
+    },
+    {
+     "hierarchy_id": "3.5.4",
+     "name": "Manage sales orders",
+     "pcf_id": "10185"
+    }
+   ],
+   "sor_classes": [
+    "CRM",
+    "CPQ",
+    "ERP-SD"
+   ],
+   "title": "Sales Operations",
+   "titles": {
+    "head": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Director"
+    },
+    "manager": {
+     "code": "11-2022.00",
+     "source": "reported",
+     "title": "Sales Manager"
+    },
+    "professional": {
+     "code": "11-2022.00",
+     "source": "alternate",
+     "title": "Sales Coordinator"
+    },
+    "support": {
+     "code": "43-4151.00",
+     "source": "reported",
+     "title": "Order Clerk"
+    }
+   }
+  },
+  "service_delivery": {
+   "categories": [
+    {
+     "name": "Deliver Services",
+     "number": "5",
+     "pcf_id": "20025"
+    }
+   ],
+   "keywords": [
+    "Operations",
+    "Service Delivery",
+    "Project"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-1021.00",
+      "title": "General and Operations Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1082.00",
+      "title": "Project Management Specialists"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-4051.00",
+      "title": "Customer Service Representatives"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "5.1.1",
+     "name": "Establish service delivery governance",
+     "pcf_id": "20027"
+    },
+    {
+     "hierarchy_id": "5.1.2",
+     "name": "Develop service delivery strategies",
+     "pcf_id": "20032"
+    },
+    {
+     "hierarchy_id": "5.2.1",
+     "name": "Manage service delivery resource demand",
+     "pcf_id": "20041"
+    },
+    {
+     "hierarchy_id": "5.2.2",
+     "name": "Create and manage resource plan",
+     "pcf_id": "20050"
+    },
+    {
+     "hierarchy_id": "5.2.3",
+     "name": "Enable service delivery resources",
+     "pcf_id": "12127"
+    },
+    {
+     "hierarchy_id": "5.3.1",
+     "name": "Initiate service delivery",
+     "pcf_id": "20059"
+    },
+    {
+     "hierarchy_id": "5.3.2",
+     "name": "Execute service delivery",
+     "pcf_id": "20069"
+    },
+    {
+     "hierarchy_id": "5.3.3",
+     "name": "Complete service delivery",
+     "pcf_id": "20077"
+    }
+   ],
+   "sor_classes": [
+    "ERP-SD",
+    "ITSM"
+   ],
+   "title": "Service Delivery",
+   "titles": {
+    "head": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Operations Director"
+    },
+    "manager": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Operations Manager"
+    },
+    "professional": {
+     "code": "13-1082.00",
+     "source": "reported",
+     "title": "Project Management Consultant"
+    }
+   }
+  },
+  "strategy": {
+   "categories": [
+    {
+     "name": "Develop Vision and Strategy",
+     "number": "1",
+     "pcf_id": "10002"
+    }
+   ],
+   "keywords": [
+    "Strategy",
+    "Strategic",
+    "Executive",
+    "Operations"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-1011.00",
+      "title": "Chief Executives"
+     },
+     {
+      "code": "11-1021.00",
+      "title": "General and Operations Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1111.00",
+      "title": "Management Analysts"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-6011.00",
+      "title": "Executive Secretaries and Executive Administrative Assistants"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "1.1.1",
+     "name": "Assess the external environment",
+     "pcf_id": "10017"
+    },
+    {
+     "hierarchy_id": "1.1.2",
+     "name": "Survey market and determine customer needs and wants",
+     "pcf_id": "10018"
+    },
+    {
+     "hierarchy_id": "1.1.3",
+     "name": "Assess the internal environment",
+     "pcf_id": "10019"
+    },
+    {
+     "hierarchy_id": "1.1.4",
+     "name": "Establish strategic vision",
+     "pcf_id": "10020"
+    },
+    {
+     "hierarchy_id": "1.1.5",
+     "name": "Conduct organization restructuring opportunities",
+     "pcf_id": "16792"
+    },
+    {
+     "hierarchy_id": "1.2.1",
+     "name": "Develop overall mission statement",
+     "pcf_id": "10037"
+    },
+    {
+     "hierarchy_id": "1.2.2",
+     "name": "Define and evaluate strategic options to achieve the mission",
+     "pcf_id": "10038"
+    },
+    {
+     "hierarchy_id": "1.2.3",
+     "name": "Set/Develop long-term enterprise strategy",
+     "pcf_id": "10039"
+    },
+    {
+     "hierarchy_id": "1.2.4",
+     "name": "Coordinate and align cross-functional and process strategies",
+     "pcf_id": "10040"
+    },
+    {
+     "hierarchy_id": "1.2.5",
+     "name": "Create organizational design",
+     "pcf_id": "10041"
+    },
+    {
+     "hierarchy_id": "1.2.6",
+     "name": "Develop and set organizational objectives",
+     "pcf_id": "10042"
+    },
+    {
+     "hierarchy_id": "1.2.7",
+     "name": "Formulate business unit strategies",
+     "pcf_id": "10043"
+    },
+    {
+     "hierarchy_id": "1.2.8",
+     "name": "Develop customer experience strategy",
+     "pcf_id": "19959"
+    },
+    {
+     "hierarchy_id": "1.2.9",
+     "name": "Communicate strategies internally and externally",
+     "pcf_id": "18916"
+    },
+    {
+     "hierarchy_id": "1.3.1",
+     "name": "Develop strategic initiatives",
+     "pcf_id": "10057"
+    },
+    {
+     "hierarchy_id": "1.3.2",
+     "name": "Evaluate strategic initiatives",
+     "pcf_id": "10058"
+    },
+    {
+     "hierarchy_id": "1.3.3",
+     "name": "Select strategic initiatives",
+     "pcf_id": "10059"
+    },
+    {
+     "hierarchy_id": "1.3.4",
+     "name": "Establish high-level measures",
+     "pcf_id": "10060"
+    },
+    {
+     "hierarchy_id": "1.3.5",
+     "name": "Execute strategic initiatives",
+     "pcf_id": "19507"
+    },
+    {
+     "hierarchy_id": "1.3.6",
+     "name": "Review execution of strategic initiatives",
+     "pcf_id": "21422"
+    },
+    {
+     "hierarchy_id": "1.3.7",
+     "name": "Refine strategic initiatives and project plans as needed",
+     "pcf_id": "21423"
+    },
+    {
+     "hierarchy_id": "1.4.1",
+     "name": "Develop business models",
+     "pcf_id": "20945"
+    },
+    {
+     "hierarchy_id": "1.4.2",
+     "name": "Maintain business models",
+     "pcf_id": "20950"
+    },
+    {
+     "hierarchy_id": "1.4.3",
+     "name": "Establish business model governance",
+     "pcf_id": "20955"
+    }
+   ],
+   "sor_classes": [
+    "EPM",
+    "DMS"
+   ],
+   "title": "Strategy & Corporate Development",
+   "titles": {
+    "head": {
+     "code": "11-1011.00",
+     "source": "reported",
+     "title": "Executive Director"
+    },
+    "manager": {
+     "code": "11-1021.00",
+     "source": "reported",
+     "title": "Operations Manager"
+    },
+    "professional": {
+     "code": "13-1111.00",
+     "source": "alternate",
+     "title": "Operations Analyst"
+    },
+    "support": {
+     "code": "43-6011.00",
+     "source": "reported",
+     "title": "Executive Assistant"
+    }
+   }
+  },
+  "tax": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Tax"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2011.00",
+      "title": "Accountants and Auditors"
+     },
+     {
+      "code": "13-2082.00",
+      "title": "Tax Preparers"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-3031.00",
+      "title": "Bookkeeping, Accounting, and Auditing Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.9.1",
+     "name": "Develop tax strategy and plan",
+     "pcf_id": "10765"
+    },
+    {
+     "hierarchy_id": "9.9.2",
+     "name": "Process taxes",
+     "pcf_id": "10766"
+    }
+   ],
+   "sor_classes": [
+    "ERP-FI",
+    "DMS"
+   ],
+   "title": "Tax",
+   "titles": {
+    "head": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Tax Director"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Tax Manager"
+    },
+    "professional": {
+     "code": "13-2082.00",
+     "source": "reported",
+     "title": "Tax Advisor"
+    }
+   }
+  },
+  "trade_compliance": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Customs",
+    "Trade",
+    "Export",
+    "Import"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3071.00",
+      "title": "Transportation, Storage, and Distribution Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1041.08",
+      "title": "Customs Brokers"
+     },
+     {
+      "code": "13-1081.00",
+      "title": "Logisticians"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-5011.01",
+      "title": "Freight Forwarders"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.11.1",
+     "name": "Screen sanctioned party list",
+     "pcf_id": "14090"
+    },
+    {
+     "hierarchy_id": "9.11.2",
+     "name": "Control exports and imports",
+     "pcf_id": "14091"
+    },
+    {
+     "hierarchy_id": "9.11.3",
+     "name": "Classify products",
+     "pcf_id": "14092"
+    },
+    {
+     "hierarchy_id": "9.11.4",
+     "name": "Perform currency conversion",
+     "pcf_id": "19593"
+    },
+    {
+     "hierarchy_id": "9.11.5",
+     "name": "Calculate duty",
+     "pcf_id": "14093"
+    },
+    {
+     "hierarchy_id": "9.11.6",
+     "name": "Communicate with customs",
+     "pcf_id": "14094"
+    },
+    {
+     "hierarchy_id": "9.11.7",
+     "name": "Document trade",
+     "pcf_id": "14095"
+    },
+    {
+     "hierarchy_id": "9.11.8",
+     "name": "Process trade preferences",
+     "pcf_id": "14096"
+    },
+    {
+     "hierarchy_id": "9.11.9",
+     "name": "Handle restitution",
+     "pcf_id": "14097"
+    },
+    {
+     "hierarchy_id": "9.11.10",
+     "name": "Prepare letter of credit",
+     "pcf_id": "14098"
+    }
+   ],
+   "sor_classes": [
+    "ERP-MM",
+    "TMS",
+    "DMS"
+   ],
+   "title": "Global Trade",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Global Trade"
+    },
+    "manager": {
+     "code": "11-3071.00",
+     "source": "alternate",
+     "title": "Import Manager"
+    },
+    "professional": {
+     "code": "13-1041.08",
+     "source": "alternate",
+     "title": "Importer"
+    },
+    "support": {
+     "code": "43-5011.01",
+     "source": "reported",
+     "title": "Import Agent"
+    }
+   }
+  },
+  "treasury": {
+   "categories": [
+    {
+     "name": "Manage Financial Resources",
+     "number": "9",
+     "pcf_id": "17058"
+    }
+   ],
+   "keywords": [
+    "Treasury",
+    "Treasurer",
+    "Cash Manage"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3031.01",
+      "title": "Treasurers and Controllers"
+     },
+     {
+      "code": "11-3031.00",
+      "title": "Financial Managers"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-2051.00",
+      "title": "Financial and Investment Analysts"
+     },
+     {
+      "code": "13-2054.00",
+      "title": "Financial Risk Specialists"
+     }
+    ],
+    "support": [
+     {
+      "code": "43-3031.00",
+      "title": "Bookkeeping, Accounting, and Auditing Clerks"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "9.7.1",
+     "name": "Manage treasury policies and procedures",
+     "pcf_id": "10758"
+    },
+    {
+     "hierarchy_id": "9.7.2",
+     "name": "Manage cash",
+     "pcf_id": "10759"
+    },
+    {
+     "hierarchy_id": "9.7.3",
+     "name": "Manage in-house bank accounts",
+     "pcf_id": "10760"
+    },
+    {
+     "hierarchy_id": "9.7.4",
+     "name": "Manage debt and investment",
+     "pcf_id": "10761"
+    },
+    {
+     "hierarchy_id": "9.7.5",
+     "name": "Monitor and execute risk and hedging transactions",
+     "pcf_id": "11208"
+    },
+    {
+     "hierarchy_id": "9.7.6",
+     "name": "Manage financial fraud/dispute cases",
+     "pcf_id": "16958"
+    },
+    {
+     "hierarchy_id": "9.10.1",
+     "name": "Monitor international rates",
+     "pcf_id": "10767"
+    },
+    {
+     "hierarchy_id": "9.10.2",
+     "name": "Manage transactions",
+     "pcf_id": "10768"
+    },
+    {
+     "hierarchy_id": "9.10.3",
+     "name": "Monitor currency exposure/hedge currency",
+     "pcf_id": "10769"
+    },
+    {
+     "hierarchy_id": "9.10.4",
+     "name": "Report results",
+     "pcf_id": "10770"
+    }
+   ],
+   "sor_classes": [
+    "Treasury",
+    "ERP-FI"
+   ],
+   "title": "Treasury",
+   "titles": {
+    "head": {
+     "code": "11-3031.01",
+     "source": "reported",
+     "title": "Treasurer"
+    },
+    "manager": {
+     "code": "11-3031.00",
+     "source": "alternate",
+     "title": "Cash Manager"
+    },
+    "professional": {
+     "code": "13-2051.00",
+     "source": "alternate",
+     "title": "Treasury Analyst"
+    }
+   }
+  },
+  "warehouse": {
+   "categories": [
+    {
+     "name": "Manage Supply Chain for Physical Products",
+     "number": "4",
+     "pcf_id": "20022"
+    }
+   ],
+   "keywords": [
+    "Warehouse"
+   ],
+   "occupations": {
+    "manager": [
+     {
+      "code": "11-3071.00",
+      "title": "Transportation, Storage, and Distribution Managers"
+     },
+     {
+      "code": "53-1042.00",
+      "title": "First-Line Supervisors of Helpers, Laborers, and Material Movers, Hand"
+     },
+     {
+      "code": "53-1043.00",
+      "title": "First-Line Supervisors of Material-Moving Machine and Vehicle Operators"
+     }
+    ],
+    "professional": [
+     {
+      "code": "13-1081.00",
+      "title": "Logisticians"
+     }
+    ],
+    "support": [
+     {
+      "code": "53-7065.00",
+      "title": "Stockers and Order Fillers"
+     },
+     {
+      "code": "53-7051.00",
+      "title": "Industrial Truck and Tractor Operators"
+     },
+     {
+      "code": "53-7062.00",
+      "title": "Laborers and Freight, Stock, and Material Movers, Hand"
+     },
+     {
+      "code": "53-7064.00",
+      "title": "Packers and Packagers, Hand"
+     }
+    ]
+   },
+   "processes": [
+    {
+     "hierarchy_id": "4.4.3",
+     "name": "Operate warehousing",
+     "pcf_id": "10340"
+    }
+   ],
+   "sor_classes": [
+    "WMS",
+    "ERP-MM"
+   ],
+   "title": "Warehouse",
+   "titles": {
+    "head": {
+     "code": null,
+     "source": "derived",
+     "title": "Head of Warehouse"
+    },
+    "manager": {
+     "code": "53-1042.00",
+     "source": "reported",
+     "title": "Warehouse Manager"
+    },
+    "professional": {
+     "code": "53-1042.00",
+     "source": "alternate",
+     "title": "Warehouse Coordinator"
+    },
+    "support": {
+     "code": "53-7062.00",
+     "source": "reported",
+     "title": "Warehouse Worker"
+    }
+   }
+  }
+ },
+ "schema": "worldloom.functions/v1",
+ "sources": {
+  "onet": "31.0",
+  "pcf": "cross_industry@7.4",
+  "sor_classes": "process-catalogue/catalogue.json"
+ },
+ "tiers": {
+  "manager": "runs the function; the head of the function is the senior title in this tier's pool",
+  "professional": "does the judgement work: analysis, decisions, approvals",
+  "support": "does the transactional work: capture, posting, filing, dispatch"
+ },
+ "title_rule": "Per tier, the shortest O*NET title of the function's seats that carries the tier's word and one of the function's keywords; reported titles before alternate ones; a tier with no such title gets a derived title (source: derived); a function with no support title seats no support role.",
+ "version": 1
+}

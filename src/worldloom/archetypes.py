@@ -636,6 +636,24 @@ def get(key: str) -> Archetype:
     return shape
 
 
+def matched(description: str) -> Archetype | None:
+    """The archetype *description* names, or ``None`` when no phrase matches.
+
+    The same longest-phrase rule ``inspired_by`` applies, without its fallback,
+    so a caller that has to *say* whether a description was recognised can:
+    ``company.resolve`` used to report every retail description as possibly
+    unrecognised, because the shape a retailer resolves to is also the shape an
+    unknown industry falls back to, and this is the one call that can tell the
+    two apart.
+    """
+    lowered = description.casefold()
+    best = ""
+    for phrase in _INSPIRATION:
+        if phrase in lowered and len(phrase) > len(best):
+            best = phrase
+    return get(_INSPIRATION[best]) if best else None
+
+
 def inspired_by(description: str) -> Archetype:
     """Resolve a description of a real company to an archetype of that shape.
 
@@ -643,13 +661,10 @@ def inspired_by(description: str) -> Archetype:
     retailer like Woolworths" and "woolies" land in the same place. Falls back to
     the mid-size retailer rather than raising, because a caller who describes
     something unrecognised is better served by a working world than an error.
+    ``matched`` is the same lookup without the fallback.
     """
-    lowered = description.casefold()
-    best = ""
-    for phrase in _INSPIRATION:
-        if phrase in lowered and len(phrase) > len(best):
-            best = phrase
-    return get(_INSPIRATION.get(best, "omnichannel_retailer"))
+    found = matched(description)
+    return found if found is not None else get("omnichannel_retailer")
 
 
 def available() -> list[str]:

@@ -32,6 +32,7 @@ server serves however many corpora a session is working on.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 #: Exit code and message when the SDK is missing. Same posture as the renderer
@@ -249,6 +250,63 @@ def validate_corpus(corpus: str) -> dict[str, Any]:
             for v in report.violations
         ],
     }
+
+
+def _evalrun_session(cases: str, limit: int | None = None) -> Any:
+    from .evalrun import EvalSession
+
+    return EvalSession.from_export(cases, limit=limit)
+
+
+def evalrun_cases(cases: str, limit: int | None = None) -> dict[str, Any]:
+    """What a compiled case set can grade, per axis. A zero is a named gap."""
+    return _evalrun_session(cases, limit).coverage().model_dump(mode="json")
+
+
+def evalrun_run(cases: str, out: str, agent: str = "reference", limit: int | None = None) -> dict[str, Any]:
+    """Run a built-in agent over the case set and write the run directory."""
+    from .evalrun import ReferenceAgent, ResponsesAgent, ScriptedAgent, load_responses
+
+    session = _evalrun_session(cases, limit)
+    if agent == "reference":
+        under_test: Any = ReferenceAgent(session.cases)
+    elif agent == "lazy":
+        under_test = ScriptedAgent([], name="lazy")
+    elif agent.startswith("scripted:"):
+        under_test = ResponsesAgent(load_responses(Path(agent.removeprefix("scripted:"))))
+    else:
+        raise ValueError(f"agent must be reference, lazy or scripted:<responses.json>, not {agent!r}")
+    session.run(under_test, label="run")
+    return session.write("run", out).model_dump(mode="json", by_alias=True)
+
+
+def evalrun_plan(cases: str, out: str, agent: str = "reference", limit: int | None = None) -> dict[str, Any]:
+    """Grade a planner on the plan axis alone and write the run directory."""
+    from .evalrun import ReferencePlanner, ScriptedPlanner, load_plans
+
+    session = _evalrun_session(cases, limit)
+    if agent == "reference":
+        planner: Any = ReferencePlanner(session.cases)
+    elif agent.startswith("scripted:"):
+        planner = ScriptedPlanner(load_plans(Path(agent.removeprefix("scripted:"))))
+    else:
+        raise ValueError(f"agent must be reference or scripted:<plans.json>, not {agent!r}")
+    session.plan(planner, label="plan")
+    return session.write("plan", out).model_dump(mode="json", by_alias=True)
+
+
+def evalrun_summarize(run: str) -> dict[str, Any]:
+    """Recompute a run directory's summary from its results ledger."""
+    from .evalrun import read_run, summarize
+
+    return summarize(read_run(Path(run))).model_dump(mode="json", by_alias=True)
+
+
+def evalrun_compare(baseline: str, recent: str) -> dict[str, Any]:
+    """Two run directories, case by case: improvements, regressions, which axis moved."""
+    from .evalrun import compare, read_run
+
+    return compare(read_run(Path(baseline)), read_run(Path(recent))).model_dump(mode="json", by_alias=True)
 
 
 #: Every tool, its description, and its JSON schema. Data rather than
@@ -487,12 +545,112 @@ TOOLS: tuple[dict[str, Any], ...] = (
         },
         "call": probe_resolve,
     },
+    {
+        "name": "evalrun_cases",
+        "description": (
+            "What a compiled enterprise case set (a `worldloom enterprise-evals build` "
+            "directory) can grade, counted per axis: reads, writes split into create, "
+            "update and delete, verifies, designed failures, artifact and answer "
+            "contracts, shapes and connectors. A zero is a gap in the set, named "
+            "before anything runs against it."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "cases": {"type": "string", "description": "The enterprise-evals directory."},
+                "limit": {"type": "integer", "description": "Only the first N cases."},
+            },
+            "required": ["cases"],
+        },
+        "call": evalrun_cases,
+    },
+    {
+        "name": "evalrun_run",
+        "description": (
+            "Run a built-in agent over the case set, one isolated connector state per "
+            "case, grade plan, trajectory and outcomes, and write the run directory "
+            "(run.json, results.jsonl, summary.json). `reference` walks every expected "
+            "DAG through the tool surface and is the executable ceiling; `lazy` calls "
+            "nothing and is the floor; `scripted:<responses.json>` replays a responses "
+            "document written against `worldloom evalrun requests`. An interactive "
+            "agent runs through `worldloom evalrun run --exec`, not through this tool."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "cases": {"type": "string", "description": "The enterprise-evals directory."},
+                "out": {"type": "string", "description": "Run directory to write."},
+                "agent": {"type": "string", "description": "reference | lazy | scripted:<responses.json>. Default reference."},
+                "limit": {"type": "integer", "description": "Only the first N cases."},
+            },
+            "required": ["cases", "out"],
+        },
+        "call": evalrun_run,
+    },
+    {
+        "name": "evalrun_plan",
+        "description": (
+            "Grade a planner on the plan axis alone: each case's request and tool "
+            "catalog go to the planner, it states a DAG of tool calls, nothing is "
+            "executed, and the stated DAG is graded against the expected one by tool "
+            "name and dependency reachability. `reference` restates every expected "
+            "DAG and is the ceiling; `scripted:<plans.json>` replays a plans document "
+            "written against `worldloom evalrun requests --for plan`. An interactive "
+            "planner runs through `worldloom evalrun plan --exec`. The run directory "
+            "compares with an executed run on the plan axis; its trajectory and "
+            "outcome axes are unobserved."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "cases": {"type": "string", "description": "The enterprise-evals directory."},
+                "out": {"type": "string", "description": "Run directory to write."},
+                "agent": {"type": "string", "description": "reference | scripted:<plans.json>. Default reference."},
+                "limit": {"type": "integer", "description": "Only the first N cases."},
+            },
+            "required": ["cases", "out"],
+        },
+        "call": evalrun_plan,
+    },
+    {
+        "name": "evalrun_summarize",
+        "description": (
+            "A run directory's summary, recomputed from its results ledger: pass rate, "
+            "per-axis means, trajectory match rates, error codes, safety findings, "
+            "structured expectations met, and slices by shape, connector and failure. "
+            "Error rows are counted and excluded from every mean."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {"run": {"type": "string", "description": "A run directory."}},
+            "required": ["run"],
+        },
+        "call": evalrun_summarize,
+    },
+    {
+        "name": "evalrun_compare",
+        "description": (
+            "Two run directories case by case, joined on case id: improvements and "
+            "regressions under Eval Studio's ±0.10 bands, which axis moved, and cases "
+            "graded on one side and errored on the other, reported as reliability "
+            "changes rather than score changes."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "baseline": {"type": "string", "description": "The baseline run directory."},
+                "recent": {"type": "string", "description": "The recent run directory."},
+            },
+            "required": ["baseline", "recent"],
+        },
+        "call": evalrun_compare,
+    },
 )
 
 #: What a tool operates on. Every tool must name exactly one of these and
-#: require it, so that a single server can serve however many corpora and
-#: probes a session is working on without holding any of them as state.
-SUBJECTS = ("corpus", "probe")
+#: require it, so that a single server can serve however many corpora, probes,
+#: case sets and runs a session is working on without holding any as state.
+SUBJECTS = ("corpus", "probe", "cases", "run", "baseline")
 
 
 def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:

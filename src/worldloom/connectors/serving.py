@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 import hmac
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from threading import RLock
 from typing import Any
@@ -20,7 +20,7 @@ from ..connector_emulator import ConnectorEmulator, ConnectorError, ConnectorSpa
 from ..connector_trace import grade_trace
 
 _READ_OPS = frozenset({"search", "get", "download"})
-_MANAGEMENT_TOOLS = 5
+_MANAGEMENT_TOOLS = 6
 
 
 class ServingError(ValueError):
@@ -31,7 +31,11 @@ class ServingError(ValueError):
 class ServingLimits:
     max_runs: int = 32
     max_runs_per_principal: int = 4
-    max_calls_per_run: int = 512
+    # High enough for a mapped reorganisation of a thousand records (one
+    # search page per hundred, a write and a readback per record); a
+    # run that needs more is a retry storm, which the trajectory grade
+    # names on its own.
+    max_calls_per_run: int = 4096
     max_tools: int = 100
     max_request_bytes: int = 65536
     max_response_bytes: int = 1048576
@@ -41,7 +45,7 @@ class ServingLimits:
         if any(value < 1 for value in asdict(self).values()):
             raise ServingError("serving limits must be positive")
         if self.max_tools <= _MANAGEMENT_TOOLS:
-            raise ServingError("max_tools must leave room for five evaluation tools")
+            raise ServingError("max_tools must leave room for six evaluation tools")
 
 
 @dataclass
@@ -51,6 +55,19 @@ class _Run:
     emulators: dict[str, ConnectorEmulator]
     spans: list[ConnectorSpan] = field(default_factory=list)
     attempts: int = 0
+    #: Calls the run did not admit (unknown tool, undeclared argument, a
+    #: limit): no span exists for them, so they are kept here and graded as
+    #: attempts. An agent that keeps probing the surface is not the same
+    #: trajectory as one that did not.
+    refusals: list[dict[str, Any]] = field(default_factory=list)
+    #: Every record as it stood when the run began. `score` diffs the live
+    #: state against it, so an external agent's outcomes are graded from what
+    #: it changed, never from what it reported.
+    before: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: The questions the agent asked the user, in order, each with the
+    #: number of spans recorded before it and the reply it was given. A
+    #: question is a turn: recorded here, never claimed by the agent.
+    questions: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ConnectorEvaluationService:
@@ -104,7 +121,7 @@ class ConnectorEvaluationService:
         if selected - set(catalog):
             raise ServingError(f"unknown tools: {sorted(selected - set(catalog))}")
         if len(selected) + _MANAGEMENT_TOOLS > limits.max_tools:
-            raise ServingError(f"tool_limit: {len(selected)} connector tools plus five evaluation tools; use --tool")
+            raise ServingError(f"tool_limit: {len(selected)} connector tools plus six evaluation tools; use --tool")
         self.tools = {name: catalog[name] for name in sorted(selected)}
         for row in self.rows.values():
             for node in row["expected_dag"]["nodes"]:
@@ -158,7 +175,9 @@ class ConnectorEvaluationService:
             emulators = {server: self._emulator(server, row, principal) for server in servers}
             self._ordinal += 1
             run_id = f"run-{self._ordinal}"
-            self._runs[run_id] = _Run(principal, query_id, emulators)
+            before = {fid: copy.deepcopy(dict(record)) for server in sorted(emulators)
+                      for fid, record in sorted(emulators[server].records.items())}
+            self._runs[run_id] = _Run(principal, query_id, emulators, before=before)
             return {"run_id": run_id, "query_id": query_id, "query": row.get("query", ""),
                     "max_calls": self.limits.max_calls_per_run}
 
@@ -238,7 +257,8 @@ class ConnectorEvaluationService:
         program = program_for(row)
         outputs, producers = observed_flow(row, run.spans)
         wire = {node["id"]: node for node in row["expected_dag"]["nodes"]}
-        connector, _ = self.tools[name]
+        connector, tool = self.tools[name]
+        declared = self.definitions[connector].tool(tool)
         emulator = run.emulators[connector]
         for node in program.nodes:
             if node.kind == "transform" or f"{node.connector}.{wire[node.id]['tool']}" != name:
@@ -257,7 +277,11 @@ class ConnectorEvaluationService:
                 wanted = bound_arguments(node, outputs, items[index])
             except ValueError:
                 continue
-            if node.operation in {"search", "create", "send", "post", "upload"}:
+            if node.operation in {"search", "create", "send", "post", "upload"} and "entity" in declared.params:
+                # Only when the tool declares it. `call` refuses an undeclared
+                # argument before reaching here, so demanding `entity` of a
+                # tool without one (email's `search_threads`) made every such
+                # node unattributable through the very surface it is served on.
                 wanted["entity"] = node.entity
             actual = dict(arguments)
             if node.operation == "search" and prior:
@@ -270,7 +294,11 @@ class ConnectorEvaluationService:
                     actual.pop(key, None)
             if wanted.get("id") is not None:
                 wanted["id"] = emulator.by_ident.get(str(wanted["id"]), str(wanted["id"]))
-                actual["id"] = emulator.by_ident.get(str(actual.get("id")), str(actual.get("id")))
+                raw = str(actual.get("id"))
+                # The emulator forgets a deleted record's native id; the
+                # readback the agent took it from is still in the run's
+                # recorded results, so the readback after a delete attributes.
+                actual["id"] = emulator.by_ident.get(raw, _recorded_aliases(outputs).get(raw, raw))
             if any(actual.get(key) != value for key, value in wanted.items()):
                 continue
             consumed = tuple(dict.fromkeys(identifier for parent in node.depends_on
@@ -302,21 +330,26 @@ class ConnectorEvaluationService:
     def call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         with self._lock:
             run = self._run(principal, run_id)
+
+            def refuse(message: str) -> ServingError:
+                run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message})
+                return ServingError(message)
+
             if name not in self.tools:
-                raise ServingError(f"tool_not_allowed: {name}")
+                raise refuse(f"tool_not_allowed: {name}")
             connector, tool = self.tools[name]
             if connector not in run.emulators:
-                raise ServingError(f"connector_not_in_query: {connector}")
+                raise refuse(f"connector_not_in_query: {connector}")
             if run.attempts >= self.limits.max_calls_per_run:
-                raise ServingError("call_limit: retrieve the trace and end this run")
+                raise refuse("call_limit: retrieve the trace and end this run")
             run.attempts += 1
             supplied = dict(arguments)
             declared = self.definitions[connector].tool(tool)
             unknown = set(supplied) - set(declared.params)
             if unknown:
-                raise ServingError(f"unknown_arguments: {sorted(unknown)}")
+                raise refuse(f"unknown_arguments: {sorted(unknown)}")
             if len(json.dumps(supplied, sort_keys=True, allow_nan=False).encode()) > self.limits.max_request_bytes:
-                raise ServingError("request_limit: reduce the tool arguments")
+                raise refuse("request_limit: reduce the tool arguments")
             if self.rows[run.query_id].get("grammar") == "enterprise-dag@1":
                 node, consumed = self._grammar_attribution(run, name, supplied)
             else:
@@ -381,6 +414,158 @@ class ConnectorEvaluationService:
                     "next_offset": next_offset if next_offset < len(run.spans) else None,
                     "attempts": run.attempts}
 
+    def spans(self, principal: str, run_id: str) -> tuple[ConnectorSpan, ...]:
+        """Every span of a run, unpaged. The SDK path for a trusted embedding.
+
+        `trace` is the wire: paged and byte-bounded because it answers an
+        external client. A grader running in the same process wants the
+        whole thing once, and paging it back through the wire budget only
+        adds a place to lose a span.
+        """
+        with self._lock:
+            return tuple(self._run(principal, run_id).spans)
+
+    def refusals(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
+        """Every call this run refused before a span could exist, in order."""
+        with self._lock:
+            return tuple(dict(item) for item in self._run(principal, run_id).refusals)
+
+    def ask(self, principal: str, run_id: str, question: str, about: tuple[str, ...] = ()) -> str:
+        """Record a question to the user and answer it from the case.
+
+        The reply comes from the row's own question points — the first
+        unclaimed point the question matches — so an agent that asks what
+        the request left open gets the user's answer, and one that asks
+        something the row never wanted gets a neutral reply and is graded as
+        unsolicited. The agent never learns which of the two it was.
+        """
+        from ..evalrun.contract import case_from_row
+
+        text = str(question or "").strip()
+        if not text:
+            raise ServingError("ask: a question needs text")
+        if len(text) > 2000:
+            raise ServingError("ask: a question is at most 2000 characters")
+        with self._lock:
+            run = self._run(principal, run_id)
+            if len(run.questions) >= 32:
+                raise ServingError("ask: at most 32 questions per run")
+            row = self.rows[run.query_id]
+            case = case_from_row(row, query=str(row.get("query") or f"case {row['id']}"), principal=principal)
+            claimed = {str(item.get("point")) for item in run.questions if item.get("point")}
+            point = next((p for p in case.trajectory.questions if p.id not in claimed and p.matches(text)), None)
+            reply = point.answer if point is not None else "Please proceed as you judge best."
+            run.questions.append({
+                "id": f"q{len(run.questions) + 1}", "index": len(run.spans), "question": text,
+                "about": [str(value) for value in about], "reply": reply,
+                **({"point": point.id} if point is not None else {}),
+            })
+            return reply
+
+    def questions(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
+        """Every question this run asked, in order, with what the user replied.
+
+        The `point` a question matched is the grader's business, not the
+        agent's, and is stripped here: the surface tells an agent what the
+        user said, never whether the question was expected.
+        """
+        with self._lock:
+            return tuple({key: value for key, value in item.items() if key != "point"}
+                         for item in self._run(principal, run_id).questions)
+
+    def _question_behaviours(self, run: _Run) -> set[str]:
+        behaviours: set[str] = set()
+        for item in run.questions:
+            behaviours.add("clarify")
+            if item.get("point"):
+                behaviours.add(f"question:{item['point']}")
+                if str(item["point"]).startswith("confirm-"):
+                    behaviours.add("confirm_before")
+        return behaviours
+
+    def snapshot(self, principal: str, run_id: str) -> dict[str, dict[str, Any]]:
+        """The run's connector state, every record by fid, copied.
+
+        Taken at `begin` and again after the agent finishes, the two snapshots
+        are the outcome axis: created is in the second and not the first,
+        deleted the reverse, updated is the same fid with different fields.
+        Copied, so a caller holding the pre-state cannot watch it change.
+        """
+        with self._lock:
+            run = self._run(principal, run_id)
+            return {fid: copy.deepcopy(dict(record)) for server in sorted(run.emulators)
+                    for fid, record in sorted(run.emulators[server].records.items())}
+
+    def tool_catalog(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
+        """The tools this run may call, with parameters and safety annotations.
+
+        The `tools/list` an MCP client would see, minus the five evaluation
+        tools: only connectors the query names, each with the read-only,
+        destructive and idempotent hints the same classification derives.
+        """
+        from ..evalrun.safety import classify_tool, tool_annotations
+
+        with self._lock:
+            run = self._run(principal, run_id)
+            out = []
+            for name in sorted(self.tools):
+                connector, tool = self.tools[name]
+                if connector not in run.emulators:
+                    continue
+                declared = self.definitions[connector].tool(tool)
+                safety = classify_tool(connector, tool, declared)
+                out.append({"name": name, "op": declared.op, "entities": list(declared.entities),
+                            "params": dict(declared.params), "annotations": tool_annotations(safety),
+                            "risk": safety.risk.value, "idempotency": safety.idempotency.value})
+            return tuple(out)
+
+    def score(self, principal: str, run_id: str, *, answer: str = "",
+              artifacts: Iterable[Mapping[str, Any]] = (), planned_dag: Mapping[str, Any] | None = None,
+              rater: Any = None) -> dict[str, Any]:
+        """Grade this run on the three axes: the plan, the trajectory, the outcomes.
+
+        `grade` decides the row's assertions; this adds the per-axis grades
+        `worldloom.evalrun` computes over the same spans, the snapshot taken at
+        `begin`, and the live state now. The agent may hand over its final
+        answer, the artifacts it produced (name, text, the record ids it
+        cites) and the DAG it says it planned; all three are graded only
+        against what was observed. The result is a `CaseResult` document, so
+        a served run lands in the same ledger as a local one
+        (`worldloom evalrun import-served`). The run stays open.
+        """
+        from ..evalrun.agents import AgentResponse, ProducedArtifact
+        from ..evalrun.contract import case_from_row
+        from ..evalrun.runner import CaseResult, grade_run, safety_for
+
+        with self._lock:
+            run = self._run(principal, run_id)
+            row = self.rows[run.query_id]
+            case = case_from_row(row, query=str(row.get("query") or f"case {row['id']}"), principal=principal)
+            produced = tuple(
+                ProducedArtifact(name=str(item.get("name") or f"artifact-{index}"),
+                                 media_type=str(item.get("media_type") or "text/plain"),
+                                 text=str(item.get("text") or ""),
+                                 cites=tuple(str(value) for value in item.get("cites", ())))
+                for index, item in enumerate(artifacts)
+            )
+            response = AgentResponse(answer=answer, artifacts=produced,
+                                     planned_dag=dict(planned_dag) if planned_dag else None)
+            spans = tuple(run.spans)
+            refusals = tuple(dict(item) for item in run.refusals)
+            questions = tuple(dict(item) for item in run.questions)
+            after = {fid: copy.deepcopy(dict(record)) for server in sorted(run.emulators)
+                     for fid, record in sorted(run.emulators[server].records.items())}
+            assertions = self.grade(principal, run_id)
+            score = grade_run(case, spans, run.before, after, assertions, response,
+                              definitions=self.definitions, rater=rater, safety=safety_for(self.definitions),
+                              refusals=refusals, questions=questions)
+            result = CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
+                                agent=f"served:{principal}", status="graded", score=score, answer=answer,
+                                calls=len(spans), spans=tuple(_span_json(span) for span in spans),
+                                refused=len(refusals), refusals=refusals,
+                                questions=tuple({k: v for k, v in item.items() if k != "point"} for item in questions))
+            return result.model_dump(mode="json")
+
     def grade(self, principal: str, run_id: str) -> dict[str, Any]:
         with self._lock:
             run = self._run(principal, run_id)
@@ -393,6 +578,11 @@ class ConnectorEvaluationService:
                     behaviors.add("denial_surfaced" if code == 403 else
                                   "report_not_found" if code == 404 or kind == "not_found" else
                                   "branch_failed" if kind in {"timeout", "rate_limit"} else "validation_error")
+            # The questions the run asked are behaviours too: `clarify` and
+            # `confirm_before` are what `clarify_before_write` and
+            # `confirm_before` have always waited for, and `question:<id>`
+            # is what `question_required` reads.
+            behaviors |= self._question_behaviours(run)
             return dict(grade_trace(run.spans, self.rows[run.query_id], post_state=post_state,
                                    behaviors=sorted(behaviors)))
 
@@ -401,6 +591,23 @@ class ConnectorEvaluationService:
             grade = self.grade(principal, run_id)
             del self._runs[run_id]
             return {"run_id": run_id, "ended": True, "grade": grade}
+
+
+def _recorded_aliases(outputs: Mapping[str, Sequence[Any]]) -> dict[str, str]:
+    """Native identifiers in recorded results, mapped to the fid each answered for."""
+    aliases: dict[str, str] = {}
+    for produced in outputs.values():
+        for entry in produced:
+            if isinstance(entry, Mapping) and isinstance(entry.get("payload"), Mapping):
+                native = entry["payload"]
+                for key in ("id", "Id", "sys_id", "key", "number", "name", "title"):
+                    if native.get(key) is not None:
+                        aliases.setdefault(str(native[key]), str(entry.get("id")))
+    return aliases
+
+
+def _span_json(span: ConnectorSpan) -> dict[str, Any]:
+    return json.loads(json.dumps(asdict(span), sort_keys=True, default=str))
 
 
 class _AccessBoundary:
@@ -495,6 +702,19 @@ def create_connector_app(
                  lambda principal, args: service.trace(principal, **args), "Read this run's observed tool spans. Follow next_offset for more.", True),
         register("eval_grade", {"run_id": (str, ...)},
                  lambda principal, args: service.grade(principal, **args), "Grade observed calls and actual record state against the evaluation.", True),
+        register("eval_score", {"run_id": (str, ...), "answer": (str | None, None),
+                                "artifacts": (list[dict[str, Any]] | None, None),
+                                "planned_dag": (dict[str, Any] | None, None)},
+                 lambda principal, args: service.score(principal, args.pop("run_id"), **args),
+                 "Grade this run on three axes (plan, trajectory, outcomes) as a worldloom.eval-run case result. "
+                 "Optionally hand over your final answer, the artifacts you produced ({name, text, cites}) and the "
+                 "DAG you planned; they are graded only against what was observed. The run stays open.", True),
+        register("eval_ask", {"run_id": (str, ...), "question": (str, ...), "about": (list[str] | None, None)},
+                 lambda principal, args: {"reply": service.ask(principal, args["run_id"], args["question"],
+                                                                tuple(args.get("about") or ()))},
+                 "Ask the user a question and get their reply. Ask when the request is ambiguous, a required "
+                 "parameter is missing, or a call would be destructive and the request did not authorise it; "
+                 "asking when nothing is unclear is graded as unsolicited.", False),
         register("eval_end", {"run_id": (str, ...)},
                  lambda principal, args: service.end(principal, **args), "Grade and release this run. Retrieve the trace before ending.", False),
     ]

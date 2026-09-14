@@ -212,6 +212,15 @@ class RetailWorld:
     """An industry ``Pack`` supplying the archetype, lore, and company name.
     Set via ``from_pack``; carried on the instance so ``build`` can embed it in
     the recipe, which is what makes a pack-built corpus rebuild itself."""
+    landscape: Any = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered name, a document of pools, or a ``Landscape``. ``None`` is the
+    engine's own vocabulary, which is what every estate built before this
+    field existed was made of, so an un-set landscape is byte-identical
+    rather than close. A pack's ``landscape`` arrives here through
+    ``from_pack``; a blueprint's through ``estate(vocabulary=)``; and the
+    recipe records it beside the size, so the estate rebuilds in the same
+    words."""
     seasonality: Any = None
     """The trading year (``worldloom.profiles``). ``None`` is the engine's own
     general-retail profile — a 21% December — which every world built before
@@ -230,6 +239,11 @@ class RetailWorld:
     from, for the reason the pack is embedded whole: a corpus that could only
     be rebuilt by whoever still had the probe that derived it would fail the
     reason recipes exist."""
+    unit_roles: tuple[Any, ...] | None = None
+    """The posts minted for every business unit (``roles.UnitRole``), replaced.
+    ``None`` is the engine's own, which is what every world built before this
+    field existed minted; a pack's ``roles.unit_roles`` arrives here through
+    ``from_pack``, and the recipe records it beside ``role_table``."""
 
     physics: Parameters = DEFAULT
     """The world physics the organisation is generated under
@@ -327,7 +341,16 @@ class RetailWorld:
                    # The pack's own trading year, or None for the engine's. This
                    # is the line that stops a pack-authored insurer trading like
                    # a supermarket.
-                   seasonality=packs_module.seasonality_of(pack))
+                   seasonality=packs_module.seasonality_of(pack),
+                   # The estate the pack asks for, in the words it asks for it.
+                   # `None` on both when the pack says nothing, which is what
+                   # keeps every pack corpus built before the fields existed
+                   # byte-identical; `--estate` rebinds the size afterwards.
+                   estate=pack.estate or None, landscape=pack.landscape,
+                   # The organisation the pack authored, reviewed on the way in;
+                   # `None` on both when it says nothing.
+                   role_table=packs_module.role_table_of(pack),
+                   unit_roles=packs_module.unit_roles_of(pack))
 
     def build(self) -> World:
         """Generate the organisation, its lore, and the lore's founding milestones.
@@ -336,6 +359,7 @@ class RetailWorld:
         already on the timeline — the world's beginning, not yet any close.
         """
         from . import __version__ as worldloom_version
+        from . import landscape as landscape_module
         from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import organisation
@@ -374,8 +398,10 @@ class RetailWorld:
             annual_revenue=self.annual_revenue,
             pack=self.pack,
             estate=self.estate,
+            landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             seasonality=self.seasonality,
             # `self.locale`, not the resolved `locale`: the recipe stores what
             # it was given. A corpus built as "germany" replays as "germany" and
@@ -391,14 +417,17 @@ class RetailWorld:
             archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
-            voices=dict(self.pack.voices) if self.pack is not None else None,
+            voices=packs_module.voices_of(self.pack) if self.pack is not None else None,
             estate_profile=self.estate,
+            landscape=landscape_module.resolve(self.landscape, default=landscape_module.RETAIL)
+            if self.landscape is not None else None,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
             locale=locale,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             employees_total=self.employees,
         )
 
@@ -480,138 +509,13 @@ register_domain(Domain(
 
 # The fact kinds this vertical answers for, in the process-global registry
 # (`worldloom.factkinds`) — the fifth registration seam, and the one
-# `lob.lint_responsibilities` and the episode grammar's lint consult. Retail
-# registers the shared vocabularies too: `close.*` and the incident-chain
-# `ops.*` kinds are minted verbatim by banking's and procurement's episodes
-# ("reuses retail's close.* kinds verbatim" — `generators/regulatory.py`), and
-# a kind has *one* declaration whoever's episode mints it — the other verticals
-# register only what is theirs alone.
-from .factkinds import FactKind
-from .factkinds import register as _register_kinds
+# `lob.lint_responsibilities` and the episode grammar's lint consult. The
+# vocabulary is versioned data (`_data/factkinds/retail@1.json`); retail's
+# file carries the shared `close.*` and incident-chain `ops.*` kinds too,
+# because a kind has *one* declaration whoever's episode mints it.
+from .factkinds import register_catalogue as _register_kinds
 
-_register_kinds([
-    FactKind(kind="close.due_date", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",), about="The committed close date for the period."),
-    FactKind(kind="close.revised_date", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",), about="The moved close date, when an incident moves it."),
-    FactKind(kind="close.status", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at", "supersedes-prior"),
-             about="Where the close stands; a delayed status is superseded, never edited."),
-    FactKind(kind="close.delay", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",), about="Business days the close slipped."),
-    FactKind(kind="financial.revenue.actual", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "sums-to(financial.revenue.actual)"),
-             about="Actual revenue; child subjects sum to their parent's figure exactly."),
-    FactKind(kind="financial.revenue.budget", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "sums-to(financial.revenue.budget)"),
-             about="Budgeted revenue, rolled up the same way."),
-    FactKind(kind="financial.revenue.variance", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "reconciles-against(financial.revenue.actual, financial.revenue.budget)"),
-             about="Actual less budget, exactly — validate.financial() recomputes it."),
-    FactKind(kind="financial.gross_profit.actual", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "sums-to(financial.gross_profit.actual)"),
-             about="Actual gross profit."),
-    FactKind(kind="financial.gross_profit.budget", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "sums-to(financial.gross_profit.budget)"),
-             about="Budgeted gross profit."),
-    FactKind(kind="financial.gross_profit.variance", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "reconciles-against(financial.gross_profit.actual, financial.gross_profit.budget)"),
-             about="Actual less budget on gross profit."),
-    FactKind(kind="financial.gross_margin_pct.actual", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "reconciles-against(financial.gross_profit.actual, financial.revenue.actual)"),
-             about="The stated margin, derived from the amounts beside it."),
-    FactKind(kind="financial.gross_margin_pct.budget", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at", "reconciles-against(financial.gross_profit.budget, financial.revenue.budget)"),
-             about="The budgeted margin, same derivation."),
-    FactKind(kind="financial.incident_pl_impact", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at",), about="The P&L cost the incident is assessed at."),
-    FactKind(kind="metric.gross_margin_variance", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at",), about="Margin variance in points, for the memo."),
-    FactKind(kind="metric.online_conversion_rate.actual", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at",), about="Online conversion as landed."),
-    FactKind(kind="metric.online_conversion_rate.forecast", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at",), about="Online conversion as forecast."),
-    FactKind(kind="metric.promotional_depth_margin_impact", domain="retail", generated_by="generators/finance.py",
-             invariants=("holds-at",), about="What promotional depth took off margin."),
-    # The incident chain. Shared vocabulary: banking's regulatory episode mints
-    # most of these kinds too, against its own incident, under this declaration.
-    FactKind(kind="ops.incident_opened", domain="retail",
-             generated_by="generators/operations.py (reused by banking's regulatory.py)",
-             invariants=("holds-at", "precedes-event"), about="The raised ticket."),
-    FactKind(kind="ops.cause", domain="retail",
-             generated_by="generators/operations.py (reused by banking's regulatory.py)",
-             invariants=("holds-at", "supersedes-prior"),
-             about="What broke. The confirmed cause supersedes the initial hypothesis;"
-                   " the hypothesis stays on the record as a past belief."),
-    FactKind(kind="ops.cause_ruled_out", domain="retail",
-             generated_by="generators/operations.py (reused by banking's regulatory.py)",
-             invariants=("holds-at",), about="The evidence that dismissed the hypothesis."),
-    FactKind(kind="ops.feed_status", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",), about="The failed feed's state."),
-    FactKind(kind="ops.valuation_status", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",), about="Whether inventory valuation completed."),
-    FactKind(kind="ops.workaround", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",), about="The applied workaround."),
-    FactKind(kind="ops.mapping_table_owner", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",), about="Who owns the mapping table — 'unassigned' is the finding."),
-    FactKind(kind="ops.previous_similar_incident", domain="retail", generated_by="generators/operations.py",
-             invariants=("holds-at",),
-             about="The named earlier period a comparable failure occurred in."),
-    FactKind(kind="ops.root_cause_classification", domain="retail",
-             generated_by="generators/operations.py (reused by banking's regulatory.py)",
-             invariants=("holds-at",), about="The audit classification of the failure."),
-    FactKind(kind="ops.remediation", domain="retail",
-             generated_by="generators/operations.py (reused by banking's regulatory.py)",
-             invariants=("holds-at",), about="The tickets raised to fix it."),
-    FactKind(kind="ops.remediation_addresses", domain="retail",
-             generated_by="generators/operations.py (reused by banking's regulatory.py)",
-             invariants=("holds-at",), about="Which remediation addresses the control failure."),
-    FactKind(kind="ops.affected_records", domain="retail",
-             generated_by="generators/operations.py (reused by banking's regulatory.py)",
-             invariants=("holds-at",), about="The blast radius the ticket quotes."),
-    # The corporate centre and the distribution network. Both blocks exist
-    # because `validate.reachability` measured this vertical's own organisation
-    # as decorative: two cost centres declared by every retail company and named
-    # by no fact, and — on any archetype with warehouses — an estate of
-    # zero-weight sites the store P&L correctly refuses turnover to and nothing
-    # else said anything about. `generators/retail_estate.py` opens with the
-    # counts.
-    FactKind(kind="overhead.shared_services.cost", domain="retail",
-             generated_by="generators/retail_estate.py",
-             invariants=("holds-at", "sums-to(overhead.shared_services.cost)"),
-             about="The corporate cost base, by the cost centre that incurs it;"
-                   " the centres sum to the group figure exactly."),
-    FactKind(kind="overhead.shared_services.recharge", domain="retail",
-             generated_by="generators/retail_estate.py",
-             invariants=("holds-at", "sums-to(overhead.shared_services.recharge)"),
-             about="The same base, by the division it is recharged to. A second"
-                   " decomposition of one figure over a different set of"
-                   " entities, which is what makes either checkable."),
-    FactKind(kind="overhead.shared_services.recovery_pct", domain="retail",
-             generated_by="generators/retail_estate.py",
-             invariants=("holds-at",
-                         "reconciles-against(overhead.shared_services.recharge,"
-                         " financial.revenue.actual)"),
-             about="Recharge as a share of the subject's own revenue. A rate:"
-                   " stated at every level it is read at and summed at none."),
-    FactKind(kind="logistics.throughput", domain="retail",
-             generated_by="generators/retail_estate.py",
-             invariants=("holds-at", "sums-to(logistics.throughput)"),
-             about="Cartons dispatched through a distribution centre. The"
-                   " measure a site that sells nothing actually owns."),
-    FactKind(kind="logistics.cost_to_serve", domain="retail",
-             generated_by="generators/retail_estate.py",
-             invariants=("holds-at", "sums-to(logistics.cost_to_serve)"),
-             about="What moving that volume cost, by the centre that moved it."),
-    FactKind(kind="logistics.cost_per_carton", domain="retail",
-             generated_by="generators/retail_estate.py",
-             invariants=("holds-at",
-                         "reconciles-against(logistics.cost_to_serve,"
-                         " logistics.throughput)"),
-             about="Cost over volume at the level it is stated. A rate — the"
-                   " network's figure is its own two amounts divided, never the"
-                   " total of its centres' rates."),
-])
+_register_kinds("retail@1")
 
 
 # ---------------------------------------------------------------------------

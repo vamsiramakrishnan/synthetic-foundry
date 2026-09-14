@@ -342,6 +342,34 @@ def test_the_banking_estate_extends_the_episodes_world_rather_than_a_parallel_on
     assert not {s.name for s in grown_only} & core_names
 
 
+@pytest.fixture(scope="module")
+def contractor() -> World:
+    from worldloom.procurement import ProcureToPayWorld
+    from worldloom.procurement_scenarios import PurchaseToPayCycle
+
+    return ProcureToPayWorld(seed=SEED, estate="large").build().run(
+        PurchaseToPayCycle(period="2026-03")
+    )
+
+
+def test_a_procurement_estate_builds_validates_and_gates(contractor: World) -> None:
+    """The fourth vocabulary, and the vertical the table was closed to for the
+    longest: `ProcureToPayWorld` refused `--estate` outright."""
+    report = contractor.validate()
+    assert report.ok, "\n".join(str(v) for v in report.violations)
+    gates = [s for s in contractor.services if s.name in ("identity-provider", "site-connectivity-gateway")]
+    assert len(gates) == 2, "both chokepoints are in the large estate"
+
+
+def test_a_contractor_speaks_procurement(contractor: World) -> None:
+    spoken = {name for pool in landscape.PROCUREMENT.services.values() for name in pool}
+    names = {s.name for s in contractor.services}
+    assert names <= spoken, sorted(names - spoken)
+    assert "three-way-match-engine" in names
+    assert "Delegations Register" in {s.name for s in contractor.systems}
+    assert "procurement" in landscape.LANDSCAPES and landscape.publish()["procurement"]["about"]
+
+
 def test_an_insurer_had_no_technology_graph_at_all_before_this() -> None:
     """The sharpest case for the whole change. Not a thin estate — none."""
     assert list(InsuranceWorld(seed=SEED).build().services) == []

@@ -157,6 +157,12 @@ def _scope_findings(case: UseCase, spec: EvalSpec) -> list[ConstructionIssue]:
             activity = selector.get("activity_id")
             if isinstance(activity, str) and activity in case.activities:
                 covered_activities.add(activity)
+            elif activity is None and isinstance(selector.get("stream"), str):
+                # A selector scoped to the value stream covers every declared
+                # activity: the activities are the stream's, and the records
+                # it demands carry the stream (`sor.records`), so nothing
+                # outside those activities can satisfy it.
+                covered_activities.update(case.activities)
             else:
                 missing.append("activity_id naming one of the use case's declared activities")
         if missing:

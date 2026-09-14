@@ -32,7 +32,7 @@ from ..presentation import DEFAULT as DEFAULT_PRESENTATION
 from ..presentation import Presentation
 from ..presentation import of as presentation_of
 from ..rng import Rng
-from . import Rendered, RenderError, fonts, ooxml, slug_for
+from . import Rendered, RenderError, chaptered, fonts, ooxml, slug_for
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -368,6 +368,14 @@ def _page_setup(document) -> None:  # type: ignore[no-untyped-def]
 _MUTED = "6B747B"
 
 
+#: The heading a chaptered document's appendix opens with. Every hidden section
+#: already says it is not part of the readable surface; in a long document
+#: those sections sit together after the last chapter, and one heading over
+#: the run is what a reader turns to rather than a page of "supporting facts"
+#: arriving with no announcement.
+_APPENDIX_HEADING = "Appendix"
+
+
 def _running_heads(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
     """A header naming the document and a footer that counts its own pages.
 
@@ -390,6 +398,13 @@ def _running_heads(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: i
         part for part in (ir.metadata.get("company"), ir.title) if part
     )
     head.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    if chaptered(ir):
+        # The current chapter, as a field Word resolves from the nearest
+        # Heading 1 above the page — the same rule as the page number below:
+        # a running head that was *written* would name the wrong chapter the
+        # moment a section moved.
+        head.add_run(" · ")
+        _field(head, ' STYLEREF "Heading 1" ')
     for run in head.runs:
         run.font.size = size
         run.font.color.rgb = _rgb(_MUTED)
@@ -1061,9 +1076,29 @@ def render(
     # contains, and a fresh `count(1)` per section would hand out "1" again
     # the moment a second section drew a chart.
     chart_index = count(1)
+    chapters = chaptered(ir)
+    visible_seen = 0
+    appendix_opened = False
     for section in ir.sections:
         if section.hidden and presentation.appendix != "append":
             continue
+        if chapters and not section.hidden:
+            # Each chapter on its own page. The first follows the contents
+            # page, which already ends in a break.
+            if visible_seen:
+                document.add_page_break()
+            visible_seen += 1
+        if chapters and section.hidden and not appendix_opened:
+            # One heading over every hidden section, however many follow —
+            # not one per section, which would read as the document
+            # repeatedly announcing the same change of subject.
+            document.add_page_break()
+            appendix = document.add_heading(_APPENDIX_HEADING, level=1)
+            _style_heading(
+                appendix, size_pt=_heading_pt(g, _TS_HEADING), colour_hex=g.colour_roles["body_text"],
+                alignment=g.title_alignment, space_before_pt=_space_pt(g, _SP_HEADING),
+            )
+            appendix_opened = True
         _section(document, section, facts, g, locale, presentation, chart_index)
 
     if ir.metadata.get("voice") and presentation.provenance == "footer":

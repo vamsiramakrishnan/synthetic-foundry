@@ -1,0 +1,189 @@
+{
+  "domain": "insurance",
+  "about": "Insurance's own fact kinds — the `close.*` kinds the reserving episode reuses are declared once, by retail. The invariants restate what insurance's `_checks` enforces. `financial.revenue.*` is deliberately absent: it is retail's registration and shared vocabulary, the way `close.*` is, and re-declaring it here under `domain: insurance` would be two modules disagreeing about one kind — exactly what `factkinds.register` refuses. See `generators/insurance_book.generate` for why the book is minted into that vocabulary rather than a private one.",
+  "fact_kinds": [
+    {
+      "kind": "reserves.philosophy",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at",
+        "standing"
+      ],
+      "about": "The reserving philosophy; set once, reused every quarter."
+    },
+    {
+      "kind": "reserves.risk_margin_policy_pct",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at",
+        "standing"
+      ],
+      "about": "The board's margin policy, standing beside the philosophy."
+    },
+    {
+      "kind": "reserves.ultimate",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at",
+        "rolls-up-to"
+      ],
+      "about": "A cohort's ultimate claims cost.",
+      "note": "`rolls-up-to` is registered here ahead of the authored spec that will declare it: the registry is the cross-module truth about a kind, and `episodes.lint` refuses a spec claiming an invariant the registry does not hold. Registering it now means the reserving pack can state the rule its cells already keep — the cohort ultimates sum to the central estimate — rather than the lint and the pack disagreeing about what the kind means."
+    },
+    {
+      "kind": "reserves.ibnr",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Incurred-but-not-reported for a cohort."
+    },
+    {
+      "kind": "reserves.central_estimate_total",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The actuary's central estimate."
+    },
+    {
+      "kind": "reserves.margin_released",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The margin release the quarter booked."
+    },
+    {
+      "kind": "reserves.risk_margin_remaining",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What margin stands after the release."
+    },
+    {
+      "kind": "reserves.committee_recommendation",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What the reserving committee recommended."
+    },
+    {
+      "kind": "reserves.booked_strengthening",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The strengthening actually booked."
+    },
+    {
+      "kind": "reserves.booked_total",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at",
+        "never-superseded"
+      ],
+      "about": "What was carried at the valuation, permanently — closing or superseding it is `booked_total_touched`."
+    },
+    {
+      "kind": "reserves.held_vs_central_gap",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at",
+        "standing",
+        "carries-forward-as(reuse)"
+      ],
+      "about": "The standing gap phase 1 opens; a later quarter reuses it rather than minting a second."
+    },
+    {
+      "kind": "reserves.attribution_deterioration",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The genuine-deterioration share of the movement."
+    },
+    {
+      "kind": "reserves.attribution_pattern_change",
+      "generated_by": "generators/reserving.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The benign pattern-change share."
+    },
+    {
+      "kind": "claims.incurred_to_date",
+      "generated_by": "generators/triangles.py",
+      "invariants": [
+        "holds-at",
+        "never-superseded"
+      ],
+      "about": "A cohort's incurred position, as read at one valuation.",
+      "note": "The diagonal, and `never-superseded` is not new behaviour here: check (a) in insurance's `_checks` (`triangle_touched`) has refused a closed or superseded reading of either kind since this vertical shipped. What was missing was the declaration — so a pack authoring the same diagonal was refused for claiming a rule the registry did not hold, while the engine enforced that exact rule. Declared now, which is what lets an authored observation grid mint append-only cells (`episodes.run`) instead of chaining them and then failing check (a)."
+    },
+    {
+      "kind": "claims.paid_to_date",
+      "generated_by": "generators/triangles.py",
+      "invariants": [
+        "holds-at",
+        "never-superseded"
+      ],
+      "about": "A cohort's paid position, as read at one valuation."
+    },
+    {
+      "kind": "claims.actual_vs_expected",
+      "generated_by": "generators/triangles.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The quarter's development against the calibrated pattern."
+    },
+    {
+      "kind": "portfolio.policies_in_force",
+      "generated_by": "generators/insurance_book.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(portfolio.policies_in_force)"
+      ],
+      "about": "The policy book one office, unit or group carries into the valuation. Sites sum to their unit and units to the group.",
+      "note": "The book, cut by the organisation that wrote it. `financial.revenue.*` is deliberately absent from this catalogue — see the catalogue's `about`."
+    },
+    {
+      "kind": "claims_ops.notified_count",
+      "generated_by": "generators/insurance_book.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(claims_ops.notified_count)"
+      ],
+      "about": "Claims notified in the quarter. Deliberately a separate prefix from `claims.*`: the triangle's diagonals are keyed by accident cohort over the period field, and an operational count keyed by the reporting quarter under the same prefix would make that pun ambiguous."
+    },
+    {
+      "kind": "claims_ops.settled_count",
+      "generated_by": "generators/insurance_book.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(claims_ops.settled_count)"
+      ],
+      "about": "Claims settled in the quarter, by claims centre, unit and group."
+    },
+    {
+      "kind": "expense.operating",
+      "generated_by": "generators/insurance_book.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(expense.operating)"
+      ],
+      "about": "Operating expense. Cost centres sum to the group; the expense *ratio* is never minted, because a ratio of totals is not the total of ratios."
+    },
+    {
+      "kind": "data.records_of_record",
+      "generated_by": "generators/insurance_book.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "How many records a system holds for what it is the system of record for. No roll-up: five systems of record for five different things do not add to anything anybody reports."
+    }
+  ]
+}

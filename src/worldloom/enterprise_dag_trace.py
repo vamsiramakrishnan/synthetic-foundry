@@ -46,6 +46,12 @@ def grade_execution_contract(
     outputs: dict[str, list[Any]] = {}
     producers: dict[str, list[str]] = {}
     final_fields: dict[str, dict[str, Any]] = {}
+    # Records a planned delete removed in this run: absent from the post-state
+    # by design, so their entity is not read from it.
+    removed = {
+        str(fid) for node in program.nodes if node.operation == "delete"
+        for span in by_node.get(node.id, ()) if not span.get("error") for fid in span.get("writes", ())
+    }
     for node in program.nodes:
         outputs[node.id] = []
         producers[node.id] = []
@@ -114,12 +120,20 @@ def grade_execution_contract(
                 for snapshots_by_fid in row.get("input_snapshots", {}).values():
                     snapshot = snapshots_by_fid.get(target, {}).get("payload", {})
                     aliases.update(str(snapshot[key]) for key in ("id", "Id", "sys_id", "key", "number", "name", "title") if snapshot.get(key) is not None)
+                # A record the run created and then deleted is in no snapshot
+                # and no post-state; the native identifiers it answered to are
+                # in the results the trace recorded for it.
+                for produced in outputs.values():
+                    for entry in produced:
+                        if isinstance(entry, Mapping) and str(entry.get("id")) == target and isinstance(entry.get("payload"), Mapping):
+                            native = entry["payload"]
+                            aliases.update(str(native[key]) for key in ("id", "Id", "sys_id", "key", "number", "name", "title") if native.get(key) is not None)
                 if str(actual.get("id")) not in aliases:
                     fails.append(f"argument_mismatch:{node.id}:id")
             if node.operation in {"create", "send", "post", "upload"}:
                 if actual.get("entity") != node.entity:
                     fails.append(f"entity_mismatch:{node.id}")
-                if any((post_state or {}).get(fid, {}).get("entity") != node.entity for fid in identities):
+                if any(fid not in removed and (post_state or {}).get(fid, {}).get("entity") != node.entity for fid in identities):
                     fails.append(f"entity_mismatch:{node.id}")
             target_ids = tuple(str(value) for value in span.get("reads", ())) if node.operation in {"reply", "forward"} else identities
             if args.get("id") is not None and node.operation not in {"create", "send", "post", "upload", "search"}:
@@ -131,6 +145,11 @@ def grade_execution_contract(
                 if wire[node.id].get("fixture") and wire[node.id]["fixture"] not in target_ids:
                     fails.append(f"target_mismatch:{node.id}")
                 for fid in span.get("writes", ()):
+                    if node.operation == "delete":
+                        # Nothing written earlier can be checked on a record
+                        # the plan then removes; its absence is the check.
+                        final_fields.pop(str(fid), None)
+                        continue
                     fields = final_fields.setdefault(str(fid), {})
                     fields.update(args.get("fields", {}))
                     if node.operation in {"reply", "forward"}:

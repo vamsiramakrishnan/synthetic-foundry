@@ -271,6 +271,24 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 | `--shard-index` |  |
 | `--strength` |  |
 
+### `worldloom enterprise-evals housekeeping`
+
+Build a hero use case: a drive, inbox or channel list that needs tidying, and the cases that grade it.
+
+```
+worldloom enterprise-evals housekeeping <WORLD_PATH> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--connector` | Whose tools tidy it; default is the kind's first connector. |
+| `--duplicates` | Drive only: the share of files with a stray copy. |
+| `--kind` | What to tidy: drive, inbox or chats. |
+| `--mess` | The share of items in the wrong place. |
+| `--records` | How many files, messages or channels the corpus holds. |
+| `--salt` | Vary the draw without changing the seed. |
+| `--stale` | The share of items past the archive rule. |
+
 ### `worldloom enterprise-evals plan`
 
 Write grounded query plans as JSONL.
@@ -368,6 +386,132 @@ Validate a materialized enterprise evaluation corpus.
 ```
 worldloom enterprise-evals validate <PATH>
 ```
+
+### `worldloom evalrun`
+
+Execute an agent against a compiled case set and grade plan, trajectory and outcomes.
+
+### `worldloom evalrun cases`
+
+Compile the corpus into three-axis cases and report what the set can grade.
+
+```
+worldloom evalrun cases <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the axis coverage as JSON. |
+| `--limit` |  |
+| `--out`, `-o` | Write cases.jsonl here. |
+
+### `worldloom evalrun compare`
+
+Compare two runs case by case: improvements, regressions, and which axis moved.
+
+```
+worldloom evalrun compare <BASELINE> <RECENT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` |  |
+
+### `worldloom evalrun import-served`
+
+Bring an external agent's served runs in as a run directory.
+
+```
+worldloom evalrun import-served <CORPUS> <RESULTS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | How to label the agent in the ledger. |
+| `--json` |  |
+| `--out`, `-o` | Run directory to write. |
+
+### `worldloom evalrun import-studio`
+
+Bring an Eval Studio results CSV in as a run, so it can be compared with a local one.
+
+```
+worldloom evalrun import-studio <CORPUS> <RESULTS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` |  |
+| `--out`, `-o` | Run directory to write. |
+
+### `worldloom evalrun plan`
+
+Grade the plan axis alone: the planner states each case's DAG and nothing runs.
+
+```
+worldloom evalrun plan <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | reference \| scripted:<plans.json> |
+| `--exec` | The planner as an executable, one subprocess per case: reads a `worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints {"plan": {"nodes": [...]}} on stdout. Nothing is executed. |
+| `--json` | Emit the summary as JSON. |
+| `--limit` |  |
+| `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
+| `--principal` | The principal the tool catalog is advertised to. |
+| `--shell` | Run the --exec command through the shell. |
+| `--timeout` | Seconds the --exec child may run per case. |
+
+### `worldloom evalrun requests`
+
+Write every case as a request a harness can answer offline: query, persona, tools.
+
+```
+worldloom evalrun requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--for` | run: answered with trajectories for `evalrun run`; plan: answered with DAGs for `evalrun plan`. |
+| `--limit` |  |
+| `--out`, `-o` | Write requests.json here instead of stdout. |
+| `--principal` |  |
+
+### `worldloom evalrun run`
+
+Run one agent over the case set, one isolated connector state per case, and grade.
+
+```
+worldloom evalrun run <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | reference \| lazy \| scripted:<responses.json> |
+| `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--json` | Emit the summary as JSON. |
+| `--limit` |  |
+| `--max-turns` | Turns the --exec child may take per case. |
+| `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
+| `--principal` | The principal every run is begun under. |
+| `--rater` | grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam). |
+| `--rater-timeout` | Seconds an exec: rater child may run per answer. |
+| `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
+| `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
+| `--timeout` | Seconds the --exec child may run per turn before it is killed. |
+
+### `worldloom evalrun summarize`
+
+Recompute a run's summary from its results ledger.
+
+```
+worldloom evalrun summarize <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` |  |
 
 ### `worldloom evals`
 
@@ -588,6 +732,41 @@ worldloom gemini-enterprise score <CORPUS> <RESULTS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. |
+
+### `worldloom industry`
+
+Derive the whole evaluation programme an industry implies: its lines of business, processes, requests and counts.
+
+### `worldloom industry list`
+
+The industries the process catalogue knows, with each default company's headline count.
+
+### `worldloom industry programme`
+
+Derive the programme for one industry: LOBs, process lines, seated requests, facts and use cases with derived counts.
+
+```
+worldloom industry programme <INDUSTRY> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--describe` | Print the headline numbers and stop; write nothing. |
+| `--engine` | The registered domain whose world the derived LOBs ride. Default: the industry's own name when a domain is registered under it. |
+
+### `worldloom industry project`
+
+Derive a Studio project for one company: its divisions, lines of business and use cases from the process catalogue.
+
+```
+worldloom industry project <INDUSTRY> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--lob` | A function family to seat (repeatable). Default: every family with a supported process line. |
+| `--name` | The company's name. Required for an industry; a company spec carries its own. |
+| `--seed` | The world seed. |
 
 ### `worldloom inspect`
 
@@ -867,6 +1046,10 @@ List the lore targets each engine consults, and what each one changes.
 worldloom pack targets <ENGINE>
 ```
 
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit as data, with the engine's organisation: the spine a `roles.table` must keep, the shipped table and per-unit posts to start from. |
+
 ### `worldloom pack template`
 
 Print a minimal valid pack to start from.
@@ -1128,6 +1311,26 @@ worldloom studio advance <PROJECT>
 | `--timeout` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
+### `worldloom studio evalrun`
+
+Grade an agent on this company's connector cases, per axis, and print the run summary.
+
+```
+worldloom studio evalrun <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | reference (the executable ceiling; no harness) or harness (the configured coding harness over the exec seam). |
+| `--harness-command` | Trusted local adapter for --agent harness: JSON stdin, JSON stdout; no shell. |
+| `--limit` | Only the first N selected rows. |
+| `--max-turns` | Turns the harness may take per case. |
+| `--mode` | run: execute through the tool surface and grade three axes; plan: state a DAG only and grade the plan axis. |
+| `--source` | Which cases: dataset (the connector queryset), programme (the process programme's record requests over the company's records) or both. |
+| `--split` | Grade only this dataset split (train, validation, test); empty grades every row. |
+| `--timeout` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
 ### `worldloom studio init`
 
 Create a project from an explicit company contract.
@@ -1214,7 +1417,7 @@ worldloom studio run <PROJECT>
 | --- | --- |
 | `--batch-limit` |  |
 | `--harness-command` |  |
-| `--operation` | build, compile, narrate, foundry or native |
+| `--operation` | build, compile, narrate, foundry, native or evalrun (the reference agent) |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
 ### `worldloom studio serve`

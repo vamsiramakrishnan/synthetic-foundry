@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
@@ -84,6 +85,14 @@ def _entity_matches(connector: str, requested: str, actual: str) -> bool:
 
     if requested == actual:
         return True
+    return _alias_matches(connector, requested, actual)
+
+
+@lru_cache(maxsize=4096)
+def _alias_matches(connector: str, requested: str, actual: str) -> bool:
+    # Memoised per triple: materialisation asks this once per requirement and
+    # record, and a corpus of ten thousand records must not parse the
+    # definition ten thousand times.
     from .connector_definition import REFERENCE_CONNECTORS, load_connector_definition
 
     if connector not in REFERENCE_CONNECTORS:

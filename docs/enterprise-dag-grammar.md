@@ -45,9 +45,16 @@ catalogue is not present in this repository.
 | `conditional` | Inspect the first search result count, execute one of two complementary writes, verify the selected write. |
 | `fan_out` | Create two independently named outputs from shared evidence and verify both. |
 | `write_chain` | Write, read back, update that exact returned record, read back again. |
+| `delete_chain` | Write, read back, delete that exact returned record, read it back expecting `not_found`. |
 
 Shape compatibility is a constraint. `read_chain` requires multiple sources;
-`fan_out` requires an operation that creates records. Shape selection takes
+`fan_out` requires an operation that creates records; `write_chain` and
+`delete_chain` require a destination whose connector definition serves an
+update or a delete for the entity (SharePoint and Drive files do; email
+drafts do not). A planned delete compiles to a `deleted` assertion naming the
+write that created the record and a `failure_at` expecting `not_found` on
+the final readback, so the record being gone and the readback failing are
+both graded rather than excused. Shape selection takes
 place before covering and sharding, so coverage includes the shape dimension
 and interleaved shards reconstruct the same global sequence. Conditional
 campaigns deterministically request one- or two-record witnesses so both

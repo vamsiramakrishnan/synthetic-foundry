@@ -1,0 +1,194 @@
+{
+  "artifact_types": [
+    {
+      "key": "purchase_order",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 0
+      },
+      "sections": [],
+      "word": false,
+      "filing": null,
+      "note": "An APPROVED_REPORT because it is an agreement somebody signed, not a measurement of anything."
+    },
+    {
+      "key": "goods_receipt_note",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 0
+      },
+      "sections": [],
+      "word": false,
+      "filing": null,
+      "note": "SYSTEM_OF_RECORD for its own system, what arrived, which is exactly why rank cannot arbitrate between it and the invoice."
+    },
+    {
+      "key": "supplier_invoice",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 2,
+        "minutes": 0
+      },
+      "sections": [],
+      "word": false,
+      "filing": null,
+      "note": "SYSTEM_OF_RECORD for its own system, what was billed, which is exactly why rank cannot arbitrate between it and the receipt."
+    },
+    {
+      "key": "match_exception_report",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+        "days": 0,
+        "hours": 4,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "The exception",
+          "kinds": [
+            "p2p.match_total_variance",
+            "p2p.approval_tolerance"
+          ],
+          "scope": "group",
+          "purpose": "State the total variance and the tolerance it broke, in that order. This is the paragraph that decides whether anyone senior reads the rest; it must say plainly that the buyer can no longer clear this.",
+          "required": true
+        },
+        {
+          "heading": "Where the variance sits",
+          "kinds": [
+            "p2p.match_quantity_variance",
+            "p2p.match_price_variance"
+          ],
+          "scope": "any",
+          "purpose": "Split the variance two ways — billed for what did not arrive, and billed at a rate that was not agreed — and say which line each sits on. Do not give the clean line a paragraph; a line that matched warrants a clause.",
+          "required": true
+        },
+        {
+          "heading": "Status and what is needed",
+          "kinds": [
+            "p2p.exception_status"
+          ],
+          "scope": "group",
+          "purpose": "Where the exception stands and what has to happen for it to move. Written while it is still open, so it asks for a decision rather than reporting one.",
+          "required": true
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "payment_approval_memo",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 0,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "The settlement",
+          "kinds": [
+            "p2p.approved_payment_value",
+            "p2p.credit_note_value",
+            "p2p.invoiced_value"
+          ],
+          "scope": "group",
+          "purpose": "What was billed, what the supplier conceded, and what is actually being paid. Lead with the figure being approved, not with the one on the invoice.",
+          "required": true
+        },
+        {
+          "heading": "Authority for the decision",
+          "kinds": [
+            "p2p.exception_approved_by",
+            "p2p.approval_tolerance",
+            "p2p.match_total_variance"
+          ],
+          "scope": "any",
+          "purpose": "Who approved this and under what delegation. State that the variance exceeded the tolerance and that this is therefore Finance's decision — the memo is the record that the approval chain was followed, and a memo that leaves the approver implicit is not that record.",
+          "required": true
+        },
+        {
+          "heading": "What the close carries",
+          "kinds": [
+            "financial.accrual.grni",
+            "p2p.received_value",
+            "close."
+          ],
+          "scope": "group",
+          "purpose": "The accrual posted at close, and — plainly, rather than left to a reader's inference — that it is built from what was received at the contracted rate, not from what was invoiced. This is the sentence that connects a site receipting note to the general ledger.",
+          "required": true
+        },
+        {
+          "heading": "Still outstanding",
+          "kinds": [
+            "p2p.open_shortfall_quantity",
+            "p2p.open_shortfall_value"
+          ],
+          "scope": "group",
+          "purpose": "The undelivered balance carried into next month, and that it is a commitment rather than an accrual — nothing has been received, so nothing is owed for it yet. One short paragraph.",
+          "required": false,
+          "note": "A \"still outstanding\" where nothing is. A settlement that closed the order out has no balance to carry, and the memo ends on the approval, which is where a memo about an approval should end. The three sections that make it the record of a decision (settlement, authority, what the close carries) stay required."
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "vendor_master_change",
+      "authority": "working_document",
+      "lifecycle": "draft",
+      "lag": {
+        "days": 0,
+        "hours": 3,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "The requested change",
+          "kinds": [
+            "p2p.vendor_change_status"
+          ],
+          "scope": "group",
+          "purpose": "What the supplier asked for and why it is being held. State the second approver is outstanding without naming a date it will be resolved by — there is not one.",
+          "required": true
+        },
+        {
+          "heading": "Counterparty",
+          "kinds": [
+            "p2p.contract_counterparty"
+          ],
+          "scope": "any",
+          "purpose": "Which agreement this supplier is engaged under. One or two sentences; this section exists so the change can be tied to a contract, not to restate the contract.",
+          "required": true
+        }
+      ],
+      "word": true,
+      "filing": null,
+      "note": "The one document below approved standing, matching the one fact below it: a change nobody has countersigned is a draft, whatever the vendor master screen shows."
+    },
+    {
+      "key": "spend_and_commitment_workbook",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 6,
+        "minutes": 0
+      },
+      "sections": [],
+      "word": false,
+      "filing": null,
+      "note": "A workbook off the order book, the receipting system and the ledger, published at close, the same standing the retail month-end model has and for the same reason: it restates no third party's claim, it reports what three systems of record hold. Its lag is longer than any of the six documents beside it: the position is assembled after the ledger locks, not while the cycle is running."
+    }
+  ]
+}

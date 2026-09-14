@@ -4,31 +4,41 @@ on:
     paths:
       - .github/workflows/process-bindings-check.yml
       - src/worldloom/process_bindings/**
-      - src/worldloom/process_catalogue.py
-      - src/worldloom/process_planning/**
+      - src/worldloom/pcf.py
+      - src/worldloom/functions.py
       - src/worldloom/process.py
       - src/worldloom/predicates.py
       - src/worldloom/artifact_ecology.py
       - src/worldloom/_data/process-catalogue/**
+      - src/worldloom/_data/pcf/**
+      - src/worldloom/_data/functions/**
       - tests/test_process*.py
+      - tests/test_pcf.py
+      - tests/test_functions.py
       - tests/test_predicates.py
       - tests/test_ecology_sdk.py
       - tools/compile_process_bindings.py
+      - tools/check_catalogue_pcf.py
   push:
     branches: [main]
     paths:
       - .github/workflows/process-bindings-check.yml
       - src/worldloom/process_bindings/**
-      - src/worldloom/process_catalogue.py
-      - src/worldloom/process_planning/**
+      - src/worldloom/pcf.py
+      - src/worldloom/functions.py
       - src/worldloom/process.py
       - src/worldloom/predicates.py
       - src/worldloom/artifact_ecology.py
       - src/worldloom/_data/process-catalogue/**
+      - src/worldloom/_data/pcf/**
+      - src/worldloom/_data/functions/**
       - tests/test_process*.py
+      - tests/test_pcf.py
+      - tests/test_functions.py
       - tests/test_predicates.py
       - tests/test_ecology_sdk.py
       - tools/compile_process_bindings.py
+      - tools/check_catalogue_pcf.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -47,10 +57,12 @@ jobs:
         run: python -m pip install -e '.[dev]' ruff==0.15.8 mypy==2.3.1
       - name: Lint and type check
         run: |
-          ruff check src/worldloom/process_bindings src/worldloom/predicates.py src/worldloom/artifact_ecology.py tools/compile_process_bindings.py tests/test_process_bindings.py
-          mypy src/worldloom/process_bindings src/worldloom/predicates.py src/worldloom/artifact_ecology.py
-      - name: Source parity, adapters, evidence and compatibility tests
-        run: python -m pytest -q tests/test_process_bindings.py tests/test_lexicon.py tests/test_predicates.py tests/test_tool_surface.py tests/test_process.py tests/test_ecology_sdk.py tests/test_determinism_hygiene.py tests/test_process_catalogue.py tests/test_process_planning.py
+          ruff check src/worldloom/process_bindings src/worldloom/pcf.py src/worldloom/functions.py src/worldloom/predicates.py src/worldloom/artifact_ecology.py tools/compile_process_bindings.py tools/check_catalogue_pcf.py tests/test_process_bindings.py tests/test_pcf.py tests/test_functions.py
+          mypy src/worldloom/process_bindings src/worldloom/pcf.py src/worldloom/functions.py src/worldloom/predicates.py src/worldloom/artifact_ecology.py
+      - name: Catalogue, framework join, adapters and compatibility tests
+        run: python -m pytest -q tests/test_process_bindings.py tests/test_pcf.py tests/test_functions.py tests/test_lexicon.py tests/test_predicates.py tests/test_tool_surface.py tests/test_process.py tests/test_ecology_sdk.py tests/test_determinism_hygiene.py
+      - name: Every activity resolves in its framework
+        run: python tools/check_catalogue_pcf.py --strict
       - name: Recompile all twelve industries twice
         run: |
           python -m worldloom.process_bindings --all --out /tmp/processes-one
@@ -58,11 +70,11 @@ jobs:
           diff -r /tmp/processes-one /tmp/processes-two
           python - <<'PY'
           from pathlib import Path
-          from worldloom.process_bindings import baseline_parity, verify_export
+          from worldloom.process_bindings import verify_export
           plans = [verify_export(p) for p in sorted(Path('/tmp/processes-one').glob('company-*'))]
           assert len(plans) == 12
           assert sum(len(p.rows) for p in plans) == 6975
-          assert all(baseline_parity(p) for p in plans)
+          assert all(r.pcf_name for p in plans for r in p.rows)
           PY
       - uses: actions/upload-artifact@v7
         with:

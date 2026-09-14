@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from .connector_definition import ConnectorDefinition, builtin_connector_definitions
@@ -134,7 +134,18 @@ def compile_dag_row(
             selected = [by_external.get(rid, rid) for rid in fixture.input_record_ids.get(key, ())]
             if len(selected) < requirement.minimum:
                 raise RowError(query.id, f"{spec.id}: insufficient bound source records")
-            if spec.kind == "search":
+            if spec.kind == "search" and requirement.bind == "predicate":
+                # The requirement's own rule is the search, so an agent that
+                # reads the request can search by it; the records it must
+                # return are still exactly the fixture's, checked by
+                # `expected_reads`. Up to the grammar's own bound, paged by
+                # the runtime at the tool's page size.
+                assert requirement.predicate is not None
+                payload.update(predicate=requirement.predicate.model_dump(mode="json"),
+                               max_results=min(len(selected), 1000))
+                payload.pop("id", None)
+                node["expected_reads"] = selected[:1000]
+            elif spec.kind == "search":
                 # Intersect exact fixture identities with authored field filters.
                 predicate = payload.get("predicate") or {}
                 if "where" in predicate:
@@ -158,8 +169,10 @@ def compile_dag_row(
             for assertion in base.get("assertions", ()):
                 if assertion.get("node") == template_key and assertion["type"] == "fields_used":
                     assertions.append({**assertion, "node": spec.id})
-        # A mapped fetch consumes only its search results, not the whole fixture pool.
-        if spec.for_each:
+        # A mapped fetch consumes only its search results, not the whole fixture
+        # pool. Reads only: a mapped write or readback returns the record *after*
+        # the write, and a snapshot of it taken before would fail every one.
+        if spec.for_each and spec.kind == "read":
             bound_ids = sorted({by_external.get(rid, rid)
                                 for key, rids in fixture.input_record_ids.items()
                                 if key.split(":", 1)[0] == spec.connector for rid in rids})
@@ -176,6 +189,8 @@ def compile_dag_row(
         payload = {key: value for key, value in payload.items() if key in admitted}
         node.update(tool=tool, entity=concrete, op=definition.tool(tool).op, payload=payload)
         nodes.append(node)
+    assertions.extend(_delete_assertions(query.id, dag, nodes))
+    assertions.extend(_mapped_assertions(dag, nodes, available))
     row = {
         **base, "grammar": GRAMMAR_VERSION, "shape": query.dimensions.get("dag_shape", "authored"),
         "expected_dag": {"nodes": nodes, "edges": [[parent, node.id] for node in dag.nodes for parent in node.depends_on]},
@@ -201,6 +216,87 @@ def compile_dag_row(
         raise RowError(query.id, str(error)) from error
     from .enterprise_failures import compile_failure_contract
     return compile_failure_contract(row)
+
+
+def _mapped_assertions(
+    dag: EnterpriseDag, nodes: Sequence[Mapping[str, Any]], definitions: Mapping[str, ConnectorDefinition],
+) -> list[dict[str, Any]]:
+    """Per-record expectations for a mapped write over a search's results.
+
+    A `for_each` write is one node and one record per item, and until this
+    the graders could only ask whether *a* record changed. When the write
+    iterates a search whose reads are pinned and its effect is stated
+    literally (a move's `parent`, an update's `fields`, a transition's
+    `state`, a delete), every pinned record is expected to end in that
+    state, by fid, and the outcome grade is the fraction that did.
+    """
+    wire = {str(node["id"]): node for node in nodes}
+    out: list[dict[str, Any]] = []
+    for spec in dag.nodes:
+        if spec.kind != "write" or spec.for_each is None:
+            continue
+        source = wire.get(spec.for_each.node, {})
+        records = [str(fid) for fid in source.get("expected_reads", ())][: spec.for_each.limit]
+        if not records or "id" not in spec.bindings:
+            continue
+        if spec.operation == "delete":
+            out.append({"type": "deleted", "node": spec.id, "records": records})
+            continue
+        fields: dict[str, Any] = {}
+        if spec.operation == "move" and "parent" in spec.arguments:
+            fields = {"parent": spec.arguments["parent"]}
+        elif spec.operation in {"update", "patch", "upsert"} and isinstance(spec.arguments.get("fields"), Mapping):
+            fields = dict(spec.arguments["fields"])
+        elif spec.operation == "transition" and "state" in spec.arguments:
+            definition = definitions.get(spec.connector)
+            entity = definition.entities.get(str(wire[spec.id].get("entity"))) if definition else None
+            workflow = entity.workflow if entity is not None else None
+            fields = {workflow.field if workflow else "state": spec.arguments["state"]}
+        if fields:
+            out.append({"type": "per_record_state", "node": spec.id, "records": records, "fields": fields})
+    return out
+
+
+def _binding_origin(spec: EnterpriseDagNode, by_id: Mapping[str, EnterpriseDagNode]) -> str:
+    """The node whose record an ``id`` binding chain ultimately addresses."""
+    seen = {spec.id}
+    current = spec
+    while "id" in current.bindings and current.bindings["id"].node in by_id:
+        current = by_id[current.bindings["id"].node]
+        if current.id in seen:
+            break
+        seen.add(current.id)
+    return current.id
+
+
+def _delete_assertions(query_id: str, dag: EnterpriseDag, nodes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """A planned delete is graded on what is gone, and its readback on failing.
+
+    The delete's target is found by following its ``id`` binding back to the
+    node that produced the record: a fixture the plan read, or a write the
+    plan made. ``deleted`` then names one or the other, and any verify bound
+    to the delete's result is expected to meet ``not_found``, stated as a
+    ``failure_at`` so the execution contract can demand the error rather
+    than excuse it.
+    """
+    by_id = {spec.id: spec for spec in dag.nodes}
+    wire = {str(node["id"]): node for node in nodes}
+    out: list[dict[str, Any]] = []
+    for spec in dag.nodes:
+        if spec.kind == "write" and spec.operation == "delete":
+            origin = _binding_origin(spec, by_id)
+            assertion: dict[str, Any] = {"type": "deleted", "node": spec.id}
+            if wire.get(origin, {}).get("fixture"):
+                assertion["fixture"] = wire[origin]["fixture"]
+            elif origin != spec.id and by_id[origin].kind == "write":
+                assertion["created_by"] = origin
+            else:
+                from .enterprise_rows import RowError
+                raise RowError(query_id, f"{spec.id}: delete addresses neither a fixture nor a record the plan creates")
+            out.append(assertion)
+        elif spec.kind == "verify" and "id" in spec.bindings and by_id.get(spec.bindings["id"].node, spec).operation == "delete":
+            out.append({"type": "failure_at", "node": spec.id, "kind": "not_found", "writes_persist": False, "blocked_nodes": []})
+    return out
 
 
 __all__ = ["compile_dag_row"]

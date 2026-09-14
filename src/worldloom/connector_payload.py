@@ -405,7 +405,44 @@ def _shape_rovo(definition: ConnectorDefinition, r: Mapping[str, Any]) -> dict[s
     }
 
 
+def _shape_sor(definition: ConnectorDefinition, r: Mapping[str, Any]) -> dict[str, Any]:
+    """A system-of-record record as the catalogue describes it: the product's own
+    id, the object kind, the binding's fields, and the status by name and code."""
+    entity = _entity(r)
+    status = str(r.get("status") or "open")
+    codes = definition.state_codes.get(entity, {})
+    return {
+        "ident": r.get("ident") or r.get("external_id"),
+        "object": r.get("object") or definition.query_name_for(entity),
+        "product": r.get("product"),
+        "sor_class": r.get("sor_class"),
+        "table": r.get("table"),
+        "tcode": r.get("tcode"),
+        "title": _name(r),
+        "status": status,
+        "status_code": codes.get(status, status),
+        "activity_id": r.get("activity_id"),
+        "activity": r.get("activity"),
+        "stream": r.get("stream"),
+        "pcf_id": r.get("pcf_id"),
+        "pcf_name": r.get("pcf_name"),
+        "function": r.get("function"),
+        "owner_bu": r.get("owner_bu"),
+        "country": r.get("country"),
+        "period": r.get("period"),
+        "control": r.get("control"),
+        "exception": r.get("exception"),
+        "amount": r.get("amount"),
+        "currency": r.get("currency"),
+        "binding_id": r.get("binding_id"),
+        "created_at": r.get("created_at", definition.clock),
+        "modified_at": r.get("modified_at", definition.clock),
+        **_wide_fields(definition, r),
+    }
+
+
 _SHAPERS = {
+    "sor_record": _shape_sor,
     "jira_issue": _shape_jira,
     "servicenow_record": _shape_servicenow,
     "salesforce_sobject": _shape_salesforce,

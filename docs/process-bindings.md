@@ -19,14 +19,14 @@ compiler as data, without executing that script.
 `_data/process-catalogue/bindings-provenance.json` records SHA-256 hashes and sizes for all
 five uploads. It also records the raw and canonical semantic digest for each of
 the 12 JSONL files in `all-12-industries.zip`. The expanded archive is a parity
-baseline, not a second runtime database. The original coverage CSV and compiler
-are retained beside the catalogue; the compiler is stored as inert `.py.txt`.
+baseline, not a second runtime database.
 
 The supplied [vocabulary proposal](sources/VOCABULARY.md) is retained verbatim as
 source material. Its descriptions of harvested datasets, licenses, vendor
 objects and regional rules are not a claim that this integration verified them.
-The catalogue itself says its APQC numbers are hints and its regional/product
-claims need verification. They remain authored priors here. `NOASSERTION` in the
+The catalogue's process ids are APQC PCF identifiers resolved against the
+shipped frameworks (see [the process catalogue](process-catalogue.md)); its
+regional and product claims remain authored priors here. `NOASSERTION` in the
 license ledger means no license was established by the upload; it is not an
 open-data license or a redistribution clearance.
 
@@ -128,7 +128,7 @@ executable steps, resolve references and pass the existing `process.accept`
 and `process.resolve` gates. Free-text controls are not boolean predicates.
 
 Lexicon records use source-and-industry-scoped activity IDs. Two activities
-sharing a broad `5.x` APQC hint do not become one canonical concept. Weights
+belonging to the same PCF process do not become one canonical concept. Weights
 are uniform authored priors over distinct activities, not source-measured
 frequencies. `sample_channels(binding, seed=8128)` uses stable per-binding and
 per-channel RNG streams. These are independent presence probabilities; they
@@ -187,6 +187,6 @@ Default compilation includes every universal stream, as the source does.
 streams. Choosing which support functions actually operate in a particular
 company remains an explicit company-authoring decision.
 
-The uploaded files do not contain authoritative APQC workbooks, ESCO releases,
-an anonymised Jira dump, BPI raw logs or EDGAR filings. This integration neither
-substitutes for those sources nor claims they were downloaded.
+The APQC frameworks and the O*NET database are shipped as data (see
+[Reference data](reference-data.md)). ESCO releases, an anonymised Jira dump,
+BPI raw logs and EDGAR filings are not; nothing here claims they were.

@@ -42,9 +42,9 @@ projections. `strict_sources` remains opt-in for materialization.
 For a positive end-to-end evidence check,
 `tests/test_enterprise_operational_execution.py` builds actual retail inventory
 and banking loan histories. It exercises 24 queries per industry for each of
-legacy, `map_read`, `conditional` and `write_chain` (192 total), validates
-evidence, exports and reloads, compiles and executes every row. The 144 grammar
-queries also run through CLI simulation. The 48 legacy runs additionally
+legacy, `map_read`, `conditional`, `write_chain` and `delete_chain` (240
+total), validates evidence, exports and reloads, compiles and executes every
+row. The 192 grammar queries also run through CLI simulation. The 48 legacy runs additionally
 achieve complete observation coverage through the semantic trace scorer.
 
 ## Implemented contracts
@@ -64,7 +64,7 @@ achieve complete observation coverage through the semantic trace scorer.
 
 The external service observes the tools and record identities itself; callers
 cannot submit node labels, assertions or a fabricated post-state. Actual HTTP
-tests cover the eight shapes, both conditional paths, mapped reads and writes,
+tests cover the nine shapes, both conditional paths, mapped reads and writes,
 pagination, response refusal, run isolation and authentication. Both execution
 paths use the connector emulator and assertion dispatcher.
 

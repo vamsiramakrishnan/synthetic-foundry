@@ -50,11 +50,29 @@ def materialize_owners(world: World, structure: CompanySpec, *,
         raise ValueError("support ownership needs restored generation state before materialization")
     events = tuple(world.events)
     if formed_at is None:
-        if not events:
-            raise ValueError("support ownership needs a company event timeline or explicit formed_at")
-        formed_at = max(event.occurred_at for event in events) + timedelta(hours=1)
+        joined = [person.joined for person in world.people if person.joined is not None]
+        if events:
+            formed_at = max(event.occurred_at for event in events) + timedelta(hours=1)
+        elif joined:
+            # A world with people and no events yet (a company built without
+            # an episode, as a catalogue-derived project is): the support
+            # units form an hour after the last person joined, so every
+            # leader has joined at formation and nothing is dated before the
+            # organisation it belongs to.
+            formed_at = max(joined) + timedelta(hours=1)
+        else:
+            raise ValueError("support ownership needs a company event timeline, people with join dates, or explicit formed_at")
+    from ..recipe import process_structure_of
+
+    # A world built from this very structure (a catalogue project: the
+    # company's units are the declared ones, `industry.divisions`) already
+    # holds every support unit, led as its pack seats it. Nothing to form.
+    built_from = process_structure_of(world.recipe) == structure
     resolved: dict[str, str] = {}
     for name, role in leaders.items():
+        if built_from and name in existing:
+            resolved[name] = existing[name].leader_id
+            continue
         identifier = world._roles.get(role)
         person = next((person for person in world.people if person.id == identifier), None)
         if person is None:

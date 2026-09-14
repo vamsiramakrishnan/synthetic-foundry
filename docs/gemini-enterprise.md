@@ -108,6 +108,14 @@ not quote it looks identical to one that never opened it.
 Closing that gap means capturing the parts of the `streamAssist` stream Eval
 Studio drops, which is a change to Eval Studio rather than to this engine.
 
+## Comparing with a local run
+
+`worldloom evalrun import-studio ./cases eval_results.csv -o ./runs/studio`
+brings a results CSV in as a run on the answer axis only, joined on query
+text, so it can sit next to a local three-axis run in `worldloom evalrun
+compare`. The summary reports plan and trajectory as unobserved rather than
+as zeros. See [eval execution](eval-execution.md).
+
 ## The corpus side is not optional
 
 It is tempting to run step 3 against a customer's existing data store and skip

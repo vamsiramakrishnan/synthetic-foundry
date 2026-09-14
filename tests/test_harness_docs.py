@@ -73,6 +73,10 @@ DOCUMENTS = (
     ".claude/commands/worldloom-render.md",
     ".claude/commands/worldloom-evaluate.md",
     ".claude/commands/worldloom-design.md",
+    ".claude/commands/worldloom-evalrun.md",
+    ".claude/skills/worldloom-evalrun/SKILL.md",
+    ".claude/skills/worldloom-evalrun/references/protocol.md",
+    "docs/eval-execution.md",
     "docs/generation-model.md",
     "docs/lore.md",
     # User-facing operator documentation. These pages are intentionally in the
@@ -104,6 +108,7 @@ DOCUMENTS = (
     "docs/narration-programs.md",
     "docs/process-bindings.md",
     "docs/process-catalogue.md",
+    "docs/industry-programme.md",
     "docs/architecture.md",
     "docs/enterprise-corpus.md",
     "docs/sdk.md",

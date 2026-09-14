@@ -28,7 +28,8 @@ def snapshot_intent(spec: ProjectSpec) -> dict[str, Any]:
     """One identity for generation, narration selection and read-only readiness."""
     return {"company": spec.company, "seed": spec.seed,
             "lobs": [lob.model_dump(mode="json") for lob in spec.lobs],
-            "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes)}
+            "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes),
+            **({"structure": spec.structure.model_dump(mode="json")} if spec.structure is not None else {})}
 
 
 def changes(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
@@ -50,7 +51,20 @@ def preset(engine: str = "retail", name: str = "Northstar Retail") -> ProjectSpe
     from ..synthesis.connectors import operational_profile
 
     if engine not in {"retail", "banking"}:
-        raise ValueError("the runnable examples are retail and banking; other engines use the interview")
+        from ..industry import project
+        from ..process_bindings.compiler import resource
+
+        if engine in resource("defaults.json")["DEFAULT_ORGS"]:
+            # Any industry the process catalogue knows starts from its derived
+            # programme: every line of business with a supported process line, every
+            # line of theirs as a use case with the line's own count, and the
+            # company's limitations acknowledged rather than hidden.
+            return project(engine, name)
+        raise ValueError(
+            "the runnable examples are retail and banking, and any industry the process"
+            " catalogue knows starts from its derived programme (`worldloom industry list`);"
+            " other engines use the interview"
+        )
     document = {"engine": engine, "identity": {"company_name": name}, "geo": "australia"}
     resolution = company.resolve(company.from_document(document))
     structure = default_company(engine, name=name)
@@ -125,6 +139,9 @@ class Studio:
         for job in jobs:
             if job["options"]["operation"] == "foundry":
                 job["progress"] = progress(self, job["id"])
+            elif job["options"]["operation"] == "evalrun":
+                from .evalrun import progress as evalrun_progress
+                job["progress"] = evalrun_progress(self, job["id"])
         return {**current, "workflow": self.workflow(project, current["revision"], harness_configured=harness_configured).model_dump(mode="json"),
                 "construction_plan": compile_project(spec).model_dump(mode="json"),
                 "resolution": {"engine": resolution.engine, "unmet": list(resolution.unmet)},
@@ -193,8 +210,9 @@ class Studio:
         action = workflow.next_action
         if action is None or action.kind != "run":
             return {"advanced": False, "workflow": workflow.model_dump(mode="json")}
-        options = RunOptions.model_validate({"operation": action.operation, "harness_identity":
-            digest(harness_command) if action.operation in {"narrate", "native", "foundry"} else ""})
+        needs_harness = action.operation in {"narrate", "native", "foundry"} or action.options.get("evalrun_agent") == "harness"
+        options = RunOptions.model_validate({"operation": action.operation, **action.options,
+                                             "harness_identity": digest(harness_command) if needs_harness else ""})
         job = self.store.enqueue(project, revision, options)
         advanced = run_job(self, job["id"], harness_command=harness_command, timeout=timeout)
         return {"advanced": advanced, "job": self.store.job(job["id"]),
@@ -230,6 +248,7 @@ class Studio:
         request = {"schema": "worldloom.company-interview/v1", "request_id": request_id,
                    "revision": revision, "company": current["spec"], "message": message,
                    "native_sources": self.native_sources(project, revision),
+                   "programme": self._programme_headline(current["spec"]),
                    "conversation": [{"user": t["request"]["message"], "assistant": t["reply"]["message"]}
                                     for t in turns[-8:] if t["reply"]],
                    "instructions": [
@@ -239,10 +258,14 @@ class Studio:
                        "Return the complete proposed project only when there is enough information. Preserve existing values unless the operator requests a change.",
                        "Keep unanswered details as questions; do not acknowledge unsupported claims on the operator's behalf.",
                        "Reuse registered company, LOB, process, scenario and synthesis contracts. A new label does not implement a workflow.",
+                       "When the operator names an industry, derive its lines of business, processes, requests and counts from the process catalogue (`worldloom industry programme INDUSTRY --describe`; the `programme` field below carries the headline numbers) rather than inventing a LOB list or writing a round number as a use case count. A use case's count is the process line's situations; a system no connector emulates is named as unemulated, never replaced.",
+                       "To change the company itself, edit `structure` (its name, industry, operating model, countries, business units with their archetypes, and the landscape naming the product per system class), set `divisions` and `use_cases` to empty lists, keep `lobs` to keep the families seated now or empty it to seat every supported family, and set `derive` to true. The Studio then derives the divisions, LOBs, use cases and acknowledged limitations from the process catalogue for that company before recording the revision. Do not write those by hand when the company changes.",
                        "For a Foundry run each use case needs an explicit construction EvalSpec. Its connector selectors must constrain the declared business unit, LOB and activity. Do not claim unsupported business evidence.",
                        "For native file tasks, declare native_corpus plans referencing accepted company ArtifactIR sections and native_tasks linked to a use_case_id. Specify read/analyze/update/create outcomes, citations, calculations and preserved content. Long documents need enough distinct grounded sections; padding is not evidence.",
                        "Native difficulty uses native_calibration: declare the actual target cohort, pass-rate band, independent support and finite total budgets. Optional noise_variants expose grounded extra files within the same evidence component; the training choice is sealed before one holdout. Never claim prose mutation or independent support from shared files or facts.",
                        "Declare calibration cohort, noise variants and finite trial budgets. Query counts do not establish independent case support or observed difficulty.",
+                       "Evaluation is not retrieval. Every use case is graded on three axes by `worldloom evalrun`: the plan (which connector DAG the request should produce), the trajectory (order, budget, designed failures honoured, no unsafe retries) and the outcomes (records created, updated and deleted as a state diff; the artifact and answer, grounded). State for each use case which axes it exercises and which write operations (create, update, delete) its outcomes contain. A use case whose outcomes contain no write grades only reads.",
+                       "Some requests should be under-specified on purpose: an agent is also graded on whether it asks before acting when the request is ambiguous, a parameter is missing or a delete needs the user's word. Say for each use case whether its requests are complete or deliberately leave something open, and what the user would reply.",
                        "Return one JSON object matching response_schema. Proposals are reviewed before becoming a revision.",
                    ], "response_schema": InterviewReply.model_json_schema()}
         with self.store.connection() as db:
@@ -265,6 +288,25 @@ class Studio:
                        (request_id, project, revision, ordinal, canonical(request)))
         return request
 
+    @staticmethod
+    def _programme_headline(spec: dict[str, Any]) -> dict[str, Any] | None:
+        """The derived programme's numbers for the company's industry, or None.
+
+        Read from the process structure when the project has one, else from
+        the company document's industry through `industry.industry_of`, so an
+        interviewer sees what the catalogue already answers before asking.
+        """
+        from ..industry import describe, industry_of
+
+        structure = spec.get("structure") or {}
+        industry = structure.get("industry") or industry_of(str((spec.get("company") or {}).get("industry", "")))
+        if not industry:
+            return None
+        try:
+            return describe(industry)
+        except ValueError:
+            return None
+
     def accept_interview(self, project: str, reply: InterviewReply) -> dict[str, Any]:
         reply = InterviewReply.model_validate(reply.model_dump(mode="json"))
         with self.store.connection() as db:
@@ -277,14 +319,28 @@ class Studio:
                 raise StudioConflict("this interview response is already recorded")
             db.execute("UPDATE interviews SET reply=? WHERE id=?", (payload, reply.request_id))
         original = self.store.get(project, row["revision"])
+        proposed = self._proposed(reply)
         return {"reply": reply.model_dump(mode="json"), "revision": row["revision"],
-                "changes": changes(original["spec"], reply.proposal.model_dump(mode="json")) if reply.proposal else []}
+                "changes": changes(original["spec"], proposed.model_dump(mode="json")) if proposed else []}
+
+    @staticmethod
+    def _proposed(reply: InterviewReply) -> ProjectSpec | None:
+        """The project an interview reply proposes, derived from its structure when it asks."""
+        if reply.proposal is None:
+            return None
+        if not reply.derive:
+            return reply.proposal
+        from ..industry import rederive
+
+        return rederive(reply.proposal)
 
     def apply_interview(self, project: str, request_id: str) -> dict[str, Any]:
         turn = next((t for t in self.interviews(project) if t["id"] == request_id), None)
         if turn is None or not turn["reply"] or not turn["reply"].get("proposal"):
             raise ValueError("interview has no proposed company revision")
-        return self.store.revise(project, turn["revision"], ProjectSpec.model_validate(turn["reply"]["proposal"]),
+        proposed = self._proposed(InterviewReply.model_validate(turn["reply"]))
+        assert proposed is not None
+        return self.store.revise(project, turn["revision"], proposed,
                                  reason="Applied reviewed interview proposal")
 
     def snapshot(self, spec: ProjectSpec) -> tuple[World, Path]:
@@ -304,14 +360,24 @@ class Studio:
         # profile/LOB edits create an explicit alternate revision from the
         # same seed, never an unlabelled replacement inside a dataset batch.
         blueprint = sdk.from_resolution(resolution, seed=spec.seed)
+        overrides: dict[str, Any] = {}
         if spec.divisions:
+            overrides["units"] = [unit.model_dump(mode="json") for unit in spec.divisions]
+        if spec.structure is not None and resolution.pack is not None and resolution.pack.roles is None:
+            # An industry no engine builds rides the retail shape; its
+            # commercial seats take the company's own revenue function.
+            from ..industry import role_table
+
+            derived_roles = role_table(spec.structure)
+            if derived_roles is not None:
+                overrides["roles"] = derived_roles
+        if overrides:
             from dataclasses import replace
 
             from ..packs import Pack
 
             assert resolution.pack is not None
-            pack = Pack.model_validate({**resolution.pack.model_dump(mode="json"),
-                                        "units": [unit.model_dump(mode="json") for unit in spec.divisions]})
+            pack = Pack.model_validate({**resolution.pack.model_dump(mode="json"), **overrides})
             blueprint = replace(blueprint, pack_source=pack)
         for lob in spec.lobs:
             blueprint = blueprint.lob(lob)
@@ -339,6 +405,15 @@ class Studio:
         else:
             built = blueprint.build()
         world = built.world
+        if spec.structure is not None:
+            # The process company rides the world, so its systems of record
+            # and their evidence project from the world alone wherever
+            # records are read, and its facts are in the ledger they cite.
+            # Before compilation, as a rebuild replays it: a step first, the
+            # derived layer after.
+            from ..recipe import apply_process_structure
+
+            world = apply_process_structure(world, spec.structure)
         if spec.episodes:
             world = world.compile()
         world.validate().raise_if_failed()
@@ -462,6 +537,11 @@ class Studio:
                              "business_unit": c.owner, "lob": c.lob, "activities": ",".join(c.activities)}
                      for c in spec.use_cases})
 
+    def agent_results(self, project: str, job_id: str, *, offset: int = 0, limit: int = 25, **filters: str) -> dict[str, Any]:
+        """Page one completed agent run's graded cases; the run is authenticated first."""
+        from .evalrun import results
+        return results(self, project, job_id, offset=offset, limit=limit, **filters)
+
     def evidence(self, project: str, revision: str, row_id: str) -> dict[str, Any]:
         """Operator inspection only; the evaluated-agent export remains prompt-only."""
         from ..enterprise_io import load_exported_corpus
@@ -502,6 +582,9 @@ class Studio:
         if options.operation == "foundry":
             from .foundry import execute
             return execute(self, job, harness_command=harness_command, timeout=timeout)
+        if options.operation == "evalrun":
+            from .evalrun import execute as execute_evalrun
+            return execute_evalrun(self, job, harness_command=harness_command, timeout=timeout)
         if options.operation == "interview":
             if not harness_command:
                 raise ValueError("connect a coding harness or export the interview request")

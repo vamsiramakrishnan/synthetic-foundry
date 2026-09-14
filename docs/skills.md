@@ -32,12 +32,14 @@ terminal-capable agent can use it without slash-command support.
 |---|---|---|
 | Resume a company dataset | `worldloom studio next`, `worldloom studio advance` | [Company workflow](studio.md#resume-a-company-workflow) |
 | Prepare native evaluations | `worldloom studio prepare-native` | [Native document tasks](studio.md#native-documents-and-file-tasks) |
+| Grade agents inside Studio | `worldloom studio evalrun` | [Grade agents on the connector cases](studio.md#grade-agents-on-the-connector-cases) |
 | Build a decided world | `worldloom build`, `worldloom status` | [Company specification](agents/company-specification.md) |
 | Propose an employee action | `worldloom act requests`, `worldloom act accept` | [Actors](agents/actors.md) |
 | Write fact-scoped prose | `worldloom narrate requests`, `worldloom narrate accept` | [Writing responses](agents/writing-responses.md) |
 | Render and inspect files | `worldloom render`, `worldloom validate` | [Artifact compiler](artifact-compiler.md) |
 | Measure the result | `worldloom evaluate`, `worldloom diversity` | [Enterprise corpus gates](enterprise-corpus.md#quality-gates) |
 | Generate many configurations | `worldloom mosaic`, `worldloom fleet` | [Fleets](agents/fleets.md) |
+| Evaluate an agent on enterprise workflows | `worldloom evalrun cases`, `worldloom evalrun run`, `worldloom evalrun compare` | [Eval execution](eval-execution.md) |
 
 Report the stage result and relevant receipt. A build count, narration
 acceptance, coherence result, and retrieval score answer different questions.
@@ -174,6 +176,17 @@ agent-trajectory scoring, all grounded in one `World`.
 
 Source: [`.claude/skills/worldloom-agent-evals/SKILL.md`](../.claude/skills/worldloom-agent-evals/SKILL.md)
 
+### `worldloom-evalrun`
+
+Run an agent against a compiled enterprise case set and grade three axes
+separately: the plan it formed, the trajectory it took, the outcomes it left.
+Three transports let any harness be the agent under test: an executable driven
+one turn at a time over the `--exec` seam, a requests/responses document pair,
+or MCP through `worldloom enterprise-evals serve`. `worldloom evalrun plan`
+grades a planner on the plan axis alone, nothing executed.
+
+Source: [`.claude/skills/worldloom-evalrun/SKILL.md`](../.claude/skills/worldloom-evalrun/SKILL.md)
+
 ### `worldloom-artifact-realism`
 
 Improve how a world materialises into documents, decks, workbooks, tickets,
@@ -184,17 +197,18 @@ Source: [`.claude/skills/worldloom-artifact-realism/SKILL.md`](../.claude/skills
 
 ### `worldloom-process-bindings`
 
-Compile the supplied 12-industry catalogue into company activity bindings,
-inspect coverage and evidence boundaries, and drive process authoring from
-them without treating authored hints as measurements.
+Compile the twelve-industry catalogue into company activity bindings, each
+naming its APQC process, inspect coverage and evidence boundaries, and drive
+process authoring from them without treating authored priors as measurements. Derive the whole
+evaluation programme an industry implies with `worldloom industry programme`.
 
 Source: [`.claude/skills/worldloom-process-bindings/SKILL.md`](../.claude/skills/worldloom-process-bindings/SKILL.md)
 
 ### `worldloom-process-catalogue`
 
-Compile authored industry factors into company-bound process plans, then
-author executable episodes through the existing process cascade. The plan is
-context for the cascade, never an execution trace.
+Read and extend the process catalogue, whose activities are keyed by APQC
+process id, and carry compiled bindings into the process authoring cascade.
+The bindings are context for the cascade, never an execution trace.
 
 Source: [`.claude/skills/worldloom-process-catalogue/SKILL.md`](../.claude/skills/worldloom-process-catalogue/SKILL.md)
 
@@ -263,6 +277,22 @@ worldloom narrate accept ./corpus \
 
 Narration requests are independent by section. Workers may propose them in
 parallel; acceptance binds each response to the exact request and corpus ledger.
+
+### Agent evaluation
+
+```bash
+worldloom evalrun requests ./cases -o requests.json
+worldloom evalrun run ./cases --agent scripted:responses.json -o ./runs/mine
+worldloom evalrun run ./cases --exec "python3 my_agent.py" -o ./runs/mine
+worldloom evalrun plan ./cases --exec "python3 my_planner.py" -o ./runs/planner
+```
+
+The requests document carries each case's query and tool catalog and nothing
+the agent must not know. A responses document replays a fixed trajectory; the
+`--exec` form runs the agent one turn at a time with the transcript as its
+only memory, so it can act on what a tool returned. Either way the grader
+reads only the spans and snapshots the service recorded. `plan` sends the
+same request and catalog to a planner and grades only the DAG it states.
 
 ### Actor decisions
 

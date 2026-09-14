@@ -63,6 +63,13 @@ The scorer measures required semantic calls, dependency order, write verificatio
 
 `ConnectorSimulator` is an executable in-memory MCP target for harness tests. It applies fixture permissions, stale versions, missing identifiers, ambiguous joins, partial writes, version conflicts, idempotent writes, and dependency-based readback instead of merely carrying failure labels.
 
+## Running an agent and grading three axes
+
+`worldloom evalrun run dist/enterprise-evals -o ./runs/reference` executes an
+agent over the compiled rows through the same tool surface `serve` exposes and
+grades plan, trajectory and outcomes separately, with the assertion grade
+beside them. See [eval execution](eval-execution.md).
+
 ## External connector agents
 
 `worldloom enterprise-evals serve dist/enterprise-evals --check` validates the

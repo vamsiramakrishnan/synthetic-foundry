@@ -18,7 +18,8 @@
         "read": "get_message",
         "reply": "reply_message",
         "search": "search_messages",
-        "send": "send_message"
+        "send": "send_message",
+        "update": "update_message"
       },
       "required_on_create": [
         "subject"
@@ -225,6 +226,20 @@
         "entity": "string?",
         "fields": "object",
         "name": "string?"
+      },
+      "projection": false
+    },
+    "update_message": {
+      "entities": [
+        "message"
+      ],
+      "idempotency": null,
+      "max_results": 1000,
+      "op": "update",
+      "page_size": 50,
+      "params": {
+        "id": "string",
+        "fields": "object"
       },
       "projection": false
     }

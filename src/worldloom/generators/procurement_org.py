@@ -223,25 +223,12 @@ def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
 #: like the role table — see ``banking_org``'s identical comment for why these
 #: do not move to ``generators/names.py``.
 #:
-#: The suffix pool, and **it is currently unreachable from any shipped
-#: locale** — stated rather than quietly carried, because a pool nothing draws
-#: from is exactly the "carried, citable and inert" failure this repository
-#: keeps finding.
-#:
-#: ``Locale.industry_suffixes`` is a closed table in ``locales.py`` naming
-#: three engines, and ``suffixes_for`` answers an engine it has never heard of
-#: with the *retail* pool rather than raising — deliberately, so a new vertical
-#: is not made unbuildable by a naming table. So a contractor built today is
-#: named from ``company_suffixes`` and comes out as "Ardent Holdings", which is
-#: a perfectly plausible contractor and is not this engine's own vocabulary.
-#: The gap is the same class as ``parameters.DEFAULTS`` and
-#: ``landscape.LANDSCAPES``: a core table with no registration seam.
-#:
-#: This pool stays because it *is* reached the moment either of two things
-#: happens — a locale (or a pack-authored one) states an empty pool, or
-#: ``industry_suffixes`` grows a seam — and deleting it would mean rediscovering
-#: what a contracting group is called in the jurisdiction this engine was
-#: written for.
+#: The suffix pool, reached only as a fallback. Every shipped locale answers
+#: ``suffixes_for("procurement")`` from its own ``industry_suffixes`` (and
+#: refuses an engine it has no entry for), so a contractor is named in the
+#: jurisdiction's words; this pool is what an authored locale that states an
+#: empty procurement pool falls back to, and it keeps what a contracting group
+#: is called in the jurisdiction this engine was written for.
 _CONTRACTOR_SUFFIX = ("Infrastructure", "Group Services", "Contracting", "Infrastructure Group")
 _SOURCING = ("Sourcemark", "Contract Vault", "Vendorline")
 _PROCURE = ("Requisite P2P", "OrderBridge", "Procureflow")
@@ -270,6 +257,11 @@ def generate(
     # in generator code, and a table missing one raises `KeyError` part-way
     # through an episode rather than building a different company.
     role_table: Sequence[tuple[str, str, str, str | None]] | None = None,
+    # The per-unit posts, replaced — `organisation.generate`'s seam and its
+    # argument: a parameter rides the call and is recorded by the recipe,
+    # `None` is this module's own `_UNIT_ROLES`, and a supplied set must still
+    # mint the engine's own suffixes because generator code looks them up.
+    unit_roles: Sequence[UnitRole] | None = None,
     physics: Parameters = DEFAULT,
 ) -> ProcurementOrganisation:
     """Build the contracting group for an archetype. Same seed, same graph, same ids.
@@ -289,8 +281,19 @@ def generate(
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
     role_table = list(_ROLES if role_table is None else role_table)
+    unit_role_specs = _UNIT_ROLES if unit_roles is None else tuple(unit_roles)
+    supplied_suffixes = {spec.suffix for spec in unit_role_specs}
+    missing = [spec.suffix for spec in _UNIT_ROLES if spec.suffix not in supplied_suffixes]
+    if missing:
+        raise ValueError(
+            f"unit_roles must mint the procurement engine's own per-unit posts —"
+            f" missing suffix(es): {', '.join(missing)}. The engine looks"
+            " `{unit}_md` up by name, so a set without it raises part-way"
+            " through a build rather than building a different company. Add"
+            " rows around it instead."
+        )
     for unit in units:
-        for spec in _UNIT_ROLES:
+        for spec in unit_role_specs:
             role_table.append(spec.row(unit.key, unit.name))
     role_table, depth_of = sorted_roles(role_table)
 

@@ -13,16 +13,16 @@ tree downstream.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
-from ..models import Model
+from ..models import Model, SizeBudget
 
 #: Size classes, in the vocabulary the existing ``ArtifactIntent`` already uses.
 #: Kept identical rather than improved, because two adjacent vocabularies for the
 #: same idea is how a codebase starts needing a translation table.
-SizeClass = Literal["small", "medium", "long"]
+SizeClass = Literal["small", "medium", "long", "xlong"]
 
 #: How much a reader is expected to absorb per unit of surface. Not a synonym for
 #: size: a one-page dashboard is small and dense, a twenty-page discussion
@@ -147,6 +147,10 @@ class ArtifactPlan(Model):
     """The artifact's purpose in one line — ``explain_performance_and_request_decisions``."""
     beats: list[NarrativeBeat] = Field(default_factory=list)
     size_class: SizeClass = "medium"
+    budget: SizeBudget | None = None
+    """The numbers behind ``size_class`` when the document type declared its
+    own — copied from ``ArtifactIntent.budget`` by whoever built this plan.
+    ``None`` resolves the size class through ``sizing.PRESETS``."""
     density_profile: DensityProfile = "balanced"
     emphasis: list[str] = Field(default_factory=list)
     """Themes to foreground, in priority order."""
@@ -166,6 +170,18 @@ class ArtifactPlan(Model):
 
     def required_beats(self) -> list[NarrativeBeat]:
         return [beat for beat in self.beats if not beat.optional]
+
+    @model_serializer(mode="wrap")
+    def _budget_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # An accepted plan is the `output` of a generation-ledger entry
+        # (`compiler.handshake.accept`), so the same rule as
+        # `ArtifactIntent._budget_wire`: a budget is written when declared and
+        # absent otherwise, and every ledger written before budgets existed
+        # keeps its exact bytes.
+        data: dict[str, Any] = handler(self)
+        if self.budget is None:
+            data.pop("budget", None)
+        return data
 
 
 __all__ = [

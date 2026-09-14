@@ -70,9 +70,47 @@ same artifacts.
 
 from __future__ import annotations
 
-from .cases import COLUMNS, ROW_LIMIT, RUBRICS, Shard, rows, shards
-from .datastore import MEDIA_TYPES, UNSUPPORTED_MEDIA, Export, documents
-from .results import Scorecard, Slice, read_results, score
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .cases import COLUMNS, ROW_LIMIT, RUBRICS, Shard, rows, shards
+    from .datastore import MEDIA_TYPES, UNSUPPORTED_MEDIA, Export, documents
+    from .results import Scorecard, Slice, read_results, score
+
+# Lazy re-exports (PEP 562), as in `worldloom.evalrun`: `worldloom.cli` imports
+# this package's CLI at module level, and an eager import here pulled the
+# models module before `--help` could print. Names are served on first access.
+_EXPORTS: dict[str, str] = {
+    'COLUMNS': '.cases',
+    'Export': '.datastore',
+    'MEDIA_TYPES': '.datastore',
+    'ROW_LIMIT': '.cases',
+    'RUBRICS': '.cases',
+    'Scorecard': '.results',
+    'Shard': '.cases',
+    'Slice': '.results',
+    'UNSUPPORTED_MEDIA': '.datastore',
+    'documents': '.datastore',
+    'read_results': '.results',
+    'rows': '.cases',
+    'score': '.results',
+    'shards': '.cases',
+}
+
+
+def __getattr__(name: str) -> object:
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+
+    value = getattr(import_module(module, __name__), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_EXPORTS))
 
 __all__ = [
     # Cases out.

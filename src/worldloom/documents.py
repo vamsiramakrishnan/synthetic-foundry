@@ -42,6 +42,7 @@ from .models import (
     FormulaKind,
     Lifecycle,
     Row,
+    SizeBudget,
     Table,
 )
 from .narrative import references
@@ -146,6 +147,10 @@ class FilingPlan:
     size: str = "medium"
     rationale: str = ""
     facts: tuple[str, ...] = ()
+    budget: SizeBudget | None = None
+    """The numbers behind ``size`` when the author declared them rather than
+    naming a preset — copied onto the intent at plan time, see
+    ``sizing.budget_of``. ``None`` means the preset ``size`` names."""
     """Which of the planner's fact bundles this document is given. See
     ``generators/planning.FILING_BUNDLES`` for the closed set and what each
     one is."""
@@ -1522,6 +1527,22 @@ class SectionPlan:
     a quiet month genuinely would not have.
     """
 
+    repeat: str = ""
+    """What this one plan step becomes several sections *over*.
+
+    Empty, the default, is one section. ``"unit"`` is one section per business
+    unit that has facts for it, in the order the units were minted, each handed
+    only the facts whose subject is that unit or a category or site inside it,
+    and each with ``{{var:unit.name}}`` in its heading and purpose resolved to
+    that unit's name. This is how a long document grows from facts rather than
+    from filler: a group review that walks every division is one authored step
+    that expands to as many sections as the company has divisions, and each of
+    those is its own narration request with its own bounded fact set — which
+    is also what keeps the per-section validator exactly as strict as it was.
+    ``plan.py``'s "one beat becoming three sections in a long artifact is
+    normal" made concrete.
+    """
+
 
 _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
     "cfo_variance_memo": (
@@ -1984,6 +2005,47 @@ def _in_scope(fact: CanonicalFact, scope: str, *, company_id: str, unit_ids: set
     if scope == "unit":
         return fact.subject in unit_ids
     return True
+
+
+#: The one variable a repeated step may use beyond the closed vocabulary
+#: ``templating`` resolves from the world: the unit the section is about,
+#: which no world-level lookup can name because it differs per section.
+UNIT_NAME_VARIABLE = "{{var:unit.name}}"
+
+
+def _repeated_over_units(
+    world: World, step: SectionPlan, facts: Sequence[CanonicalFact],
+) -> list[ArtifactSection]:
+    """*step* expanded to one section per business unit with facts for it.
+
+    A unit's facts are the ones whose subject is the unit itself or a category
+    or site inside it — the same membership `narrative.compiler._hierarchy`
+    reports to a writer, so a section about "Fresh" carries the figures a
+    reader would file under Fresh. A unit with no matching fact gets no
+    section, the rule every plan step already follows: a heading with nothing
+    under it is not a document a company would issue.
+    """
+    from . import templating
+    from .compiler.compose import infer_semantic_role
+
+    out: list[ArtifactSection] = []
+    for unit in world.business_units:
+        inside = {unit.id}
+        inside.update(c.id for c in world.categories if c.business_unit_id == unit.id)
+        inside.update(site.id for site in world.sites if site.business_unit_id == unit.id)
+        assigned = [
+            fact.id for fact in facts
+            if fact.subject in inside and any(fact.kind.startswith(prefix) for prefix in step.kinds)
+        ]
+        if not assigned:
+            continue
+        heading, _ = templating.substitute(step.heading.replace(UNIT_NAME_VARIABLE, unit.name), world)
+        purpose, _ = templating.substitute(step.purpose.replace(UNIT_NAME_VARIABLE, unit.name), world)
+        out.append(ArtifactSection(
+            heading=heading, body=None, fact_ids=assigned, purpose=purpose,
+            semantic_role=infer_semantic_role(heading, step.kinds),
+        ))
+    return out
 
 
 def _assigned(
@@ -2561,6 +2623,9 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
 
     sections: list[ArtifactSection] = _planned_sections(world, intent, facts)
     for step in plan if not sections else ():
+        if step.repeat == "unit":
+            sections.extend(_repeated_over_units(world, step, facts))
+            continue
         assigned = _assigned(facts, step, company_id=world.company.id, unit_ids=unit_ids)
         # A section with nothing to say does not belong in the document. The plan
         # follows the episode, so a close without an incident gets no incident
@@ -2812,7 +2877,7 @@ def intent_minter(
         facts: list[str], events: list[str], size: str, rationale: str, *,
         supersedes: str | None = None, derived_from: list[str] | None = None,
         revises: str | None = None, restates: str | None = None,
-        approver_role: str | None = None,
+        approver_role: str | None = None, budget: SizeBudget | None = None,
     ) -> ArtifactIntent:
         made = ArtifactIntent(
             id=minter.next("ART"),
@@ -2826,6 +2891,7 @@ def intent_minter(
             triggered_by=events,
             required_fact_ids=facts,
             size_profile=size,  # type: ignore[arg-type]
+            budget=budget,
             rationale=rationale,
             supersedes=supersedes,
             derived_from=[a for a in (derived_from or []) if a],

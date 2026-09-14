@@ -98,6 +98,7 @@ An `ArtifactIntent` is the decision that a document should exist, with:
 - **Author**: role key (e.g., `"group_cfo"`, `"chief_underwriting"`)
 - **Audience**: access class (e.g., `"finance"`, `"executive_committee"`)
 - **Required facts**: the fact IDs the document must carry
+- **Size**: a named budget (`small`, `medium`, `long`, `xlong`; `sizing.PRESETS`) or, when none fits, a declared `budget` of components and words per section that rides the intent
 - **Structured part** (if any): tables compiled from facts via `outline()` (generic fact-kind prefix matching) or custom `_COMPILERS` (workbook, thread, Jira issue)
 - **Unstructured part** (if any): section names for `narrate requests` (prose)
 

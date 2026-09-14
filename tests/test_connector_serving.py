@@ -388,7 +388,7 @@ def test_authored_partial_write_retains_state_and_grades_the_actual_failure() ->
         assert runtime._runs[run].emulators["servicenow"].records["f1"]["state"] == "open"
 
 
-@pytest.mark.parametrize("shape,count", [("conditional", 1), *[(shape, 3) for shape in ("conditional", "deep_chain", "diamond", "fan_in", "fan_out", "map_read", "read_chain", "write_chain")]])
+@pytest.mark.parametrize("shape,count", [("conditional", 1), *[(shape, 3) for shape in ("conditional", "deep_chain", "delete_chain", "diamond", "fan_in", "fan_out", "map_read", "read_chain", "write_chain")]])
 def test_external_calls_execute_every_shipped_dag_shape(shape: str, count: int) -> None:
     from test_enterprise_dag import compiled
 
@@ -403,11 +403,18 @@ def test_external_calls_execute_every_shipped_dag_shape(shape: str, count: int) 
         assert not any(tool["name"].startswith("model.") for tool in advertised)
         run = call(client, "eval_begin", {"query_id": target["id"]})["run_id"]
         for span in reference.spans:
+            if span.error:
+                # The readback after a delete is expected to fail, served or not.
+                failed = rpc(client, "tools/call", {"name": span.tool, "arguments": {"run_id": run, **span.args}})
+                assert failed.get("isError"), failed
+                continue
             call(client, span.tool, {"run_id": run, **span.args})
         grade = call(client, "eval_grade", {"run_id": run})
         assert grade["fails"] == [], (shape, grade)
         observed = call(client, "eval_trace", {"run_id": run})
         assert [span["node"] for span in observed["spans"]] == [span.node for span in reference.spans]
+        assert [(span["node"], span["error"]["kind"]) for span in observed["spans"] if span.get("error")] == \
+            [(span.node, span.error["kind"]) for span in reference.spans if span.error]
 
 
 def test_external_mapped_creates_bind_each_actual_source_and_verify_each_created_record() -> None:

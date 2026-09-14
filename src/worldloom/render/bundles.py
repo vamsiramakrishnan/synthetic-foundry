@@ -302,6 +302,7 @@ def render_confluence(world: World) -> list[Rendered]:
                     presentation=profile.for_doctype(intent.artifact_type),
                     artifact_type=intent.artifact_type,
                     size_class=intent.size_profile,
+                    budget=intent.budget,
                 ).decode("utf-8"),
                 "labels": [intent.domain, intent.artifact_type],
                 "worldloom_fact_ids": list(intent.required_fact_ids),

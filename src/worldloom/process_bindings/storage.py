@@ -11,7 +11,7 @@ from typing import Any
 
 from ..corpus import write_json, write_jsonl
 from .adapters import demands, lexicon_records
-from .compiler import compile_company, fingerprint, resource
+from .compiler import compile_company
 from .models import CompiledCatalogue
 
 
@@ -77,11 +77,6 @@ def verify_export(output: Path, *, catalogue: dict[str, Any] | None = None) -> C
                 raise ValueError(f"export projection differs from replay: {name}")
     return compiled
 
-
-
-def baseline_parity(compiled: CompiledCatalogue) -> bool:
-    reference = resource("bindings-provenance.json")["compiled_baselines"].get(f"{compiled.company}.jsonl")
-    return bool(reference and fingerprint([r.legacy_record() for r in compiled.rows]) == reference["semantic_sha256"])
 
 
 def replay_builtin(compiled: CompiledCatalogue) -> bool:

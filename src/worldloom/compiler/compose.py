@@ -35,8 +35,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from .. import sizing
 from ..documents import SectionPlan
-from ..models import ArtifactIntent, ArtifactIR, ArtifactSection, CanonicalFact
+from ..models import (
+    ArtifactIntent,
+    ArtifactIR,
+    ArtifactSection,
+    CanonicalFact,
+    SizeBudget,
+)
 from ..rng import Rng
 from .components import CELL_BAND, FLOW, QUOTE, ComponentSpec, roles_for
 from .grammar import GrammarViolation, check
@@ -61,21 +68,19 @@ from .plan import (
 #: profile names both callers already interpret the same way.
 _DENSITY_BY_PROFILE = DENSITY_POINTS
 
-#: ``size_class`` -> the maximum number of components the artifact may end up
-#: with, after optional beats are dropped.
-#:
-#: Set from the outlines `documents.py` already ships, with headroom rather than
-#: a tight fit: the existing "small" artifacts (`working_note`, `confluence_page`,
-#: `close_calendar`) run two sections, "medium" (`cfo_variance_memo`,
-#: `knowledge_article`) three to five, "long" (`incident_rca`, `finance_workbook`)
-#: five to six. A cap equal to today's section count would leave no room for a
-#: plan to add a beat `documents.py` never had reason to — which is the entire
-#: reason this compiler exists instead of the literal outline it replaces.
-_COMPONENT_CAP: dict[SizeClass, int] = {
-    "small": 4,
-    "medium": 7,
-    "long": 12,
-}
+# The component cap per size class used to be a literal dict here, set from
+# the outlines `documents.py` ships with headroom: "small" artifacts run two
+# sections, "medium" three to five, "long" five to six, and a cap equal to
+# today's section count would leave no room for a plan to add a beat. Those
+# numbers now live in `sizing.PRESETS`, verbatim, beside the word brief the
+# narration compiler reads for the same size — the two were tuned apart for as
+# long as they were two tables, and neither could be declared by a document
+# type. `_cap` is the one read.
+
+
+def _cap(plan: ArtifactPlan) -> int:
+    """The components *plan* may compose to, before furniture is added back."""
+    return sizing.budget_for(plan.size_class, override=plan.budget).components
 
 #: Beat keys that are part of the document rather than part of its argument,
 #: and are therefore outside the size-class budget above.
@@ -269,7 +274,7 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
     # for the reason stated at the refusal below: raising "small" to five would
     # move a band whose value is set by the outlines `documents.py` ships, to
     # make room for something that is not an outline section at all.
-    cap = _COMPONENT_CAP[plan.size_class] + sum(
+    cap = _cap(plan) + sum(
         1 for beat in plan.beats if beat.key in _FURNITURE
     )
 
@@ -565,6 +570,7 @@ def plan_for(
         intent=intent.rationale or intent.artifact_type,
         beats=beats,
         size_class=intent.size_profile,
+        budget=intent.budget,
         # `ArtifactIntent` carries no density signal today — that is a
         # rendering concern `documents.py` never had to decide, since it only
         # ever emitted one shape per artifact type. "balanced" is the profile
@@ -614,6 +620,7 @@ def plan_from_ir(
     artifact_type: str,
     size_class: SizeClass = "medium",
     density_profile: DensityProfile = "balanced",
+    budget: SizeBudget | None = None,
 ) -> ArtifactPlan:
     """Derive a plan from a resolved ``ArtifactIR``.
 
@@ -664,6 +671,7 @@ def plan_from_ir(
         intent=ir.title,
         beats=beats,
         size_class=size_class,
+        budget=budget,
         density_profile=density_profile,
     )
 
@@ -675,6 +683,7 @@ def section_components(
     fmt: str,
     size_class: SizeClass = "medium",
     density_profile: DensityProfile = "balanced",
+    budget: SizeBudget | None = None,
 ) -> dict[str, str]:
     """Which component the compiler chose for each section of *ir*, in *fmt*.
 
@@ -695,7 +704,8 @@ def section_components(
     render.
     """
     plan = plan_from_ir(
-        ir, artifact_type=artifact_type, size_class=size_class, density_profile=density_profile
+        ir, artifact_type=artifact_type, size_class=size_class,
+        density_profile=density_profile, budget=budget,
     )
     try:
         composition = compose(plan, fmt=fmt)

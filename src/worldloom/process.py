@@ -57,7 +57,7 @@ from .episodes import (
 )
 
 if TYPE_CHECKING:
-    from .process_planning.models import Compilation
+    from .process_bindings.models import CompiledCatalogue
 
 
 __all__ = [
@@ -177,27 +177,28 @@ def open(
 
 
 def open_from_catalogue(
-    compilation: Compilation,
+    compiled: CompiledCatalogue,
     stream: str,
     *,
     engine: str,
     lob: str,
     period: Literal["month", "quarter", "year"] = "month",
 ) -> Session:
-    """Carry compiled industry factors through the existing authoring cascade.
+    """Carry a company's compiled activity bindings through the authoring cascade.
 
-    The caller must name an installed engine and LOB. Twelve planning overlays
-    do not magically create twelve validated simulation engines. No controls,
-    causal transitions or measurement claims are inferred from source prose.
+    The caller must name an installed engine and LOB. Twelve catalogue overlays
+    do not create twelve validated simulation engines. The brief carries the
+    stream's bindings (activity, PCF process, owner, system, control, exception);
+    no control becomes an executable predicate by being named.
     """
     from . import _install
-    from .process_planning import authoring_context
+    from .process_bindings import authoring_brief
 
     _install()
-    context = authoring_context(compilation, stream)
+    context = authoring_brief(compiled, stream=stream).context
     seed = ProcessSeed(
         name="".join(part[:1].upper() + part[1:] for part in stream.split("_")),
-        purpose=f"Author {stream} for {compilation.company.name} from the supplied process factors.",
+        purpose=f"Author {stream} for {compiled.company} from its compiled process bindings.",
         engine=engine, lob=lob, period=period,
     )
     findings = lint_seed(seed)

@@ -43,6 +43,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .. import sizing
 from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
@@ -149,6 +150,52 @@ def _background(world: World, cited: list[CanonicalFact]) -> list[str]:
     return [c.assertion for c in world.lore if c.id in wanted]
 
 
+#: A document is framed for its writers once it has more visible sections than
+#: this. Below it, a writer holding one section of a three-section memo needs
+#: no map; above it — a division-by-division review, a report with chapters —
+#: a writer who cannot see the other sections repeats what an earlier one
+#: established and contradicts what a later one will. Strictly greater, and
+#: above every outline the engines ship (the longest is six), so the request
+#: digest of every section in every existing corpus is unchanged and every
+#: ledger replays.
+FRAMED_FROM = 8
+
+
+def outline_context(ir: ArtifactIR, section: ArtifactSection) -> list[str]:
+    """The document's shape, as standing context for one section's writer.
+
+    Deterministic and built from the outline itself — headings and purposes
+    the compiler already resolved — rather than asked of a model: a framing
+    pass that called the writer once more per document would put a new call
+    site in every long document's ledger, and the outline is a fact about the
+    document, not a judgement anyone needs to make. Two lines, no figures:
+    the sections in order, and where this one sits between its neighbours.
+    """
+    visible = [s for s in ir.sections if not s.hidden]
+    if len(visible) <= FRAMED_FROM or section.hidden:
+        return []
+    index = next((i for i, s in enumerate(visible) if s is section or s.heading == section.heading), None)
+    if index is None:
+        return []
+    order = "; ".join(s.heading for s in visible)
+    lines = [f"This document's sections, in order: {order}."]
+    before = visible[index - 1].heading if index > 0 else None
+    after = visible[index + 1].heading if index + 1 < len(visible) else None
+    if before and after:
+        place = f"follows \"{before}\" and precedes \"{after}\""
+    elif before:
+        place = f"closes the document, after \"{before}\""
+    elif after:
+        place = f"opens the document, before \"{after}\""
+    else:
+        place = "is the whole document"
+    lines.append(
+        f"This section {place}. Cover only its own purpose; what another section"
+        " establishes is referred to by its heading, never restated."
+    )
+    return lines
+
+
 def _hierarchy(world: World, cited: list[CanonicalFact], names: dict[str, str]) -> dict[str, str]:
     """Where each subject sits, so prose can say "the largest division"."""
     units = {unit.id: unit.name for unit in world.business_units}
@@ -221,7 +268,7 @@ def _request_for(
             if facts[fact_id].subject in names
         },
         purpose=section.purpose,
-        background=_background(world, [facts[f] for f in allowed]),
+        background=_background(world, [facts[f] for f in allowed]) + outline_context(ir, section),
         author_traits=dict(author.traits),
         persona_label=persona.label if persona else "",
         hierarchy=_hierarchy(world, [facts[f] for f in allowed], names),
@@ -244,14 +291,15 @@ def _request_for(
             if constraint.kind.value == "terminology"
         },
         # Briefs, not physics: what the writer is asked for, not what the world
-        # contains. Raised from 70/130/200 after rendered corpora read as
-        # telegrams — three sentences could not carry a variance memo's
-        # argument, and the optional-fact budget below scales off this number,
-        # so shorter briefs also meant thinner evidence per section. Measured
-        # both ways when it moved: with pools widened but briefs held at the
-        # old numbers, retrieval hardness reads exactly as before (26 of 51),
-        # so the pin's move is attributable here and nowhere else.
-        target_words={"small": 110, "medium": 190, "long": 300}.get(intent.size_profile, 190),
+        # contains. The presets were raised from 70/130/200 after rendered
+        # corpora read as telegrams — three sentences could not carry a
+        # variance memo's argument, and the optional-fact budget scales off
+        # this number, so shorter briefs also meant thinner evidence per
+        # section. Read from `sizing` now rather than a literal here, so the
+        # brief and the composer's component cap for the same size are one
+        # declared pair, and a document type that declares its own budget
+        # reaches the writer with it.
+        target_words=sizing.budget_of(intent).words,
     )
     return request.model_copy(update={"fact_digest": content_key(
         "narration-request/v2", request.model_dump(mode="json", exclude={"fact_digest"}),

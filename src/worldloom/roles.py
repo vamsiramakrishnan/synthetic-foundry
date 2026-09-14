@@ -47,6 +47,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 #: The suffixes of the roles minted per business unit. Spelled *with* the
 #: leading underscore, deliberately: ``domains.Domain.unit_role_suffixes``
@@ -113,7 +114,9 @@ class UnitRole:
     role key (``manager="ceo"``) or a sibling post in the same unit
     (``manager_suffix="_md"`` — retail's buyer reports to their own unit's
     MD); exactly one of the two should be set, and ``manager_suffix`` wins
-    because a same-unit reference is the narrower claim.
+    because a same-unit reference is the narrower claim. ``kinds`` names the
+    unit kinds the post is minted for; empty mints it for every unit, which
+    is what every engine's own posts do.
     """
 
     suffix: str
@@ -121,6 +124,11 @@ class UnitRole:
     function: str
     manager: str | None = None
     manager_suffix: str | None = None
+    kinds: tuple[str, ...] = ()
+
+    def minted_for(self, kind: str) -> bool:
+        """Whether a unit of *kind* gets this post."""
+        return not self.kinds or kind in self.kinds
 
     def row(self, unit_key: str, unit_name: str) -> tuple[str, str, str, str | None]:
         """The role-table row this spec mints for one unit."""
@@ -682,6 +690,43 @@ def _shipped(engine: str) -> tuple[Role, ...]:
     return from_rows(module._ROLES)
 
 
+def _shipped_unit_roles(engine: str) -> tuple[UnitRole, ...]:
+    from importlib import import_module
+
+    module = import_module({
+        "retail": "worldloom.generators.organisation",
+        "banking": "worldloom.generators.banking_org",
+        "insurance": "worldloom.generators.insurance_org",
+        "procurement": "worldloom.generators.procurement_org",
+    }[engine])
+    return tuple(module._UNIT_ROLES)
+
+
+def published(engine: str) -> dict[str, Any]:
+    """The engine's organisation as data: what a pack must keep, what it ships.
+
+    What ``worldloom pack targets --json`` prints and what a pack author
+    starts a ``roles`` block from: ``spine`` (the keys generator code looks
+    up, which a table may retitle but not remove), ``table`` (every shipped
+    row, in ``PackRole``'s spelling), and ``unit_roles`` (the posts minted per
+    unit, in ``PackUnitRole``'s). Read from the generators rather than
+    restated, so a fifth engine's rows appear the moment it ships them.
+    """
+    from dataclasses import asdict
+
+    return {
+        "engine": engine,
+        "spine": sorted(SPINE[engine]),
+        "table": [
+            {"key": role.key, "title": role.title, "function": role.function,
+             "reports_to": role.manager}
+            for role in _shipped(engine)
+        ],
+        "unit_roles": [asdict(spec) for spec in _shipped_unit_roles(engine)],
+        "rules": list(RULES),
+    }
+
+
 def check(
     table: Sequence[Role],
     *,
@@ -727,7 +772,7 @@ def to_rows(table: Sequence[Role]) -> tuple[tuple[str, str, str, str | None], ..
 
 __all__ = [
     "ROOT", "RULES", "Rejection", "Role", "SPINE", "Shape", "UNIT_ROLES",
-    "UNIT_ROLE_SUFFIXES", "UnitRole", "check", "from_rows", "from_shape",
+    "UNIT_ROLE_SUFFIXES", "UnitRole", "check", "from_rows", "from_shape", "published",
     "measure", "parse_unit_role", "request", "required", "review", "to_rows",
     "unit_role_key",
 ]
