@@ -11,6 +11,16 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The console in the README
+
+- `README.md` gains a Studio console section with four pages of the console
+  (overview, company and processes, use cases, evaluations), and
+  `docs/studio.md` a gallery of all eight, captured from the connected retail
+  pilot and a catalogue-derived telecom company under `docs/images/studio/`.
+- The console's overview subtitle and the "Generation boundaries" panel no
+  longer print a blank engine for a company no engine builds; the panel
+  says the world is derived from the process catalogue.
+
 ### The programme's record requests run as evalrun cases
 
 - Every record request of a programme is an `evalrun` case

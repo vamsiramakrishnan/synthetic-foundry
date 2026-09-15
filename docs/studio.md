@@ -20,6 +20,23 @@ hosted service or separate frontend installation. The local workspace holds
 company revisions, interview exchanges, jobs, snapshots and dataset checkpoints.
 Back up the whole workspace when retaining generated datasets.
 
+## Console pages
+
+Captured from the connected retail pilot (`Load connected retail pilot`) after
+one compile and one reference evalrun, and from a telecom company derived
+from the process catalogue for the Evaluations page.
+
+| Page | What it shows |
+|---|---|
+| ![Overview](images/studio/overview.png) | **Overview.** The eight build stages with their state and next action, the company map and the run ledger. |
+| ![Interview](images/studio/interview.png) | **Interview.** The request exported for a coding harness, the coverage of the company contract and the response import. |
+| ![Company and processes](images/studio/company.png) | **Company & processes.** Profile, revenue divisions, business units, lines of business and the bound process catalogue. |
+| ![Use cases](images/studio/use-cases.png) | **Use cases.** Owner, source systems, process activities and the typed contract of each use case. |
+| ![Foundry run](images/studio/foundry.png) | **Foundry run.** The eight run stages, measured difficulty, publication state and the compiled construction obligations. |
+| ![Documents and files](images/studio/documents.png) | **Documents & files.** Native file tasks prepared from accepted prose; empty until a writing harness has narrated the company. |
+| ![Evaluations](images/studio/evaluations.png) | **Evaluations.** Agent grades per case on plan, trajectory and outcomes, with the qualified queries and their evidence below. |
+| ![Changes and runs](images/studio/changes.png) | **Changes & runs.** Company revisions with their reasons and the run ledger of this revision. |
+
 ## One company, several contracts
 
 | Object | Meaning | Generation authority |

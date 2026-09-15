@@ -59,6 +59,41 @@ Inspect the generated files alongside the facts and evaluation records.
 the included cases. A passing validator does not establish realism or strong
 retrieval performance. `status` identifies the next incomplete stage.
 
+## The Studio console
+
+`worldloom studio serve` opens a local console for one company at a time.
+Every page reads the same company revision. Every run keeps the revision it
+ran on. The screenshots below come from the connected retail pilot and from a
+telecom company derived from the process catalogue.
+
+![The overview page: the eight build stages of one company, each marked complete, ready or blocked, with the action that unblocks it](docs/images/studio/overview.png)
+
+The overview lists the eight stages from company contract to frozen dataset.
+Each stage shows whether it is complete, ready or blocked, and what unblocks
+it. The company map and the run ledger sit below.
+
+![The company and processes page: profile, revenue divisions and business units](docs/images/studio/company.png)
+
+**Company & processes** holds the profile, the revenue divisions, the
+business units and the process catalogue bound to them. A change saves a new
+revision; earlier runs keep theirs.
+
+![The use cases page: three retail use cases with their owners, source systems and process activities](docs/images/studio/use-cases.png)
+
+Each use case names its owner, its source systems and the process activities
+it covers. The compiler generates the evidence and checks it against the
+contract. Missing evidence keeps the evalset incomplete rather than filling it.
+
+![The evaluations page: the reference agent graded on 48 connector cases with plan, trajectory and outcome scores per case](docs/images/studio/evaluations.png)
+
+**Evaluations** grades an agent on the connector cases and shows plan,
+trajectory and outcomes for every case. The reference agent is the executable
+ceiling of the dataset, not a claim about any model. A connected coding
+harness is graded on the same cases and compared to it.
+
+The interview, foundry run, documents and changes pages are shown in
+[docs/studio.md](docs/studio.md#console-pages).
+
 ## Choose the dataset by the test it must support
 
 | Test | Build into the corpus | Start here |
