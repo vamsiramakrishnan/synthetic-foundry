@@ -456,6 +456,7 @@ worldloom evalrun plan <CORPUS>
 | --- | --- |
 | `--agent` | reference \| scripted:<plans.json> |
 | `--exec` | The planner as an executable, one subprocess per case: reads a `worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints {"plan": {"nodes": [...]}} on stdout. Nothing is executed. |
+| `--harness` | An installed coding harness as the planner, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
@@ -490,6 +491,7 @@ worldloom evalrun run <CORPUS>
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
 | `--max-turns` | Turns the --exec child may take per case. |
@@ -875,6 +877,7 @@ worldloom narrate loop <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--exec` | The model as an executable: reads one requests JSON document on stdin, prints one responses JSON document on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--harness` | An installed coding harness as the writer, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--max-rounds` | Rounds to run before giving up with every outstanding violation listed. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
 | `--shell` | Run the command through the shell. This is the opt-in for pipelines. |

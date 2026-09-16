@@ -150,14 +150,22 @@ ServiceNow bundle does not write to a live tenant.
 
 ## Add agent-authored prose
 
-Worldloom does not call an LLM. Your coding agent or external writer supplies
-prose through a request/accept contract:
+Worldloom never calls a model service itself. It drives one you have already
+installed, or exchanges files with any writer:
 
 ```bash
+# An installed coding harness, using its own login. No adapter to write.
+worldloom narrate loop ./corpus --harness claude    # or --harness codex
+
+# Or the offline round trip, for a writer this package does not adapt.
 worldloom narrate requests ./corpus -o requests.json
 # The writer reads requests.json and produces responses.json.
 worldloom narrate accept ./corpus --from responses.json --model-id your-writer
 ```
+
+`--harness` is the same flag on `worldloom evalrun run` and `evalrun plan`, so
+grading a real coding harness against the reference ceiling is one word rather
+than an adapter script.
 
 Each request carries allowed facts, required facts, author, audience, and a
 knowledge cutoff. Use the request's fact references; unsupported figures or

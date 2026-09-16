@@ -137,10 +137,13 @@ trajectory was observed.
 
 ## Driving it from another harness
 
-Three transports, each carrying only what the agent may know:
+Transports, each carrying only what the agent may know. An installed `codex`
+or `claude` needs none of them spelled out: `--harness` is the adapter this
+package ships, using that harness's own login.
 
 | Transport | Command | When |
 | --- | --- | --- |
+| An installed coding harness | `evalrun run ./cases --harness codex`, `--harness claude` | A real second number against the reference ceiling, with no adapter to write. Shorthand for the bundled `--exec` child, which speaks the same turn document and tells the harness it is the agent under test. `evalrun plan --harness` grades its planning alone. |
 | Executable, one subprocess per turn | `evalrun run ./cases --exec "<command>"` | The agent must act on what a tool returned. The child reads a `worldloom.evalrun-turn/v2` document (query, tools, transcript) and prints one call, one question to the user, or the final answer. Stateless between turns. |
 | Requests and responses files | `evalrun requests ./cases -o requests.json`, then `evalrun run ./cases --agent scripted:responses.json` | A fixed trajectory: a regression set, a hand-authored baseline, a harness that cannot be called back. Replay cannot see a call's result. |
 | MCP | `enterprise-evals serve ./cases`, then `evalrun import-served ./cases scores.jsonl` | An agent that speaks MCP, Gemini Enterprise included. It calls `eval_score` before `eval_end` and keeps each document; those are complete three-axis results graded by the serving service, and `import-served` collects them into a comparable run. |

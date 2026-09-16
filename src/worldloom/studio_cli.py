@@ -32,14 +32,10 @@ def serve_command(
     if harness:
         if harness_command or harness not in {"codex", "claude"}:
             _refuse("studio_rejected", "choose --harness codex/claude or --harness-command, not both")
-        import os
-        import shlex
-        import subprocess
-        import sys
-        args = [sys.executable, "-m", "worldloom.studio.harness", harness, "--timeout", str(max(1, timeout - 5))]
-        if allow_native_writes:
-            args.append("--allow-native-writes")
-        harness_command = subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
+        from .studio.harness import adapter_command
+        harness_command = adapter_command(
+            harness, timeout=max(1, timeout - 5), allow_native_writes=allow_native_writes
+        )
 
     server = StudioServer(workspace, port=port, harness_command=harness_command, timeout=timeout)
     typer.echo(f"Worldloom Studio: http://127.0.0.1:{server.server_port}")

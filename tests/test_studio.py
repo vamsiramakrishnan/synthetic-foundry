@@ -75,7 +75,13 @@ def test_authored_divisions_change_generated_structure_not_only_metadata(project
     world, location = studio.snapshot(ProjectSpec.model_validate(amended.model_dump(mode="json")))
     assert location != base_path
     assert len(base.business_units) != len(world.business_units)
-    assert [unit.name for unit in world.business_units] == ["Stores", "Online"]
+    # The authored divisions are the revenue units; the structure's support
+    # units are formed beside them with no revenue allocated.
+    revenue = [unit.name for unit in world.business_units if unit.kind != "support"]
+    assert revenue == ["Stores", "Online"]
+    assert {unit.name for unit in world.business_units if unit.kind == "support"} == {
+        "Group Finance", "Supply Chain"
+    }
     world.validate().raise_if_failed()
 
 
@@ -244,6 +250,48 @@ def test_installed_harness_adapters_parse_only_final_output(tmp_path, monkeypatc
     assert "plan" in commands[1]
     with pytest.raises(ValueError):
         command_for("arbitrary-command", tmp_path / "result")
+
+
+def test_the_adapter_tells_the_child_which_seam_it_is_answering(monkeypatch):
+    """One adapter serves four seams, so the wrapper must name the role.
+
+    Before this the authoring prose reached an evalrun turn and told the agent
+    under test it was completing an authoring request.
+    """
+    prompts = []
+    def run(argv, **kwargs):
+        prompts.append(kwargs["input"])
+        return subprocess.CompletedProcess(argv, 0, '{"result":"{}"}', "")
+    monkeypatch.setattr(subprocess, "run", run)
+
+    invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})
+    assert "agent under test" in prompts[-1] and "authoring request" not in prompts[-1]
+    invoke("claude", {"schema": "worldloom.evalrun-plan/v1", "query": "q"})
+    assert "Plan only; execute nothing." in prompts[-1]
+    invoke("claude", {"schema": "worldloom.evalrun-rating/v1"})
+    assert "You are the judge." in prompts[-1]
+    invoke("claude", {"requests": [], "response_shape": {}})
+    assert "{{fact:ID}}" in prompts[-1]
+    invoke("claude", {"company": {}})
+    assert "authoring request" in prompts[-1]
+    # Every seam ends the same way, whatever the role.
+    assert all("exactly one JSON object" in prompt for prompt in prompts)
+    assert all("Do not modify project files." in prompt or "authoring" in prompt for prompt in prompts)
+
+
+def test_one_adapter_command_serves_studio_evalrun_and_narration():
+    """`--harness codex` is the same child everywhere it is offered."""
+    from worldloom.studio.harness import NAMES, adapter_command
+
+    assert NAMES == ("codex", "claude")
+    command = adapter_command("claude", timeout=120)
+    assert "worldloom.studio.harness" in command and "claude" in command and "120" in command
+    assert "--allow-native-writes" not in command
+    assert "--allow-native-writes" in adapter_command("codex", allow_native_writes=True)
+    with pytest.raises(ValueError):
+        adapter_command("gpt")
+    with pytest.raises(ValueError):
+        adapter_command("claude", allow_native_writes=True)
 
 
 def test_native_codex_write_scope_requires_operator_opt_in(tmp_path, monkeypatch):

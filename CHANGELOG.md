@@ -11,6 +11,25 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### An installed coding harness is one flag
+
+- `worldloom evalrun run --harness codex|claude`, `evalrun plan --harness` and
+  `narrate loop --harness` drive an installed coding harness through the
+  adapter this package already shipped for the Studio, using that harness's
+  own login. Grading a real agent against the reference ceiling, and getting
+  prose accepted, no longer needs an adapter script. `studio.harness.adapter_command`
+  is the one spelling all four commands use, quoting for the platform the
+  child is split on.
+- The adapter now tells the child which seam it is answering
+  (`studio.harness.role_for`). It sent authoring prose to every child, so an
+  evalrun turn told the agent under test it was completing an authoring
+  request; a turn, a plan, a rating and a narration request each get their
+  own role, and every one of them still ends in "return exactly one JSON
+  object". A native trial that opts in to workspace writes now refuses a seam
+  with no write instruction to grant rather than silently dropping the opt-in.
+- `narrate loop` takes `--exec` or `--harness` and refuses with both or
+  neither, naming the offline round trip in the refusal.
+
 ### A country with no locale says so
 
 - `industry.unlocalised` and `industry.locale_finding` name the countries no
