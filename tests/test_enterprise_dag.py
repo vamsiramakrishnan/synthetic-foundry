@@ -377,19 +377,19 @@ def test_compiled_arguments_match_advertised_connector_tool_schemas():
         compile_row(query.model_copy(update={"expected_dag": tuple(nodes)}), fixture, records)
 
 
-def test_the_default_shape_set_grounds_on_the_sources_a_row_declares():
-    """`map_read` and `conditional` raise a source minimum; nothing else does."""
+def test_the_default_shape_set_is_the_whole_catalogue():
+    """Every shape grounds now, so a default case set grades every one.
+
+    `map_read` and `conditional` raise a source's minimum to two. They were
+    opt-in while the materializer topped a source pool up to exactly one
+    record; it now tops up to the largest minimum a planned row asks of it.
+    """
     from worldloom.enterprise_dag import default_shapes
 
-    catalogue = shape_catalogue()
-    raises_a_minimum = {
-        name for name, template in catalogue.items()
-        if template["reads"] == "map" or template["control"] == "conditional"
-    }
-    assert raises_a_minimum == {"map_read", "conditional"}
-    assert set(default_shapes()) == catalogue.keys() - raises_a_minimum
+    assert set(default_shapes()) == shape_catalogue().keys()
     # The point of the default: a case set that never deletes cannot grade one.
     assert "delete_chain" in default_shapes()
+    assert {"map_read", "conditional"} <= set(default_shapes())
 
 
 def test_a_dag_shape_selection_resolves_to_the_shapes_to_plan():
@@ -426,15 +426,36 @@ def test_the_default_plan_grades_a_delete_and_the_legacy_plan_does_not():
     assert legacy.deletes == 0 and legacy.shapes == {"legacy": legacy.cases}
 
 
-def test_a_row_that_outruns_the_corpus_names_the_pair_and_the_counts():
+@pytest.mark.parametrize("shape", tuple(shape_catalogue()))
+def test_every_shape_grounds_on_a_corpus_the_materializer_filled(shape):
+    """The two minimum-raising shapes compile now, which is why they default on."""
     from worldloom.enterprise_corpus import materialize_corpus
     from worldloom.enterprise_queries import plan_queries
     from worldloom.enterprise_specs import CoverageProfile
-    from worldloom.evalrun.contract import cases_from_corpus
+    from worldloom.evalrun.contract import axis_coverage, cases_from_corpus
     from worldloom.world import World
 
     world = World.load("retail-close")
     queries, _ = plan_queries(world, profile=CoverageProfile(strengths=1, connector_counts=(1,), failures=("none",)),
-                              strategy="exhaustive", limit=80, dag_shapes=("map_read",))
-    with pytest.raises(ValueError, match=r"bound 1 source record\(s\), and the row needs 2"):
-        cases_from_corpus(materialize_corpus(world, queries))
+                              strategy="exhaustive", limit=40, dag_shapes=(shape,))
+    coverage = axis_coverage(cases_from_corpus(materialize_corpus(world, queries)))
+    assert coverage.cases > 0 and coverage.shapes == {shape: coverage.cases}
+
+
+def test_a_strict_corpus_that_outruns_its_evidence_names_the_counts():
+    """Filler records meet a count, never a claim.
+
+    Under `strict_sources` the materializer must not invent evidence, so a
+    pair short of what a planned row asks for is refused with both numbers
+    rather than topped up.
+    """
+    from worldloom.enterprise_corpus import materialize_corpus
+    from worldloom.enterprise_queries import plan_queries
+    from worldloom.enterprise_specs import CoverageProfile
+    from worldloom.world import World
+
+    world = World.load("retail-close")
+    queries, _ = plan_queries(world, profile=CoverageProfile(strengths=1, connector_counts=(1,), failures=("none",)),
+                              strategy="exhaustive", limit=40, dag_shapes=("map_read",))
+    with pytest.raises(ValueError, match=r"record\(s\) and a planned row needs"):
+        materialize_corpus(world, queries, strict_sources=True)

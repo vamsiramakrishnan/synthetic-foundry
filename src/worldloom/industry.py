@@ -788,6 +788,18 @@ class ProcessLine(Model):
     this is the honest size of the evalset a line supports; `situations` is
     the larger number of phrasings over it. Zero when the lines were derived
     without their requests."""
+    workforce_share: float = 0.0
+    """The share of this industry's workforce that works in this line's
+    function, measured rather than assumed: `staffing.family_shares` reads it
+    from the Bureau of Labor Statistics' occupational employment by industry.
+
+    A share and not a headcount, because a programme knows the industry and
+    not how many people the company employs. A caller holding a total turns
+    these into people with `staffing.allocate`, which renormalises over the
+    families the company actually models.
+
+    Zero when the table carries no employment for this industry or this
+    family, which is a gap to state rather than a reason to split evenly."""
     reads: int
     writes: int
     systems: tuple[str, ...]
@@ -831,6 +843,13 @@ class IndustryProgramme(Model):
     """The distinct ground truths those requests rest on. Report this as the
     size of the evalset: a verb and a channel change a request's wording and
     leave its answer alone, so `requests` counts phrasings over these."""
+    staffing_release: str = ""
+    """The employment release each line's `workforce_share` was measured
+    from, or `""` when this industry is not carried.
+
+    Named on the programme rather than left implicit because a share is
+    only as current as the survey behind it: a reader comparing two
+    programmes has to be able to see they rest on the same one."""
     facts: int
     records: int = 0
     """System-of-record records derived for the company (`sor.records`)."""
@@ -913,9 +932,16 @@ def lines(
     distinct ground truths its requests rest on, which is the honest size of
     the evalset the line supports. Without them the field stays zero and only
     the phrasing count, `situations`, is known.
+
+    Each line also carries `workforce_share`, the measured share of the
+    industry's employment that works in its function (`staffing`). Zero for an
+    industry or a family the published table does not carry.
     """
+    from . import staffing
+
     cat = catalogue if catalogue is not None else load_catalogue()
     emulators = table if table is not None else emulated_systems()
+    shares = staffing.family_shares(compiled.industry)
     names = stream_names(cat)
     titles = {spec.name: spec.title for spec in lobs}
     grounded: dict[tuple[str, str], set[str]] = {}
@@ -946,6 +972,7 @@ def lines(
                 bindings=len(rows),
                 situations=reads + writes,
                 distinct_answers=len(grounded.get((family, stream), ())),
+            workforce_share=shares.get(family, 0.0),
                 reads=reads,
                 writes=writes,
                 systems=tuple(sorted({row.sor_product for row in rows})),
@@ -1014,6 +1041,7 @@ def programme(
     on a record set is asked about the latest of them.
     """
     from . import domains
+    from . import staffing as staffing_module
 
     cat = catalogue if catalogue is not None else load_catalogue()
     company = default_company(spec) if isinstance(spec, str) else spec
@@ -1035,8 +1063,17 @@ def programme(
     gap = locale_finding(company.countries, catalogue=cat)
     if gap is not None:
         findings.append(gap)
+    if not staffing_module.family_shares(compiled.industry):
+        findings.append(
+            f"no measured employment for {compiled.industry!r}: every line's"
+            " workforce_share is 0, so nothing here says how big a line is."
+            " `tools/ingest_bls_oes.py` builds the table from the Bureau of"
+            " Labor Statistics' occupational employment by industry; an"
+            " industry it does not carry needs a crosswalk entry."
+        )
     unemulated = sorted({name for line in derived_lines for name in line.unemulated})
     summary = IndustryProgramme(
+        staffing_release=staffing_module.release() if staffing_module.family_shares(compiled.industry) else "",
         industry=compiled.industry,
         company=compiled.company,
         operating_model=company.operating_model,
@@ -1331,6 +1368,26 @@ COUNTRY_LOCALES: dict[str, str] = {
     "GB": "united_kingdom", "UK": "united_kingdom",
     "DE": "germany", "AT": "germany",
     "AE": "gulf",
+    # The ten the shipped industries operate in that had no locale, so a
+    # company in any of them was built with Australian names, cities, calendar
+    # and digit grammar while the catalogue denominated its records in the
+    # local currency. `tools/ingest_locales.py` generates them; one country
+    # each, because none of these jurisdictions shares another's calendar.
+    "CN": "china",
+    "HK": "hong_kong",
+    "ID": "indonesia",
+    "IN": "india",
+    "JP": "japan",
+    "MY": "malaysia",
+    "SG": "singapore",
+    "TW": "taiwan",
+    # TH and VN are deliberately absent. A locale has to be able to staff a
+    # company, and no library publishes a romanised surname pool deep enough
+    # for either: Faker's Thai surnames romanise to 314 distinct forms where a
+    # deep pool needs 500, and Vietnamese surnames are carried nowhere but
+    # Faker, which has ten. `tools/ingest_locales.UNSERVED` records both, and
+    # `locale_finding` keeps saying so rather than padding a pool with names
+    # nobody published.
 }
 DEFAULT_GEO = "australia"
 
@@ -1742,6 +1799,14 @@ def describe(industry: str) -> dict[str, Any]:
         "bindings": summary.bindings,
         "situations": summary.situations,
         "distinct_answers": summary.distinct_answers,
+        "staffing_release": summary.staffing_release,
+        # The measured shape of the workforce, largest function first. A share
+        # per family rather than per line: several lines of one family are one
+        # department, and the employment survey counts the department.
+        "workforce": dict(sorted(
+            {line.lob: line.workforce_share for line in summary.lines if line.workforce_share}.items(),
+            key=lambda item: (-item[1], item[0]),
+        )),
         "reads": summary.reads,
         "writes": summary.writes,
         "facts": summary.facts,

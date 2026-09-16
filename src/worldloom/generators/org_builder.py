@@ -75,12 +75,18 @@ def establish(
     functions included — the same convention a cost allocation uses, and the
     reason the parts add up rather than leaving an unexplained remainder.
 
-    Revenue share is a proxy for staffing, not a measurement, and it is the
-    only per-unit weight a pack declares. Occupational headcount per industry
-    would be better and none is shipped. Deliberately *not* derived from the
-    named roster: a pack names the decision-making graph, which is top-heavy
-    by construction, so its proportions would put half a retailer in group
-    functions.
+    Revenue share is a proxy for staffing, and it is the only per-unit weight
+    a *pack* declares: a pack's units are trading divisions (Food, General
+    Merchandise, Digital), and no employment survey counts those. Measured
+    employment does exist for units shaped like functions, and `staffing`
+    carries it: the Bureau of Labor Statistics' occupational employment by
+    industry, joined to function families, which is what sizes a
+    catalogue-derived company's lines. A trading division is not a function,
+    so this stays a proxy and says so.
+
+    Deliberately *not* derived from the named roster: a pack names the
+    decision-making graph, which is top-heavy by construction, so its
+    proportions would put half a retailer in group functions.
 
     Every unit keeps at least the people the world names in it, so an
     establishment never contradicts the roster; the excess comes off the

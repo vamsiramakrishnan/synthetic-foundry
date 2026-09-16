@@ -4,13 +4,14 @@ Enterprise planning uses `enterprise-dag@1`. Each generated node has
 arguments, explicit result references, dependencies, and optional result-based
 conditions or bounded iteration. These values drive execution and grading.
 
-Planning with no `--dag-shape` plans every shape a row can ground on the
-sources it already declares. That is seven of the nine in the catalogue, and it
-includes `delete_chain`, so a default case set can grade a delete. Two shapes
-raise a source's `minimum` above what the row asked for: `map_read` fetches
-every search hit, and `conditional` needs a witness for both branches. They are
-named explicitly, because a world holding one record where the row wanted one
-plans a case that materializes and then refuses to compile.
+Planning with no `--dag-shape` plans every shape in the catalogue, so a
+default case set grades a delete, a mapped read and a conditional branch.
+
+`map_read` fetches every search hit and `conditional` needs a witness for both
+branches, so both raise a source's `minimum` to two. The materializer tops a
+source pool up to the largest minimum any planned row asks of it, which is what
+makes those two groundable; it used to stop at one, and rows under them
+materialized and then refused to compile.
 
 ```bash
 # The default: every groundable shape, deletes included.
@@ -24,9 +25,11 @@ worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exh
 worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape none
 ```
 
-Use a corpus with sufficient operational evidence. A mapped source requires at
-least two records; a missing witness is a compilation refusal that names the
-connector, the entity, how many records bound, and how many the row needs. All source reads
+A mapped source requires at least two records. The materializer supplies them
+unless the row filters its sources by a predicate or the corpus is built
+`strict_sources`, in which case a filler record would meet the count and not
+the claim, and the refusal names the connector, the entity, how many records
+are present and how many the row needs. All source reads
 are bound to fixture identities. A search intersects those identities with the
 authored field predicates. It does not search an unrelated connector pool.
 

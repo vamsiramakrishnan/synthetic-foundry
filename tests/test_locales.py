@@ -401,7 +401,12 @@ def test_every_presets_fiscal_year_is_stated_rather_than_inherited() -> None:
     thing that would be true of a corpus if anything read it."""
     assert {name: locale.fiscal_year_start_month
             for name, locale in locales.LOCALES.items()} == {
+        # Authored presets.
         "australia": 7, "united_kingdom": 4, "germany": 1, "gulf": 1,
+        # Generated presets. India and Japan open on 1 April; the rest of the
+        # set default to the calendar year, which `tools/ingest_locales.py`
+        # states as a jurisdiction default a company may still elect out of.
+        "china": 1, "hong_kong": 1, "india": 4, "indonesia": 1, "japan": 4, "malaysia": 1, "singapore": 1, "taiwan": 1,
     }
 
 

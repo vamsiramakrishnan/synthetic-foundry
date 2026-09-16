@@ -81,8 +81,7 @@ expected error as a designed failure, so an agent that skips the last readback
 has not honoured it, and the `deleted` assertion names the write that created
 the record. SharePoint and Drive files serve `delete_file`, which the specs
 had declared and the definitions did not. A build with no `--dag-shape` now
-plans it: 120 cases from `retail-close` grade 11 deletes. `--dag-shape none`
-plans the single-write trajectory instead.
+plans it. `--dag-shape none` plans the single-write trajectory instead.
 
 **Unstructured outcomes rest on records.** Every grammar write binds the
 collected evidence into the record it creates. The artifact contract names
@@ -320,12 +319,13 @@ Named and not closed here:
 
 - **The shape catalogue is nine shapes.** The external forty-two-shape
   target is not in this repository.
-- **Two shapes are opt-in.** `map_read` and `conditional` raise a source's
-  `minimum` above what the row declared, so a world holding one record where
-  the row wanted one plans a case that materializes and then refuses to
-  compile. A build with no `--dag-shape` plans the other seven. Deleting a
-  preexisting fixture record is compiled (the `deleted` assertion then names
-  the fixture) but no shipped profile plans an update-then-delete.
+- **Every shape is planned by default.** `map_read` and `conditional` raise a
+  source's `minimum` to two, and the materializer used to top a source pool up
+  to exactly one record, so rows under those shapes materialized and then
+  refused to compile. It now tops a pool up to the largest minimum any planned
+  row asks of it, and all nine shapes ground. Deleting a preexisting fixture
+  record is compiled (the `deleted` assertion then names the fixture) but no
+  shipped profile plans an update-then-delete.
 - **A planned DAG is graded by tool name.** `evalrun plan` cannot tell two
   calls of one tool apart by their arguments, so a planner that names the
   right tools in the right order passes the plan axis whatever it would have

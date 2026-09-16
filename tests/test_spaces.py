@@ -383,13 +383,20 @@ def test_the_gate_now_reaches_a_twelve_period_corpus() -> None:
 def test_a_pairwise_plan_would_close_every_one_of_those_gaps() -> None:
     """The other half of the claim: the gaps are not inherent to a small fleet.
 
-    Thirty-nine rows — five times the sweep's eight, and a fraction of the 240
-    it builds over a month — cover every pair in the space, including every one
-    the assertions above name. A fleet this size is a planning decision rather
-    than a budget, which is the difference this module is arguing for.
+    Eighty-three rows cover every pair in the space, including every one the
+    assertions above name. That is ten times the sweep's eight and still a
+    third of the 240 it builds over a month, so a fleet this size is a planning
+    decision rather than a budget, which is the difference this module argues
+    for.
+
+    The number grew with the locale axis, which is the pairwise arithmetic
+    working rather than a regression: the axis went from five values to
+    thirteen when `tools/ingest_locales.py` generated eight jurisdictions, and
+    every one of them has to pair with every value of every other axis. A cover
+    that did not grow would mean the new locales were not being swept.
     """
     space = spaces.build_space()
     plan = spaces.cover(space, strength=2)
     assert spaces.holes(space, plan) == ()
     assert spaces.unvaried(space, plan) == ()
-    assert len(plan) < 60
+    assert len(plan) < 100

@@ -11,6 +11,89 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Eight locales, generated from published data (Generation)
+
+- Four locales shipped and the catalogue built companies in fourteen
+  countries, so an Indian telecom was given Australian names, Australian
+  cities, an Australian calendar and Australian digit grammar while its records
+  were denominated in rupees. `tools/ingest_locales.py` generates eight of the
+  ten that were missing: China, Hong Kong, India, Indonesia, Japan, Malaysia,
+  Singapore and Taiwan.
+- Thailand and Vietnam are still gaps, and the tool records why for each. A
+  deep name pool needs 500 given and 500 family names. No library publishes a
+  romanised Vietnamese surname pool at all, Faker carries ten, and Faker's Thai
+  surnames romanise to 314 distinct forms. Ten Vietnamese surnames is not even
+  wrong, since they are extraordinarily concentrated, but it cannot meet a
+  contract that draws one distinct surname per person. Padding either pool
+  would be inventing names, so `locale_finding` keeps saying TH and VN have no
+  locale.
+- Nothing in them is invented, which is the point: ten hand-written name pools
+  would have been ten fabrications. Regions are ISO 3166-2 subdivisions from
+  pycountry, cities are ranked by population from geonamescache, names are
+  romanised from names-dataset or Faker, the currency and the entire digit
+  grammar are CLDR through babel, and holidays are the fixed-date entries the
+  holidays package publishes.
+- Romanised deliberately. Faker's Japanese, Chinese and Indian providers are in
+  native script, and this project renders English-language business documents,
+  where a group report listing two scripts is a mixed-script artefact rather
+  than a more accurate corpus.
+- names-dataset needed cleaning and the tool says so: its per-country first
+  names are derived from profile data where field order varies, so Singapore's
+  list opens with an abbreviation and four surnames. A candidate that also
+  appears in the country's surname list is dropped, as is anything under three
+  characters.
+- **`Locale.grouping`**, and the reason it had to exist. India writes 12,34,567
+  and not 1,234,567, and its filings are denominated in lakh and crore, so
+  every rupee figure this tool printed was grouped the Western way. A single
+  separator character can say comma or full stop but not group *size*. The
+  value is read from the CLDR decimal pattern, `spell` honours it, and it
+  defaults to thousands so every locale written before it stays byte-identical.
+- Two tables are authored and neither is a name: statutory company forms and
+  the month a financial year opens, because no library publishes either per
+  jurisdiction. India and Japan open on 1 April; the rest default to the
+  calendar year.
+- The identifier surface follows. `tools/ingest_surface.py` adds the eight
+  countries to `data/surface/rules.json`, with phone formats from
+  libphonenumber's published national formats and the statutory registration
+  number each country's invoices carry: an Indian company quotes a GSTIN and a
+  Singaporean one a UEN, where both used to print `REG-########`. Hong Kong
+  takes the PO box convention this repository already uses for the Gulf,
+  because it numbers no addresses. No pre-existing country changed.
+
+### Employment is measured, and every shape grounds (Generation)
+
+- `worldloom.staffing` reads occupational employment by industry from the
+  Bureau of Labor Statistics. `tools/ingest_bls_oes.py` joins three tables that
+  were already here or one download away: OES employment for an SOC occupation
+  inside a NAICS industry, the O*NET function crosswalk in `_data/functions`,
+  and the process catalogue's NAICS map. All twelve shipped industries are
+  carried, from 37,944 occupation-by-industry rows.
+- The numbers discriminate where revenue share could not. 58% of a freight
+  company's employment is warehousing, 32% of a consumer-products company's is
+  production, and 15% of a software company's is engineering. A 20,000-person
+  logistics company now puts 18,070 people in warehousing; the revenue-share
+  proxy could not tell it from a software company.
+- Every derived line carries `workforce_share`, and the programme names the
+  release it was measured from. `staffing.allocate` turns a stated total into
+  people across the families a company models, by largest remainder so the
+  parts sum exactly. An industry the table does not carry gets a zero share and
+  a finding that says so, never an even split.
+- Longest NAICS prefix wins in the crosswalk. The catalogue carries both
+  `NAICS 52` (banking) and `NAICS 5241` (insurance), and first-match order put
+  every insurer in the bank.
+- `establish` still splits a pack's units by revenue share and now says why:
+  a pack's units are trading divisions, and no employment survey counts those.
+- **Every DAG shape is planned by default.** `map_read` and `conditional` were
+  opt-in because they raise a source's `minimum` to two while the materializer
+  topped a source pool up to exactly one record, so rows under them
+  materialized and then refused to compile. `materialize_corpus` now tops a
+  pool up to the largest minimum any planned row asks of it. The first filler
+  record keeps the key it has always had, so a corpus that only ever needed one
+  is byte-identical.
+- A predicate-filtered source, or a corpus built `strict_sources`, is still
+  refused rather than filled: a filler record meets a count and not a claim,
+  and the refusal names how many records are present and how many are needed.
+
 ### Procurement is a function, and the system says so
 
 - The engine registry listed `procurement` beside `retail`, `banking` and

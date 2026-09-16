@@ -1,0 +1,1746 @@
+{
+ "locales": {
+  "china": {
+   "about": "China: 16 ISO subdivisions as regions, 14 cities by population, CNY, 7 fixed-date holidays, a financial year opening in month 1, and ',' thousands. Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Shanghai",
+     "China"
+    ],
+    [
+     "Beijing",
+     "China"
+    ],
+    [
+     "Shenzhen",
+     "China"
+    ],
+    [
+     "Guangzhou",
+     "China"
+    ],
+    [
+     "Chengdu",
+     "China"
+    ],
+    [
+     "Tianjin",
+     "China"
+    ],
+    [
+     "Wuhan",
+     "China"
+    ],
+    [
+     "Dongguan",
+     "China"
+    ],
+    [
+     "Xi’an",
+     "China"
+    ],
+    [
+     "Nanjing",
+     "China"
+    ],
+    [
+     "Hangzhou",
+     "China"
+    ],
+    [
+     "Foshan",
+     "China"
+    ],
+    [
+     "Chongqing",
+     "China"
+    ],
+    [
+     "Wuzhong",
+     "China"
+    ]
+   ],
+   "company_suffixes": [
+    "Co., Ltd.",
+    "Group Co., Ltd.",
+    "Holdings Co., Ltd.",
+    "Technology Co., Ltd."
+   ],
+   "country": "CN",
+   "currency": "CNY",
+   "decimal_separator": ".",
+   "family": [
+    "Wang",
+    "Zhang",
+    "Chen",
+    "Liu",
+    "Li",
+    "Lee",
+    "Huang",
+    "Wu",
+    "Yang",
+    "Xu",
+    "Lin",
+    "Chan",
+    "Zhou",
+    "Wong",
+    "Zhao",
+    "Yu",
+    "Zhu",
+    "Sun",
+    "Hu",
+    "Lu",
+    "Zheng",
+    "Jiang",
+    "Ma",
+    "He",
+    "Guo",
+    "Tang",
+    "Luo",
+    "Liang",
+    "Gao",
+    "Xie",
+    "Shen",
+    "Wei",
+    "Yan",
+    "Cheng",
+    "Shi",
+    "Feng",
+    "Ye",
+    "Zeng",
+    "Cai",
+    "Deng"
+   ],
+   "fiscal_year_start_month": 1,
+   "given": [
+    "Lily",
+    "Cherry",
+    "Candy",
+    "Crystal",
+    "Coco",
+    "Amber",
+    "Penny",
+    "Nan",
+    "Rain",
+    "Snow",
+    "Miya",
+    "Demi",
+    "Queenie",
+    "Holly",
+    "Krystal",
+    "Spring",
+    "Sammi",
+    "Rainbow",
+    "Sissi",
+    "Yuting",
+    "Jelly",
+    "Season",
+    "Dandan",
+    "Skye",
+    "Mindy",
+    "Poppy",
+    "Yiyi",
+    "Rainy",
+    "Vincy",
+    "Landy",
+    "Yiwen",
+    "Carry",
+    "Linna",
+    "Hailey",
+    "Carey",
+    "Lijuan",
+    "Fen",
+    "Libby",
+    "Bessie",
+    "Xiaomin"
+   ],
+   "group_separator": ",",
+   "grouping": [
+    3
+   ],
+   "holidays": [
+    [
+     1,
+     1
+    ],
+    [
+     5,
+     1
+    ],
+    [
+     5,
+     2
+    ],
+    [
+     10,
+     1
+    ],
+    [
+     10,
+     2
+    ],
+    [
+     10,
+     3
+    ],
+    [
+     10,
+     7
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank Co., Ltd.",
+     "Commercial Bank Co., Ltd.",
+     "Rural Bank Co., Ltd."
+    ],
+    "insurance": [
+     "Insurance Co., Ltd.",
+     "Life Insurance Co., Ltd.",
+     "Property and Casualty Insurance Co., Ltd."
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "AH",
+    "BJ",
+    "CQ",
+    "FJ",
+    "GD",
+    "GS",
+    "GX",
+    "GZ",
+    "HA",
+    "HB",
+    "HE",
+    "HI",
+    "HK",
+    "HL",
+    "HN",
+    "JL"
+   ]
+  },
+  "hong_kong": {
+   "about": "Hong Kong: 16 ISO subdivisions as regions, 14 cities by population, HKD, 6 fixed-date holidays, a financial year opening in month 1, and ',' thousands. Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Hong Kong",
+     "Hong Kong"
+    ],
+    [
+     "New Territories",
+     "Hong Kong"
+    ],
+    [
+     "Kowloon",
+     "Hong Kong"
+    ],
+    [
+     "Hong Kong Island",
+     "Hong Kong"
+    ],
+    [
+     "Victoria",
+     "Hong Kong"
+    ],
+    [
+     "Tuen Mun",
+     "Hong Kong"
+    ],
+    [
+     "Sha Tin",
+     "Hong Kong"
+    ],
+    [
+     "Sham Shui Po",
+     "Hong Kong"
+    ],
+    [
+     "Wong Tai Sin",
+     "Hong Kong"
+    ],
+    [
+     "Kowloon City",
+     "Hong Kong"
+    ],
+    [
+     "Tseung Kwan O",
+     "Hong Kong"
+    ],
+    [
+     "Kwai Chung",
+     "Hong Kong"
+    ],
+    [
+     "Tsuen Wan",
+     "Hong Kong"
+    ],
+    [
+     "Tin Shui Wai",
+     "Hong Kong"
+    ]
+   ],
+   "company_suffixes": [
+    "Limited",
+    "Holdings Limited",
+    "(HK) Limited",
+    "Group Limited"
+   ],
+   "country": "HK",
+   "currency": "HKD",
+   "decimal_separator": ".",
+   "family": [
+    "Chan",
+    "Wong",
+    "Lee",
+    "Leung",
+    "Lam",
+    "Cheung",
+    "Ng",
+    "Lau",
+    "Ho",
+    "Li",
+    "Cheng",
+    "Lai",
+    "Yeung",
+    "Lo",
+    "Tang",
+    "Tsang",
+    "Chow",
+    "Kwok",
+    "Fung",
+    "Chung",
+    "Yu",
+    "Tam",
+    "Law",
+    "Yip",
+    "Tse",
+    "So",
+    "Chu",
+    "Liu",
+    "Wu",
+    "Mak",
+    "Choi",
+    "Hui",
+    "Ma",
+    "Yuen",
+    "Chiu",
+    "Kwan",
+    "Chau",
+    "Au",
+    "Poon",
+    "Yau"
+   ],
+   "fiscal_year_start_month": 1,
+   "given": [
+    "Sam",
+    "Simon",
+    "Ben",
+    "Henry",
+    "Vincent",
+    "Ray",
+    "Jack",
+    "Stephen",
+    "Wilson",
+    "Ryan",
+    "King",
+    "Roy",
+    "Louis",
+    "Edward",
+    "Dennis",
+    "Bobo",
+    "Philip",
+    "Lawrence",
+    "Alfred",
+    "Gordon",
+    "Rex",
+    "Bill",
+    "Marcus",
+    "Kent",
+    "Barry",
+    "Samson",
+    "Happy",
+    "Johnson",
+    "Allen",
+    "Wayne",
+    "Kaka",
+    "Donald",
+    "Jackson",
+    "Herman",
+    "Howard",
+    "Nicholas",
+    "Matt",
+    "Bruce",
+    "Larry",
+    "Tiger"
+   ],
+   "group_separator": ",",
+   "grouping": [
+    3
+   ],
+   "holidays": [
+    [
+     1,
+     1
+    ],
+    [
+     5,
+     1
+    ],
+    [
+     7,
+     1
+    ],
+    [
+     10,
+     1
+    ],
+    [
+     12,
+     25
+    ],
+    [
+     12,
+     26
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank Limited",
+     "Banking Corporation Limited",
+     "Finance Limited"
+    ],
+    "insurance": [
+     "Insurance Limited",
+     "Assurance Limited",
+     "Life Insurance Limited"
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "Hong Kong",
+    "New Territories",
+    "Kowloon",
+    "Hong Kong Island",
+    "Victoria",
+    "Tuen Mun",
+    "Sha Tin",
+    "Sham Shui Po",
+    "Wong Tai Sin",
+    "Kowloon City",
+    "Tseung Kwan O",
+    "Kwai Chung",
+    "Tsuen Wan",
+    "Tin Shui Wai",
+    "Tai Po",
+    "Fanling"
+   ]
+  },
+  "india": {
+   "about": "India: 16 ISO subdivisions as regions, 14 cities by population, INR, 5 fixed-date holidays, a financial year opening in month 4, and lakh grouping (12,34,567). Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Mumbai",
+     "India"
+    ],
+    [
+     "Delhi",
+     "India"
+    ],
+    [
+     "Bengaluru",
+     "India"
+    ],
+    [
+     "Hyderabad",
+     "India"
+    ],
+    [
+     "Ahmedabad",
+     "India"
+    ],
+    [
+     "Chennai",
+     "India"
+    ],
+    [
+     "Kolkata",
+     "India"
+    ],
+    [
+     "Surat",
+     "India"
+    ],
+    [
+     "Pune",
+     "India"
+    ],
+    [
+     "Jaipur",
+     "India"
+    ],
+    [
+     "Kanpur",
+     "India"
+    ],
+    [
+     "Navi Mumbai",
+     "India"
+    ],
+    [
+     "Lucknow",
+     "India"
+    ],
+    [
+     "Nagpur",
+     "India"
+    ]
+   ],
+   "company_suffixes": [
+    "Private Limited",
+    "Limited",
+    "Industries Limited",
+    "Enterprises Private Limited"
+   ],
+   "country": "IN",
+   "currency": "INR",
+   "decimal_separator": ".",
+   "family": [
+    "Kumar",
+    "Singh",
+    "Khan",
+    "Sharma",
+    "Yadav",
+    "Patel",
+    "Das",
+    "Raj",
+    "Gupta",
+    "Ali",
+    "Ansari",
+    "Thakur",
+    "Roy",
+    "Rajput",
+    "Kumari",
+    "Shaikh",
+    "Patil",
+    "Verma",
+    "Chauhan",
+    "Mishra",
+    "Sk",
+    "Sahu",
+    "Alam",
+    "Choudhary",
+    "Rana",
+    "Parmar",
+    "Mondal",
+    "Pandey",
+    "Pal",
+    "Shah",
+    "Saini",
+    "Ram",
+    "Jain",
+    "Prajapati",
+    "Rathod",
+    "Tiwari",
+    "Nayak",
+    "Soni",
+    "Sarkar",
+    "Mandal"
+   ],
+   "fiscal_year_start_month": 4,
+   "given": [
+    "Abdul",
+    "Kamal",
+    "Salman",
+    "Amar",
+    "Samir",
+    "Amol",
+    "Aniket",
+    "Swapnil",
+    "Anurag",
+    "Ajeet",
+    "Abhijit",
+    "Dheeraj",
+    "Omkar",
+    "Ashutosh",
+    "Nikita",
+    "Dhananjay",
+    "Nishant",
+    "Rajib",
+    "Virendra",
+    "Somnath",
+    "Sujeet",
+    "Dipankar",
+    "Sanjeet",
+    "Upendra",
+    "Siddharth",
+    "Subodh",
+    "Tapas",
+    "Milan",
+    "Rashid",
+    "Nasir",
+    "Mangesh",
+    "Sanjit",
+    "Prasanta",
+    "Sanjib",
+    "Bikram",
+    "Subrata",
+    "Jayanta",
+    "Shailendra",
+    "Amarjeet",
+    "Gourav"
+   ],
+   "group_separator": ",",
+   "grouping": [
+    3,
+    2
+   ],
+   "holidays": [
+    [
+     1,
+     26
+    ],
+    [
+     4,
+     14
+    ],
+    [
+     8,
+     15
+    ],
+    [
+     10,
+     2
+    ],
+    [
+     12,
+     25
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank Limited",
+     "Banking Corporation Limited",
+     "Finance Limited"
+    ],
+    "insurance": [
+     "Insurance Company Limited",
+     "General Insurance Limited",
+     "Life Insurance Company Limited"
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "AN",
+    "AP",
+    "AR",
+    "AS",
+    "BR",
+    "CG",
+    "CH",
+    "DH",
+    "DL",
+    "GA",
+    "GJ",
+    "HP",
+    "HR",
+    "JH",
+    "JK",
+    "KA"
+   ]
+  },
+  "indonesia": {
+   "about": "Indonesia: 16 ISO subdivisions as regions, 14 cities by population, IDR, 5 fixed-date holidays, a financial year opening in month 1, and '.' thousands. Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Jakarta",
+     "Indonesia"
+    ],
+    [
+     "Surabaya",
+     "Indonesia"
+    ],
+    [
+     "Bekasi",
+     "Indonesia"
+    ],
+    [
+     "Bandung",
+     "Indonesia"
+    ],
+    [
+     "Medan",
+     "Indonesia"
+    ],
+    [
+     "Depok",
+     "Indonesia"
+    ],
+    [
+     "Tangerang",
+     "Indonesia"
+    ],
+    [
+     "Palembang",
+     "Indonesia"
+    ],
+    [
+     "Semarang",
+     "Indonesia"
+    ],
+    [
+     "Makassar",
+     "Indonesia"
+    ],
+    [
+     "South Tangerang",
+     "Indonesia"
+    ],
+    [
+     "Batam",
+     "Indonesia"
+    ],
+    [
+     "Jepara",
+     "Indonesia"
+    ],
+    [
+     "Pekanbaru",
+     "Indonesia"
+    ]
+   ],
+   "company_suffixes": [
+    "Tbk",
+    "Persero Tbk",
+    "Indonesia Tbk",
+    "Group Tbk"
+   ],
+   "country": "ID",
+   "currency": "IDR",
+   "decimal_separator": ",",
+   "family": [
+    "Wijaya",
+    "Gunawan",
+    "Setiawan",
+    "Santoso",
+    "Kurniawan",
+    "Susanto",
+    "Putra",
+    "Hidayat",
+    "Widjaja",
+    "Wibowo",
+    "Lie",
+    "Nugroho",
+    "Dewi",
+    "Saputra",
+    "Hartono",
+    "Siregar",
+    "Putri",
+    "Irawan",
+    "Kusuma",
+    "Pratama",
+    "Iskandar",
+    "Arifin",
+    "Prasetyo",
+    "Purnomo",
+    "Wati",
+    "Budiman",
+    "Lestari",
+    "Wahyudi",
+    "Jaya",
+    "Hermawan",
+    "Widodo",
+    "Susilo",
+    "Sutanto",
+    "Maulana",
+    "Yanto",
+    "Utomo",
+    "Nugraha",
+    "Susanti",
+    "Darmawan",
+    "Tjandra"
+   ],
+   "fiscal_year_start_month": 1,
+   "given": [
+    "Siti",
+    "Tri",
+    "Dian",
+    "Ade",
+    "Henny",
+    "Rini",
+    "Indah",
+    "Made",
+    "Ayu",
+    "Novi",
+    "Diah",
+    "Fenny",
+    "Erni",
+    "Dessy",
+    "Lanny",
+    "Iis",
+    "Enny",
+    "Iin",
+    "Lilik",
+    "Etty",
+    "Desy",
+    "Siska",
+    "Prima",
+    "Ninik",
+    "Lies",
+    "Titik",
+    "Yuyun",
+    "Winda",
+    "Esti",
+    "Ratu",
+    "Wenny",
+    "Suci",
+    "Vonny",
+    "Cut",
+    "Yetty",
+    "Sinta",
+    "Niken",
+    "Heny",
+    "Nanik",
+    "Nunung"
+   ],
+   "group_separator": ".",
+   "grouping": [
+    3
+   ],
+   "holidays": [
+    [
+     1,
+     1
+    ],
+    [
+     5,
+     1
+    ],
+    [
+     6,
+     1
+    ],
+    [
+     8,
+     17
+    ],
+    [
+     12,
+     25
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank Tbk",
+     "Bank Persero Tbk",
+     "Bank Syariah Tbk"
+    ],
+    "insurance": [
+     "Asuransi Tbk",
+     "Asuransi Jiwa Tbk",
+     "Asuransi Umum Tbk"
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "AC",
+    "BA",
+    "BB",
+    "BE",
+    "BT",
+    "GO",
+    "JA",
+    "JB",
+    "JI",
+    "JK",
+    "JT",
+    "JW",
+    "KA",
+    "KB",
+    "KI",
+    "KR"
+   ]
+  },
+  "japan": {
+   "about": "Japan: 16 ISO subdivisions as regions, 14 cities by population, JPY, 13 fixed-date holidays, a financial year opening in month 4, and ',' thousands. Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Tokyo",
+     "Japan"
+    ],
+    [
+     "Yokohama",
+     "Japan"
+    ],
+    [
+     "Osaka",
+     "Japan"
+    ],
+    [
+     "Nagoya",
+     "Japan"
+    ],
+    [
+     "Sapporo",
+     "Japan"
+    ],
+    [
+     "Fukuoka",
+     "Japan"
+    ],
+    [
+     "Kawasaki",
+     "Japan"
+    ],
+    [
+     "Kobe",
+     "Japan"
+    ],
+    [
+     "Kyoto",
+     "Japan"
+    ],
+    [
+     "Saitama",
+     "Japan"
+    ],
+    [
+     "Hiroshima",
+     "Japan"
+    ],
+    [
+     "Sendai",
+     "Japan"
+    ],
+    [
+     "Chiba",
+     "Japan"
+    ],
+    [
+     "Kitakyushu",
+     "Japan"
+    ]
+   ],
+   "company_suffixes": [
+    "K.K.",
+    "Co., Ltd.",
+    "Holdings K.K.",
+    "Corporation"
+   ],
+   "country": "JP",
+   "currency": "JPY",
+   "decimal_separator": ".",
+   "family": [
+    "Suzuki",
+    "Sato",
+    "Tanaka",
+    "Watanabe",
+    "Takahashi",
+    "Yamamoto",
+    "Nakamura",
+    "Ito",
+    "Kobayashi",
+    "Saito",
+    "Yamada",
+    "Kato",
+    "Yoshida",
+    "Inoue",
+    "Matsumoto",
+    "Hayashi",
+    "Kimura",
+    "Sasaki",
+    "Yamaguchi",
+    "Shimizu",
+    "Mori",
+    "Abe",
+    "Ikeda",
+    "Hashimoto",
+    "Yamashita",
+    "Maeda",
+    "佐藤",
+    "Sakamoto",
+    "Ono",
+    "Okada",
+    "Ishikawa",
+    "Aoki",
+    "Ogawa",
+    "鈴木",
+    "田中",
+    "Murakami",
+    "Ishii",
+    "Sakai",
+    "Fujita",
+    "Ueda"
+   ],
+   "fiscal_year_start_month": 4,
+   "given": [
+    "Jun",
+    "Mika",
+    "Kana",
+    "Saki",
+    "Aki",
+    "Keita",
+    "Shin",
+    "Mio",
+    "Kota",
+    "Daichi",
+    "Manabu",
+    "Nobuyuki",
+    "Kensuke",
+    "Tsutomu",
+    "Masatoshi",
+    "Rei",
+    "Taichi",
+    "Yuichiro",
+    "Maho",
+    "Toshihiro",
+    "Mao",
+    "Yasuyuki",
+    "Toshiaki",
+    "Keiichi",
+    "Yuma",
+    "Junya",
+    "Hirotaka",
+    "Masakazu",
+    "Ryohei",
+    "Tsubasa",
+    "Shuichi",
+    "Akihiko",
+    "Masayoshi",
+    "Mie",
+    "Naoyuki",
+    "Shinichiro",
+    "Tetsuo",
+    "Mitsuhiro",
+    "Susumu",
+    "Kaho"
+   ],
+   "group_separator": ",",
+   "grouping": [
+    3
+   ],
+   "holidays": [
+    [
+     1,
+     1
+    ],
+    [
+     2,
+     11
+    ],
+    [
+     2,
+     23
+    ],
+    [
+     3,
+     20
+    ],
+    [
+     4,
+     29
+    ],
+    [
+     5,
+     3
+    ],
+    [
+     5,
+     4
+    ],
+    [
+     5,
+     5
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     8,
+     11
+    ],
+    [
+     9,
+     23
+    ],
+    [
+     11,
+     3
+    ],
+    [
+     11,
+     23
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank, Ltd.",
+     "Financial Group, Inc.",
+     "Shinkin Bank"
+    ],
+    "insurance": [
+     "Insurance Co., Ltd.",
+     "Life Insurance Co., Ltd.",
+     "Marine and Fire Insurance Co., Ltd."
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "Hokkaido",
+    "Aomori",
+    "Iwate",
+    "Miyagi",
+    "Akita",
+    "Yamagata",
+    "Fukushima",
+    "Ibaraki",
+    "Tochigi",
+    "Gunma",
+    "Saitama",
+    "Chiba",
+    "Tokyo",
+    "Kanagawa",
+    "Niigata",
+    "Toyama"
+   ]
+  },
+  "malaysia": {
+   "about": "Malaysia: 16 ISO subdivisions as regions, 14 cities by population, MYR, 4 fixed-date holidays, a financial year opening in month 1, and ',' thousands. Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Kuala Lumpur",
+     "Malaysia"
+    ],
+    [
+     "Johor Bahru",
+     "Malaysia"
+    ],
+    [
+     "Kampung Baru Subang",
+     "Malaysia"
+    ],
+    [
+     "Petaling Jaya",
+     "Malaysia"
+    ],
+    [
+     "Ipoh",
+     "Malaysia"
+    ],
+    [
+     "Shah Alam",
+     "Malaysia"
+    ],
+    [
+     "Subang Jaya",
+     "Malaysia"
+    ],
+    [
+     "Bukit Rahman Putra",
+     "Malaysia"
+    ],
+    [
+     "Pelentong",
+     "Malaysia"
+    ],
+    [
+     "Malacca",
+     "Malaysia"
+    ],
+    [
+     "Iskandar Puteri",
+     "Malaysia"
+    ],
+    [
+     "Kota Bharu",
+     "Malaysia"
+    ],
+    [
+     "Kuantan",
+     "Malaysia"
+    ],
+    [
+     "Kota Kuala Muda",
+     "Malaysia"
+    ]
+   ],
+   "company_suffixes": [
+    "Sdn Bhd",
+    "Berhad",
+    "Holdings Bhd",
+    "Group Berhad"
+   ],
+   "country": "MY",
+   "currency": "MYR",
+   "decimal_separator": ".",
+   "family": [
+    "Tan",
+    "Lee",
+    "Lim",
+    "Wong",
+    "Ahmad",
+    "Ismail",
+    "Ng",
+    "Abdullah",
+    "Chong",
+    "Ali",
+    "Chan",
+    "Ibrahim",
+    "Chin",
+    "Ong",
+    "Yap",
+    "Hassan",
+    "Rahman",
+    "Othman",
+    "Aziz",
+    "Kumar",
+    "Mohamad",
+    "Yong",
+    "Man",
+    "Hashim",
+    "Yusof",
+    "Shah",
+    "Low",
+    "Goh",
+    "Wan",
+    "Leong",
+    "Zakaria",
+    "Liew",
+    "Omar",
+    "Ramli",
+    "Lai",
+    "Mohd",
+    "Din",
+    "Salleh",
+    "Ling",
+    "Nizam"
+   ],
+   "fiscal_year_start_month": 1,
+   "given": [
+    "Abd",
+    "Are",
+    "Tengku",
+    "Mhd",
+    "Xii",
+    "Amar",
+    "Tuan",
+    "Encik",
+    "Darren",
+    "Amer",
+    "Ehh",
+    "Kenneth",
+    "Haji",
+    "Dinesh",
+    "Frankie",
+    "Fakhrul",
+    "Ainul",
+    "Jeremy",
+    "Melvin",
+    "Eugene",
+    "Ibnu",
+    "Raden",
+    "Khan",
+    "Edmund",
+    "Syamsul",
+    "Ian",
+    "Benny",
+    "Mizta",
+    "Leon",
+    "Johnson",
+    "Cikgu",
+    "Alfred",
+    "Mohd Faizal",
+    "Bernard",
+    "Shawn",
+    "Rajesh",
+    "Arjun",
+    "Matthew",
+    "Sheikh",
+    "Allan"
+   ],
+   "group_separator": ",",
+   "grouping": [
+    3
+   ],
+   "holidays": [
+    [
+     5,
+     1
+    ],
+    [
+     8,
+     31
+    ],
+    [
+     9,
+     16
+    ],
+    [
+     12,
+     25
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank Berhad",
+     "Banking Berhad",
+     "Islamic Bank Berhad"
+    ],
+    "insurance": [
+     "Insurance Berhad",
+     "Takaful Berhad",
+     "General Insurance Berhad"
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "Johor",
+    "Kedah",
+    "Kelantan",
+    "Melaka",
+    "Negeri Sembilan",
+    "Pahang",
+    "Pulau Pinang",
+    "Perak",
+    "Perlis",
+    "Selangor",
+    "Terengganu",
+    "Sabah",
+    "Sarawak",
+    "Wilayah Persekutuan Kuala Lumpur",
+    "Wilayah Persekutuan Labuan",
+    "Wilayah Persekutuan Putrajaya"
+   ]
+  },
+  "singapore": {
+   "about": "Singapore: 5 ISO subdivisions as regions, 14 cities by population, SGD, 4 fixed-date holidays, a financial year opening in month 1, and ',' thousands. Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Singapore",
+     "Singapore"
+    ],
+    [
+     "Bedok New Town",
+     "Singapore"
+    ],
+    [
+     "Ulu Bedok",
+     "Singapore"
+    ],
+    [
+     "Sengkang New Town",
+     "Singapore"
+    ],
+    [
+     "Tampines Estate",
+     "Singapore"
+    ],
+    [
+     "Jurong Town",
+     "Singapore"
+    ],
+    [
+     "Tampines New Town",
+     "Singapore"
+    ],
+    [
+     "Woodlands",
+     "Singapore"
+    ],
+    [
+     "Jurong West",
+     "Singapore"
+    ],
+    [
+     "Yishun New Town",
+     "Singapore"
+    ],
+    [
+     "Hougang New Town",
+     "Singapore"
+    ],
+    [
+     "Punggol",
+     "Singapore"
+    ],
+    [
+     "Choa Chu Kang New Town",
+     "Singapore"
+    ],
+    [
+     "Ang Mo Kio New Town",
+     "Singapore"
+    ]
+   ],
+   "company_suffixes": [
+    "Pte Ltd",
+    "Holdings Pte Ltd",
+    "Singapore Pte Ltd",
+    "Group Pte Ltd"
+   ],
+   "country": "SG",
+   "currency": "SGD",
+   "decimal_separator": ".",
+   "family": [
+    "Tan",
+    "Lim",
+    "Lee",
+    "Ng",
+    "Wong",
+    "Ong",
+    "Goh",
+    "Kumar",
+    "Chan",
+    "Chua",
+    "Koh",
+    "Teo",
+    "Ang",
+    "Islam",
+    "Tay",
+    "Ho",
+    "Chen",
+    "Yeo",
+    "Wang",
+    "Hossain",
+    "Low",
+    "Chong",
+    "Li",
+    "Lin",
+    "Sim",
+    "Toh",
+    "Raj",
+    "Loh",
+    "Leong",
+    "Zhang",
+    "Chia",
+    "Chew",
+    "Yap",
+    "Liu",
+    "Rahman",
+    "Tang",
+    "Yong",
+    "Soh",
+    "Lau",
+    "Yang"
+   ],
+   "fiscal_year_start_month": 1,
+   "given": [
+    "Ryan",
+    "Marcus",
+    "Bernard",
+    "Sunny",
+    "Ian",
+    "Ray",
+    "Stanley",
+    "Xavier",
+    "Jackson",
+    "Daryl",
+    "Shah",
+    "Johnson",
+    "Wayne",
+    "Jon",
+    "Leonard",
+    "Colin",
+    "Nigel",
+    "Clement",
+    "Sasi",
+    "Man",
+    "Kent",
+    "Benson",
+    "Sheikh",
+    "Lionel",
+    "Sharif",
+    "Glenn",
+    "Benedict",
+    "Gavin",
+    "Sha",
+    "Damien",
+    "Luke",
+    "Amos",
+    "Muhamad",
+    "Boy",
+    "Mas",
+    "Kazi",
+    "Lester",
+    "Gordon",
+    "Darryl",
+    "Ash"
+   ],
+   "group_separator": ",",
+   "grouping": [
+    3
+   ],
+   "holidays": [
+    [
+     1,
+     1
+    ],
+    [
+     5,
+     1
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     12,
+     25
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank Pte Ltd",
+     "Banking Group Pte Ltd",
+     "Bank Limited"
+    ],
+    "insurance": [
+     "Insurance Pte Ltd",
+     "Assurance Pte Ltd",
+     "Life Pte Ltd"
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "Central Singapore",
+    "North East",
+    "North West",
+    "South East",
+    "South West"
+   ]
+  },
+  "taiwan": {
+   "about": "Taiwan: 16 ISO subdivisions as regions, 14 cities by population, TWD, 4 fixed-date holidays, a financial year opening in month 1, and ',' thousands. Names are romanised, from names-dataset.",
+   "cities": [
+    [
+     "Taipei",
+     "Taiwan"
+    ],
+    [
+     "New Taipei City",
+     "Taiwan"
+    ],
+    [
+     "Taichung",
+     "Taiwan"
+    ],
+    [
+     "Kaohsiung",
+     "Taiwan"
+    ],
+    [
+     "Tainan",
+     "Taiwan"
+    ],
+    [
+     "Banqiao",
+     "Taiwan"
+    ],
+    [
+     "Taoyuan",
+     "Taiwan"
+    ],
+    [
+     "Hsinchu",
+     "Taiwan"
+    ],
+    [
+     "Keelung",
+     "Taiwan"
+    ],
+    [
+     "Fengshan",
+     "Taiwan"
+    ],
+    [
+     "Neihu",
+     "Taiwan"
+    ],
+    [
+     "Chiayi City",
+     "Taiwan"
+    ],
+    [
+     "Yongkang",
+     "Taiwan"
+    ],
+    [
+     "Chang-hua",
+     "Taiwan"
+    ]
+   ],
+   "company_suffixes": [
+    "Co., Ltd.",
+    "Inc.",
+    "Holdings Co., Ltd.",
+    "Technology Inc."
+   ],
+   "country": "TW",
+   "currency": "TWD",
+   "decimal_separator": ".",
+   "family": [
+    "Chen",
+    "Lin",
+    "Huang",
+    "Chang",
+    "Wang",
+    "Lee",
+    "Wu",
+    "Liu",
+    "Hsu",
+    "Yang",
+    "Tsai",
+    "Cheng",
+    "Yu",
+    "Lu",
+    "Li",
+    "Hsieh",
+    "Chou",
+    "Kuo",
+    "Lai",
+    "Formosa",
+    "Liao",
+    "Chiu",
+    "Su",
+    "Hung",
+    "Tseng",
+    "Yeh",
+    "Chiang",
+    "Ho",
+    "Kao",
+    "Chu",
+    "Chuang",
+    "Lo",
+    "Chung",
+    "Shih",
+    "Hsiao",
+    "Wei",
+    "Hu",
+    "Chien",
+    "Pan",
+    "Shen"
+   ],
+   "fiscal_year_start_month": 1,
+   "given": [
+    "Allen",
+    "Wong",
+    "Mas",
+    "Howard",
+    "Wayne",
+    "Hao",
+    "Benson",
+    "Kang",
+    "Bang",
+    "Fish",
+    "Eko",
+    "Shin",
+    "Bakul",
+    "Sekar",
+    "Angus",
+    "Bear",
+    "Anson",
+    "Ayahe",
+    "Pin",
+    "Maz",
+    "Xiang",
+    "Mbah",
+    "Awan",
+    "Chuck",
+    "Wade",
+    "Jaka",
+    "Lie",
+    "Jung",
+    "Pony",
+    "Dek",
+    "Yu Chen",
+    "Show",
+    "Lun",
+    "Teh",
+    "Orange",
+    "Ayya",
+    "Dedi",
+    "Sambel",
+    "Muji",
+    "Titan"
+   ],
+   "group_separator": ",",
+   "grouping": [
+    3
+   ],
+   "holidays": [
+    [
+     1,
+     1
+    ],
+    [
+     2,
+     28
+    ],
+    [
+     4,
+     4
+    ],
+    [
+     10,
+     10
+    ]
+   ],
+   "industry_suffixes": {
+    "banking": [
+     "Bank Co., Ltd.",
+     "Financial Holdings Co., Ltd.",
+     "Commercial Bank Co., Ltd."
+    ],
+    "insurance": [
+     "Insurance Co., Ltd.",
+     "Life Insurance Co., Ltd.",
+     "Property Insurance Co., Ltd."
+    ]
+   },
+   "name_source": "names-dataset",
+   "negative": "leading_minus",
+   "percent_gap": "",
+   "regions": [
+    "CHA",
+    "CYI",
+    "CYQ",
+    "HSQ",
+    "HSZ",
+    "HUA",
+    "ILA",
+    "KEE",
+    "KHH",
+    "KIN",
+    "LIE",
+    "MIA",
+    "NAN",
+    "NWT",
+    "PEN",
+    "PIF"
+   ]
+  }
+ },
+ "schema": "worldloom.locales/v1",
+ "sources": {
+  "babel": "2.18.0",
+  "faker": "40.39.0",
+  "geonamescache": "3.0.2",
+  "names-dataset": "2.x",
+  "pycountry": "26.2.16"
+ }
+}

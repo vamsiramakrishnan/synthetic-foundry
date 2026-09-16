@@ -259,36 +259,41 @@ def test_the_emulator_table_names_only_connectors_and_entities_that_exist() -> N
             )
 
 
-def test_a_country_with_no_locale_says_so_rather_than_building_quietly(tmp_path: Path) -> None:
-    """Ten of the twelve shipped countries have no locale and fall back to one.
+def test_a_country_with_no_locale_still_says_so_though_none_is_left(tmp_path: Path) -> None:
+    """The gap is closed, and the machinery that stated it still works.
 
-    That is a limit of the build, not a secret: the programme states it, the
-    Studio console shows it beside the missing engine, and the sentence names
-    the currency the catalogue declares so the disagreement with the rendered
-    documents is visible rather than discovered.
+    Every country the shipped industries build in now has a locale
+    (`tools/ingest_locales.py` generated the ten that were missing), so no
+    shipped programme raises this finding. The refusal is kept and tested
+    against a country nobody ships, because the next catalogue to add one is
+    the case it exists for: the alternative is a company built quietly in
+    Australia with someone else's currency on its records.
     """
     from worldloom.studio.service import Studio
 
-    assert industry.unlocalised(("IN", "SG", "AU")) == ("IN", "SG")
+    # A country outside the registry, which is what the finding is for now.
+    assert industry.unlocalised(("ZZ", "IN", "AU")) == ("ZZ",)
     assert industry.unlocalised(("AU", "NZ")) == ()
+    assert industry.unlocalised(("IN", "SG")) == ()
     assert industry.locale_finding(("AU", "NZ")) is None
-    gap = industry.locale_finding(("IN",))
-    assert gap is not None and "IN" in gap and "'australia'" in gap and "INR" in gap
+    assert industry.locale_finding(("IN", "SG")) is None
+    gap = industry.locale_finding(("ZZ",))
+    assert gap is not None and "ZZ" in gap and "locales.register" in gap
 
-    derived = industry.programme("telecom")
-    assert any("a locale for IN" in finding for finding in derived.summary.findings)
-    assert not any(
-        "a locale for" in finding for finding in industry.programme("retail").summary.findings
-    ), "retail operates in AU and NZ, which both ship a locale"
+    # No shipped industry raises it any more, which is the point of the work.
+    for name in ("telecom", "retail", "banking", "technology_saas"):
+        assert not any(
+            "a locale for" in finding
+            for finding in industry.programme(name).summary.findings
+        ), name
 
     spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
     studio = Studio(tmp_path)
     project = studio.store.create(spec)
     findings = studio.describe(project["id"], project["revision"])["findings"]
-    locale = [f for f in findings if f["code"] == "locale_missing"]
-    assert len(locale) == 1 and locale[0]["acknowledged"] is True
+    assert [f for f in findings if f["code"] == "locale_missing"] == []
     # A stated limit does not withhold readiness; an unanswered question does.
-    assert findings and all(f["acknowledged"] for f in findings)
+    assert all(f["acknowledged"] for f in findings)
 
 
 def test_a_support_unit_is_a_business_unit_and_never_a_revenue_division() -> None:
@@ -425,10 +430,13 @@ def test_every_shipped_industry_derives_a_complete_honest_programme(name: str) -
     derived = industry.programme(name)
     summary = derived.summary
     assert summary.industry == name
-    # Findings are for things the programme cannot make honest. The only one
-    # any shipped industry still raises is a country with no locale, which is
-    # a stated gap rather than an incoherent programme.
+    # Findings are for things the programme cannot make honest. The only one a
+    # shipped industry still raises is the locale gap for TH and VN, which no
+    # library publishes a deep enough name pool to close; everything else, the
+    # measured employment included, is answered.
     assert all(finding.startswith("a locale for ") for finding in summary.findings)
+    for finding in summary.findings:
+        assert "TH" in finding or "VN" in finding, finding
     assert (
         summary.requests
         == summary.situations
@@ -530,8 +538,7 @@ def test_describe_reports_the_headline_numbers() -> None:
     described = industry.describe("telecom")
     assert described["situations"] == described["reads"] + described["writes"]
     assert described["lobs"] == len(described["by_lob"])
-    # Telecom builds in IN, which ships no locale; that gap is the one finding.
-    assert all(finding.startswith("a locale for ") for finding in described["findings"])
+    assert described["findings"] == []
     assert sum(described["intents"].values()) == described["situations"]
 
 
@@ -783,7 +790,10 @@ def test_a_project_derives_from_a_described_company_and_rederives_keeping_its_se
     assert [unit.name for unit in spec.divisions] == ["Consumer", "Enterprise"]
     assert [lob.name for lob in spec.lobs] == ["billing"]
     assert spec.use_cases and all(case.lob == "billing" for case in spec.use_cases)
-    assert spec.company == {"industry": "telecom", "identity": {"company_name": "Ardent Telecom"}, "geo": "australia"}
+    # The company operates in IN and is therefore spelled there: rupees, an
+    # April financial year, Indian names and cities, and lakh digit grouping.
+    # It used to say "australia", which was the geography gap in one field.
+    assert spec.company == {"industry": "telecom", "identity": {"company_name": "Ardent Telecom"}, "geo": "india"}
     assert industry.project(described, lobs=("billing",)) == spec
     with pytest.raises(ValueError, match="names 'Ardent Telecom'"):
         industry.project(described, "Other Co")
@@ -800,8 +810,11 @@ def test_a_project_derives_from_a_described_company_and_rederives_keeping_its_se
     assert len(everything.lobs) > 1
     with pytest.raises(ValueError, match="has none"):
         industry.rederive(spec.model_copy(update={"structure": None, "divisions": (), "lobs": (), "use_cases": ()}))
-    # The locale follows the country where one is shipped.
-    assert industry.geo_for(("IN",)) == "australia" and industry.geo_for(("SG", "DE")) == "germany"
+    # The locale follows the first country that has one, and every country the
+    # shipped industries build in now does.
+    assert industry.geo_for(("IN",)) == "india"
+    assert industry.geo_for(("SG", "DE")) == "singapore"
+    assert industry.geo_for(("ZZ", "DE")) == "germany"
 
 
 def test_the_process_kinds_are_in_the_registry_of_a_process_that_never_imported_industry() -> None:

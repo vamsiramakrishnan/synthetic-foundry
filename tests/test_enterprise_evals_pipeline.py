@@ -175,7 +175,15 @@ def test_every_planned_query_executes(built: Path) -> None:
     assert report["average_dag_score"] is None
     assert report["assertion_passed"] == 12 and report["assertion_failed"] == 0
     blocked = [item for item in report["results"] if item["outcome"] == "blocked_at_designed_write"]
-    assert blocked and all(item["finding"] == "node write failed: denied" for item in blocked)
+    # The write node's *name* varies with the shape now that every shape is
+    # planned by default: `conditional` writes through `write-primary` and
+    # `write-fallback`. What must hold is that the denial landed on a write and
+    # was the designed one, not which branch of which shape carried it.
+    assert blocked
+    assert all(
+        item["finding"].startswith("node write") and item["finding"].endswith("failed: denied")
+        for item in blocked
+    ), sorted({item["finding"] for item in blocked})
 
 
 def test_the_legacy_trajectory_still_executes_and_scores(built_legacy: Path) -> None:

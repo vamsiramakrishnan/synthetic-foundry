@@ -105,6 +105,18 @@ all = [
     "python-pptx>=1.0",
     "mcp>=2.2,<3",
 ]
+# `tools/ingest_*.py` only. Never imported from `src/`: every ingest runs once
+# against a published source and commits a versioned table, so a build reads
+# JSON and a user installing the tool carries none of this. Declared so the
+# tables can be rebuilt from their sources rather than trusted.
+ingest = [
+    "openpyxl>=3.1",
+    "faker>=30.0",
+    "babel>=2.14",
+    "pycountry>=23.12",
+    "geonamescache>=2.0",
+    "holidays>=0.50",
+]
 dev = [
     "pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0",
     "python-pptx>=1.0", "mcp>=2.2,<3",

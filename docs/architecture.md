@@ -198,10 +198,24 @@ revenue, by largest remainder so the parts sum to the total exactly. Before it,
 a 400-person and a 20,000-person retailer were identical below the top: same
 units, same roster, nothing a document could cite about the size of a division.
 
-Revenue share is a proxy for staffing, not a measurement, and it is the only
-per-unit weight a pack declares. It is deliberately not derived from the named
-roster, which is the decision-making graph and top-heavy by construction.
-Occupational headcount per industry would be better and is not shipped.
+Revenue share is a proxy, and it is the only per-unit weight a *pack*
+declares: a pack's units are trading divisions, and no employment survey counts
+those. It is deliberately not derived from the named roster, which is the
+decision-making graph and top-heavy by construction.
+
+Units shaped like functions are measured rather than proxied. `worldloom.staffing`
+reads `_data/oes/employment@<year>.json`, which `tools/ingest_bls_oes.py` builds
+by joining the Bureau of Labor Statistics' occupational employment by industry
+to the function crosswalk in `_data/functions` and the catalogue's NAICS map. A
+derived programme carries each line's `workforce_share` from it, and
+`staffing.allocate` turns a stated total into people across the families a
+company models. The numbers discriminate where revenue share could not: 58% of
+a freight company's employment is warehousing, and 15% of a software company's
+is engineering.
+
+It is United States national employment for one survey period, and it is the
+shape of an industry rather than of a named employer. An industry the table
+does not carry gets a zero share and a stated finding, never an even split.
 
 Two more validator rules follow: the units may not establish more people than
 the company states, and a unit may not hold more named employees than it

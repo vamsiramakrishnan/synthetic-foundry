@@ -235,19 +235,21 @@ def shape_catalogue() -> dict[str, dict[str, Any]]:
 
 
 def default_shapes() -> tuple[str, ...]:
-    """Every shape a row can ground on the sources it already declares.
+    """Every shape in the catalogue. A default case set grades all of them.
 
-    Two shapes in the catalogue raise a source's `minimum` above what the row
-    asked for: `map_read` fetches each search hit, and `conditional` needs a
-    witness for both branches. A world holding one record where the row wanted
-    one then plans a case that materializes but cannot compile. They stay
-    reachable by name; everything else, deletes included, is planned by
-    default, because a case set that never deletes cannot grade a delete.
+    Two shapes used to be held back. `map_read` fetches each search hit and
+    `conditional` needs a witness for both branches, so both raise a source's
+    `minimum` to two, and the materializer topped a source pool up to exactly
+    one record. Rows under those shapes materialized and then refused to
+    compile, which made them opt-in for a reason that was really a generation
+    bug. `enterprise_corpus.materialize_corpus` now tops a pool up to the
+    largest minimum any planned row asks of it, so the exclusion is gone.
+
+    Kept as a named function rather than folded into `shape_catalogue` because
+    it is the answer to a different question: what a caller who said nothing
+    should get, which is free to narrow again if a shape earns it.
     """
-    return tuple(sorted(
-        name for name, template in _shape_data().items()
-        if template["reads"] != "map" and template["control"] != "conditional"
-    ))
+    return tuple(sorted(_shape_data()))
 
 
 def resolve_shapes(requested: Sequence[str] | None) -> tuple[str, ...]:
