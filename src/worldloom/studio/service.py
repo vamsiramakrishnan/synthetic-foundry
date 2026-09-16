@@ -130,6 +130,16 @@ class Studio:
         compilation = compile_company(spec.structure) if spec.structure else None
         findings = [{"code": "company_unmet", "message": finding,
                      "acknowledged": finding in spec.acknowledged_unmet} for finding in resolution.unmet]
+        if spec.structure is not None:
+            # A country with no shipped locale builds in the default one and
+            # used to say nothing about it. It is a stated limit of the build,
+            # not a gap the operator can close from the console, so it is
+            # acknowledged and does not withhold readiness.
+            from ..industry import locale_finding
+
+            gap = locale_finding(spec.structure.countries)
+            if gap is not None:
+                findings.append({"code": "locale_missing", "message": gap, "acknowledged": True})
         findings.extend({"code": "workflow_missing", "message": f"{c.title}: define an executable workflow", "acknowledged": False}
                         for c in spec.use_cases if c.scenario is None and c.id not in {t.use_case_id for t in spec.native_tasks})
         if not spec.use_cases:

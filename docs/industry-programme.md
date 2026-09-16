@@ -215,6 +215,26 @@ sector framework (`TM Forum eTOM`) and a declared word table
 (`INDUSTRY_WORDS`), matched at word boundaries with the longest phrase
 winning.
 
+## The locale a company is built in
+
+The catalogue's companies operate in twelve countries: AU, CN, HK, ID, IN,
+JP, MY, NZ, SG, TH, TW and VN. Four locales ship (`australia`,
+`united_kingdom`, `germany`, `gulf`), and only AU and NZ are among the
+twelve, so ten of them build in the default locale and take its names,
+cities, calendar, figure grammar and currency.
+
+That is now stated rather than discovered. `industry.unlocalised` names the
+countries with no locale and `industry.locale_finding` writes the sentence:
+the programme carries it in `findings`, and the Studio console shows it as an
+acknowledged limit beside the missing engine. It names the currency the
+catalogue declares for those countries, because connector records carry that
+currency per country while the rendered documents carry the locale's, and the
+two disagree until a locale is written and `locales.register`ed.
+
+A telecom operating in India reads: *a locale for IN: none ships, so the
+company's names, cities, calendar, figure grammar and currency are
+'australia'. The catalogue denominates them in INR.*
+
 ## The shipped industries
 
 Counts for each catalogue's default company, as `worldloom industry list`

@@ -11,6 +11,18 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A country with no locale says so
+
+- `industry.unlocalised` and `industry.locale_finding` name the countries no
+  shipped locale answers for and what the company loses to the one it is
+  built in: its names, cities, calendar, figure grammar and currency. Ten of
+  the twelve countries the shipped industries operate in are among them.
+  The programme carries the sentence in `findings`, and the Studio console
+  shows it as an acknowledged limit beside the missing engine, which does not
+  withhold readiness. The sentence names the currency the catalogue declares
+  for those countries, because connector records carry it per country while
+  rendered documents carry the locale's.
+
 ### Honest counts, and a support unit that earns no revenue (Generation)
 
 - **A programme reports what it grounds, not how it can be phrased.**

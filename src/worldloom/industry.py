@@ -921,6 +921,9 @@ def programme(
     if domains.by_name(world_engine) is None:
         world_engine = ""
     findings = lint(lobs) + standing_findings(derived_requests, lobs)
+    gap = locale_finding(company.countries, catalogue=cat)
+    if gap is not None:
+        findings.append(gap)
     unemulated = sorted({name for line in derived_lines for name in line.unemulated})
     summary = IndustryProgramme(
         industry=compiled.industry,
@@ -1224,6 +1227,48 @@ DEFAULT_GEO = "australia"
 def geo_for(countries: Sequence[str]) -> str:
     """The locale of the first of *countries* that has one, else `DEFAULT_GEO`."""
     return next((COUNTRY_LOCALES[c] for c in countries if c in COUNTRY_LOCALES), DEFAULT_GEO)
+
+
+def unlocalised(countries: Sequence[str]) -> tuple[str, ...]:
+    """The countries in *countries* that no shipped locale answers for.
+
+    Ten of the twelve countries the shipped industries operate in are here:
+    a locale is names, cities, a calendar, a currency and a digit grammar,
+    and four of them ship. The catalogue knows every country's currency, tax
+    and fiscal year; the world that renders them does not.
+    """
+    return tuple(sorted({c for c in countries if c not in COUNTRY_LOCALES}))
+
+
+def locale_finding(
+    countries: Sequence[str], *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """What a company in *countries* loses to the locale it is built in, or None.
+
+    None when every country has a locale. Otherwise the sentence names the
+    countries, the locale actually used and the currency the catalogue
+    declares for them, so a reader sees an Indian telecom's Australian names
+    and AUD figures as a stated limit rather than finding them in the output.
+    """
+    missing = unlocalised(countries)
+    if not missing:
+        return None
+    cat = catalogue if catalogue is not None else load_catalogue()
+    variants = cat.get("regional_variants", {})
+    declared = sorted({
+        variants[code]["currency"]
+        for code in missing
+        if code in variants and variants[code].get("currency")
+    })
+    geo = geo_for(countries)
+    money = f" The catalogue denominates them in {', '.join(declared)}." if declared else ""
+    return (
+        f"a locale for {', '.join(missing)}: none ships, so the company's names,"
+        f" cities, calendar, figure grammar and currency are {geo!r}."
+        f"{money} Connector records carry the catalogue's own currency per country,"
+        " so records and rendered documents disagree on the money."
+        " Write a locale and `locales.register` it to close the gap."
+    )
 
 
 #: The unit archetypes that earn revenue; the function they bind most is the
@@ -1628,6 +1673,8 @@ __all__ = [
     "stream_names",
     "use_cases",
     "COUNTRY_LOCALES",
+    "locale_finding",
+    "unlocalised",
     "DEFAULT_GEO",
     "geo_for",
     "rederive",

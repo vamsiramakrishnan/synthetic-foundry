@@ -257,6 +257,38 @@ def test_the_emulator_table_names_only_connectors_and_entities_that_exist() -> N
             )
 
 
+def test_a_country_with_no_locale_says_so_rather_than_building_quietly(tmp_path: Path) -> None:
+    """Ten of the twelve shipped countries have no locale and fall back to one.
+
+    That is a limit of the build, not a secret: the programme states it, the
+    Studio console shows it beside the missing engine, and the sentence names
+    the currency the catalogue declares so the disagreement with the rendered
+    documents is visible rather than discovered.
+    """
+    from worldloom.studio.service import Studio
+
+    assert industry.unlocalised(("IN", "SG", "AU")) == ("IN", "SG")
+    assert industry.unlocalised(("AU", "NZ")) == ()
+    assert industry.locale_finding(("AU", "NZ")) is None
+    gap = industry.locale_finding(("IN",))
+    assert gap is not None and "IN" in gap and "'australia'" in gap and "INR" in gap
+
+    derived = industry.programme("telecom")
+    assert any("a locale for IN" in finding for finding in derived.summary.findings)
+    assert not any(
+        "a locale for" in finding for finding in industry.programme("retail").summary.findings
+    ), "retail operates in AU and NZ, which both ship a locale"
+
+    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    studio = Studio(tmp_path)
+    project = studio.store.create(spec)
+    findings = studio.describe(project["id"], project["revision"])["findings"]
+    locale = [f for f in findings if f["code"] == "locale_missing"]
+    assert len(locale) == 1 and locale[0]["acknowledged"] is True
+    # A stated limit does not withhold readiness; an unanswered question does.
+    assert findings and all(f["acknowledged"] for f in findings)
+
+
 def test_a_support_unit_is_a_business_unit_and_never_a_revenue_division() -> None:
     """A shared service centre sells nothing, so it earns no revenue share.
 
