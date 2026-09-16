@@ -11,6 +11,97 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A container, a checked package, and an honest install line
+
+- A `Dockerfile` builds the wheel and installs it, so the image runs what a
+  wheel install gives anyone rather than a source tree. It runs as uid 10001,
+  writes only to the `/workspace` volume, and carries the four renderers and
+  the MCP server. CI builds it on every push, opens the console on a published
+  loopback port, renders DOCX, XLSX, PDF and PPTX inside it, and checks the
+  process is not root.
+- `worldloom studio serve --host` picks the bind address; it stays 127.0.0.1
+  unless you name another. A non-loopback bind prints what it gives away: the
+  console has no authentication, so anyone who reaches the port can read the
+  company and start jobs.
+- The console's origin guard now reads the host *name* and ignores the port.
+  Pinning the port rejected every container whose published port differed from
+  the port inside it, and bought nothing: a page on another origin picks its
+  own port freely, so the loopback name is the whole defence against DNS
+  rebinding.
+- `twine check --strict` runs on the built sdist and wheel in CI and in the
+  release, before anything is uploaded. A README PyPI cannot render is rejected
+  at upload, after the version number is spent.
+- The release workflow takes a concurrency group that does not cancel: a run
+  that has already uploaded cannot be replayed under the same version.
+- The README says what actually installs today. Nothing is on PyPI, so the
+  three paths are a checkout, a wheel you build, and the container; the PyPI
+  line says plainly that no tag has been pushed.
+
+### An installed coding harness is one flag
+
+- `worldloom evalrun run --harness codex|claude`, `evalrun plan --harness` and
+  `narrate loop --harness` drive an installed coding harness through the
+  adapter this package already shipped for the Studio, using that harness's
+  own login. Grading a real agent against the reference ceiling, and getting
+  prose accepted, no longer needs an adapter script. `studio.harness.adapter_command`
+  is the one spelling all four commands use, quoting for the platform the
+  child is split on.
+- The adapter now tells the child which seam it is answering
+  (`studio.harness.role_for`). It sent authoring prose to every child, so an
+  evalrun turn told the agent under test it was completing an authoring
+  request; a turn, a plan, a rating and a narration request each get their
+  own role, and every one of them still ends in "return exactly one JSON
+  object". A native trial that opts in to workspace writes now refuses a seam
+  with no write instruction to grant rather than silently dropping the opt-in.
+- `narrate loop` takes `--exec` or `--harness` and refuses with both or
+  neither, naming the offline round trip in the refusal.
+
+### A country with no locale says so
+
+- `industry.unlocalised` and `industry.locale_finding` name the countries no
+  shipped locale answers for and what the company loses to the one it is
+  built in: its names, cities, calendar, figure grammar and currency. Ten of
+  the twelve countries the shipped industries operate in are among them.
+  The programme carries the sentence in `findings`, and the Studio console
+  shows it as an acknowledged limit beside the missing engine, which does not
+  withhold readiness. The sentence names the currency the catalogue declares
+  for those countries, because connector records carry it per country while
+  rendered documents carry the locale's.
+
+### Honest counts, and a support unit that earns no revenue (Generation)
+
+- **A programme reports what it grounds, not how it can be phrased.**
+  `IndustryProgramme.distinct_answers` and `ProcessLine.distinct_answers`
+  count the distinct ground truths a company's requests rest on;
+  `industry.lines` fills them when passed the requests. A verb and a channel
+  change a request's wording and leave its answer alone, so `situations`
+  counts phrasings over these: the twelve shipped industries offer 189,346
+  situations resting on 29,505 distinct answers, and a telecom's 5,550 rest
+  on 903. `worldloom industry list` prints both.
+- **Generation.** A derived Studio use case now asks for the line's distinct
+  answers rather than its situations, so a catalogue project stops requesting
+  six queries for every answer it can ground. A telecom's billing project
+  requests 57 queries where it requested 282.
+- **Generation.** `industry.divisions` returns the revenue units alone.
+  A shared service centre and a group function sell nothing, so they no
+  longer take an equal cut of the company's revenue; they are formed as
+  business units by `ownership.materialize_owners`, which allocates none,
+  and the Studio snapshot forms them before it declares the structure. A
+  telecom's revenue is its two customer segments, not four units at a
+  quarter each, and no per-unit commercial or finance post is minted inside
+  a unit that sells nothing. `divisions` takes the compiled catalogue to
+  weight each division by the bindings it owns.
+
+### The console in the README
+
+- `README.md` gains a Studio console section with four pages of the console
+  (overview, company and processes, use cases, evaluations), and
+  `docs/studio.md` a gallery of all eight, captured from the connected retail
+  pilot and a catalogue-derived telecom company under `docs/images/studio/`.
+- The console's overview subtitle and the "Generation boundaries" panel no
+  longer print a blank engine for a company no engine builds; the panel
+  says the world is derived from the process catalogue.
+
 ### The programme's record requests run as evalrun cases
 
 - Every record request of a programme is an `evalrun` case

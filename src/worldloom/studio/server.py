@@ -1,4 +1,4 @@
-"""Loopback console with a fixed command boundary and a durable local worker."""
+"""Local console with a fixed command boundary and a durable local worker."""
 
 from __future__ import annotations
 
@@ -20,8 +20,27 @@ from .worker import recover
 MAX_BODY = 4_000_000
 
 
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
+
+def loopback(value: str) -> bool:
+    """True when a Host or Origin header names a loopback address.
+
+    The port is deliberately not part of this. The check exists to stop DNS
+    rebinding: a page served from another origin picks its own port freely, but
+    it cannot make a browser put a loopback literal in `Host`. Requiring the
+    port to equal the one this process bound would buy nothing and would reject
+    a container whose published port differs from the port inside it.
+    """
+    try:
+        name = urlsplit("//" + value).hostname
+    except ValueError:
+        return False
+    return name in LOOPBACK
+
+
 class StudioServer(HTTPServer):
-    def __init__(self, root: str | Path, *, port: int = 8765,
+    def __init__(self, root: str | Path, *, port: int = 8765, host: str = "127.0.0.1",
                  harness_command: str | None = None, timeout: float = 600, launch_workers: bool = True) -> None:
         self.studio = Studio(root)
         self.harness_command = harness_command
@@ -29,7 +48,10 @@ class StudioServer(HTTPServer):
         self.launch_workers = launch_workers
         self.child: subprocess.Popen[bytes] | None = None
         recover(self.studio)
-        super().__init__(("127.0.0.1", port), StudioHandler)
+        # Loopback by default. The console has no authentication, so any other
+        # address hands the company, its documents and the harness seam to
+        # whoever can reach the port.
+        super().__init__((host, port), StudioHandler)
 
     def pump(self) -> None:
         if not self.launch_workers or (self.child is not None and self.child.poll() is None):
@@ -80,11 +102,9 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def allowed(self, *, mutation: bool = False) -> bool:
-        port = self.server.server_port
-        hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
         host = self.headers.get("Host", "")
         origin = self.headers.get("Origin")
-        valid = host in hosts and (origin is None or origin == "http://" + host)
+        valid = loopback(host) and (origin is None or origin == "http://" + host)
         if mutation:
             valid = valid and self.headers.get("X-Worldloom-Studio") == "1" and self.headers.get("Content-Type", "").split(";")[0] == "application/json"
         if not valid:

@@ -11,7 +11,7 @@ workflows before you have a suitable enterprise dataset. A seed and recipe
 control the world; accepted generation ledgers make authored material replayable.
 
 Repository, Python package and command: `worldloom` ·
-Python 3.11+ · pre-release, install from source · Apache-2.0
+Python 3.11+ · pre-release; no release is on PyPI yet · Apache-2.0
 
 [Quickstart](#quickstart) · [Design a corpus](docs/enterprise-corpus.md) ·
 [Python SDK](docs/sdk.md) · [Documentation site](https://vamsiramakrishnan.github.io/worldloom/)
@@ -27,8 +27,8 @@ PPTX and XLSX tasks for reading, comparison, updates and creation. The console,
 `worldloom studio next` and `Studio.workflow()` share the same readiness checks.
 Optional calibration measures target outcomes with independent held-out evidence.
 
-Status: 0.1.0, the first release. The source-install path below targets this
-repository checkout. The library never calls an LLM service by itself.
+Status: 0.1.0, unreleased. Nothing is on PyPI yet, so every install below
+starts from this checkout. The library never calls an LLM service by itself.
 
 ## Quickstart
 
@@ -49,6 +49,44 @@ worldloom evaluate ./corpus --retriever both
 worldloom status ./corpus
 ```
 
+## Install
+
+Three ways in. Nothing is published to an index yet, so each starts from a
+clone.
+
+**A checkout.** The quickstart above. Editable, and the one to use while
+changing the code.
+
+**A wheel.** Build one and install it anywhere, with the renderers:
+
+```bash
+pipx run build
+python -m pip install "worldloom[all] @ file://$(readlink -f dist/*.whl)"
+```
+
+CI builds this wheel on every push and proves two things about it: that a bare
+install runs and names the missing extra when you ask for a format it cannot
+render, and that a full install renders, validates and replays byte-identically.
+
+**A container.** The image installs the wheel, not the source tree, so what
+runs inside it is what a wheel install gives anyone:
+
+```bash
+docker build -t worldloom .
+docker run --rm -p 127.0.0.1:8765:8765 -v worldloom-workspace:/workspace worldloom
+```
+
+Open http://127.0.0.1:8765. The named volume holds company revisions, jobs and
+datasets, so back it up to keep generated corpora. Publish the port to
+127.0.0.1 and nowhere else: the console has no authentication, and it refuses
+any request whose `Host` is not a loopback address for exactly that reason. The
+container calls no model service and carries no harness login, so run the
+Studio on the host when you want to drive an installed `codex` or `claude`.
+
+**PyPI.** `pip install "worldloom[all]"` is what a tagged release will give
+you. The release workflow is written and rehearses against TestPyPI first, but
+no tag has been pushed, so that command does not work today.
+
 The default example is a retailer's month-end close with an incident. It is a
 bounded business episode, not a full retailer's operating history. The prose
 is deterministic test material; use the [narration workflow](#add-agent-authored-prose)
@@ -58,6 +96,41 @@ Inspect the generated files alongside the facts and evaluation records.
 `validate` checks their relationships; `evaluate` measures retrieval against
 the included cases. A passing validator does not establish realism or strong
 retrieval performance. `status` identifies the next incomplete stage.
+
+## The Studio console
+
+`worldloom studio serve` opens a local console for one company at a time.
+Every page reads the same company revision. Every run keeps the revision it
+ran on. The screenshots below come from the connected retail pilot and from a
+telecom company derived from the process catalogue.
+
+![The overview page: the eight build stages of one company, each marked complete, ready or blocked, with the action that unblocks it](docs/images/studio/overview.png)
+
+The overview lists the eight stages from company contract to frozen dataset.
+Each stage shows whether it is complete, ready or blocked, and what unblocks
+it. The company map and the run ledger sit below.
+
+![The company and processes page: profile, revenue divisions and business units](docs/images/studio/company.png)
+
+**Company & processes** holds the profile, the revenue divisions, the
+business units and the process catalogue bound to them. A change saves a new
+revision; earlier runs keep theirs.
+
+![The use cases page: three retail use cases with their owners, source systems and process activities](docs/images/studio/use-cases.png)
+
+Each use case names its owner, its source systems and the process activities
+it covers. The compiler generates the evidence and checks it against the
+contract. Missing evidence keeps the evalset incomplete rather than filling it.
+
+![The evaluations page: the reference agent graded on 48 connector cases with plan, trajectory and outcome scores per case](docs/images/studio/evaluations.png)
+
+**Evaluations** grades an agent on the connector cases and shows plan,
+trajectory and outcomes for every case. The reference agent is the executable
+ceiling of the dataset, not a claim about any model. A connected coding
+harness is graded on the same cases and compared to it.
+
+The interview, foundry run, documents and changes pages are shown in
+[docs/studio.md](docs/studio.md#console-pages).
 
 ## Choose the dataset by the test it must support
 
@@ -115,14 +188,22 @@ ServiceNow bundle does not write to a live tenant.
 
 ## Add agent-authored prose
 
-Worldloom does not call an LLM. Your coding agent or external writer supplies
-prose through a request/accept contract:
+Worldloom never calls a model service itself. It drives one you have already
+installed, or exchanges files with any writer:
 
 ```bash
+# An installed coding harness, using its own login. No adapter to write.
+worldloom narrate loop ./corpus --harness claude    # or --harness codex
+
+# Or the offline round trip, for a writer this package does not adapt.
 worldloom narrate requests ./corpus -o requests.json
 # The writer reads requests.json and produces responses.json.
 worldloom narrate accept ./corpus --from responses.json --model-id your-writer
 ```
+
+`--harness` is the same flag on `worldloom evalrun run` and `evalrun plan`, so
+grading a real coding harness against the reference ceiling is one word rather
+than an adapter script.
 
 Each request carries allowed facts, required facts, author, audience, and a
 knowledge cutoff. Use the request's fact references; unsupported figures or

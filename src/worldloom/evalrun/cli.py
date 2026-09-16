@@ -97,6 +97,28 @@ def cases_command(
         typer.echo(f"{len(cases)} case(s) written to {out}")
 
 
+def _harness_exec(harness: str | None, exec_command: str | None, *, timeout: float) -> str | None:
+    """The bundled adapter as an `--exec` command, or whatever `--exec` gave.
+
+    `--harness codex` is shorthand for the adapter this package already ships
+    for the Studio, so grading a real coding harness needs no adapter script.
+    Naming both leaves it ambiguous which child runs, so that is refused.
+    """
+    if harness is None:
+        return exec_command
+    from ..cli import _refuse
+    from ..studio.harness import NAMES, adapter_command
+
+    if exec_command is not None:
+        _refuse("cannot_combine", "--harness and --exec both name the child process; give one")
+    if harness not in NAMES:
+        _refuse("unknown_harness",
+                f"{harness!r}; use {' or '.join(NAMES)}, or --exec for a custom adapter")
+    # The child is given less than the parent allows, so the parent's timeout
+    # is what reports the overrun rather than a race between the two.
+    return adapter_command(harness, timeout=max(1.0, timeout - 5))
+
+
 def _agent(spec: str, cases: tuple[Any, ...]) -> Any:
     from ..cli import _refuse
     from .agents import ReferenceAgent, ScriptedAgent
@@ -184,6 +206,10 @@ def run_command(
               "`worldloom.evalrun-turn/v2` JSON document on stdin, prints {\"call\": ...} "
               "or {\"answer\": ...} on stdout. Run without a shell (shlex argv) unless --shell is given."),
     ),
+    harness: str | None = typer.Option(
+        None, "--harness",
+        help="An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter.",
+    ),
     timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per turn before it is killed."),
     shell: bool = typer.Option(False, "--shell", help="Run the --exec command through the shell (the opt-in for pipelines)."),
     max_turns: int = typer.Option(64, "--max-turns", min=1, help="Turns the --exec child may take per case."),
@@ -208,6 +234,8 @@ def run_command(
     from .results import write_run
     from .runner import run_cases, service_for
 
+    # Before the corpus: a typo in --harness should not wait on a build.
+    exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
@@ -277,6 +305,10 @@ def plan_command(
               "`worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints "
               "{\"plan\": {\"nodes\": [...]}} on stdout. Nothing is executed."),
     ),
+    harness: str | None = typer.Option(
+        None, "--harness",
+        help="An installed coding harness as the planner, using its own login: codex or claude. Shorthand for the bundled --exec adapter.",
+    ),
     timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per case."),
     shell: bool = typer.Option(False, "--shell", help="Run the --exec command through the shell."),
     limit: int | None = typer.Option(None, "--limit", min=1),
@@ -297,6 +329,7 @@ def plan_command(
     from .results import write_run
     from .runner import service_for
 
+    exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")

@@ -727,6 +727,8 @@ _REFUSALS: dict[str, str] = {
     "no_cases": "the corpus compiled to no cases, so there is nothing to run",
     "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",
     "unknown_rater": "the --rater value is not one this package ships",
+    "unknown_harness": "the --harness value is not a coding harness this package adapts",
+    "no_writer": "the command needs a writer and none was named",
     "script_unreadable": "the scripted agent's JSON file cannot be read",
     "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",
     "service_unbuildable": "the connector evaluation service refused the case set; the message is the serving error",
@@ -3055,13 +3057,17 @@ def narrate_accept(
 @narrate_app.command("loop")
 def narrate_loop(
     corpus: str = typer.Argument(..., help="Corpus path to narrate."),
-    exec_command: str = typer.Option(
-        ..., "--exec",
+    exec_command: str | None = typer.Option(
+        None, "--exec",
         help=(
             "The model as an executable: reads one requests JSON document on "
             "stdin, prints one responses JSON document on stdout. Run without "
             "a shell (shlex argv) unless --shell is given."
         ),
+    ),
+    harness: str | None = typer.Option(
+        None, "--harness",
+        help="An installed coding harness as the writer, using its own login: codex or claude. Shorthand for the bundled --exec adapter.",
     ),
     max_rounds: int = typer.Option(
         8, "--max-rounds",
@@ -3098,6 +3104,20 @@ def narrate_loop(
         document. Print only the responses JSON document it asks for: $(cat)"
     """
     from . import execseam
+    from .studio.harness import NAMES, adapter_command
+
+    if harness is not None:
+        if exec_command is not None:
+            _refuse("cannot_combine", "--harness and --exec both name the writer; give one")
+        if harness not in NAMES:
+            _refuse("unknown_harness",
+                    f"{harness!r}; use {' or '.join(NAMES)}, or --exec for a custom adapter")
+        exec_command = adapter_command(harness, timeout=max(1.0, timeout - 5))
+    if exec_command is None:
+        _refuse("no_writer",
+                "narration needs a writer: --harness codex/claude for an installed"
+                " coding harness, or --exec for your own adapter. `worldloom narrate"
+                " requests` and `narrate accept --from` are the offline round trip.")
 
     world = _compiled(_load(corpus), corpus)
 

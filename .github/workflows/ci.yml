@@ -497,6 +497,44 @@ jobs:
   # fails actionably where it cannot, and that the full install renders,
   # validates, and replays byte-for-byte. Run from outside the checkout so the
   # source tree cannot quietly stand in for the package.
+  # The container is a shipped artifact, so it is built and opened here. It
+  # installs the wheel rather than the checkout, which is the whole point: a
+  # build that only works against a source tree is not a distribution.
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the image
+        run: docker build -t worldloom:ci .
+
+      - name: The console answers on a published loopback port
+        run: |
+          docker run -d --name worldloom-ci -p 127.0.0.1:8765:8765 worldloom:ci
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            curl -fsS -o /dev/null http://127.0.0.1:8765/ && break
+            sleep 2
+          done
+          curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8765/
+          curl -fsS http://127.0.0.1:8765/api/bootstrap > /dev/null
+          # The origin guard still refuses a rebinding Host through the same port.
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            -H 'Host: evil.example:8765' http://127.0.0.1:8765/api/bootstrap)" = 403
+
+      - name: The renderers the image promises are present
+        run: |
+          docker exec worldloom-ci sh -c 'cd /tmp \
+            && worldloom build --seed 8128 --incident --out ./corpus \
+            && worldloom render ./corpus -f docx -f xlsx -f pdf -f pptx \
+            && test "$(find ./corpus -name "*.docx" -o -name "*.xlsx" \
+                       -o -name "*.pdf" -o -name "*.pptx" | wc -l)" -gt 0'
+
+      - name: The process is not root
+        run: test "$(docker exec worldloom-ci id -u)" = 10001
+
+      - if: always()
+        run: docker rm -f worldloom-ci || true
+
   package:
     runs-on: ubuntu-latest
     steps:
@@ -508,6 +546,12 @@ jobs:
 
       - name: Build sdist and wheel
         run: pipx run build
+
+      - name: The package metadata is one PyPI will accept
+        # `build` succeeding says nothing about whether the index will take the
+        # result: a README PyPI cannot render, or a classifier it does not
+        # know, is rejected at upload, after the version number is spent.
+        run: pipx run twine check --strict dist/*
 
       - name: A bare install works, and degrades legibly
         run: |

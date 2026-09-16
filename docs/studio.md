@@ -8,7 +8,12 @@ processes, and generate evidence and qualified evaluations from the same world.
 worldloom studio serve --workspace ./worldloom-workspace
 ```
 
-Open `http://127.0.0.1:8765`. Create a company or choose **Load connected retail
+Open `http://127.0.0.1:8765`.
+
+`--host` changes the bind address, and `0.0.0.0` is what the container uses so
+a published port reaches it. The console has no login: on any address but
+loopback it prints what it is giving away, and you should publish the port to
+127.0.0.1 or put an authenticating proxy in front. Create a company or choose **Load connected retail
 pilot**. This example connects inventory exceptions, supplier replenishment and
 invoice reconciliation across Jira, ServiceNow and email. **Load smaller retail
 example** retains the earlier 24-query inventory example. Both are authored
@@ -19,6 +24,23 @@ The console ships in the Python package. It requires no JavaScript build,
 hosted service or separate frontend installation. The local workspace holds
 company revisions, interview exchanges, jobs, snapshots and dataset checkpoints.
 Back up the whole workspace when retaining generated datasets.
+
+## Console pages
+
+Captured from the connected retail pilot (`Load connected retail pilot`) after
+one compile and one reference evalrun, and from a telecom company derived
+from the process catalogue for the Evaluations page.
+
+| Page | What it shows |
+|---|---|
+| ![Overview](images/studio/overview.png) | **Overview.** The eight build stages with their state and next action, the company map and the run ledger. |
+| ![Interview](images/studio/interview.png) | **Interview.** The request exported for a coding harness, the coverage of the company contract and the response import. |
+| ![Company and processes](images/studio/company.png) | **Company & processes.** Profile, revenue divisions, business units, lines of business and the bound process catalogue. |
+| ![Use cases](images/studio/use-cases.png) | **Use cases.** Owner, source systems, process activities and the typed contract of each use case. |
+| ![Foundry run](images/studio/foundry.png) | **Foundry run.** The eight run stages, measured difficulty, publication state and the compiled construction obligations. |
+| ![Documents and files](images/studio/documents.png) | **Documents & files.** Native file tasks prepared from accepted prose; empty until a writing harness has narrated the company. |
+| ![Evaluations](images/studio/evaluations.png) | **Evaluations.** Agent grades per case on plan, trajectory and outcomes, with the qualified queries and their evidence below. |
+| ![Changes and runs](images/studio/changes.png) | **Changes & runs.** Company revisions with their reasons and the run ledger of this revision. |
 
 ## One company, several contracts
 
@@ -478,7 +500,7 @@ The preset also starts a company of any industry the process catalogue knows
 (`GET /api/preset?engine=telecom`, `preset("telecom", "Ardent Telecom")`),
 built from its derived programme ([Industry programme](industry-programme.md)):
 every line of business with a supported process line as a LOB, each of its
-lines as a use case whose `count` is the line's situations, the company's
+lines as a use case whose `count` is the line's distinct answers, the company's
 limitations acknowledged where no engine builds its world. The interview
 request carries the programme's headline numbers under `programme`.
 
@@ -553,10 +575,13 @@ the worker exits. Restart recovery marks abandoned jobs interrupted only after
 acquiring that lock. A live worker cannot be taken over. Dataset checkpoints
 remain the source of resume truth, and failed jobs retain their errors.
 
-The server binds to loopback and requires matching Host/Origin and a JSON
-mutation header. It serves no arbitrary filesystem paths and uses no CORS
-allowlist for external websites. This is a local operator console, not a
-multi-user hosted service. Harness calls use the configured timeout and no
+The server binds to loopback and requires a loopback `Host`, a matching
+`Origin`, and a JSON mutation header. The `Host` check is on the name, not the
+port, so a container whose published port differs from the port inside it still
+works; a page on any other origin is refused, which is what stops DNS
+rebinding. It serves no arbitrary filesystem paths and uses no CORS allowlist
+for external websites. This is a local operator console, not a multi-user
+hosted service. Harness calls use the configured timeout and no
 shell. The worker continues independently if the browser disconnects; queued
 jobs are dispatched while the server remains running.
 

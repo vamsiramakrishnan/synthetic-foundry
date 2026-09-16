@@ -215,31 +215,60 @@ sector framework (`TM Forum eTOM`) and a declared word table
 (`INDUSTRY_WORDS`), matched at word boundaries with the longest phrase
 winning.
 
+## The locale a company is built in
+
+The catalogue's companies operate in twelve countries: AU, CN, HK, ID, IN,
+JP, MY, NZ, SG, TH, TW and VN. Four locales ship (`australia`,
+`united_kingdom`, `germany`, `gulf`), and only AU and NZ are among the
+twelve, so ten of them build in the default locale and take its names,
+cities, calendar, figure grammar and currency.
+
+That is now stated rather than discovered. `industry.unlocalised` names the
+countries with no locale and `industry.locale_finding` writes the sentence:
+the programme carries it in `findings`, and the Studio console shows it as an
+acknowledged limit beside the missing engine. It names the currency the
+catalogue declares for those countries, because connector records carry that
+currency per country while the rendered documents carry the locale's, and the
+two disagree until a locale is written and `locales.register`ed.
+
+A telecom operating in India reads: *a locale for IN: none ships, so the
+company's names, cities, calendar, figure grammar and currency are
+'australia'. The catalogue denominates them in INR.*
+
 ## The shipped industries
 
 Counts for each catalogue's default company, as `worldloom industry list`
 prints them. Each is thirty LOBs; the lines are LOB × stream cells with at
-least one bound activity; situations are the requests derived.
+least one bound activity; situations are the ways to phrase a request
+and distinct answers are the ground truths under them.
 
-| Industry | Engine | Lines | Situations | Writes |
-| --- | --- | --- | --- | --- |
-| banking | banking | 64 | 21,321 | 10,242 |
-| consumer_products | | 52 | 19,768 | 9,516 | 9 |
-| healthcare | | 58 | 4,931 | 2,362 | 12 |
-| insurance | insurance | 63 | 15,294 | 7,356 |
-| life_sciences | | 52 | 14,826 | 7,137 | 9 |
-| logistics | | 58 | 39,560 | 19,100 | 12 |
-| manufacturing | | 55 | 20,388 | 9,801 | 11 |
-| public_sector | | 60 | 4,074 | 1,934 | 10 |
-| retail | retail | 61 | 9,896 | 4,762 |
-| technology_saas | | 58 | 28,944 | 13,804 | 10 |
-| telecom | | 62 | 5,550 | 2,677 | 10 |
-| utilities | | 58 | 4,794 | 2,325 | 9 |
+| Industry | Engine | Lines | Situations | Distinct answers | Writes |
+| --- | --- | --- | --- | --- | --- |
+| banking | banking | 64 | 21,321 | 3,357 | 10,242 |
+| consumer_products |  | 52 | 19,768 | 3,067 | 9,516 |
+| healthcare |  | 58 | 4,931 | 778 | 2,362 |
+| insurance | insurance | 63 | 15,294 | 2,395 | 7,356 |
+| life_sciences |  | 52 | 14,826 | 2,310 | 7,137 |
+| logistics |  | 58 | 39,560 | 6,177 | 19,100 |
+| manufacturing |  | 55 | 20,388 | 3,155 | 9,801 |
+| public_sector |  | 60 | 4,074 | 626 | 1,934 |
+| retail | retail | 61 | 9,896 | 1,564 | 4,762 |
+| technology_saas |  | 58 | 28,944 | 4,404 | 13,804 |
+| telecom |  | 62 | 5,550 | 903 | 2,677 |
+| utilities |  | 58 | 4,794 | 769 | 2,325 |
 
-189,346 requests in all, each seated, each grounded in a declared fact, each
-counted where it belongs. `evals.coverage.report` reads a programme's requests
-exactly as it reads a corpus's cases (`coverage.Requested` is the shared
-shape), and a full programme uses every situation the catalogue offers.
+189,346 situations in all, resting on **29,505 distinct answers**. The two
+numbers measure different things and only the second is an evalset size. A
+situation is a binding crossed with a verb and a channel, so asking the same
+billing exception by email and in a ticket, as a list and as a message, is
+four situations over one ground truth. `worldloom industry list` prints both,
+`ProcessLine.distinct_answers` carries the per-line figure, and a derived
+Studio use case asks for the distinct count, never the crossing.
+
+`evals.coverage.report` reads a programme's requests exactly as it reads a
+corpus's cases (`coverage.Requested` is the shared shape), and a full
+programme uses every situation the catalogue offers.
+
 
 ## Python
 
@@ -249,6 +278,7 @@ from worldloom import industry
 derived = industry.programme("telecom")
 summary = derived.summary            # IndustryProgramme: lobs, lines, counts, unemulated, findings
 summary.by_lob()                     # situations per line of business
+summary.distinct_answers             # the ground truths under them: the evalset size
 derived.lobs                         # tuple[lob.Lob, ...], one per owning function family
 derived.requests[0].to_case()        # an EvaluationCase citing the derived facts
 derived.coverage()                   # CoverageReport against every situation offered
