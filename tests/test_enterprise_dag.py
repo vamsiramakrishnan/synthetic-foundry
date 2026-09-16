@@ -375,3 +375,66 @@ def test_compiled_arguments_match_advertised_connector_tool_schemas():
     next(node for node in nodes if node["id"] == "write-marker")["arguments"]["name"] = "Unadvertised update argument"
     with pytest.raises(ValueError, match="does not accept arguments"):
         compile_row(query.model_copy(update={"expected_dag": tuple(nodes)}), fixture, records)
+
+
+def test_the_default_shape_set_grounds_on_the_sources_a_row_declares():
+    """`map_read` and `conditional` raise a source minimum; nothing else does."""
+    from worldloom.enterprise_dag import default_shapes
+
+    catalogue = shape_catalogue()
+    raises_a_minimum = {
+        name for name, template in catalogue.items()
+        if template["reads"] == "map" or template["control"] == "conditional"
+    }
+    assert raises_a_minimum == {"map_read", "conditional"}
+    assert set(default_shapes()) == catalogue.keys() - raises_a_minimum
+    # The point of the default: a case set that never deletes cannot grade one.
+    assert "delete_chain" in default_shapes()
+
+
+def test_a_dag_shape_selection_resolves_to_the_shapes_to_plan():
+    from worldloom.enterprise_dag import default_shapes, resolve_shapes
+
+    assert resolve_shapes(None) == default_shapes()
+    assert resolve_shapes([]) == default_shapes()
+    # `none` is the single-write DAG the grammar produced before shapes.
+    assert resolve_shapes(["none"]) == ()
+    assert resolve_shapes(["*"]) == ("*",)
+    assert resolve_shapes(["delete_chain", "fan_in"]) == ("delete_chain", "fan_in")
+
+
+def test_the_default_plan_grades_a_delete_and_the_legacy_plan_does_not():
+    from worldloom.enterprise_corpus import materialize_corpus
+    from worldloom.enterprise_dag import resolve_shapes
+    from worldloom.enterprise_queries import plan_queries
+    from worldloom.enterprise_specs import CoverageProfile
+    from worldloom.evalrun.contract import axis_coverage, cases_from_corpus
+    from worldloom.world import World
+
+    world = World.load("retail-close")
+    profile = CoverageProfile(strengths=1, connector_counts=(1,), failures=("none",))
+
+    def coverage(requested):
+        queries, _ = plan_queries(world, profile=profile, strategy="exhaustive",
+                                  limit=80, dag_shapes=resolve_shapes(requested))
+        return axis_coverage(cases_from_corpus(materialize_corpus(world, queries)))
+
+    default = coverage(None)
+    assert default.deletes > 0 and "delete_chain" in default.shapes
+    assert "legacy" not in default.shapes
+    legacy = coverage(["none"])
+    assert legacy.deletes == 0 and legacy.shapes == {"legacy": legacy.cases}
+
+
+def test_a_row_that_outruns_the_corpus_names_the_pair_and_the_counts():
+    from worldloom.enterprise_corpus import materialize_corpus
+    from worldloom.enterprise_queries import plan_queries
+    from worldloom.enterprise_specs import CoverageProfile
+    from worldloom.evalrun.contract import cases_from_corpus
+    from worldloom.world import World
+
+    world = World.load("retail-close")
+    queries, _ = plan_queries(world, profile=CoverageProfile(strengths=1, connector_counts=(1,), failures=("none",)),
+                              strategy="exhaustive", limit=80, dag_shapes=("map_read",))
+    with pytest.raises(ValueError, match=r"bound 1 source record\(s\), and the row needs 2"):
+        cases_from_corpus(materialize_corpus(world, queries))

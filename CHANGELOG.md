@@ -11,6 +11,25 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A default build plans a delete (Generation)
+
+- `enterprise-evals plan`, `build` and `qualify` with no `--dag-shape` planned
+  the single-write trajectory the grammar produced before shapes existed. Every
+  case set they made reported `deletes: 0`, so none of them could grade a
+  delete at all. They now plan every shape a row can ground on the sources it
+  already declares, `delete_chain` among them. 120 cases from `retail-close`
+  grade 11 deletes where they graded none.
+- `enterprise_dag.default_shapes()` derives that set from the catalogue rather
+  than listing it. `map_read` and `conditional` raise a source's `minimum`
+  above what the row asked for, so they stay opt-in: a world holding one record
+  where the row wanted one plans a case that materializes and then refuses.
+- `enterprise_dag.resolve_shapes()` is the one spelling all three commands use.
+  `--dag-shape none` plans the old single-write trajectory, `*` is the whole
+  catalogue, and omitting it is the default set.
+- A row that outruns the corpus now says so. The refusal read "insufficient
+  bound source records"; it names the connector, the entity, how many records
+  bound and how many the row needs.
+
 ### A container, a checked package, and an honest install line
 
 - A `Dockerfile` builds the wheel and installs it, so the image runs what a

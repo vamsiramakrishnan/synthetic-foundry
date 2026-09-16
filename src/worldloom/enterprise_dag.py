@@ -8,7 +8,7 @@ catalogue is a small versioned set of examples of this public grammar.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from functools import lru_cache
 from importlib.resources import files
 from typing import Any, Literal
@@ -234,6 +234,38 @@ def shape_catalogue() -> dict[str, dict[str, Any]]:
     return {key: dict(value) for key, value in _shape_data().items()}
 
 
+def default_shapes() -> tuple[str, ...]:
+    """Every shape a row can ground on the sources it already declares.
+
+    Two shapes in the catalogue raise a source's `minimum` above what the row
+    asked for: `map_read` fetches each search hit, and `conditional` needs a
+    witness for both branches. A world holding one record where the row wanted
+    one then plans a case that materializes but cannot compile. They stay
+    reachable by name; everything else, deletes included, is planned by
+    default, because a case set that never deletes cannot grade a delete.
+    """
+    return tuple(sorted(
+        name for name, template in _shape_data().items()
+        if template["reads"] != "map" and template["control"] != "conditional"
+    ))
+
+
+def resolve_shapes(requested: Sequence[str] | None) -> tuple[str, ...]:
+    """Turn a `--dag-shape` selection into the shapes to plan.
+
+    Omitted is `default_shapes()`. `*` is the whole catalogue, the two
+    minimum-raising shapes included. `none` plans the single-write DAG the
+    grammar produced before shapes existed, which is what every caller used
+    to get by saying nothing.
+    """
+    values = tuple(requested or ())
+    if not values:
+        return default_shapes()
+    if values == ("none",):
+        return ()
+    return values
+
+
 def shape_coverage(queries: Iterable[Any]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for query in queries:
@@ -242,4 +274,4 @@ def shape_coverage(queries: Iterable[Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-__all__ = ["GRAMMAR_VERSION", "EnterpriseDag", "EnterpriseDagNode", "ResultReference", "ResultCondition", "ResultIteration", "dag_metrics", "shape_catalogue", "shape_coverage"]
+__all__ = ["GRAMMAR_VERSION", "EnterpriseDag", "EnterpriseDagNode", "ResultReference", "ResultCondition", "ResultIteration", "dag_metrics", "default_shapes", "resolve_shapes", "shape_catalogue", "shape_coverage"]

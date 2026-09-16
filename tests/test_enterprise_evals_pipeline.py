@@ -92,10 +92,8 @@ def _profile(tmp_path: Path, **overrides: object) -> Path:
     return path
 
 
-@pytest.fixture(scope="module")
-def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """A corpus built through the CLI, shared by the assertions below."""
-    tmp_path = tmp_path_factory.mktemp("enterprise-evals")
+def _build(tmp_path: Path, *, shapes: list[str]) -> Path:
+    """Build the fixture corpus through the CLI, on a named shape selection."""
     # This positive demand uses evidence actually present in the golden world.
     # The historical broader demand remains unchanged and must fail validation
     # in the dedicated missing-evidence test below.
@@ -105,15 +103,29 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
         {"connector": "jira", "entities": ["issue"]},
     ]
     out = tmp_path / "corpus"
+    shape_args = [arg for shape in shapes for arg in ("--dag-shape", shape)]
     result = RUNNER.invoke(
         app,
         [
             "enterprise-evals", "build", "examples/retail-close", str(out),
             "--profile", str(_profile(tmp_path, additional_workflows=[workflow])), "--limit", "12",
+            *shape_args,
         ],
     )
     assert result.exit_code == 0, result.output
     return out
+
+
+@pytest.fixture(scope="module")
+def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """What a user gets: the default shape set, every groundable shape."""
+    return _build(tmp_path_factory.mktemp("enterprise-evals"), shapes=[])
+
+
+@pytest.fixture(scope="module")
+def built_legacy(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The single-write trajectory, which `--dag-shape none` still plans."""
+    return _build(tmp_path_factory.mktemp("enterprise-evals-legacy"), shapes=["none"])
 
 
 def test_build_plans_and_materialises(built: Path) -> None:
@@ -129,26 +141,54 @@ def test_the_corpus_validates(built: Path) -> None:
     assert "valid" in result.output
 
 
+def _simulate(corpus: Path) -> dict:
+    result = RUNNER.invoke(app, ["enterprise-evals", "simulate", str(corpus)])
+    assert result.exit_code == 0, result.output
+    return json.loads(result.output.strip().splitlines()[-1])
+
+
+def _designed(corpus: Path) -> int:
+    from worldloom.enterprise_io import load_exported_corpus
+
+    queries = load_exported_corpus(corpus).queries
+    designed = sum(query.dimensions.get("failure") == "permission_denied" for query in queries)
+    assert designed, "this fixture must exercise an actual injected denial"
+    return designed
+
+
 def test_every_planned_query_executes(built: Path) -> None:
-    """The number this file exists for.
+    """The number this file exists for, on the corpus a default build makes.
 
     Completion and the declared write denials partition the entire corpus.
     Neither a missing source nor harness breakage may enter the denial count.
     """
-    result = RUNNER.invoke(app, ["enterprise-evals", "simulate", str(built)])
-    assert result.exit_code == 0, result.output
-    report = json.loads(result.output.strip().splitlines()[-1])
+    report = _simulate(built)
     assert report["queries"] == 12
-    from worldloom.enterprise_io import load_exported_corpus
-
-    queries = load_exported_corpus(built).queries
-    designed = sum(query.dimensions.get("failure") == "permission_denied" for query in queries)
-    assert designed, "this fixture must exercise an actual injected denial"
-    assert report["completed"] == len(queries) - designed
+    designed = _designed(built)
+    assert report["completed"] == 12 - designed
     assert report["blocked_at_designed_write"] == designed
     assert report["stopped_before_failure_point"] == 0
     assert report["raised"] == 0
-    assert all(item["finding"] == "node write failed" for item in report["results"] if item["outcome"] == "blocked_at_designed_write")
+    # A grammar row is graded on its assertions, never on the legacy weighted
+    # score: the two have different denominators, so `simulate` leaves the
+    # average unset rather than mixing them.
+    assert report["average_dag_score"] is None
+    assert report["assertion_passed"] == 12 and report["assertion_failed"] == 0
+    blocked = [item for item in report["results"] if item["outcome"] == "blocked_at_designed_write"]
+    assert blocked and all(item["finding"] == "node write failed: denied" for item in blocked)
+
+
+def test_the_legacy_trajectory_still_executes_and_scores(built_legacy: Path) -> None:
+    """`--dag-shape none` is the trajectory every build planned before shapes."""
+    report = _simulate(built_legacy)
+    assert report["queries"] == 12
+    designed = _designed(built_legacy)
+    assert report["completed"] == 12 - designed
+    assert report["blocked_at_designed_write"] == designed
+    assert report["stopped_before_failure_point"] == 0
+    assert report["raised"] == 0
+    assert all(item["finding"] == "node write failed"
+               for item in report["results"] if item["outcome"] == "blocked_at_designed_write")
     assert report["average_dag_score"] > 0.7
 
 

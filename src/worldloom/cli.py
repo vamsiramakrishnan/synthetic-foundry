@@ -177,9 +177,10 @@ def enterprise_evals_plan(
     profile_path: Path | None = typer.Option(None, "--profile"),
     shard_index: int | None = typer.Option(None, "--shard-index"),
     shard_count: int | None = typer.Option(None, "--shard-count"),
-    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat or use * for the versioned catalogue."),
+    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground."),
 ) -> None:
     """Write grounded query plans as JSONL."""
+    from .enterprise_dag import resolve_shapes
     from .enterprise_queries import plan_queries
     from .enterprise_specs import (
         CoverageProfile,
@@ -209,7 +210,7 @@ def enterprise_evals_plan(
         limit=limit,
         shard_index=shard_index,
         shard_count=shard_count,
-        dag_shapes=tuple(dag_shape or ()),
+        dag_shapes=resolve_shapes(dag_shape),
     )
     with output.open("w", encoding="utf-8") as handle:
         for query in queries:
@@ -384,12 +385,13 @@ def enterprise_evals_build(
     profile_path: Path | None = typer.Option(None, "--profile"),
     shard_index: int | None = typer.Option(None, "--shard-index"),
     shard_count: int | None = typer.Option(None, "--shard-count"),
-    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat or use * for the versioned catalogue."),
+    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground."),
     render_limit: int = typer.Option(0, "--render-limit", min=0),
 ) -> None:
     """Plan, materialize, validate, export, and optionally render a connector corpus."""
     from .enterprise_artifacts import render_corpus_artifacts
     from .enterprise_corpus import materialize_corpus, validate_corpus
+    from .enterprise_dag import resolve_shapes
     from .enterprise_io import export_corpus
     from .enterprise_queries import plan_queries
     from .enterprise_specs import (
@@ -420,7 +422,7 @@ def enterprise_evals_build(
         limit=limit,
         shard_index=shard_index,
         shard_count=shard_count,
-        dag_shapes=tuple(dag_shape or ()),
+        dag_shapes=resolve_shapes(dag_shape),
     )
     corpus = materialize_corpus(world, queries)
     findings = validate_corpus(corpus)

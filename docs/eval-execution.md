@@ -5,7 +5,7 @@ axes. It is the loop Gemini Enterprise Eval Studio has and Worldloom did not,
 with the grading a fact-derived corpus can support and Eval Studio cannot.
 
 ```bash
-worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200
 worldloom evalrun cases ./cases                     # what the set can grade, per axis
 worldloom evalrun run ./cases -o ./runs/reference   # the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
@@ -73,15 +73,16 @@ the spans the service recorded show the write that made it and the delete
 that removed it, and both expectations are met on that record, with the
 artifact grounded on the write the service saw.
 
-**Deletes are planned, not hand-authored.** `enterprise-evals build --dag-shape
-delete_chain` adds a `delete` and a final readback to every case whose
+**Deletes are planned, not hand-authored, and they are the default.**
+`delete_chain` adds a `delete` and a final readback to every case whose
 destination connector serves a delete: write, read back, delete that exact
 returned record, read it back expecting `not_found`. The row states the
 expected error as a designed failure, so an agent that skips the last readback
 has not honoured it, and the `deleted` assertion names the write that created
-the record. SharePoint and Drive files now serve `delete_file`, which the
-specs had declared and the definitions did not; the default build plans no
-delete, so bytes without `--dag-shape` are unchanged.
+the record. SharePoint and Drive files serve `delete_file`, which the specs
+had declared and the definitions did not. A build with no `--dag-shape` now
+plans it: 120 cases from `retail-close` grade 11 deletes. `--dag-shape none`
+plans the single-write trajectory instead.
 
 **Unstructured outcomes rest on records.** Every grammar write binds the
 collected evidence into the record it creates. The artifact contract names
@@ -319,12 +320,12 @@ Named and not closed here:
 
 - **The shape catalogue is nine shapes.** The external forty-two-shape
   target is not in this repository.
-- **Deletes are opt-in.** The shipped scenario profiles draft email, which
-  nothing deletes, so a default build still reports `deletes: 0`; a profile
-  whose destination is a SharePoint or Drive file, built with `--dag-shape
-  delete_chain`, reports the deletes it grades. Deleting a preexisting
-  fixture record is compiled (the `deleted` assertion then names the
-  fixture) but no shipped profile plans an update-then-delete.
+- **Two shapes are opt-in.** `map_read` and `conditional` raise a source's
+  `minimum` above what the row declared, so a world holding one record where
+  the row wanted one plans a case that materializes and then refuses to
+  compile. A build with no `--dag-shape` plans the other seven. Deleting a
+  preexisting fixture record is compiled (the `deleted` assertion then names
+  the fixture) but no shipped profile plans an update-then-delete.
 - **A planned DAG is graded by tool name.** `evalrun plan` cannot tell two
   calls of one tool apart by their arguments, so a planner that names the
   right tools in the right order passes the plan axis whatever it would have

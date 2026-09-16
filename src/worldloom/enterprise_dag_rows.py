@@ -133,7 +133,11 @@ def compile_dag_row(
             key = f"{requirement.connector}:{requirement.entity}"
             selected = [by_external.get(rid, rid) for rid in fixture.input_record_ids.get(key, ())]
             if len(selected) < requirement.minimum:
-                raise RowError(query.id, f"{spec.id}: insufficient bound source records")
+                # Name the shortfall and the pair it is about: the row asked
+                # for more records than the world holds, which is a fact about
+                # the corpus, not about this node.
+                raise RowError(query.id, f"{spec.id}: {key} bound {len(selected)} source record(s),"
+                                         f" and the row needs {requirement.minimum}")
             if spec.kind == "search" and requirement.bind == "predicate":
                 # The requirement's own rule is the search, so an agent that
                 # reads the request can search by it; the records it must

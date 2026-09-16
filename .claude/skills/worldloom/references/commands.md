@@ -262,7 +262,7 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 
 | Option | Purpose |
 | --- | --- |
-| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -299,7 +299,7 @@ worldloom enterprise-evals plan <WORLD_PATH> <OUTPUT>
 
 | Option | Purpose |
 | --- | --- |
-| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -317,7 +317,7 @@ worldloom enterprise-evals qualify <WORLD_PATH>
 
 | Option | Purpose |
 | --- | --- |
-| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
 | `--json` | Print the complete qualification report. |
 | `--limit` | Maximum qualified outputs; uncovered interactions remain in the report. |
 | `--out`, `-o` | Qualified corpus, coverage findings and exact execution proofs. |

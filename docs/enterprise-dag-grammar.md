@@ -1,17 +1,32 @@
 # Executable enterprise DAGs
 
-Enterprise planning can opt into `enterprise-dag@1`. Each generated node has
+Enterprise planning uses `enterprise-dag@1`. Each generated node has
 arguments, explicit result references, dependencies, and optional result-based
 conditions or bounded iteration. These values drive execution and grading.
-The default planner retains the legacy trajectory.
+
+Planning with no `--dag-shape` plans every shape a row can ground on the
+sources it already declares. That is seven of the nine in the catalogue, and it
+includes `delete_chain`, so a default case set can grade a delete. Two shapes
+raise a source's `minimum` above what the row asked for: `map_read` fetches
+every search hit, and `conditional` needs a witness for both branches. They are
+named explicitly, because a world holding one record where the row wanted one
+plans a case that materializes and then refuses to compile.
 
 ```bash
+# The default: every groundable shape, deletes included.
+worldloom enterprise-evals plan examples/retail-close queries.jsonl --exhaustive --limit 100
+
+# The whole catalogue, on a corpus with enough evidence for the two that need it.
 worldloom enterprise-evals plan examples/retail-close queries.jsonl --exhaustive --limit 100 --dag-shape '*'
 worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape map_read --dag-shape conditional
+
+# The single-write trajectory the grammar produced before shapes existed.
+worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape none
 ```
 
 Use a corpus with sufficient operational evidence. A mapped source requires at
-least two records; a missing witness is a compilation refusal. All source reads
+least two records; a missing witness is a compilation refusal that names the
+connector, the entity, how many records bound, and how many the row needs. All source reads
 are bound to fixture identities. A search intersects those identities with the
 authored field predicates. It does not search an unrelated connector pool.
 
