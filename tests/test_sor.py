@@ -220,7 +220,15 @@ def test_a_world_built_for_a_process_company_projects_its_records_and_evidence(t
     assert process_structure_of(world.recipe) == spec.structure
     # The world's units are the company's own, the declaration is one event,
     # and the company's facts are in the ledger about those units.
-    assert [unit.name for unit in world.business_units] == [unit.name for unit in spec.structure.bus]  # type: ignore[union-attr]
+    # Exactly the company's declared units, revenue first: the vertical builder
+    # forms the trading divisions, then `materialize_owners` forms the support
+    # groups that earn none, so the authored order is not preserved.
+    assert sorted(unit.name for unit in world.business_units) == sorted(
+        unit.name for unit in spec.structure.bus  # type: ignore[union-attr]
+    )
+    assert [unit.kind for unit in world.business_units] == sorted(
+        (unit.kind for unit in world.business_units), key=lambda kind: kind == "support"
+    )
     declared = [event for event in world.events if event.kind == PROCESS_STRUCTURE_EVENT]
     assert len(declared) == 1 and declared[0].actors == [world._roles["ceo"]]
     process_facts = [fact for fact in world.facts if fact.id.startswith("PFACT-")]

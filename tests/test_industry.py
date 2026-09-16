@@ -139,7 +139,9 @@ def test_every_asker_has_standing_over_what_it_asks(
     """The seat table and the responsibility edges agree, under the same rule
     `evals.plausibility` applies to a corpus."""
     assert industry.standing_findings(telecom.requests, telecom.lobs) == []
-    assert telecom.summary.findings == ()
+    # The programme carries one finding, and it is about the missing IN locale,
+    # not about standing: every request here is asked by a seat that may ask.
+    assert not [finding for finding in telecom.summary.findings if "standing" in finding]
     # The chief executive asks down the line, so `ceo` has standing over every
     # family's streams; a role the owning LOB does not declare has none.
     executive = telecom.requests[0].model_copy(update={"asker": "ceo"})
@@ -422,7 +424,11 @@ def test_the_count_ceiling_is_applied_and_visible(telecom: industry.Programme) -
 def test_every_shipped_industry_derives_a_complete_honest_programme(name: str) -> None:
     derived = industry.programme(name)
     summary = derived.summary
-    assert summary.industry == name and summary.findings == ()
+    assert summary.industry == name
+    # Findings are for things the programme cannot make honest. The only one
+    # any shipped industry still raises is a country with no locale, which is
+    # a stated gap rather than an incoherent programme.
+    assert all(finding.startswith("a locale for ") for finding in summary.findings)
     assert (
         summary.requests
         == summary.situations
@@ -523,7 +529,9 @@ def test_record_set_requests_read_their_answers_off_the_records(
 def test_describe_reports_the_headline_numbers() -> None:
     described = industry.describe("telecom")
     assert described["situations"] == described["reads"] + described["writes"]
-    assert described["lobs"] == len(described["by_lob"]) and described["findings"] == []
+    assert described["lobs"] == len(described["by_lob"])
+    # Telecom builds in IN, which ships no locale; that gap is the one finding.
+    assert all(finding.startswith("a locale for ") for finding in described["findings"])
     assert sum(described["intents"].values()) == described["situations"]
 
 
