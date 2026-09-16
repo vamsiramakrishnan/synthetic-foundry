@@ -1432,6 +1432,7 @@ Open the local company console; slow work runs in a separate process.
 | `--allow-native-writes` | With --harness codex, allow native update/create writes in the task output directory. |
 | `--harness` | Use an installed codex or claude CLI with its existing login. |
 | `--harness-command` | Trusted local adapter: JSON stdin, JSON stdout; no shell. |
+| `--host` | Address to bind. The console has no authentication, so anything but a loopback address exposes it. |
 | `--port` |  |
 | `--timeout` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |

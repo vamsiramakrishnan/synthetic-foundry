@@ -11,6 +11,32 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A container, a checked package, and an honest install line
+
+- A `Dockerfile` builds the wheel and installs it, so the image runs what a
+  wheel install gives anyone rather than a source tree. It runs as uid 10001,
+  writes only to the `/workspace` volume, and carries the four renderers and
+  the MCP server. CI builds it on every push, opens the console on a published
+  loopback port, renders DOCX, XLSX, PDF and PPTX inside it, and checks the
+  process is not root.
+- `worldloom studio serve --host` picks the bind address; it stays 127.0.0.1
+  unless you name another. A non-loopback bind prints what it gives away: the
+  console has no authentication, so anyone who reaches the port can read the
+  company and start jobs.
+- The console's origin guard now reads the host *name* and ignores the port.
+  Pinning the port rejected every container whose published port differed from
+  the port inside it, and bought nothing: a page on another origin picks its
+  own port freely, so the loopback name is the whole defence against DNS
+  rebinding.
+- `twine check --strict` runs on the built sdist and wheel in CI and in the
+  release, before anything is uploaded. A README PyPI cannot render is rejected
+  at upload, after the version number is spent.
+- The release workflow takes a concurrency group that does not cancel: a run
+  that has already uploaded cannot be replayed under the same version.
+- The README says what actually installs today. Nothing is on PyPI, so the
+  three paths are a checkout, a wheel you build, and the container; the PyPI
+  line says plainly that no tag has been pushed.
+
 ### An installed coding harness is one flag
 
 - `worldloom evalrun run --harness codex|claude`, `evalrun plan --harness` and

@@ -8,7 +8,12 @@ processes, and generate evidence and qualified evaluations from the same world.
 worldloom studio serve --workspace ./worldloom-workspace
 ```
 
-Open `http://127.0.0.1:8765`. Create a company or choose **Load connected retail
+Open `http://127.0.0.1:8765`.
+
+`--host` changes the bind address, and `0.0.0.0` is what the container uses so
+a published port reaches it. The console has no login: on any address but
+loopback it prints what it is giving away, and you should publish the port to
+127.0.0.1 or put an authenticating proxy in front. Create a company or choose **Load connected retail
 pilot**. This example connects inventory exceptions, supplier replenishment and
 invoice reconciliation across Jira, ServiceNow and email. **Load smaller retail
 example** retains the earlier 24-query inventory example. Both are authored
@@ -570,10 +575,13 @@ the worker exits. Restart recovery marks abandoned jobs interrupted only after
 acquiring that lock. A live worker cannot be taken over. Dataset checkpoints
 remain the source of resume truth, and failed jobs retain their errors.
 
-The server binds to loopback and requires matching Host/Origin and a JSON
-mutation header. It serves no arbitrary filesystem paths and uses no CORS
-allowlist for external websites. This is a local operator console, not a
-multi-user hosted service. Harness calls use the configured timeout and no
+The server binds to loopback and requires a loopback `Host`, a matching
+`Origin`, and a JSON mutation header. The `Host` check is on the name, not the
+port, so a container whose published port differs from the port inside it still
+works; a page on any other origin is refused, which is what stops DNS
+rebinding. It serves no arbitrary filesystem paths and uses no CORS allowlist
+for external websites. This is a local operator console, not a multi-user
+hosted service. Harness calls use the configured timeout and no
 shell. The worker continues independently if the browser disconnects; queued
 jobs are dispatched while the server remains running.
 

@@ -22,8 +22,9 @@ from worldloom.studio import (
     preset,
 )
 from worldloom.studio.harness import command_for, invoke
-from worldloom.studio.server import StudioServer
+from worldloom.studio.server import StudioServer, loopback
 from worldloom.studio.worker import recover, run_job, writer_lock
+from worldloom.studio_cli import bind_notice, reachable_host
 
 
 @pytest.fixture
@@ -530,3 +531,48 @@ def test_snapshot_recovers_crash_before_intent_write(project):
     _, recovered = studio.snapshot(spec)
     assert recovered == location and _files(recovered) == expected
     assert not staging.exists()
+
+
+def test_the_origin_guard_reads_the_host_name_not_the_port():
+    """A published container port never equals the port inside the container.
+
+    The guard exists to stop DNS rebinding, and a page on another origin picks
+    its own port freely. So the host name is the whole check: pinning the port
+    would only reject `docker run -p 127.0.0.1:18765:8765`.
+    """
+    assert loopback("127.0.0.1:8765")
+    assert loopback("127.0.0.1:18765")
+    assert loopback("localhost")
+    assert loopback("[::1]:8765")
+    assert not loopback("evil.example:8765")
+    assert not loopback("192.168.1.10:8765")
+    assert not loopback("")
+
+
+def test_a_rebinding_host_is_refused_on_the_port_the_console_bound(http_server):
+    request = Request(f"http://127.0.0.1:{http_server.server_port}/api/bootstrap",
+                      headers={"Host": f"evil.example:{http_server.server_port}"})
+    with pytest.raises(HTTPError) as refusal:
+        urlopen(request, timeout=10)
+    assert refusal.value.code == 403
+
+
+def test_the_console_binds_loopback_unless_a_host_is_named(tmp_path):
+    server = StudioServer(tmp_path, port=0, launch_workers=False)
+    try:
+        assert server.server_address[0] == "127.0.0.1"
+    finally:
+        server.server_close()
+
+
+def test_a_non_loopback_bind_says_what_it_gives_away():
+    """The console has no login, so an exposed bind is stated, not implied."""
+    assert bind_notice("127.0.0.1", 8765) == []
+    assert bind_notice("localhost", 8765) == []
+    assert bind_notice("::1", 8765) == []
+    notice = bind_notice("0.0.0.0", 8765)
+    assert "no authentication" in " ".join(notice)
+    assert "port 8765" in " ".join(notice)
+    assert reachable_host("0.0.0.0") == "127.0.0.1"
+    assert reachable_host("192.168.1.10") == "192.168.1.10"
+    assert reachable_host("::1") == "[::1]"

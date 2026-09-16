@@ -11,7 +11,7 @@ workflows before you have a suitable enterprise dataset. A seed and recipe
 control the world; accepted generation ledgers make authored material replayable.
 
 Repository, Python package and command: `worldloom` ·
-Python 3.11+ · pre-release, install from source · Apache-2.0
+Python 3.11+ · pre-release; no release is on PyPI yet · Apache-2.0
 
 [Quickstart](#quickstart) · [Design a corpus](docs/enterprise-corpus.md) ·
 [Python SDK](docs/sdk.md) · [Documentation site](https://vamsiramakrishnan.github.io/worldloom/)
@@ -27,8 +27,8 @@ PPTX and XLSX tasks for reading, comparison, updates and creation. The console,
 `worldloom studio next` and `Studio.workflow()` share the same readiness checks.
 Optional calibration measures target outcomes with independent held-out evidence.
 
-Status: 0.1.0, the first release. The source-install path below targets this
-repository checkout. The library never calls an LLM service by itself.
+Status: 0.1.0, unreleased. Nothing is on PyPI yet, so every install below
+starts from this checkout. The library never calls an LLM service by itself.
 
 ## Quickstart
 
@@ -48,6 +48,44 @@ worldloom validate ./corpus
 worldloom evaluate ./corpus --retriever both
 worldloom status ./corpus
 ```
+
+## Install
+
+Three ways in. Nothing is published to an index yet, so each starts from a
+clone.
+
+**A checkout.** The quickstart above. Editable, and the one to use while
+changing the code.
+
+**A wheel.** Build one and install it anywhere, with the renderers:
+
+```bash
+pipx run build
+python -m pip install "worldloom[all] @ file://$(readlink -f dist/*.whl)"
+```
+
+CI builds this wheel on every push and proves two things about it: that a bare
+install runs and names the missing extra when you ask for a format it cannot
+render, and that a full install renders, validates and replays byte-identically.
+
+**A container.** The image installs the wheel, not the source tree, so what
+runs inside it is what a wheel install gives anyone:
+
+```bash
+docker build -t worldloom .
+docker run --rm -p 127.0.0.1:8765:8765 -v worldloom-workspace:/workspace worldloom
+```
+
+Open http://127.0.0.1:8765. The named volume holds company revisions, jobs and
+datasets, so back it up to keep generated corpora. Publish the port to
+127.0.0.1 and nowhere else: the console has no authentication, and it refuses
+any request whose `Host` is not a loopback address for exactly that reason. The
+container calls no model service and carries no harness login, so run the
+Studio on the host when you want to drive an installed `codex` or `claude`.
+
+**PyPI.** `pip install "worldloom[all]"` is what a tagged release will give
+you. The release workflow is written and rehearses against TestPyPI first, but
+no tag has been pushed, so that command does not work today.
 
 The default example is a retailer's month-end close with an incident. It is a
 bounded business episode, not a full retailer's operating history. The prose

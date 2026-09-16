@@ -14,10 +14,38 @@ studio_app.add_typer(interview_app, name="interview")
 Workspace = Annotated[Path, typer.Option("--workspace", "-w", help="Persistent local Studio workspace.")]
 
 
+WILDCARD = {"0.0.0.0", "::", "*", ""}
+
+
+def reachable_host(host: str) -> str:
+    """The address to open in a browser. A wildcard bind is reached on loopback."""
+    if host in WILDCARD:
+        return "127.0.0.1"
+    return f"[{host}]" if ":" in host else host
+
+
+def bind_notice(host: str, port: int) -> list[str]:
+    """Say plainly what a non-loopback bind gives away. The console has no login."""
+    import ipaddress
+
+    try:
+        loopback = ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        loopback = host in {"localhost", ""}
+    if loopback:
+        return []
+    return [
+        f"Bound to {host}. The console has no authentication: anyone who reaches",
+        f"port {port} can read the company, its documents and its runs, and can start jobs.",
+        "Publish it to 127.0.0.1 only, or put an authenticating proxy in front.",
+    ]
+
+
 @studio_app.command("serve")
 def serve_command(
     workspace: Workspace = Path("./worldloom-workspace"),
     port: Annotated[int, typer.Option(min=1, max=65535)] = 8765,
+    host: Annotated[str, typer.Option("--host", help="Address to bind. The console has no authentication, so anything but a loopback address exposes it.")] = "127.0.0.1",
     harness_command: Annotated[str | None, typer.Option("--harness-command", help="Trusted local adapter: JSON stdin, JSON stdout; no shell.")] = None,
     harness: Annotated[str | None, typer.Option("--harness", help="Use an installed codex or claude CLI with its existing login.")] = None,
     allow_native_writes: Annotated[bool, typer.Option("--allow-native-writes", help="With --harness codex, allow native update/create writes in the task output directory.")] = False,
@@ -37,8 +65,13 @@ def serve_command(
             harness, timeout=max(1, timeout - 5), allow_native_writes=allow_native_writes
         )
 
-    server = StudioServer(workspace, port=port, harness_command=harness_command, timeout=timeout)
-    typer.echo(f"Worldloom Studio: http://127.0.0.1:{server.server_port}")
+    try:
+        server = StudioServer(workspace, port=port, host=host, harness_command=harness_command, timeout=timeout)
+    except OSError as error:
+        _refuse("studio_rejected", f"cannot bind {host}:{port} — {error.strerror or error}")
+    for line in bind_notice(host, server.server_port):
+        typer.echo(line, err=True)
+    typer.echo(f"Worldloom Studio: http://{reachable_host(host)}:{server.server_port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
