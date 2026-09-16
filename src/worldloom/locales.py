@@ -532,8 +532,9 @@ class Locale:
     def suffixes_for(self, industry: str) -> tuple[str, ...]:
         """What a company in *industry* is called here, after its brand word.
 
-        *industry* is a registered engine name (``retail``, ``banking``,
-        ``insurance``) — see ``industry_suffixes``. ``retail`` resolves to
+        *industry* is a registered engine name — ``domains.names()``, which is
+        ``retail``, ``banking``, ``insurance`` and ``procurement`` — see
+        ``industry_suffixes``. ``retail`` resolves to
         ``company_suffixes``, which is the one pool this locale has always had
         and is retail's by construction.
 
@@ -541,8 +542,9 @@ class Locale:
         posture as ``named``'s: an unknown engine name is a configuration error
         rather than a typo, and a silent fallback would make that vertical
         unbuildable in this jurisdiction without anywhere to report why. Every
-        shipped locale answers for all three shipped engines, so this is never
-        raised by a shipped build. A new vertical registering itself in
+        shipped locale answers for every registered engine and
+        ``test_locales_generated`` holds that, so this is never raised by a
+        shipped build. A new vertical registering itself in
         ``locales.register`` must ensure every preset carries an entry for it.
         """
         if industry == "retail":

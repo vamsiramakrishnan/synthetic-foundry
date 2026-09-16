@@ -198,6 +198,11 @@
      "Insurance Co., Ltd.",
      "Life Insurance Co., Ltd.",
      "Property and Casualty Insurance Co., Ltd."
+    ],
+    "procurement": [
+     "Engineering Co., Ltd.",
+     "Construction Group Co., Ltd.",
+     "Infrastructure Co., Ltd."
     ]
    },
    "name_source": "names-dataset",
@@ -416,6 +421,11 @@
      "Insurance Limited",
      "Assurance Limited",
      "Life Insurance Limited"
+    ],
+    "procurement": [
+     "Engineering Limited",
+     "Contracting Limited",
+     "Infrastructure Holdings Limited"
     ]
    },
    "name_source": "names-dataset",
@@ -631,6 +641,11 @@
      "Insurance Company Limited",
      "General Insurance Limited",
      "Life Insurance Company Limited"
+    ],
+    "procurement": [
+     "Infrastructure Limited",
+     "Engineering Limited",
+     "Constructions Private Limited"
     ]
    },
    "name_source": "names-dataset",
@@ -845,6 +860,11 @@
      "Asuransi Tbk",
      "Asuransi Jiwa Tbk",
      "Asuransi Umum Tbk"
+    ],
+    "procurement": [
+     "Infrastruktur Tbk",
+     "Konstruksi Tbk",
+     "Karya Persero Tbk"
     ]
    },
    "name_source": "names-dataset",
@@ -965,20 +985,20 @@
     "Hashimoto",
     "Yamashita",
     "Maeda",
-    "佐藤",
     "Sakamoto",
     "Ono",
     "Okada",
     "Ishikawa",
     "Aoki",
     "Ogawa",
-    "鈴木",
-    "田中",
     "Murakami",
     "Ishii",
     "Sakai",
     "Fujita",
-    "Ueda"
+    "Ueda",
+    "Hasegawa",
+    "Nakagawa",
+    "Nakano"
    ],
    "fiscal_year_start_month": 4,
    "given": [
@@ -1091,6 +1111,11 @@
      "Insurance Co., Ltd.",
      "Life Insurance Co., Ltd.",
      "Marine and Fire Insurance Co., Ltd."
+    ],
+    "procurement": [
+     "Corporation",
+     "Construction Co., Ltd.",
+     "Engineering Co., Ltd."
     ]
    },
    "name_source": "names-dataset",
@@ -1301,6 +1326,11 @@
      "Insurance Berhad",
      "Takaful Berhad",
      "General Insurance Berhad"
+    ],
+    "procurement": [
+     "Engineering Berhad",
+     "Construction Berhad",
+     "Infrastructure Bhd"
     ]
    },
    "name_source": "names-dataset",
@@ -1511,6 +1541,11 @@
      "Insurance Pte Ltd",
      "Assurance Pte Ltd",
      "Life Pte Ltd"
+    ],
+    "procurement": [
+     "Engineering Pte Ltd",
+     "Contracting Pte Ltd",
+     "Infrastructure Pte Ltd"
     ]
    },
    "name_source": "names-dataset",
@@ -1710,6 +1745,11 @@
      "Insurance Co., Ltd.",
      "Life Insurance Co., Ltd.",
      "Property Insurance Co., Ltd."
+    ],
+    "procurement": [
+     "Engineering Co., Ltd.",
+     "Construction Co., Ltd.",
+     "Engineering Inc."
     ]
    },
    "name_source": "names-dataset",

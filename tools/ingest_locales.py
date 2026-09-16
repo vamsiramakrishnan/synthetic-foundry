@@ -159,6 +159,50 @@ INDUSTRY_FORMS: dict[str, dict[str, tuple[str, ...]]] = {
            "insurance": ("Insurance JSC", "Life Insurance JSC", "Non-Life Insurance JSC")},
 }
 
+#: Forms for the fourth registered engine. `domains.names()` registers four —
+#: retail, banking, insurance, procurement — and `Locale.suffixes` refuses an
+#: engine the locale has no pool for, so a table that stops at banking and
+#: insurance makes every procurement build in that jurisdiction unbuildable.
+#: Procurement here is infrastructure services: the forms are the ones the
+#: region's contractors and engineering groups are chartered under.
+PROCUREMENT_FORMS: dict[str, tuple[str, ...]] = {
+    "CN": ("Engineering Co., Ltd.", "Construction Group Co., Ltd.", "Infrastructure Co., Ltd."),
+    "HK": ("Engineering Limited", "Contracting Limited", "Infrastructure Holdings Limited"),
+    "IN": ("Infrastructure Limited", "Engineering Limited", "Constructions Private Limited"),
+    "ID": ("Infrastruktur Tbk", "Konstruksi Tbk", "Karya Persero Tbk"),
+    "JP": ("Corporation", "Construction Co., Ltd.", "Engineering Co., Ltd."),
+    "MY": ("Engineering Berhad", "Construction Berhad", "Infrastructure Bhd"),
+    "SG": ("Engineering Pte Ltd", "Contracting Pte Ltd", "Infrastructure Pte Ltd"),
+    "TH": ("Engineering PCL", "Construction PCL", "Engineering Co., Ltd."),
+    "TW": ("Engineering Co., Ltd.", "Construction Co., Ltd.", "Engineering Inc."),
+    "VN": ("Construction JSC", "Engineering JSC", "Infrastructure Corporation"),
+}
+
+
+def industry_forms(alpha2: str) -> dict[str, tuple[str, ...]]:
+    """Every non-retail engine's pool for one jurisdiction, in one place.
+
+    Kept as a function rather than a second literal table so adding an engine
+    is one edit: `test_locales_generated` asserts the keys here cover
+    `domains.names()` minus retail, which `company_suffixes` answers for.
+    """
+    forms = dict(INDUSTRY_FORMS.get(alpha2, {}))
+    if alpha2 in PROCUREMENT_FORMS:
+        forms["procurement"] = PROCUREMENT_FORMS[alpha2]
+    return forms
+
+
+def romanised(name: str) -> bool:
+    """True when every character is ASCII.
+
+    names-dataset mixes scripts: Japan's surname list opens with the romanised
+    forms and then carries a handful in kanji, and three of them landed in the
+    shipped pool. A kanji surname beside `Katharina` in a group report is the
+    mixed-script artefact the module note says this tool exists not to
+    produce, so the pools are filtered rather than trusted.
+    """
+    return name.isascii()
+
 
 def titled(name: str) -> str:
     """One name, cased the way a document prints it."""
@@ -179,13 +223,15 @@ def names_dataset_pools(alpha2: str) -> tuple[list[str], list[str]] | None:
         return None
     given_raw = dataset.get_top_names(n=POOL_DRAW, country_alpha2=alpha2, use_first_names=True)
     family_raw = dataset.get_top_names(n=POOL_DRAW, country_alpha2=alpha2, use_first_names=False)
-    family = dedupe(titled(n) for n in family_raw.get(alpha2, []) if len(str(n)) > 1)
+    family = dedupe(titled(n) for n in family_raw.get(alpha2, [])
+                    if len(str(n)) > 1 and romanised(str(n)))
     surnames = {n.casefold() for n in family}
     given: list[str] = []
     for gendered in (given_raw.get(alpha2) or {}).values():
         given.extend(titled(n) for n in gendered)
     # Surname contamination and initials, both described in the module note.
-    given = dedupe(n for n in dedupe(given) if len(n) > 2 and n.casefold() not in surnames)
+    given = dedupe(n for n in dedupe(given)
+                   if len(n) > 2 and romanised(n) and n.casefold() not in surnames)
     return given, family
 
 
@@ -209,7 +255,8 @@ def faker_pools(locales: tuple[str, ...], romanise: bool = False) -> tuple[list[
             names = [romanize(n) for n in names]
         given.extend(gendered)
         family.extend(names)
-    return dedupe(titled(n) for n in given), dedupe(titled(n) for n in family)
+    return (dedupe(titled(n) for n in given if romanised(str(n))),
+            dedupe(titled(n) for n in family if romanised(str(n))))
 
 
 def number_grammar(babel_locale: str) -> dict[str, Any]:
@@ -311,7 +358,7 @@ def build(name: str, alpha2: str, printed: str, babel_locale: str) -> dict[str, 
         "given_extended": given,
         "family_extended": family,
         "company_suffixes": list(COMPANY_FORMS[alpha2]),
-        "industry_suffixes": {k: list(v) for k, v in sorted(INDUSTRY_FORMS.get(alpha2, {}).items())},
+        "industry_suffixes": {k: list(v) for k, v in sorted(industry_forms(alpha2).items())},
         "currency": currencies[0] if currencies else "USD",
         "negative": "leading_minus",
         "holidays": fixed_holidays(alpha2),

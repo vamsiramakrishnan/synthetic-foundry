@@ -15,7 +15,7 @@ from importlib.resources import files
 
 import pytest
 
-from worldloom import industry, locales
+from worldloom import domains, industry, locales
 
 GENERATED = (
     "china", "hong_kong", "india", "indonesia", "japan",
@@ -55,6 +55,36 @@ def test_a_generated_locale_is_complete_and_registered(name: str) -> None:
     # keeps: a reordered data file would rename every employee in every world.
     assert locale.given_extended[:len(locale.given)] == locale.given
     assert locale.family_extended[:len(locale.family)] == locale.family
+
+
+@pytest.mark.parametrize("name", sorted(locales.LOCALES))
+def test_every_locale_answers_for_every_registered_engine(name: str) -> None:
+    """The failure this test exists for, which CI found and the suite did not.
+
+    `domains.names()` registers four engines and `suffixes_for` refuses one the
+    locale has no pool for, so a generated table that stopped at banking and
+    insurance made every procurement build in eight jurisdictions raise at
+    company-naming time. A locale is only complete against the registry, and
+    the registry is where the count comes from.
+    """
+    locale = locales.named(name)
+    for engine in domains.names():
+        assert locale.suffixes_for(engine), engine
+
+
+@pytest.mark.parametrize("name", GENERATED)
+def test_a_generated_pool_is_romanised(name: str) -> None:
+    """names-dataset mixes scripts, and three kanji surnames reached Japan's pool.
+
+    This project renders English-language business documents; a group report
+    listing a kanji surname beside a romanised one is a mixed-script artefact,
+    not a more accurate corpus. The hand-written Latin-script locales are
+    excluded deliberately: Germany's Müller and Yıldırım are correct.
+    """
+    locale = locales.named(name)
+    for pool in (locale.given, locale.family, locale.given_extended, locale.family_extended):
+        offenders = [entry for entry in pool if not entry.isascii()]
+        assert not offenders, offenders[:5]
 
 
 def test_india_is_the_locale_the_gap_was_named_for() -> None:

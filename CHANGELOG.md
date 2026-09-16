@@ -59,6 +59,23 @@ first written up, before the waves above it landed.
   Singaporean one a UEN, where both used to print `REG-########`. Hong Kong
   takes the PO box convention this repository already uses for the Gulf,
   because it numbers no addresses. No pre-existing country changed.
+- Two defects the dispersed-replay gate found, and what each one broke. A
+  locale must answer for every engine `domains.names()` registers, and the
+  generated table stopped at banking and insurance, so every procurement build
+  in the eight new jurisdictions raised at company-naming time. Procurement
+  forms are now carried for all ten countries, and a test walks the engine
+  registry rather than a written list.
+- names-dataset mixes scripts, and three kanji surnames reached Japan's pool
+  past a filter that only looked at length. Every generated pool is filtered to
+  romanised forms and a test holds it, which is the property the whole tool was
+  built on.
+- A company form carrying punctuation is no longer read as an invented entity.
+  The narration validator peels `.,;:()'"` off every token it extracts, so a
+  company chartered `Greyfell Engineering Co., Ltd.` came out of prose as
+  `Greyfell Engineering Co Ltd` and matched neither its own name nor any
+  fragment of it. Every East Asian company form carries that punctuation, so
+  every narration in those jurisdictions was rejected for naming the company it
+  was about. The world's own names are stripped the same way before matching.
 
 ### Employment is measured, and every shape grounds (Generation)
 

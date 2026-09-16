@@ -152,7 +152,6 @@
   "Yun",
   "Aisyah",
   "Astuti",
-  "歐陽",
   "Wulandari",
   "Hsiung",
   "Jaya",
@@ -420,7 +419,6 @@
   "Yunita",
   "Amoorea",
   "Siaucie",
-  "張簡",
   "Marlina",
   "Fauzi",
   "Safira",
@@ -598,7 +596,6 @@
   "Setyowati",
   "Tatik",
   "Kaohsiung",
-  "范姜",
   "Merana",
   "Cintaku",
   "Naila",
@@ -811,7 +808,6 @@
   "Nung",
   "Anty",
   "Amei",
-  "上官",
   "Phoebe",
   "Ou Yang",
   "Inces",
@@ -900,7 +896,11 @@
   "Wahyuningsih",
   "Aulya",
   "Hartatik",
-  "Asiyah"
+  "Asiyah",
+  "Yayuk",
+  "Ai Ni",
+  "Karlina",
+  "Yudistira"
  ],
  "given": [
   "Allen",
@@ -1285,7 +1285,6 @@
   "Khalifah",
   "Rido",
   "Cage",
-  "Nguyên",
   "Sakit",
   "Lingo",
   "Afu",
@@ -1297,7 +1296,6 @@
   "Nazril",
   "Hengki",
   "Panca",
-  "Sáng",
   "Tidak",
   "Sway",
   "Chunyu",
@@ -1802,6 +1800,8 @@
   "Yu-Fen",
   "Li-Ying",
   "Shih-Yun",
-  "Shu Chen"
+  "Shu Chen",
+  "Yi-Lun",
+  "Yi-Chin"
  ]
 }
