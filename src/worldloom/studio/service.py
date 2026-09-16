@@ -411,8 +411,13 @@ class Studio:
             # records are read, and its facts are in the ledger they cite.
             # Before compilation, as a rebuild replays it: a step first, the
             # derived layer after.
+            from ..process_bindings.ownership import materialize_owners
             from ..recipe import apply_process_structure
 
+            # The units that sell are the pack's divisions; the ones that only
+            # own processes are formed here, with no trading revenue allocated
+            # to them. Before the declaration, so the event names every unit.
+            world = materialize_owners(world, spec.structure)
             world = apply_process_structure(world, spec.structure)
         if spec.episodes:
             world = world.compile()

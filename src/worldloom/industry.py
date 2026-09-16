@@ -668,6 +668,15 @@ class ProcessLine(Model):
     """Activity ids, sorted."""
     bindings: int
     situations: int
+    """Every verb crossed with every channel: how many ways this line can be
+    asked about. Not how many distinct things it can be asked, which is
+    `distinct_answers`."""
+    distinct_answers: int = 0
+    """How many distinct answers this line's requests actually ground. A verb
+    and a channel change the wording of a request, never its ground truth, so
+    this is the honest size of the evalset a line supports; `situations` is
+    the larger number of phrasings over it. Zero when the lines were derived
+    without their requests."""
     reads: int
     writes: int
     systems: tuple[str, ...]
@@ -704,7 +713,13 @@ class IndustryProgramme(Model):
     lines: tuple[ProcessLine, ...]
     bindings: int
     situations: int
+    """Every verb crossed with every channel over every binding: the number of
+    ways this company can be asked, not the number of things it can be asked."""
     requests: int
+    distinct_answers: int = 0
+    """The distinct ground truths those requests rest on. Report this as the
+    size of the evalset: a verb and a channel change a request's wording and
+    leave its answer alone, so `requests` counts phrasings over these."""
     facts: int
     records: int = 0
     """System-of-record records derived for the company (`sor.records`)."""
@@ -779,12 +794,22 @@ def lines(
     *,
     catalogue: dict[str, Any] | None = None,
     table: dict[str, Any] | None = None,
+    requests: Sequence[Request] = (),
 ) -> tuple[ProcessLine, ...]:
-    """Every LOB × stream cell with at least one bound activity, with its counts."""
+    """Every LOB × stream cell with at least one bound activity, with its counts.
+
+    Pass *requests* to fill each line's `distinct_answers`: the count of
+    distinct ground truths its requests rest on, which is the honest size of
+    the evalset the line supports. Without them the field stays zero and only
+    the phrasing count, `situations`, is known.
+    """
     cat = catalogue if catalogue is not None else load_catalogue()
     emulators = table if table is not None else emulated_systems()
     names = stream_names(cat)
     titles = {spec.name: spec.title for spec in lobs}
+    grounded: dict[tuple[str, str], set[str]] = {}
+    for request in requests:
+        grounded.setdefault((request.lob, request.stream), set()).add(request.expected_answer)
     cells: dict[tuple[str, str], list[ActivityBinding]] = {}
     for row in _bound(compiled):
         cells.setdefault((row.function, row.stream), []).append(row)
@@ -809,6 +834,7 @@ def lines(
                 activities=tuple(sorted({row.activity_id for row in rows})),
                 bindings=len(rows),
                 situations=reads + writes,
+                distinct_answers=len(grounded.get((family, stream), ())),
                 reads=reads,
                 writes=writes,
                 systems=tuple(sorted({row.sor_product for row in rows})),
@@ -890,7 +916,7 @@ def programme(
     derived_requests = tuple(
         requests(compiled, lobs, fact_ids=fact_index(derived_facts), records=derived_records)
     )
-    derived_lines = lines(compiled, lobs, catalogue=cat)
+    derived_lines = lines(compiled, lobs, catalogue=cat, requests=derived_requests)
     world_engine = engine if engine is not None else compiled.industry
     if domains.by_name(world_engine) is None:
         world_engine = ""
@@ -908,6 +934,7 @@ def programme(
         bindings=len(_bound(compiled)),
         situations=sum(line.situations for line in derived_lines),
         requests=len(derived_requests),
+        distinct_answers=len({request.expected_answer for request in derived_requests}),
         facts=len(derived_facts),
         records=len(derived_records),
         record_requests=sum(1 for request in derived_requests if request.expected_record_ids),
@@ -1118,7 +1145,7 @@ def use_cases(
                 owner=owner,
                 lob=line.lob,
                 activities=line.activities,
-                count=max(1, min(line.situations, count_ceiling)),
+                count=max(1, min(line.distinct_answers or line.situations, count_ceiling)),
                 scenario=scenario,
                 construction=design,
             )
@@ -1131,26 +1158,52 @@ def use_cases(
 # ---------------------------------------------------------------------------
 
 
-def divisions(structure: CompanySpec) -> tuple[Any, ...]:
-    """The company's business units as the pack units a Studio project builds.
+#: The unit archetypes that carry no trading revenue. `ownership.materialize_owners`
+#: makes them real World entities without allocating any, so they are business
+#: units of the company and never revenue divisions of it.
+SUPPORT_ARCHETYPES: frozenset[str] = frozenset({"shared_service_centre", "group_function"})
 
-    One unit per declared business unit, named as declared, its kind the
-    unit's archetype and its share an equal cut of the group, so the world's
-    units are the ones the bindings name and a process fact can be about the
-    unit that owns it.
+
+def divisions(
+    structure: CompanySpec, *, compiled: CompiledCatalogue | None = None
+) -> tuple[Any, ...]:
+    """The company's revenue divisions as the pack units a Studio project builds.
+
+    A division is a unit that sells something: the revenue archetypes, never a
+    shared service centre or a group function, which reach the world through
+    `ownership.materialize_owners` with no revenue allocated to them. Pass
+    *compiled* to weight each division by the bindings it owns; without it the
+    revenue is cut equally, which is a statement about ignorance and not about
+    the company. The shipped structures give each revenue unit the same
+    streams, so that weight divides them evenly too: the catalogue knows who
+    owns which process and nothing about who earns what. An authored company
+    with uneven ownership is where the weight starts to say something.
+
+    A structure whose units are all support units has no revenue division to
+    name, so every unit is taken instead: a pack's shares must decompose the
+    group, and refusing to build is worse than one flat cut.
     """
     from .packs import PackUnit
 
-    count = len(structure.bus)
-    share = round(1.0 / count, 4)
+    earning = [unit for unit in structure.bus if unit.archetype not in SUPPORT_ARCHETYPES]
+    units = earning or list(structure.bus)
+    weights = [1.0] * len(units)
+    if compiled is not None:
+        owned = Counter(row.owner_bu for row in _bound(compiled))
+        measured = [float(owned.get(unit.name, 0)) for unit in units]
+        if sum(measured) > 0 and all(value > 0 for value in measured):
+            weights = measured
+    total = sum(weights)
+    shares = [round(weight / total, 4) for weight in weights]
+    shares[-1] = round(1.0 - sum(shares[:-1]), 4)
     return tuple(
         PackUnit(
             key=re.sub(r"[^a-z0-9_]+", "_", unit.name.lower()).strip("_"),
             name=unit.name,
             kind=unit.archetype,
-            share=share if index < count - 1 else round(1.0 - share * (count - 1), 4),
+            share=share,
         )
-        for index, unit in enumerate(structure.bus)
+        for unit, share in zip(units, shares, strict=True)
     )
 
 
@@ -1336,7 +1389,7 @@ def project(
         company=document,
         seed=seed,
         structure=structure,
-        divisions=divisions(structure),
+        divisions=divisions(structure, compiled=derived.compiled),
         lobs=selected,
         use_cases=cases,
         acknowledged_unmet=tuple(resolution.unmet),
@@ -1532,6 +1585,7 @@ def describe(industry: str) -> dict[str, Any]:
         "lines": len(summary.lines),
         "bindings": summary.bindings,
         "situations": summary.situations,
+        "distinct_answers": summary.distinct_answers,
         "reads": summary.reads,
         "writes": summary.writes,
         "facts": summary.facts,

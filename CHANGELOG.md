@@ -11,6 +11,30 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Honest counts, and a support unit that earns no revenue (Generation)
+
+- **A programme reports what it grounds, not how it can be phrased.**
+  `IndustryProgramme.distinct_answers` and `ProcessLine.distinct_answers`
+  count the distinct ground truths a company's requests rest on;
+  `industry.lines` fills them when passed the requests. A verb and a channel
+  change a request's wording and leave its answer alone, so `situations`
+  counts phrasings over these: the twelve shipped industries offer 189,346
+  situations resting on 29,505 distinct answers, and a telecom's 5,550 rest
+  on 903. `worldloom industry list` prints both.
+- **Generation.** A derived Studio use case now asks for the line's distinct
+  answers rather than its situations, so a catalogue project stops requesting
+  six queries for every answer it can ground. A telecom's billing project
+  requests 57 queries where it requested 282.
+- **Generation.** `industry.divisions` returns the revenue units alone.
+  A shared service centre and a group function sell nothing, so they no
+  longer take an equal cut of the company's revenue; they are formed as
+  business units by `ownership.materialize_owners`, which allocates none,
+  and the Studio snapshot forms them before it declares the structure. A
+  telecom's revenue is its two customer segments, not four units at a
+  quarter each, and no per-unit commercial or finance post is minted inside
+  a unit that sells nothing. `divisions` takes the compiled catalogue to
+  weight each division by the bindings it owns.
+
 ### The console in the README
 
 - `README.md` gains a Studio console section with four pages of the console

@@ -257,6 +257,78 @@ def test_the_emulator_table_names_only_connectors_and_entities_that_exist() -> N
             )
 
 
+def test_a_support_unit_is_a_business_unit_and_never_a_revenue_division() -> None:
+    """A shared service centre sells nothing, so it earns no revenue share.
+
+    `ownership.materialize_owners` makes it a real unit of the company with no
+    trading revenue allocated; `divisions` is the revenue cut alone.
+    """
+    spec = industry.project("telecom", "Ardent Telecom")
+    units = {unit.name for unit in spec.divisions}
+    assert spec.structure is not None
+    declared = {unit.name: unit.archetype for unit in spec.structure.bus}
+    support = {name for name, kind in declared.items() if kind in industry.SUPPORT_ARCHETYPES}
+    assert support, "the shipped telecom declares a shared service centre and a group function"
+    assert not (units & support), f"support units took revenue: {sorted(units & support)}"
+    assert units == set(declared) - support
+    # Every declared unit still reaches the company; only the revenue differs.
+    assert support <= set(declared)
+    assert abs(sum(unit.share for unit in spec.divisions) - 1.0) < 0.02
+
+
+def test_a_structure_of_only_support_units_still_decomposes() -> None:
+    """A pack's shares must sum to one, so an all-support company cuts them flat."""
+    from worldloom.process_bindings.models import BusinessUnit, CompanySpec
+
+    structure = CompanySpec(
+        name="Shared Services Only",
+        industry="telecom",
+        operating_model="centralised",
+        countries=("IN",),
+        bus=(
+            BusinessUnit(name="Group Finance", archetype="group_function", countries=("IN",)),
+            BusinessUnit(name="Operations", archetype="shared_service_centre", countries=("IN",)),
+        ),
+    )
+    units = industry.divisions(structure)
+    assert len(units) == 2
+    assert abs(sum(unit.share for unit in units) - 1.0) < 0.02
+
+
+def test_the_programme_reports_what_it_grounds_not_how_it_can_be_phrased(
+    telecom: industry.Programme,
+) -> None:
+    """A verb and a channel change a request's wording, never its answer.
+
+    So `situations` counts phrasings and overstates the evalset. The honest
+    size is `distinct_answers`, and every consumer of a count reads that.
+    """
+    summary = telecom.summary
+    grounded = {request.expected_answer for request in telecom.requests}
+    assert summary.distinct_answers == len(grounded)
+    # The overstatement is real, not a rounding difference.
+    assert summary.distinct_answers < summary.situations
+    assert summary.situations > summary.distinct_answers * 2
+    # Per line, and summing to the whole.
+    assert sum(line.distinct_answers for line in summary.lines) == summary.distinct_answers
+    for line in summary.lines:
+        assert 0 <= line.distinct_answers <= line.situations
+    # A use case never asks for more queries than the line can answer.
+    assert sum(case.count for case in telecom.use_cases()) == summary.distinct_answers
+    assert industry.describe("telecom")["distinct_answers"] == summary.distinct_answers
+
+
+def test_lines_derived_without_requests_report_no_distinct_answers(
+    telecom: industry.Programme,
+) -> None:
+    """`lines` is usable without requests; it then says so rather than guessing."""
+    bare = industry.lines(telecom.compiled, telecom.lobs)
+    assert bare and all(line.distinct_answers == 0 for line in bare)
+    assert [line.situations for line in bare] == [
+        line.situations for line in telecom.summary.lines
+    ]
+
+
 # -- use cases ---------------------------------------------------------------
 
 
@@ -267,7 +339,10 @@ def test_a_use_case_per_supported_line_with_the_lines_count(
     supported = [line for line in telecom.summary.lines if line.supported]
     assert len(cases) == len(supported)
     for case, line in zip(cases, supported, strict=True):
-        assert case.count == line.situations
+        # The count is what the line can distinctly ground, never the larger
+        # number of ways to phrase it.
+        assert case.count == line.distinct_answers
+        assert line.distinct_answers <= line.situations
         assert case.lob == line.lob
         assert case.owner == (line.owners[0] if len(line.owners) == 1 else "")
         assert case.activities == line.activities
@@ -283,7 +358,9 @@ def test_a_use_case_per_supported_line_with_the_lines_count(
         }
         # Every scenario is one the enterprise planner accepts as it stands.
         apply_scenario_profile(builtin_registry(), case.scenario)
-    assert sum(case.count for case in cases) > 5000
+    # The requested total is what the lines ground, not the phrasings over them.
+    assert sum(case.count for case in cases) == telecom.summary.distinct_answers
+    assert sum(case.count for case in cases) < telecom.summary.situations
 
 
 def test_a_line_several_units_own_names_no_single_owner(
@@ -510,7 +587,7 @@ def test_a_project_carries_the_largest_lobs_and_their_lines_with_derived_counts(
     assert spec.use_cases and all(
         case.lob in {lob.name for lob in spec.lobs} for case in spec.use_cases
     )
-    by_key = {line.key: line.situations for line in derived.summary.lines}
+    by_key = {line.key: line.distinct_answers for line in derived.summary.lines}
     for case in spec.use_cases:
         line = next(
             line
@@ -620,11 +697,19 @@ def test_a_project_meets_its_own_evidence_requirements_from_the_world(tmp_path: 
     from worldloom.studio.service import Studio
 
     spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
-    assert [unit.key for unit in spec.divisions] == ["consumer_mobile", "enterprise", "network", "group_finance"]
+    # Only the units that sell are revenue divisions.
+    assert [unit.key for unit in spec.divisions] == ["consumer_mobile", "enterprise"]
     assert abs(sum(unit.share for unit in spec.divisions) - 1.0) < 0.01
     world, _ = Studio(tmp_path).snapshot(spec)
-    # The support units the structure declares are the world's own, so
-    # ownership has nothing to form and the world is returned as it is.
+    # The snapshot forms the support units the structure declares, with no
+    # trading revenue: the company is every unit, the revenue is two of them.
+    assert [(unit.name, unit.kind) for unit in world.business_units] == [
+        ("Consumer Mobile", "customer_segment"),
+        ("Enterprise", "customer_segment"),
+        ("Group Finance", "support"),
+        ("Network", "support"),
+    ]
+    # Having formed them once, ownership has nothing left to form.
     assert materialize_owners(restore_generator(world), spec.structure) is not None  # type: ignore[arg-type]
     assert len(materialize_owners(restore_generator(world), spec.structure).business_units) == len(world.business_units)  # type: ignore[arg-type]
     checked = 0
@@ -654,7 +739,8 @@ def test_a_project_derives_from_a_described_company_and_rederives_keeping_its_se
     )
     spec = industry.project(described, lobs=("billing",))
     assert spec.structure == described
-    assert [unit.name for unit in spec.divisions] == ["Consumer", "Enterprise", "Shared Services"]
+    # Shared Services is a declared business unit and not a revenue division.
+    assert [unit.name for unit in spec.divisions] == ["Consumer", "Enterprise"]
     assert [lob.name for lob in spec.lobs] == ["billing"]
     assert spec.use_cases and all(case.lob == "billing" for case in spec.use_cases)
     assert spec.company == {"industry": "telecom", "identity": {"company_name": "Ardent Telecom"}, "geo": "australia"}
@@ -667,7 +753,7 @@ def test_a_project_derives_from_a_described_company_and_rederives_keeping_its_se
     changed = described.model_copy(update={"bus": (*described.bus, BusinessUnit(name="Wholesale", archetype="customer_segment"))})
     again = industry.rederive(spec.model_copy(update={"structure": changed, "episodes": ("2026-03",)}))
     assert again.episodes == ("2026-03",) and again.seed == spec.seed
-    assert [unit.name for unit in again.divisions] == ["Consumer", "Enterprise", "Shared Services", "Wholesale"]
+    assert [unit.name for unit in again.divisions] == ["Consumer", "Enterprise", "Wholesale"]
     assert [lob.name for lob in again.lobs] == ["billing"]
     assert again == industry.rederive(spec.model_copy(update={"structure": changed, "episodes": ("2026-03",)}))
     everything = industry.rederive(spec.model_copy(update={"lobs": ()}))
@@ -721,7 +807,13 @@ def test_an_engine_less_industry_seats_its_revenue_function_in_the_commercial_se
     world, _ = Studio(tmp_path).snapshot(spec)
     titles = [person.title for person in world.people]
     assert "Customer Service Director" in titles and "Customer Service Manager, Consumer Mobile" in titles
-    assert "Customer Service Manager, Group Finance" not in titles and "Managing Director, Group Finance" in titles
+    # A support unit sells nothing, so no per-unit commercial or finance post
+    # is minted inside it; it is led by an existing group executive instead.
+    assert not any(title.endswith(", Group Finance") or title.endswith(", Network") for title in titles)
+    units = {unit.name: unit for unit in world.business_units}
+    assert units["Group Finance"].kind == "support" and units["Network"].kind == "support"
+    ceo = next(person for person in world.people if person.title == "Group Chief Executive Officer")
+    assert units["Group Finance"].leader_id == ceo.id
     assert not any("Merchandising" in title or "Buying" in title for title in titles)
     assert "Head of Billing" in titles
     assert world.validate().ok

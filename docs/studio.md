@@ -495,7 +495,7 @@ The preset also starts a company of any industry the process catalogue knows
 (`GET /api/preset?engine=telecom`, `preset("telecom", "Ardent Telecom")`),
 built from its derived programme ([Industry programme](industry-programme.md)):
 every line of business with a supported process line as a LOB, each of its
-lines as a use case whose `count` is the line's situations, the company's
+lines as a use case whose `count` is the line's distinct answers, the company's
 limitations acknowledged where no engine builds its world. The interview
 request carries the programme's headline numbers under `programme`.
 
