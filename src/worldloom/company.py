@@ -1098,9 +1098,10 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
             # the miss is reported as a miss, and when the process catalogue
             # knows the industry the report names the programme that does
             # exist for it rather than only what does not.
-            from .industry import industry_of
+            from .industry import function_finding, industry_of
 
             known = industry_of(spec.industry)
+            named_a_function = function_finding(spec.industry)
             if known is not None:
                 unmet.append(
                     f"an engine for {spec.industry!r}: no registered domain builds"
@@ -1109,6 +1110,15 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
                     f" and `worldloom industry programme {known}` derives its lines"
                     " of business, processes, requests and counts; say `archetype`"
                     " or write a pack to shape the world itself."
+                )
+            elif named_a_function is not None:
+                # The description named something a company *has*. Saying "no
+                # archetype recognised it" would be true and useless: the
+                # asker named a real thing in the wrong slot.
+                unmet.append(
+                    f"an industry for {spec.industry!r}: it resolved to"
+                    f" {base.key!r}, the shape an unrecognised industry falls"
+                    f" back to. {named_a_function}"
                 )
             else:
                 unmet.append(

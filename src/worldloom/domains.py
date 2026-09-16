@@ -40,6 +40,20 @@ class Domain:
     world: type[Any]
     """The world builder — ``RetailWorld``, ``BankingWorld`` — accepting
     ``(seed, archetype, employees, annual_revenue)`` keyword arguments."""
+    industry: str = ""
+    """The industry this engine builds, when its own name is not that.
+
+    `name` is the engine's registry key, and for one shipped engine that key
+    is a *function* rather than an industry: `procurement` builds an
+    infrastructure services and contracting group, and procure-to-pay is the
+    business function its episode exercises inside that company. Every
+    industry has a procurement function — the process catalogue carries one
+    for all twelve it ships — so reading the engine's key as an industry puts
+    a function where an industry belongs and makes the two look like peers.
+
+    Left empty by an engine whose key already names the industry it builds.
+    `describes()` reads this, so a listing never misrepresents an engine.
+    """
     single_episode: Callable[[str], Any] | None = None
     """``period -> scenario`` for a domain whose build runs exactly one
     episode. ``None`` for retail, whose close loop the CLI drives itself."""
@@ -151,6 +165,19 @@ def _full() -> dict[str, Domain]:
 
     _install()
     return _DOMAINS
+
+
+def describes(name: str) -> str:
+    """What engine *name* builds, in words a reader will not misread.
+
+    An engine named after a function says so, because the alternative is a
+    list in which `procurement` sits beside `retail` and `banking` as though
+    a company could be one.
+    """
+    domain = _full().get(name)
+    if domain is None or not domain.industry:
+        return name
+    return f"{domain.industry} (the {name.replace('_', ' ')} function is what its episode exercises)"
 
 
 def for_archetype(key: str) -> Domain | None:

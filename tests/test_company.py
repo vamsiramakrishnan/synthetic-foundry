@@ -752,3 +752,20 @@ def test_an_establishment_larger_than_the_company_is_a_violation() -> None:
     units = tuple(unit.model_copy(update={"headcount": 1_000}) for unit in world.business_units)
     report = replace(world, _business_units=units).validate()
     assert "establishment_exceeds_headcount" in {v.code for v in report.violations}
+
+
+def test_an_engine_named_after_a_function_says_what_it_builds() -> None:
+    """`procurement` is a function, and the engine keyed by it builds a company.
+
+    Nothing renames the engine here: its key is a registry key and a corpus
+    identifier. What changes is that a listing no longer puts it beside
+    `retail` and `banking` as though a company could be a procurement.
+    """
+    procurement = domains.by_name("procurement")
+    assert procurement.industry == "Infrastructure services and contracting"
+    assert "Infrastructure services" in domains.describes("procurement")
+    assert "the procurement function is what its episode exercises" in domains.describes("procurement")
+    # An engine whose key already names its industry declares nothing extra.
+    for name in ("retail", "banking", "insurance"):
+        assert domains.by_name(name).industry == ""
+        assert domains.describes(name) == name

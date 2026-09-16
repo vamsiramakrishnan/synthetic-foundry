@@ -56,7 +56,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.resources import files
@@ -249,6 +249,117 @@ def industry_of(
         if re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered):
             best, found = phrase, key
     return found
+
+
+def function_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every phrase that names a function family, to the family it names.
+
+    The family key and its label, spelled with spaces. Built from the
+    catalogue rather than authored, so a catalogue that adds a family is
+    matchable the moment it ships.
+    """
+    cat = catalogue if catalogue is not None else load_catalogue()
+    words: dict[str, str] = {}
+    for family, label in (cat.get("function_families") or {}).items():
+        words[family.replace("_", " ").casefold()] = family
+        if isinstance(label, str) and label:
+            words.setdefault(label.casefold(), family)
+    return words
+
+
+def stream_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every phrase that names a value stream, to the stream it names.
+
+    Separate from `function_words` because a stream is not a function: the
+    shipped `procure_to_pay` spans four families and `order_to_cash` nine, so
+    folding a stream into one family would contradict the catalogue's own
+    activity ownership.
+    """
+    cat = catalogue if catalogue is not None else load_catalogue()
+    words: dict[str, str] = {}
+    for stream, row in (cat.get("value_streams") or {}).items():
+        words[stream.replace("_", " ").casefold()] = stream
+        name = row.get("name") if isinstance(row, dict) else None
+        if isinstance(name, str) and name:
+            words.setdefault(name.casefold(), stream)
+    return words
+
+
+def _longest_match(description: str, words: Mapping[str, str]) -> str | None:
+    lowered = description.casefold()
+    best = ""
+    found: str | None = None
+    for phrase, key in sorted(words.items()):
+        if len(phrase) <= len(best):
+            continue
+        if re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered):
+            best, found = phrase, key
+    return found
+
+
+def function_of(
+    description: str, *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """The function family *description* names, or ``None``.
+
+    A function is not an industry, and the two are asked for in the same
+    words. "Procurement" names a function every industry has: the catalogue
+    carries a procurement family for all twelve it ships, so a company can
+    *have* one and cannot *be* one. This exists so a caller that found no
+    industry can say which function was named instead of reporting nothing
+    recognisable. Longest phrase wins, at word boundaries, exactly as
+    `industry_of` matches an industry.
+    """
+    return _longest_match(description, function_words(catalogue))
+
+
+def stream_of(
+    description: str, *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """The value stream *description* names, or ``None``. Same rule as above."""
+    return _longest_match(description, stream_words(catalogue))
+
+
+def function_finding(
+    description: str, *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """Say so when a description names a function or a stream, not an industry.
+
+    `None` when the description names an industry, or names neither. Otherwise
+    one sentence a caller prints as-is, naming the industry argument that gets
+    the asker what they wanted.
+    """
+    if industry_of(description, catalogue=catalogue) is not None:
+        return None
+    cat = catalogue if catalogue is not None else load_catalogue()
+    industries = sorted(cat.get("industry_overlays") or {})
+    example = industries[0] if industries else "retail"
+    family = function_of(description, catalogue=cat)
+    if family is not None:
+        spelling = family.replace("_", " ")
+        return (
+            f"{spelling!r} is a function, not an industry: every company has one,"
+            f" and this catalogue carries it for all {len(industries)} industries"
+            f" it ships. Name the industry and the function comes with it:"
+            f" industry.project({example!r}, ..., lobs=({family!r},)) builds a"
+            f" company whose {spelling} line is the one under test."
+        )
+    stream = stream_of(description, catalogue=cat)
+    if stream is None:
+        return None
+    spelling = stream.replace("_", " ")
+    owners = sorted({
+        activity[3]
+        for activity in (cat["value_streams"][stream].get("activities") or [])
+        if len(activity) > 3
+    })
+    return (
+        f"{spelling!r} is a value stream, not an industry, and not one function"
+        f" either: this catalogue runs it across {len(owners)} function families"
+        f" ({', '.join(owners)}). Name the industry and the stream runs inside"
+        f" it: industry.project({example!r}, ...) builds a company whose"
+        f" {spelling} line crosses those families the way the catalogue says."
+    )
 
 
 def register_kinds(catalogue: dict[str, Any] | None = None) -> tuple[str, ...]:
@@ -1643,6 +1754,11 @@ def describe(industry: str) -> dict[str, Any]:
 
 
 __all__ = [
+    "function_finding",
+    "function_of",
+    "function_words",
+    "stream_of",
+    "stream_words",
     "COUNT_CEILING",
     "EMULATED_SYSTEMS",
     "EPOCH",

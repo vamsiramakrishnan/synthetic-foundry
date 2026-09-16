@@ -921,3 +921,45 @@ def test_record_requests_run_as_evalrun_cases_over_the_companys_records(tmp_path
                                  "--limit", "2", "--rater", "grounded", "--json"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["cases"] == 2
+
+
+# -- a function is not an industry ------------------------------------------
+
+
+def test_a_function_and_a_stream_are_told_apart_from_an_industry() -> None:
+    """The three are asked for in the same words, and only one builds a company."""
+    assert industry.industry_of("a regional bank") == "banking"
+    assert industry.function_of("a regional bank") is None
+    assert industry.function_of("a procurement company") == "procurement"
+    assert industry.function_of("accounts payable outsourcing") == "ap"
+    assert industry.stream_of("procure to pay") == "procure_to_pay"
+    assert industry.stream_of("Order to Cash") == "order_to_cash"
+    # A stream is not folded into one family: the catalogue's own activity
+    # ownership says `procure_to_pay` spans several.
+    assert industry.function_of("procure to pay") is None
+
+
+def test_naming_a_function_where_an_industry_belongs_says_so() -> None:
+    finding = industry.function_finding("a procurement company")
+    assert finding is not None
+    assert "is a function, not an industry" in finding
+    assert "lobs=('procurement',)" in finding
+    # An industry is not a finding, and neither is a phrase naming nothing.
+    assert industry.function_finding("a regional bank") is None
+    assert industry.function_finding("a scorecard vendor") is None
+
+
+def test_naming_a_value_stream_names_the_families_it_crosses() -> None:
+    finding = industry.function_finding("procure to pay")
+    assert finding is not None and "value stream, not an industry" in finding
+    owners = {
+        activity[3]
+        for activity in industry.load_catalogue()["value_streams"]["procure_to_pay"]["activities"]
+    }
+    assert all(owner in finding for owner in owners)
+
+
+def test_every_shipped_industry_names_an_industry_not_a_function() -> None:
+    """The twelve are industries. None of them is a function family."""
+    for name in INDUSTRIES:
+        assert industry.function_of(name.replace("_", " ")) is None, name

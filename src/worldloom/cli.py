@@ -7122,6 +7122,7 @@ def pack_targets(
                 continue
             domain = domains.by_name(name)
             document[name] = {
+                "builds": domain.industry or name,
                 "lore_targets": [{"target": t, "effect": e} for t, e in domain.consulted_targets],
                 "system_slots": [{"slot": s_, "what": w} for s_, w in domain.system_slots],
                 "roles": roles.published(name),
@@ -7134,6 +7135,11 @@ def pack_targets(
             continue
         domain = domains.by_name(name)
         console.print(f"[bold]{name}[/bold]")
+        if domain.industry:
+            # An engine keyed by a function says what it builds, so nobody
+            # reads this list as four industries.
+            console.print(f"  [dim]builds {domain.industry}; {name} is the function"
+                          " its episode exercises, not the industry[/dim]")
         console.print("  [underline]lore targets[/underline]")
         for target, effect in domain.consulted_targets:
             console.print(f"    {target}\n      [dim]{effect}[/dim]")

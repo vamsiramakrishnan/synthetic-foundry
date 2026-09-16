@@ -11,6 +11,30 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Procurement is a function, and the system says so
+
+- The engine registry listed `procurement` beside `retail`, `banking` and
+  `insurance` as though a company could be one. It builds an infrastructure
+  services and contracting group, and procure-to-pay is the function its
+  episode exercises inside that company. `Domain.industry` declares what an
+  engine builds when its own key is not that, `domains.describes` reads it,
+  and `worldloom pack targets` prints it. Nothing is renamed: the key is a
+  registry key and a corpus identifier, and renaming it would change bytes
+  everywhere for a word.
+- `industry.function_of` and `industry.stream_of` recognise the words a
+  function family and a value stream are asked for in, both built from the
+  catalogue rather than authored. `industry.function_finding` turns either
+  into one sentence: what was named, that a company has it rather than is it,
+  and the `industry.project(...)` call that gets the asker what they wanted.
+- A company description that names a function now says so. It read "nothing
+  recognised it", which was true and useless: the asker named a real thing in
+  the wrong slot, and the twelve shipped industries all carry a procurement
+  function already.
+- A value stream gets its own sentence, because it is not one function either:
+  the catalogue runs `procure_to_pay` across four function families and
+  `order_to_cash` across nine, so folding either into one would contradict the
+  activity ownership the catalogue ships.
+
 ### The stated workforce is allocated, not just stated (Generation)
 
 - A company stated one headcount and nothing spent it. A 400-person and a
