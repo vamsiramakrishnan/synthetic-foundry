@@ -46,6 +46,7 @@ from . import hierarchy, names
 from .org_builder import (
     accountability_facts,
     apply_traits,
+    establish,
     form_units,
     founding_milestones,
     mint_people,
@@ -658,6 +659,14 @@ def generate(
             archetype_headcount=archetype.employees,
             modelled_headcount=len(people),
         ),
+    )
+
+    # The stated total, spent: each unit carries its part of the workforce the
+    # company claims, so a 20,000-person company no longer looks like a
+    # 400-person one below the top.
+    business_units = establish(
+        business_units, people, company.employees_total,
+        shares={unit_ids[unit.key]: unit.share for unit in units},
     )
 
     # Last of all: every entity above already has its id, so founding milestones

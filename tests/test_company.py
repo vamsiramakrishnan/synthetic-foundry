@@ -713,3 +713,42 @@ def test_a_domain_registered_from_outside_is_describable_at_once() -> None:
 
 def test_the_function_ladder_has_exactly_one_definition_between_here_and_the_sdk() -> None:
     assert sdk._FUNCTIONS is company.FUNCTIONS
+
+
+def test_the_stated_workforce_is_allocated_across_the_units() -> None:
+    """A company stated one number and nothing spent it.
+
+    Before the establishment, a 400-person and a 20,000-person retailer carried
+    the same three units and the same two dozen named people, so no document
+    could say how big a division was.
+    """
+    def built(employees: int):
+        return sdk.described({"engine": "retail", "employees": employees}).build().world
+
+    small = built(400)
+    large = built(20_000)
+    established = {unit.name: unit.headcount for unit in small.business_units}
+    assert all(value is not None for value in established.values())
+    # The whole stated total is allocated, so the parts add up exactly.
+    assert sum(established.values()) == 400
+    assert sum(unit.headcount for unit in large.business_units) == 20_000
+    # Fifty times the company is fifty times each unit, by the declared share.
+    by_name = {unit.name: unit.headcount for unit in large.business_units}
+    assert all(by_name[name] == value * 50 for name, value in established.items())
+    # The shares differ, so the units do: an even split would prove nothing.
+    assert len(set(established.values())) > 1
+
+
+def test_no_unit_establishes_fewer_people_than_the_world_names_in_it() -> None:
+    world = sdk.described({"engine": "retail", "employees": 400}).build().world
+    for unit in world.business_units:
+        named = sum(person.business_unit_id == unit.id for person in world.people)
+        assert unit.headcount is not None and unit.headcount >= named
+    assert world.validate().ok
+
+
+def test_an_establishment_larger_than_the_company_is_a_violation() -> None:
+    world = sdk.described({"engine": "retail", "employees": 400}).build().world
+    units = tuple(unit.model_copy(update={"headcount": 1_000}) for unit in world.business_units)
+    report = replace(world, _business_units=units).validate()
+    assert "establishment_exceeds_headcount" in {v.code for v in report.violations}

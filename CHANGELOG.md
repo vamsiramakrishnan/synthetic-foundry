@@ -11,6 +11,29 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The stated workforce is allocated, not just stated (Generation)
+
+- A company stated one headcount and nothing spent it. A 400-person and a
+  20,000-person retailer carried the same three units and the same two dozen
+  named people, so no document could say how big a division was.
+  `BusinessUnit.headcount` now carries each unit's part of that total, and
+  `generators.org_builder.establish` allocates it: the whole stated number, by
+  each unit's declared share of group revenue, by largest remainder so the
+  parts sum to it exactly. A 400-person retailer establishes 256/84/60; the
+  20,000-person one establishes 12,800/4,200/3,000.
+- Revenue share is a proxy for staffing, not a measurement, and it is the only
+  per-unit weight a pack declares. It is deliberately not derived from the
+  named roster: a pack names the decision-making graph, which is top-heavy by
+  construction, so the roster's own proportions would put half a retailer in
+  group functions.
+- Two validator rules. `establishment_exceeds_headcount` when the units
+  establish more people than the company states, and
+  `named_roster_exceeds_establishment` when a unit holds more named employees
+  than it establishes.
+- The world summary names the largest unit and its share of the workforce.
+- `headcount` is optional and defaults to `None`, which reads "the world does
+  not say". `examples/retail-close` is hand-authored and keeps saying nothing.
+
 ### A default build plans a delete (Generation)
 
 - `enterprise-evals plan`, `build` and `qualify` with no `--dag-shape` planned

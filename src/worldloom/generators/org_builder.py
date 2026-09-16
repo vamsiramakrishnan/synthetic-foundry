@@ -32,7 +32,7 @@ treat the draw order as API.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
 from ..ids import Minter
@@ -53,6 +53,69 @@ from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from ..roles import unit_role_key
 from . import names
+
+
+def establish(
+    units: Sequence[BusinessUnit],
+    people: Sequence[Employee],
+    total: int,
+    *,
+    shares: Mapping[str, float],
+) -> tuple[BusinessUnit, ...]:
+    """Split the company's stated headcount across its units.
+
+    A company stated one workforce number and named two dozen people, so a
+    400-person and a 20,000-person retailer were identical below the top: same
+    units, same roster, nothing a document could cite about how big a division
+    was. This turns the stated total into an establishment each unit carries.
+
+    The whole total is allocated, by each unit's declared share of group
+    revenue, using largest remainder so the parts sum to it exactly. So a
+    unit's headcount is everyone attributable to it, its share of the group
+    functions included — the same convention a cost allocation uses, and the
+    reason the parts add up rather than leaving an unexplained remainder.
+
+    Revenue share is a proxy for staffing, not a measurement, and it is the
+    only per-unit weight a pack declares. Occupational headcount per industry
+    would be better and none is shipped. Deliberately *not* derived from the
+    named roster: a pack names the decision-making graph, which is top-heavy
+    by construction, so its proportions would put half a retailer in group
+    functions.
+
+    Every unit keeps at least the people the world names in it, so an
+    establishment never contradicts the roster; the excess comes off the
+    largest unit. A world whose units declare no share keeps `headcount=None`:
+    it does not say. That is the hand-authored corpus's path, and it is why
+    the field is optional.
+    """
+    if not units:
+        return tuple(units)
+    named = {unit.id: sum(person.business_unit_id == unit.id for person in people) for unit in units}
+    weights = {unit.id: max(shares.get(unit.id, 0.0), 0.0) for unit in units}
+    scale = sum(weights.values())
+    if scale <= 0:
+        return tuple(units)
+    exact = {identifier: total * weight / scale for identifier, weight in weights.items()}
+    assigned = {identifier: int(value) for identifier, value in exact.items()}
+    # Largest remainder, ties broken by id so one world has one split.
+    spare = total - sum(assigned.values())
+    order = sorted(exact, key=lambda identifier: (-(exact[identifier] - assigned[identifier]), identifier))
+    for identifier in order[:spare]:
+        assigned[identifier] += 1
+    # A unit never establishes fewer people than the world names in it. The
+    # shortfall is taken from the largest unit, which is the only one that can
+    # afford it, and the total still holds.
+    for identifier, minimum in named.items():
+        shortfall = minimum - assigned[identifier]
+        if shortfall <= 0:
+            continue
+        donor = max((other for other in assigned if other != identifier),
+                    key=lambda other: (assigned[other], other), default=None)
+        if donor is None or assigned[donor] - shortfall < named[donor]:
+            return tuple(units)
+        assigned[identifier] += shortfall
+        assigned[donor] -= shortfall
+    return tuple(unit.model_copy(update={"headcount": assigned[unit.id]}) for unit in units)
 
 
 def stated_headcount(
