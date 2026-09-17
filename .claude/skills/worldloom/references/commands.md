@@ -262,7 +262,7 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 
 | Option | Purpose |
 | --- | --- |
-| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -299,7 +299,7 @@ worldloom enterprise-evals plan <WORLD_PATH> <OUTPUT>
 
 | Option | Purpose |
 | --- | --- |
-| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -317,7 +317,7 @@ worldloom enterprise-evals qualify <WORLD_PATH>
 
 | Option | Purpose |
 | --- | --- |
-| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
 | `--json` | Print the complete qualification report. |
 | `--limit` | Maximum qualified outputs; uncovered interactions remain in the report. |
 | `--out`, `-o` | Qualified corpus, coverage findings and exact execution proofs. |
@@ -456,6 +456,7 @@ worldloom evalrun plan <CORPUS>
 | --- | --- |
 | `--agent` | reference \| scripted:<plans.json> |
 | `--exec` | The planner as an executable, one subprocess per case: reads a `worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints {"plan": {"nodes": [...]}} on stdout. Nothing is executed. |
+| `--harness` | An installed coding harness as the planner, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
@@ -490,6 +491,7 @@ worldloom evalrun run <CORPUS>
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
 | `--max-turns` | Turns the --exec child may take per case. |
@@ -875,6 +877,7 @@ worldloom narrate loop <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--exec` | The model as an executable: reads one requests JSON document on stdin, prints one responses JSON document on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--harness` | An installed coding harness as the writer, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--max-rounds` | Rounds to run before giving up with every outstanding violation listed. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
 | `--shell` | Run the command through the shell. This is the opt-in for pipelines. |
@@ -1429,6 +1432,7 @@ Open the local company console; slow work runs in a separate process.
 | `--allow-native-writes` | With --harness codex, allow native update/create writes in the task output directory. |
 | `--harness` | Use an installed codex or claude CLI with its existing login. |
 | `--harness-command` | Trusted local adapter: JSON stdin, JSON stdout; no shell. |
+| `--host` | Address to bind. The console has no authentication, so anything but a loopback address exposes it. |
 | `--port` |  |
 | `--timeout` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |

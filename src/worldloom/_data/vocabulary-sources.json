@@ -201,6 +201,25 @@
         "eval-demand-templates"
       ],
       "note": "User-supplied, not a harvested APQC PCF. APQC hints and source calibration targets are unverified. Original uploaded coverage and compiled baselines are retained in provenance."
+    },
+    {
+      "id": "bls-oes-industry",
+      "kind": "distribution",
+      "url": "https://www.bls.gov/oes/special-requests/oesm24in4.zip",
+      "format": "xlsx",
+      "access": "public-download",
+      "license": "Public domain (U.S. Government work, 17 U.S.C. 105); attribution requested",
+      "take": [
+        "NAICS",
+        "OCC_CODE",
+        "O_GROUP",
+        "TOT_EMP"
+      ],
+      "ingested": {
+        "tool": "tools/ingest_bls_oes.py",
+        "data": "src/worldloom/_data/oes/",
+        "reader": "worldloom.staffing"
+      }
     }
   ]
 }

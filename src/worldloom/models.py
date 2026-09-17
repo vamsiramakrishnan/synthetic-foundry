@@ -311,6 +311,20 @@ class BusinessUnit(Entity):
     dissolved: datetime | None = None
     """When the unit existed. ``None`` at either end means "outside the corpus"."""
 
+    headcount: int | None = Field(default=None, ge=0)
+    """People established in this unit, not people the world names.
+
+    A company states one workforce total. Before this field, nothing spent it:
+    a 400-person and a 20,000-person retailer carried the same three units and
+    the same two dozen named people, so no document could say how big a
+    division was. ``generators.org_builder.establish`` splits the stated total
+    across the units, and this is each unit's part of it.
+
+    ``None`` means the world does not say, which is the hand-authored corpus's
+    answer and the reason this is optional rather than zero. Zero would be a
+    claim that nobody works here.
+    """
+
 
 class Employee(Entity):
     title: str

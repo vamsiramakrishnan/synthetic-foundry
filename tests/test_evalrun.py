@@ -399,6 +399,26 @@ def test_eval_studio_results_import_as_an_answer_axis_only_run(tmp_path: Path) -
 # -- CLI -------------------------------------------------------------------------
 
 
+def test_an_installed_harness_is_one_flag_not_an_adapter_script(
+    grammar_corpus: Any, tmp_path: Path
+) -> None:
+    """`--harness codex` is the bundled adapter; naming a child twice is refused."""
+    from worldloom.studio.harness import adapter_command
+
+    corpus = str(tmp_path / "corpus")
+    out = str(tmp_path / "run")
+    result = runner.invoke(app, ["evalrun", "run", corpus, "-o", out, "--harness", "gpt"])
+    assert result.exit_code != 0 and "codex or claude" in result.output
+    result = runner.invoke(
+        app, ["evalrun", "run", corpus, "-o", out, "--harness", "codex", "--exec", "./adapter.sh"]
+    )
+    assert result.exit_code != 0 and "give one" in result.output
+    result = runner.invoke(app, ["evalrun", "plan", corpus, "-o", out, "--harness", "gpt"])
+    assert result.exit_code != 0 and "codex or claude" in result.output
+    # The same child every seam is offered, and it is this package's own module.
+    assert "worldloom.studio.harness" in adapter_command("codex")
+
+
 def test_the_cli_runs_compares_and_names_the_gaps(grammar_corpus: Any, tmp_path: Path) -> None:
     export_corpus(grammar_corpus, tmp_path / "corpus")
     assert load_exported_corpus(tmp_path / "corpus") == grammar_corpus

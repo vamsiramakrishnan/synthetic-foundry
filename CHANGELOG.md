@@ -11,6 +11,263 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Eight locales, generated from published data (Generation)
+
+- Four locales shipped and the catalogue built companies in fourteen
+  countries, so an Indian telecom was given Australian names, Australian
+  cities, an Australian calendar and Australian digit grammar while its records
+  were denominated in rupees. `tools/ingest_locales.py` generates eight of the
+  ten that were missing: China, Hong Kong, India, Indonesia, Japan, Malaysia,
+  Singapore and Taiwan.
+- Thailand and Vietnam are still gaps, and the tool records why for each. A
+  deep name pool needs 500 given and 500 family names. No library publishes a
+  romanised Vietnamese surname pool at all, Faker carries ten, and Faker's Thai
+  surnames romanise to 314 distinct forms. Ten Vietnamese surnames is not even
+  wrong, since they are extraordinarily concentrated, but it cannot meet a
+  contract that draws one distinct surname per person. Padding either pool
+  would be inventing names, so `locale_finding` keeps saying TH and VN have no
+  locale.
+- Nothing in them is invented, which is the point: ten hand-written name pools
+  would have been ten fabrications. Regions are ISO 3166-2 subdivisions from
+  pycountry, cities are ranked by population from geonamescache, names are
+  romanised from names-dataset or Faker, the currency and the entire digit
+  grammar are CLDR through babel, and holidays are the fixed-date entries the
+  holidays package publishes.
+- Romanised deliberately. Faker's Japanese, Chinese and Indian providers are in
+  native script, and this project renders English-language business documents,
+  where a group report listing two scripts is a mixed-script artefact rather
+  than a more accurate corpus.
+- names-dataset needed cleaning and the tool says so: its per-country first
+  names are derived from profile data where field order varies, so Singapore's
+  list opens with an abbreviation and four surnames. A candidate that also
+  appears in the country's surname list is dropped, as is anything under three
+  characters.
+- **`Locale.grouping`**, and the reason it had to exist. India writes 12,34,567
+  and not 1,234,567, and its filings are denominated in lakh and crore, so
+  every rupee figure this tool printed was grouped the Western way. A single
+  separator character can say comma or full stop but not group *size*. The
+  value is read from the CLDR decimal pattern, `spell` honours it, and it
+  defaults to thousands so every locale written before it stays byte-identical.
+- Two tables are authored and neither is a name: statutory company forms and
+  the month a financial year opens, because no library publishes either per
+  jurisdiction. India and Japan open on 1 April; the rest default to the
+  calendar year.
+- The identifier surface follows. `tools/ingest_surface.py` adds the eight
+  countries to `data/surface/rules.json`, with phone formats from
+  libphonenumber's published national formats and the statutory registration
+  number each country's invoices carry: an Indian company quotes a GSTIN and a
+  Singaporean one a UEN, where both used to print `REG-########`. Hong Kong
+  takes the PO box convention this repository already uses for the Gulf,
+  because it numbers no addresses. No pre-existing country changed.
+- Two defects the dispersed-replay gate found, and what each one broke. A
+  locale must answer for every engine `domains.names()` registers, and the
+  generated table stopped at banking and insurance, so every procurement build
+  in the eight new jurisdictions raised at company-naming time. Procurement
+  forms are now carried for all ten countries, and a test walks the engine
+  registry rather than a written list.
+- names-dataset mixes scripts, and three kanji surnames reached Japan's pool
+  past a filter that only looked at length. Every generated pool is filtered to
+  romanised forms and a test holds it, which is the property the whole tool was
+  built on.
+- A company form carrying punctuation is no longer read as an invented entity.
+  The narration validator peels `.,;:()'"` off every token it extracts, so a
+  company chartered `Greyfell Engineering Co., Ltd.` came out of prose as
+  `Greyfell Engineering Co Ltd` and matched neither its own name nor any
+  fragment of it. Every East Asian company form carries that punctuation, so
+  every narration in those jurisdictions was rejected for naming the company it
+  was about. The world's own names are stripped the same way before matching.
+
+### Employment is measured, and every shape grounds (Generation)
+
+- `worldloom.staffing` reads occupational employment by industry from the
+  Bureau of Labor Statistics. `tools/ingest_bls_oes.py` joins three tables that
+  were already here or one download away: OES employment for an SOC occupation
+  inside a NAICS industry, the O*NET function crosswalk in `_data/functions`,
+  and the process catalogue's NAICS map. All twelve shipped industries are
+  carried, from 37,944 occupation-by-industry rows.
+- The numbers discriminate where revenue share could not. 58% of a freight
+  company's employment is warehousing, 32% of a consumer-products company's is
+  production, and 15% of a software company's is engineering. A 20,000-person
+  logistics company now puts 18,070 people in warehousing; the revenue-share
+  proxy could not tell it from a software company.
+- Every derived line carries `workforce_share`, and the programme names the
+  release it was measured from. `staffing.allocate` turns a stated total into
+  people across the families a company models, by largest remainder so the
+  parts sum exactly. An industry the table does not carry gets a zero share and
+  a finding that says so, never an even split.
+- Longest NAICS prefix wins in the crosswalk. The catalogue carries both
+  `NAICS 52` (banking) and `NAICS 5241` (insurance), and first-match order put
+  every insurer in the bank.
+- `establish` still splits a pack's units by revenue share and now says why:
+  a pack's units are trading divisions, and no employment survey counts those.
+- **Every DAG shape is planned by default.** `map_read` and `conditional` were
+  opt-in because they raise a source's `minimum` to two while the materializer
+  topped a source pool up to exactly one record, so rows under them
+  materialized and then refused to compile. `materialize_corpus` now tops a
+  pool up to the largest minimum any planned row asks of it. The first filler
+  record keeps the key it has always had, so a corpus that only ever needed one
+  is byte-identical.
+- A predicate-filtered source, or a corpus built `strict_sources`, is still
+  refused rather than filled: a filler record meets a count and not a claim,
+  and the refusal names how many records are present and how many are needed.
+
+### Procurement is a function, and the system says so
+
+- The engine registry listed `procurement` beside `retail`, `banking` and
+  `insurance` as though a company could be one. It builds an infrastructure
+  services and contracting group, and procure-to-pay is the function its
+  episode exercises inside that company. `Domain.industry` declares what an
+  engine builds when its own key is not that, `domains.describes` reads it,
+  and `worldloom pack targets` prints it. Nothing is renamed: the key is a
+  registry key and a corpus identifier, and renaming it would change bytes
+  everywhere for a word.
+- `industry.function_of` and `industry.stream_of` recognise the words a
+  function family and a value stream are asked for in, both built from the
+  catalogue rather than authored. `industry.function_finding` turns either
+  into one sentence: what was named, that a company has it rather than is it,
+  and the `industry.project(...)` call that gets the asker what they wanted.
+- A company description that names a function now says so. It read "nothing
+  recognised it", which was true and useless: the asker named a real thing in
+  the wrong slot, and the twelve shipped industries all carry a procurement
+  function already.
+- A value stream gets its own sentence, because it is not one function either:
+  the catalogue runs `procure_to_pay` across four function families and
+  `order_to_cash` across nine, so folding either into one would contradict the
+  activity ownership the catalogue ships.
+
+### The stated workforce is allocated, not just stated (Generation)
+
+- A company stated one headcount and nothing spent it. A 400-person and a
+  20,000-person retailer carried the same three units and the same two dozen
+  named people, so no document could say how big a division was.
+  `BusinessUnit.headcount` now carries each unit's part of that total, and
+  `generators.org_builder.establish` allocates it: the whole stated number, by
+  each unit's declared share of group revenue, by largest remainder so the
+  parts sum to it exactly. A 400-person retailer establishes 256/84/60; the
+  20,000-person one establishes 12,800/4,200/3,000.
+- Revenue share is a proxy for staffing, not a measurement, and it is the only
+  per-unit weight a pack declares. It is deliberately not derived from the
+  named roster: a pack names the decision-making graph, which is top-heavy by
+  construction, so the roster's own proportions would put half a retailer in
+  group functions.
+- Two validator rules. `establishment_exceeds_headcount` when the units
+  establish more people than the company states, and
+  `named_roster_exceeds_establishment` when a unit holds more named employees
+  than it establishes.
+- The world summary names the largest unit and its share of the workforce.
+- `headcount` is optional and defaults to `None`, which reads "the world does
+  not say". `examples/retail-close` is hand-authored and keeps saying nothing.
+
+### A default build plans a delete (Generation)
+
+- `enterprise-evals plan`, `build` and `qualify` with no `--dag-shape` planned
+  the single-write trajectory the grammar produced before shapes existed. Every
+  case set they made reported `deletes: 0`, so none of them could grade a
+  delete at all. They now plan every shape a row can ground on the sources it
+  already declares, `delete_chain` among them. 120 cases from `retail-close`
+  grade 11 deletes where they graded none.
+- `enterprise_dag.default_shapes()` derives that set from the catalogue rather
+  than listing it. `map_read` and `conditional` raise a source's `minimum`
+  above what the row asked for, so they stay opt-in: a world holding one record
+  where the row wanted one plans a case that materializes and then refuses.
+- `enterprise_dag.resolve_shapes()` is the one spelling all three commands use.
+  `--dag-shape none` plans the old single-write trajectory, `*` is the whole
+  catalogue, and omitting it is the default set.
+- A row that outruns the corpus now says so. The refusal read "insufficient
+  bound source records"; it names the connector, the entity, how many records
+  bound and how many the row needs.
+
+### A container, a checked package, and an honest install line
+
+- A `Dockerfile` builds the wheel and installs it, so the image runs what a
+  wheel install gives anyone rather than a source tree. It runs as uid 10001,
+  writes only to the `/workspace` volume, and carries the four renderers and
+  the MCP server. CI builds it on every push, opens the console on a published
+  loopback port, renders DOCX, XLSX, PDF and PPTX inside it, and checks the
+  process is not root.
+- `worldloom studio serve --host` picks the bind address; it stays 127.0.0.1
+  unless you name another. A non-loopback bind prints what it gives away: the
+  console has no authentication, so anyone who reaches the port can read the
+  company and start jobs.
+- The console's origin guard now reads the host *name* and ignores the port.
+  Pinning the port rejected every container whose published port differed from
+  the port inside it, and bought nothing: a page on another origin picks its
+  own port freely, so the loopback name is the whole defence against DNS
+  rebinding.
+- `twine check --strict` runs on the built sdist and wheel in CI and in the
+  release, before anything is uploaded. A README PyPI cannot render is rejected
+  at upload, after the version number is spent.
+- The release workflow takes a concurrency group that does not cancel: a run
+  that has already uploaded cannot be replayed under the same version.
+- The README says what actually installs today. Nothing is on PyPI, so the
+  three paths are a checkout, a wheel you build, and the container; the PyPI
+  line says plainly that no tag has been pushed.
+
+### An installed coding harness is one flag
+
+- `worldloom evalrun run --harness codex|claude`, `evalrun plan --harness` and
+  `narrate loop --harness` drive an installed coding harness through the
+  adapter this package already shipped for the Studio, using that harness's
+  own login. Grading a real agent against the reference ceiling, and getting
+  prose accepted, no longer needs an adapter script. `studio.harness.adapter_command`
+  is the one spelling all four commands use, quoting for the platform the
+  child is split on.
+- The adapter now tells the child which seam it is answering
+  (`studio.harness.role_for`). It sent authoring prose to every child, so an
+  evalrun turn told the agent under test it was completing an authoring
+  request; a turn, a plan, a rating and a narration request each get their
+  own role, and every one of them still ends in "return exactly one JSON
+  object". A native trial that opts in to workspace writes now refuses a seam
+  with no write instruction to grant rather than silently dropping the opt-in.
+- `narrate loop` takes `--exec` or `--harness` and refuses with both or
+  neither, naming the offline round trip in the refusal.
+
+### A country with no locale says so
+
+- `industry.unlocalised` and `industry.locale_finding` name the countries no
+  shipped locale answers for and what the company loses to the one it is
+  built in: its names, cities, calendar, figure grammar and currency. Ten of
+  the twelve countries the shipped industries operate in are among them.
+  The programme carries the sentence in `findings`, and the Studio console
+  shows it as an acknowledged limit beside the missing engine, which does not
+  withhold readiness. The sentence names the currency the catalogue declares
+  for those countries, because connector records carry it per country while
+  rendered documents carry the locale's.
+
+### Honest counts, and a support unit that earns no revenue (Generation)
+
+- **A programme reports what it grounds, not how it can be phrased.**
+  `IndustryProgramme.distinct_answers` and `ProcessLine.distinct_answers`
+  count the distinct ground truths a company's requests rest on;
+  `industry.lines` fills them when passed the requests. A verb and a channel
+  change a request's wording and leave its answer alone, so `situations`
+  counts phrasings over these: the twelve shipped industries offer 189,346
+  situations resting on 29,505 distinct answers, and a telecom's 5,550 rest
+  on 903. `worldloom industry list` prints both.
+- **Generation.** A derived Studio use case now asks for the line's distinct
+  answers rather than its situations, so a catalogue project stops requesting
+  six queries for every answer it can ground. A telecom's billing project
+  requests 57 queries where it requested 282.
+- **Generation.** `industry.divisions` returns the revenue units alone.
+  A shared service centre and a group function sell nothing, so they no
+  longer take an equal cut of the company's revenue; they are formed as
+  business units by `ownership.materialize_owners`, which allocates none,
+  and the Studio snapshot forms them before it declares the structure. A
+  telecom's revenue is its two customer segments, not four units at a
+  quarter each, and no per-unit commercial or finance post is minted inside
+  a unit that sells nothing. `divisions` takes the compiled catalogue to
+  weight each division by the bindings it owns.
+
+### The console in the README
+
+- `README.md` gains a Studio console section with four pages of the console
+  (overview, company and processes, use cases, evaluations), and
+  `docs/studio.md` a gallery of all eight, captured from the connected retail
+  pilot and a catalogue-derived telecom company under `docs/images/studio/`.
+- The console's overview subtitle and the "Generation boundaries" panel no
+  longer print a blank engine for a company no engine builds; the panel
+  says the world is derived from the process catalogue.
+
 ### The programme's record requests run as evalrun cases
 
 - Every record request of a programme is an `evalrun` case

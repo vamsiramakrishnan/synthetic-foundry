@@ -139,7 +139,9 @@ def test_every_asker_has_standing_over_what_it_asks(
     """The seat table and the responsibility edges agree, under the same rule
     `evals.plausibility` applies to a corpus."""
     assert industry.standing_findings(telecom.requests, telecom.lobs) == []
-    assert telecom.summary.findings == ()
+    # The programme carries one finding, and it is about the missing IN locale,
+    # not about standing: every request here is asked by a seat that may ask.
+    assert not [finding for finding in telecom.summary.findings if "standing" in finding]
     # The chief executive asks down the line, so `ceo` has standing over every
     # family's streams; a role the owning LOB does not declare has none.
     executive = telecom.requests[0].model_copy(update={"asker": "ceo"})
@@ -257,6 +259,115 @@ def test_the_emulator_table_names_only_connectors_and_entities_that_exist() -> N
             )
 
 
+def test_a_country_with_no_locale_still_says_so_though_none_is_left(tmp_path: Path) -> None:
+    """The gap is closed, and the machinery that stated it still works.
+
+    Every country the shipped industries build in now has a locale
+    (`tools/ingest_locales.py` generated the ten that were missing), so no
+    shipped programme raises this finding. The refusal is kept and tested
+    against a country nobody ships, because the next catalogue to add one is
+    the case it exists for: the alternative is a company built quietly in
+    Australia with someone else's currency on its records.
+    """
+    from worldloom.studio.service import Studio
+
+    # A country outside the registry, which is what the finding is for now.
+    assert industry.unlocalised(("ZZ", "IN", "AU")) == ("ZZ",)
+    assert industry.unlocalised(("AU", "NZ")) == ()
+    assert industry.unlocalised(("IN", "SG")) == ()
+    assert industry.locale_finding(("AU", "NZ")) is None
+    assert industry.locale_finding(("IN", "SG")) is None
+    gap = industry.locale_finding(("ZZ",))
+    assert gap is not None and "ZZ" in gap and "locales.register" in gap
+
+    # No shipped industry raises it any more, which is the point of the work.
+    for name in ("telecom", "retail", "banking", "technology_saas"):
+        assert not any(
+            "a locale for" in finding
+            for finding in industry.programme(name).summary.findings
+        ), name
+
+    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    studio = Studio(tmp_path)
+    project = studio.store.create(spec)
+    findings = studio.describe(project["id"], project["revision"])["findings"]
+    assert [f for f in findings if f["code"] == "locale_missing"] == []
+    # A stated limit does not withhold readiness; an unanswered question does.
+    assert all(f["acknowledged"] for f in findings)
+
+
+def test_a_support_unit_is_a_business_unit_and_never_a_revenue_division() -> None:
+    """A shared service centre sells nothing, so it earns no revenue share.
+
+    `ownership.materialize_owners` makes it a real unit of the company with no
+    trading revenue allocated; `divisions` is the revenue cut alone.
+    """
+    spec = industry.project("telecom", "Ardent Telecom")
+    units = {unit.name for unit in spec.divisions}
+    assert spec.structure is not None
+    declared = {unit.name: unit.archetype for unit in spec.structure.bus}
+    support = {name for name, kind in declared.items() if kind in industry.SUPPORT_ARCHETYPES}
+    assert support, "the shipped telecom declares a shared service centre and a group function"
+    assert not (units & support), f"support units took revenue: {sorted(units & support)}"
+    assert units == set(declared) - support
+    # Every declared unit still reaches the company; only the revenue differs.
+    assert support <= set(declared)
+    assert abs(sum(unit.share for unit in spec.divisions) - 1.0) < 0.02
+
+
+def test_a_structure_of_only_support_units_still_decomposes() -> None:
+    """A pack's shares must sum to one, so an all-support company cuts them flat."""
+    from worldloom.process_bindings.models import BusinessUnit, CompanySpec
+
+    structure = CompanySpec(
+        name="Shared Services Only",
+        industry="telecom",
+        operating_model="centralised",
+        countries=("IN",),
+        bus=(
+            BusinessUnit(name="Group Finance", archetype="group_function", countries=("IN",)),
+            BusinessUnit(name="Operations", archetype="shared_service_centre", countries=("IN",)),
+        ),
+    )
+    units = industry.divisions(structure)
+    assert len(units) == 2
+    assert abs(sum(unit.share for unit in units) - 1.0) < 0.02
+
+
+def test_the_programme_reports_what_it_grounds_not_how_it_can_be_phrased(
+    telecom: industry.Programme,
+) -> None:
+    """A verb and a channel change a request's wording, never its answer.
+
+    So `situations` counts phrasings and overstates the evalset. The honest
+    size is `distinct_answers`, and every consumer of a count reads that.
+    """
+    summary = telecom.summary
+    grounded = {request.expected_answer for request in telecom.requests}
+    assert summary.distinct_answers == len(grounded)
+    # The overstatement is real, not a rounding difference.
+    assert summary.distinct_answers < summary.situations
+    assert summary.situations > summary.distinct_answers * 2
+    # Per line, and summing to the whole.
+    assert sum(line.distinct_answers for line in summary.lines) == summary.distinct_answers
+    for line in summary.lines:
+        assert 0 <= line.distinct_answers <= line.situations
+    # A use case never asks for more queries than the line can answer.
+    assert sum(case.count for case in telecom.use_cases()) == summary.distinct_answers
+    assert industry.describe("telecom")["distinct_answers"] == summary.distinct_answers
+
+
+def test_lines_derived_without_requests_report_no_distinct_answers(
+    telecom: industry.Programme,
+) -> None:
+    """`lines` is usable without requests; it then says so rather than guessing."""
+    bare = industry.lines(telecom.compiled, telecom.lobs)
+    assert bare and all(line.distinct_answers == 0 for line in bare)
+    assert [line.situations for line in bare] == [
+        line.situations for line in telecom.summary.lines
+    ]
+
+
 # -- use cases ---------------------------------------------------------------
 
 
@@ -267,7 +378,10 @@ def test_a_use_case_per_supported_line_with_the_lines_count(
     supported = [line for line in telecom.summary.lines if line.supported]
     assert len(cases) == len(supported)
     for case, line in zip(cases, supported, strict=True):
-        assert case.count == line.situations
+        # The count is what the line can distinctly ground, never the larger
+        # number of ways to phrase it.
+        assert case.count == line.distinct_answers
+        assert line.distinct_answers <= line.situations
         assert case.lob == line.lob
         assert case.owner == (line.owners[0] if len(line.owners) == 1 else "")
         assert case.activities == line.activities
@@ -283,7 +397,9 @@ def test_a_use_case_per_supported_line_with_the_lines_count(
         }
         # Every scenario is one the enterprise planner accepts as it stands.
         apply_scenario_profile(builtin_registry(), case.scenario)
-    assert sum(case.count for case in cases) > 5000
+    # The requested total is what the lines ground, not the phrasings over them.
+    assert sum(case.count for case in cases) == telecom.summary.distinct_answers
+    assert sum(case.count for case in cases) < telecom.summary.situations
 
 
 def test_a_line_several_units_own_names_no_single_owner(
@@ -313,7 +429,14 @@ def test_the_count_ceiling_is_applied_and_visible(telecom: industry.Programme) -
 def test_every_shipped_industry_derives_a_complete_honest_programme(name: str) -> None:
     derived = industry.programme(name)
     summary = derived.summary
-    assert summary.industry == name and summary.findings == ()
+    assert summary.industry == name
+    # Findings are for things the programme cannot make honest. The only one a
+    # shipped industry still raises is the locale gap for TH and VN, which no
+    # library publishes a deep enough name pool to close; everything else, the
+    # measured employment included, is answered.
+    assert all(finding.startswith("a locale for ") for finding in summary.findings)
+    for finding in summary.findings:
+        assert "TH" in finding or "VN" in finding, finding
     assert (
         summary.requests
         == summary.situations
@@ -414,7 +537,8 @@ def test_record_set_requests_read_their_answers_off_the_records(
 def test_describe_reports_the_headline_numbers() -> None:
     described = industry.describe("telecom")
     assert described["situations"] == described["reads"] + described["writes"]
-    assert described["lobs"] == len(described["by_lob"]) and described["findings"] == []
+    assert described["lobs"] == len(described["by_lob"])
+    assert described["findings"] == []
     assert sum(described["intents"].values()) == described["situations"]
 
 
@@ -510,7 +634,7 @@ def test_a_project_carries_the_largest_lobs_and_their_lines_with_derived_counts(
     assert spec.use_cases and all(
         case.lob in {lob.name for lob in spec.lobs} for case in spec.use_cases
     )
-    by_key = {line.key: line.situations for line in derived.summary.lines}
+    by_key = {line.key: line.distinct_answers for line in derived.summary.lines}
     for case in spec.use_cases:
         line = next(
             line
@@ -620,11 +744,19 @@ def test_a_project_meets_its_own_evidence_requirements_from_the_world(tmp_path: 
     from worldloom.studio.service import Studio
 
     spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
-    assert [unit.key for unit in spec.divisions] == ["consumer_mobile", "enterprise", "network", "group_finance"]
+    # Only the units that sell are revenue divisions.
+    assert [unit.key for unit in spec.divisions] == ["consumer_mobile", "enterprise"]
     assert abs(sum(unit.share for unit in spec.divisions) - 1.0) < 0.01
     world, _ = Studio(tmp_path).snapshot(spec)
-    # The support units the structure declares are the world's own, so
-    # ownership has nothing to form and the world is returned as it is.
+    # The snapshot forms the support units the structure declares, with no
+    # trading revenue: the company is every unit, the revenue is two of them.
+    assert [(unit.name, unit.kind) for unit in world.business_units] == [
+        ("Consumer Mobile", "customer_segment"),
+        ("Enterprise", "customer_segment"),
+        ("Group Finance", "support"),
+        ("Network", "support"),
+    ]
+    # Having formed them once, ownership has nothing left to form.
     assert materialize_owners(restore_generator(world), spec.structure) is not None  # type: ignore[arg-type]
     assert len(materialize_owners(restore_generator(world), spec.structure).business_units) == len(world.business_units)  # type: ignore[arg-type]
     checked = 0
@@ -654,10 +786,14 @@ def test_a_project_derives_from_a_described_company_and_rederives_keeping_its_se
     )
     spec = industry.project(described, lobs=("billing",))
     assert spec.structure == described
-    assert [unit.name for unit in spec.divisions] == ["Consumer", "Enterprise", "Shared Services"]
+    # Shared Services is a declared business unit and not a revenue division.
+    assert [unit.name for unit in spec.divisions] == ["Consumer", "Enterprise"]
     assert [lob.name for lob in spec.lobs] == ["billing"]
     assert spec.use_cases and all(case.lob == "billing" for case in spec.use_cases)
-    assert spec.company == {"industry": "telecom", "identity": {"company_name": "Ardent Telecom"}, "geo": "australia"}
+    # The company operates in IN and is therefore spelled there: rupees, an
+    # April financial year, Indian names and cities, and lakh digit grouping.
+    # It used to say "australia", which was the geography gap in one field.
+    assert spec.company == {"industry": "telecom", "identity": {"company_name": "Ardent Telecom"}, "geo": "india"}
     assert industry.project(described, lobs=("billing",)) == spec
     with pytest.raises(ValueError, match="names 'Ardent Telecom'"):
         industry.project(described, "Other Co")
@@ -667,15 +803,18 @@ def test_a_project_derives_from_a_described_company_and_rederives_keeping_its_se
     changed = described.model_copy(update={"bus": (*described.bus, BusinessUnit(name="Wholesale", archetype="customer_segment"))})
     again = industry.rederive(spec.model_copy(update={"structure": changed, "episodes": ("2026-03",)}))
     assert again.episodes == ("2026-03",) and again.seed == spec.seed
-    assert [unit.name for unit in again.divisions] == ["Consumer", "Enterprise", "Shared Services", "Wholesale"]
+    assert [unit.name for unit in again.divisions] == ["Consumer", "Enterprise", "Wholesale"]
     assert [lob.name for lob in again.lobs] == ["billing"]
     assert again == industry.rederive(spec.model_copy(update={"structure": changed, "episodes": ("2026-03",)}))
     everything = industry.rederive(spec.model_copy(update={"lobs": ()}))
     assert len(everything.lobs) > 1
     with pytest.raises(ValueError, match="has none"):
         industry.rederive(spec.model_copy(update={"structure": None, "divisions": (), "lobs": (), "use_cases": ()}))
-    # The locale follows the country where one is shipped.
-    assert industry.geo_for(("IN",)) == "australia" and industry.geo_for(("SG", "DE")) == "germany"
+    # The locale follows the first country that has one, and every country the
+    # shipped industries build in now does.
+    assert industry.geo_for(("IN",)) == "india"
+    assert industry.geo_for(("SG", "DE")) == "singapore"
+    assert industry.geo_for(("ZZ", "DE")) == "germany"
 
 
 def test_the_process_kinds_are_in_the_registry_of_a_process_that_never_imported_industry() -> None:
@@ -721,7 +860,13 @@ def test_an_engine_less_industry_seats_its_revenue_function_in_the_commercial_se
     world, _ = Studio(tmp_path).snapshot(spec)
     titles = [person.title for person in world.people]
     assert "Customer Service Director" in titles and "Customer Service Manager, Consumer Mobile" in titles
-    assert "Customer Service Manager, Group Finance" not in titles and "Managing Director, Group Finance" in titles
+    # A support unit sells nothing, so no per-unit commercial or finance post
+    # is minted inside it; it is led by an existing group executive instead.
+    assert not any(title.endswith(", Group Finance") or title.endswith(", Network") for title in titles)
+    units = {unit.name: unit for unit in world.business_units}
+    assert units["Group Finance"].kind == "support" and units["Network"].kind == "support"
+    ceo = next(person for person in world.people if person.title == "Group Chief Executive Officer")
+    assert units["Group Finance"].leader_id == ceo.id
     assert not any("Merchandising" in title or "Buying" in title for title in titles)
     assert "Head of Billing" in titles
     assert world.validate().ok
@@ -789,3 +934,45 @@ def test_record_requests_run_as_evalrun_cases_over_the_companys_records(tmp_path
                                  "--limit", "2", "--rater", "grounded", "--json"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["cases"] == 2
+
+
+# -- a function is not an industry ------------------------------------------
+
+
+def test_a_function_and_a_stream_are_told_apart_from_an_industry() -> None:
+    """The three are asked for in the same words, and only one builds a company."""
+    assert industry.industry_of("a regional bank") == "banking"
+    assert industry.function_of("a regional bank") is None
+    assert industry.function_of("a procurement company") == "procurement"
+    assert industry.function_of("accounts payable outsourcing") == "ap"
+    assert industry.stream_of("procure to pay") == "procure_to_pay"
+    assert industry.stream_of("Order to Cash") == "order_to_cash"
+    # A stream is not folded into one family: the catalogue's own activity
+    # ownership says `procure_to_pay` spans several.
+    assert industry.function_of("procure to pay") is None
+
+
+def test_naming_a_function_where_an_industry_belongs_says_so() -> None:
+    finding = industry.function_finding("a procurement company")
+    assert finding is not None
+    assert "is a function, not an industry" in finding
+    assert "lobs=('procurement',)" in finding
+    # An industry is not a finding, and neither is a phrase naming nothing.
+    assert industry.function_finding("a regional bank") is None
+    assert industry.function_finding("a scorecard vendor") is None
+
+
+def test_naming_a_value_stream_names_the_families_it_crosses() -> None:
+    finding = industry.function_finding("procure to pay")
+    assert finding is not None and "value stream, not an industry" in finding
+    owners = {
+        activity[3]
+        for activity in industry.load_catalogue()["value_streams"]["procure_to_pay"]["activities"]
+    }
+    assert all(owner in finding for owner in owners)
+
+
+def test_every_shipped_industry_names_an_industry_not_a_function() -> None:
+    """The twelve are industries. None of them is a function family."""
+    for name in INDUSTRIES:
+        assert industry.function_of(name.replace("_", " ")) is None, name

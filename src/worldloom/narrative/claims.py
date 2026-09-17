@@ -210,6 +210,18 @@ def validate(
     # is lenient about fragments of them.
     if entity_names:
         prose = references.strip_references(narrative.text)
+        # A name is matched as the extractor surfaces it, not as the world
+        # spells it. `_capitalised_runs` strips `.,;:()'"` off every token, so
+        # a company chartered `Greyfell Engineering Co., Ltd.` comes back as
+        # `Greyfell Engineering Co Ltd` and matches neither equality nor
+        # containment against its own name. Every East Asian company form
+        # carries that punctuation — `Co., Ltd.`, `Bank, Ltd.`, `K.K.` — so
+        # without this every narration in those jurisdictions is rejected for
+        # naming the company it is about. Stripping the same characters off
+        # the world's own names is what makes the two comparable.
+        known = frozenset(entity_names) | {
+            plain for plain in (_plain(name) for name in entity_names) if plain
+        }
         for word in _capitalised_runs(prose):
             # A possessive is the entity, not a new one. Found live, by the
             # first harness-driven narration run: Gemini wrote "Meridian
@@ -217,8 +229,8 @@ def validate(
             # and the containment rule cannot save it — the possessive is
             # *longer* than the name it belongs to, not a fragment of it.
             word = word.removesuffix("'s").removesuffix("’s").rstrip("'’")
-            if len(word.split()) > 1 and word not in entity_names and not any(
-                word in name for name in entity_names
+            if len(word.split()) > 1 and word not in known and not any(
+                word in name for name in known
             ):
                 # One more chance before rejecting: drop the run's first word.
                 # A capitalised sentence-opener fused to a real name ("Within
@@ -236,8 +248,8 @@ def validate(
                 # must still be flagged even though "Ordering" sits inside a
                 # real "Mobile Ordering".
                 remainder = word.split(" ", 1)[1]
-                if remainder in entity_names or any(
-                    remainder in name for name in entity_names
+                if remainder in known or any(
+                    remainder in name for name in known
                 ):
                     continue
                 violations.append(
@@ -261,6 +273,19 @@ def validate(
 #: containment escape in ``validate`` — so the list no longer needs to grow a
 #: word every time a writer opens a sentence differently.
 _SENTENCE_OPENERS = frozenset({"For", "At", "In", "On", "By", "The", "A", "An", "This", "Both"})
+
+
+#: The punctuation `_capitalised_runs` peels off a token. Named once because
+#: `_plain` has to peel exactly the same characters, or the two stop agreeing.
+_TOKEN_PUNCTUATION = ".,;:()'\""
+
+
+def _plain(name: str) -> str:
+    """A name as `_capitalised_runs` would surface it from prose."""
+    return " ".join(
+        stripped for stripped in (token.strip(_TOKEN_PUNCTUATION) for token in name.split())
+        if stripped
+    )
 
 
 def _capitalised_runs(text: str) -> list[str]:
@@ -290,7 +315,7 @@ def _capitalised_runs(text: str) -> list[str]:
         current.clear()
 
     for token in text.replace("\n", " ").split(" "):
-        stripped = token.strip(".,;:()'\"")
+        stripped = token.strip(_TOKEN_PUNCTUATION)
         if not current and stripped in _SENTENCE_OPENERS:
             continue
         if stripped[:1].isupper() and stripped[1:2].islower():

@@ -1319,6 +1319,14 @@ def _merged(existing: tuple, incoming: tuple) -> tuple:
     return merged + tuple(item for item in incoming if item.id in updates)
 
 
+def _largest_unit(world: World) -> str:
+    """The unit holding the most of the established workforce, and how much."""
+    established = [unit for unit in world.business_units if unit.headcount is not None]
+    largest = max(established, key=lambda unit: (unit.headcount or 0, unit.name))
+    total = world.company.employees_total or 1
+    return f"{largest.name} ({largest.headcount:,}, {(largest.headcount or 0) / total:.0%})"
+
+
 class Summary:
     """A counted overview of a world.
 
@@ -1334,6 +1342,10 @@ class Summary:
             ("Employees (modelled)", f"{len(world.people):,}"),
             ("Employees (stated)", f"{world.company.employees_total:,}"),
             ("Business units", f"{len(world.business_units):,}"),
+            # The stated workforce, spent across the units. Omitted for a world
+            # that does not say, which is the hand-authored corpus's answer.
+            *([("Largest unit", _largest_unit(world))] if any(
+                unit.headcount is not None for unit in world.business_units) else []),
             ("Systems", f"{len(world.systems):,}"),
             ("Services", f"{len(world.services):,}"),
             ("Cost centres", f"{len(world.cost_centres):,}"),

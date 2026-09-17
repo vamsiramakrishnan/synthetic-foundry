@@ -460,6 +460,48 @@ def test_a_possessive_of_a_known_entity_is_not_an_invented_one(narrated: World) 
     assert not any(v.code == "unknown_entity" for v in verdict.violations), verdict.violations
 
 
+def test_a_company_form_carrying_punctuation_is_not_an_invented_entity(narrated: World) -> None:
+    """Found by the dispersed-replay gate on the first Chinese procurement build.
+
+    `_capitalised_runs` peels `.,;:()'"` off every token, so a company
+    chartered `Greyfell Engineering Co., Ltd.` comes out of prose as
+    `Greyfell Engineering Co Ltd` and matched neither equality nor containment
+    against its own name. Every East Asian company form carries that
+    punctuation, so every narration in those jurisdictions was rejected for
+    naming the company it was about. The world's own names are now stripped
+    the same way before matching.
+    """
+    facts = {f.id: f for f in narrated.facts}
+    fact = narrated.facts.first()
+    for company in ("Greyfell Engineering Co., Ltd.", "Dunmarrow Bank, Ltd.", "Halvern K.K."):
+        text = f"{company} closed the quarter at {{{{fact:{fact.id}}}}}."
+        verdict = validate(
+            _request(allowed_fact_ids=[fact.id]),
+            GeneratedNarrative(
+                text=text,
+                claims=[GeneratedClaim(text="The close.", supporting_fact_ids=[fact.id])],
+            ),
+            facts,
+            entity_names=frozenset({company}),
+        )
+        assert not any(v.code == "unknown_entity" for v in verdict.violations), (
+            company, verdict.violations,
+        )
+
+    # Stripping punctuation must not let an invention through: a name that is
+    # not the company's is still refused under a punctuated company form.
+    verdict = validate(
+        _request(allowed_fact_ids=[fact.id]),
+        GeneratedNarrative(
+            text="Westgate Logistics Co., Ltd. reviewed it.",
+            claims=[GeneratedClaim(text="Reviewed.", supporting_fact_ids=[fact.id])],
+        ),
+        facts,
+        entity_names=frozenset({"Greyfell Engineering Co., Ltd."}),
+    )
+    assert any(v.code == "unknown_entity" for v in verdict.violations)
+
+
 def test_a_capitalised_run_never_crosses_a_sentence_boundary(narrated: World) -> None:
     """Regression, verbatim from the five-world narration: the terminal full stop
     was stripped *before* the capitalisation test, so a sentence ending in an

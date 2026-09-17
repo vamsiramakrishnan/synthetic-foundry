@@ -22,8 +22,9 @@ from worldloom.studio import (
     preset,
 )
 from worldloom.studio.harness import command_for, invoke
-from worldloom.studio.server import StudioServer
+from worldloom.studio.server import StudioServer, loopback
 from worldloom.studio.worker import recover, run_job, writer_lock
+from worldloom.studio_cli import bind_notice, reachable_host
 
 
 @pytest.fixture
@@ -75,7 +76,13 @@ def test_authored_divisions_change_generated_structure_not_only_metadata(project
     world, location = studio.snapshot(ProjectSpec.model_validate(amended.model_dump(mode="json")))
     assert location != base_path
     assert len(base.business_units) != len(world.business_units)
-    assert [unit.name for unit in world.business_units] == ["Stores", "Online"]
+    # The authored divisions are the revenue units; the structure's support
+    # units are formed beside them with no revenue allocated.
+    revenue = [unit.name for unit in world.business_units if unit.kind != "support"]
+    assert revenue == ["Stores", "Online"]
+    assert {unit.name for unit in world.business_units if unit.kind == "support"} == {
+        "Group Finance", "Supply Chain"
+    }
     world.validate().raise_if_failed()
 
 
@@ -244,6 +251,48 @@ def test_installed_harness_adapters_parse_only_final_output(tmp_path, monkeypatc
     assert "plan" in commands[1]
     with pytest.raises(ValueError):
         command_for("arbitrary-command", tmp_path / "result")
+
+
+def test_the_adapter_tells_the_child_which_seam_it_is_answering(monkeypatch):
+    """One adapter serves four seams, so the wrapper must name the role.
+
+    Before this the authoring prose reached an evalrun turn and told the agent
+    under test it was completing an authoring request.
+    """
+    prompts = []
+    def run(argv, **kwargs):
+        prompts.append(kwargs["input"])
+        return subprocess.CompletedProcess(argv, 0, '{"result":"{}"}', "")
+    monkeypatch.setattr(subprocess, "run", run)
+
+    invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})
+    assert "agent under test" in prompts[-1] and "authoring request" not in prompts[-1]
+    invoke("claude", {"schema": "worldloom.evalrun-plan/v1", "query": "q"})
+    assert "Plan only; execute nothing." in prompts[-1]
+    invoke("claude", {"schema": "worldloom.evalrun-rating/v1"})
+    assert "You are the judge." in prompts[-1]
+    invoke("claude", {"requests": [], "response_shape": {}})
+    assert "{{fact:ID}}" in prompts[-1]
+    invoke("claude", {"company": {}})
+    assert "authoring request" in prompts[-1]
+    # Every seam ends the same way, whatever the role.
+    assert all("exactly one JSON object" in prompt for prompt in prompts)
+    assert all("Do not modify project files." in prompt or "authoring" in prompt for prompt in prompts)
+
+
+def test_one_adapter_command_serves_studio_evalrun_and_narration():
+    """`--harness codex` is the same child everywhere it is offered."""
+    from worldloom.studio.harness import NAMES, adapter_command
+
+    assert NAMES == ("codex", "claude")
+    command = adapter_command("claude", timeout=120)
+    assert "worldloom.studio.harness" in command and "claude" in command and "120" in command
+    assert "--allow-native-writes" not in command
+    assert "--allow-native-writes" in adapter_command("codex", allow_native_writes=True)
+    with pytest.raises(ValueError):
+        adapter_command("gpt")
+    with pytest.raises(ValueError):
+        adapter_command("claude", allow_native_writes=True)
 
 
 def test_native_codex_write_scope_requires_operator_opt_in(tmp_path, monkeypatch):
@@ -482,3 +531,48 @@ def test_snapshot_recovers_crash_before_intent_write(project):
     _, recovered = studio.snapshot(spec)
     assert recovered == location and _files(recovered) == expected
     assert not staging.exists()
+
+
+def test_the_origin_guard_reads_the_host_name_not_the_port():
+    """A published container port never equals the port inside the container.
+
+    The guard exists to stop DNS rebinding, and a page on another origin picks
+    its own port freely. So the host name is the whole check: pinning the port
+    would only reject `docker run -p 127.0.0.1:18765:8765`.
+    """
+    assert loopback("127.0.0.1:8765")
+    assert loopback("127.0.0.1:18765")
+    assert loopback("localhost")
+    assert loopback("[::1]:8765")
+    assert not loopback("evil.example:8765")
+    assert not loopback("192.168.1.10:8765")
+    assert not loopback("")
+
+
+def test_a_rebinding_host_is_refused_on_the_port_the_console_bound(http_server):
+    request = Request(f"http://127.0.0.1:{http_server.server_port}/api/bootstrap",
+                      headers={"Host": f"evil.example:{http_server.server_port}"})
+    with pytest.raises(HTTPError) as refusal:
+        urlopen(request, timeout=10)
+    assert refusal.value.code == 403
+
+
+def test_the_console_binds_loopback_unless_a_host_is_named(tmp_path):
+    server = StudioServer(tmp_path, port=0, launch_workers=False)
+    try:
+        assert server.server_address[0] == "127.0.0.1"
+    finally:
+        server.server_close()
+
+
+def test_a_non_loopback_bind_says_what_it_gives_away():
+    """The console has no login, so an exposed bind is stated, not implied."""
+    assert bind_notice("127.0.0.1", 8765) == []
+    assert bind_notice("localhost", 8765) == []
+    assert bind_notice("::1", 8765) == []
+    notice = bind_notice("0.0.0.0", 8765)
+    assert "no authentication" in " ".join(notice)
+    assert "port 8765" in " ".join(notice)
+    assert reachable_host("0.0.0.0") == "127.0.0.1"
+    assert reachable_host("192.168.1.10") == "192.168.1.10"
+    assert reachable_host("::1") == "[::1]"

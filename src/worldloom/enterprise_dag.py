@@ -8,7 +8,7 @@ catalogue is a small versioned set of examples of this public grammar.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from functools import lru_cache
 from importlib.resources import files
 from typing import Any, Literal
@@ -234,6 +234,40 @@ def shape_catalogue() -> dict[str, dict[str, Any]]:
     return {key: dict(value) for key, value in _shape_data().items()}
 
 
+def default_shapes() -> tuple[str, ...]:
+    """Every shape in the catalogue. A default case set grades all of them.
+
+    Two shapes used to be held back. `map_read` fetches each search hit and
+    `conditional` needs a witness for both branches, so both raise a source's
+    `minimum` to two, and the materializer topped a source pool up to exactly
+    one record. Rows under those shapes materialized and then refused to
+    compile, which made them opt-in for a reason that was really a generation
+    bug. `enterprise_corpus.materialize_corpus` now tops a pool up to the
+    largest minimum any planned row asks of it, so the exclusion is gone.
+
+    Kept as a named function rather than folded into `shape_catalogue` because
+    it is the answer to a different question: what a caller who said nothing
+    should get, which is free to narrow again if a shape earns it.
+    """
+    return tuple(sorted(_shape_data()))
+
+
+def resolve_shapes(requested: Sequence[str] | None) -> tuple[str, ...]:
+    """Turn a `--dag-shape` selection into the shapes to plan.
+
+    Omitted is `default_shapes()`. `*` is the whole catalogue, the two
+    minimum-raising shapes included. `none` plans the single-write DAG the
+    grammar produced before shapes existed, which is what every caller used
+    to get by saying nothing.
+    """
+    values = tuple(requested or ())
+    if not values:
+        return default_shapes()
+    if values == ("none",):
+        return ()
+    return values
+
+
 def shape_coverage(queries: Iterable[Any]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for query in queries:
@@ -242,4 +276,4 @@ def shape_coverage(queries: Iterable[Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-__all__ = ["GRAMMAR_VERSION", "EnterpriseDag", "EnterpriseDagNode", "ResultReference", "ResultCondition", "ResultIteration", "dag_metrics", "shape_catalogue", "shape_coverage"]
+__all__ = ["GRAMMAR_VERSION", "EnterpriseDag", "EnterpriseDagNode", "ResultReference", "ResultCondition", "ResultIteration", "dag_metrics", "default_shapes", "resolve_shapes", "shape_catalogue", "shape_coverage"]

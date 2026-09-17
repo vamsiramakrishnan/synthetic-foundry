@@ -177,9 +177,10 @@ def enterprise_evals_plan(
     profile_path: Path | None = typer.Option(None, "--profile"),
     shard_index: int | None = typer.Option(None, "--shard-index"),
     shard_count: int | None = typer.Option(None, "--shard-count"),
-    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat or use * for the versioned catalogue."),
+    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground."),
 ) -> None:
     """Write grounded query plans as JSONL."""
+    from .enterprise_dag import resolve_shapes
     from .enterprise_queries import plan_queries
     from .enterprise_specs import (
         CoverageProfile,
@@ -209,7 +210,7 @@ def enterprise_evals_plan(
         limit=limit,
         shard_index=shard_index,
         shard_count=shard_count,
-        dag_shapes=tuple(dag_shape or ()),
+        dag_shapes=resolve_shapes(dag_shape),
     )
     with output.open("w", encoding="utf-8") as handle:
         for query in queries:
@@ -384,12 +385,13 @@ def enterprise_evals_build(
     profile_path: Path | None = typer.Option(None, "--profile"),
     shard_index: int | None = typer.Option(None, "--shard-index"),
     shard_count: int | None = typer.Option(None, "--shard-count"),
-    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat or use * for the versioned catalogue."),
+    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground."),
     render_limit: int = typer.Option(0, "--render-limit", min=0),
 ) -> None:
     """Plan, materialize, validate, export, and optionally render a connector corpus."""
     from .enterprise_artifacts import render_corpus_artifacts
     from .enterprise_corpus import materialize_corpus, validate_corpus
+    from .enterprise_dag import resolve_shapes
     from .enterprise_io import export_corpus
     from .enterprise_queries import plan_queries
     from .enterprise_specs import (
@@ -420,7 +422,7 @@ def enterprise_evals_build(
         limit=limit,
         shard_index=shard_index,
         shard_count=shard_count,
-        dag_shapes=tuple(dag_shape or ()),
+        dag_shapes=resolve_shapes(dag_shape),
     )
     corpus = materialize_corpus(world, queries)
     findings = validate_corpus(corpus)
@@ -727,6 +729,8 @@ _REFUSALS: dict[str, str] = {
     "no_cases": "the corpus compiled to no cases, so there is nothing to run",
     "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",
     "unknown_rater": "the --rater value is not one this package ships",
+    "unknown_harness": "the --harness value is not a coding harness this package adapts",
+    "no_writer": "the command needs a writer and none was named",
     "script_unreadable": "the scripted agent's JSON file cannot be read",
     "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",
     "service_unbuildable": "the connector evaluation service refused the case set; the message is the serving error",
@@ -3055,13 +3059,17 @@ def narrate_accept(
 @narrate_app.command("loop")
 def narrate_loop(
     corpus: str = typer.Argument(..., help="Corpus path to narrate."),
-    exec_command: str = typer.Option(
-        ..., "--exec",
+    exec_command: str | None = typer.Option(
+        None, "--exec",
         help=(
             "The model as an executable: reads one requests JSON document on "
             "stdin, prints one responses JSON document on stdout. Run without "
             "a shell (shlex argv) unless --shell is given."
         ),
+    ),
+    harness: str | None = typer.Option(
+        None, "--harness",
+        help="An installed coding harness as the writer, using its own login: codex or claude. Shorthand for the bundled --exec adapter.",
     ),
     max_rounds: int = typer.Option(
         8, "--max-rounds",
@@ -3098,6 +3106,20 @@ def narrate_loop(
         document. Print only the responses JSON document it asks for: $(cat)"
     """
     from . import execseam
+    from .studio.harness import NAMES, adapter_command
+
+    if harness is not None:
+        if exec_command is not None:
+            _refuse("cannot_combine", "--harness and --exec both name the writer; give one")
+        if harness not in NAMES:
+            _refuse("unknown_harness",
+                    f"{harness!r}; use {' or '.join(NAMES)}, or --exec for a custom adapter")
+        exec_command = adapter_command(harness, timeout=max(1.0, timeout - 5))
+    if exec_command is None:
+        _refuse("no_writer",
+                "narration needs a writer: --harness codex/claude for an installed"
+                " coding harness, or --exec for your own adapter. `worldloom narrate"
+                " requests` and `narrate accept --from` are the offline round trip.")
 
     world = _compiled(_load(corpus), corpus)
 
@@ -7100,6 +7122,7 @@ def pack_targets(
                 continue
             domain = domains.by_name(name)
             document[name] = {
+                "builds": domain.industry or name,
                 "lore_targets": [{"target": t, "effect": e} for t, e in domain.consulted_targets],
                 "system_slots": [{"slot": s_, "what": w} for s_, w in domain.system_slots],
                 "roles": roles.published(name),
@@ -7112,6 +7135,11 @@ def pack_targets(
             continue
         domain = domains.by_name(name)
         console.print(f"[bold]{name}[/bold]")
+        if domain.industry:
+            # An engine keyed by a function says what it builds, so nobody
+            # reads this list as four industries.
+            console.print(f"  [dim]builds {domain.industry}; {name} is the function"
+                          " its episode exercises, not the industry[/dim]")
         console.print("  [underline]lore targets[/underline]")
         for target, effect in domain.consulted_targets:
             console.print(f"    {target}\n      [dim]{effect}[/dim]")

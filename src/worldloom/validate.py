@@ -1009,6 +1009,28 @@ class _Validator:
                 f" {self.world.company.employees_total:,} total employees",
             )
 
+        # The establishment: what each unit was allocated of that total.
+        established = [unit for unit in self.world.business_units if unit.headcount is not None]
+        if established:
+            total = sum(unit.headcount or 0 for unit in established)
+            self.checks += 1
+            if total > self.world.company.employees_total:
+                self.fail(
+                    "organisation", "establishment_exceeds_headcount", self.world.company.id,
+                    f"the business units establish {total:,} people while the company"
+                    f" states {self.world.company.employees_total:,}",
+                )
+            for unit in established:
+                named = sum(person.business_unit_id == unit.id and person.left is None
+                            for person in self._people)
+                self.checks += 1
+                if named > (unit.headcount or 0):
+                    self.fail(
+                        "organisation", "named_roster_exceeds_establishment", unit.id,
+                        f"{named:,} named employees work in {unit.name!r}, which"
+                        f" establishes {unit.headcount:,}",
+                    )
+
         for fact in self._facts.where(kind="org.headcount"):
             if fact.value is None or fact.value.unit != "employees":
                 continue

@@ -5,7 +5,7 @@ axes. It is the loop Gemini Enterprise Eval Studio has and Worldloom did not,
 with the grading a fact-derived corpus can support and Eval Studio cannot.
 
 ```bash
-worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200
 worldloom evalrun cases ./cases                     # what the set can grade, per axis
 worldloom evalrun run ./cases -o ./runs/reference   # the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
@@ -73,15 +73,15 @@ the spans the service recorded show the write that made it and the delete
 that removed it, and both expectations are met on that record, with the
 artifact grounded on the write the service saw.
 
-**Deletes are planned, not hand-authored.** `enterprise-evals build --dag-shape
-delete_chain` adds a `delete` and a final readback to every case whose
+**Deletes are planned, not hand-authored, and they are the default.**
+`delete_chain` adds a `delete` and a final readback to every case whose
 destination connector serves a delete: write, read back, delete that exact
 returned record, read it back expecting `not_found`. The row states the
 expected error as a designed failure, so an agent that skips the last readback
 has not honoured it, and the `deleted` assertion names the write that created
-the record. SharePoint and Drive files now serve `delete_file`, which the
-specs had declared and the definitions did not; the default build plans no
-delete, so bytes without `--dag-shape` are unchanged.
+the record. SharePoint and Drive files serve `delete_file`, which the specs
+had declared and the definitions did not. A build with no `--dag-shape` now
+plans it. `--dag-shape none` plans the single-write trajectory instead.
 
 **Unstructured outcomes rest on records.** Every grammar write binds the
 collected evidence into the record it creates. The artifact contract names
@@ -137,10 +137,13 @@ trajectory was observed.
 
 ## Driving it from another harness
 
-Three transports, each carrying only what the agent may know:
+Transports, each carrying only what the agent may know. An installed `codex`
+or `claude` needs none of them spelled out: `--harness` is the adapter this
+package ships, using that harness's own login.
 
 | Transport | Command | When |
 | --- | --- | --- |
+| An installed coding harness | `evalrun run ./cases --harness codex`, `--harness claude` | A real second number against the reference ceiling, with no adapter to write. Shorthand for the bundled `--exec` child, which speaks the same turn document and tells the harness it is the agent under test. `evalrun plan --harness` grades its planning alone. |
 | Executable, one subprocess per turn | `evalrun run ./cases --exec "<command>"` | The agent must act on what a tool returned. The child reads a `worldloom.evalrun-turn/v2` document (query, tools, transcript) and prints one call, one question to the user, or the final answer. Stateless between turns. |
 | Requests and responses files | `evalrun requests ./cases -o requests.json`, then `evalrun run ./cases --agent scripted:responses.json` | A fixed trajectory: a regression set, a hand-authored baseline, a harness that cannot be called back. Replay cannot see a call's result. |
 | MCP | `enterprise-evals serve ./cases`, then `evalrun import-served ./cases scores.jsonl` | An agent that speaks MCP, Gemini Enterprise included. It calls `eval_score` before `eval_end` and keeps each document; those are complete three-axis results graded by the serving service, and `import-served` collects them into a comparable run. |
@@ -316,12 +319,13 @@ Named and not closed here:
 
 - **The shape catalogue is nine shapes.** The external forty-two-shape
   target is not in this repository.
-- **Deletes are opt-in.** The shipped scenario profiles draft email, which
-  nothing deletes, so a default build still reports `deletes: 0`; a profile
-  whose destination is a SharePoint or Drive file, built with `--dag-shape
-  delete_chain`, reports the deletes it grades. Deleting a preexisting
-  fixture record is compiled (the `deleted` assertion then names the
-  fixture) but no shipped profile plans an update-then-delete.
+- **Every shape is planned by default.** `map_read` and `conditional` raise a
+  source's `minimum` to two, and the materializer used to top a source pool up
+  to exactly one record, so rows under those shapes materialized and then
+  refused to compile. It now tops a pool up to the largest minimum any planned
+  row asks of it, and all nine shapes ground. Deleting a preexisting fixture
+  record is compiled (the `deleted` assertion then names the fixture) but no
+  shipped profile plans an update-then-delete.
 - **A planned DAG is graded by tool name.** `evalrun plan` cannot tell two
   calls of one tool apart by their arguments, so a planner that names the
   right tools in the right order passes the plan axis whatever it would have

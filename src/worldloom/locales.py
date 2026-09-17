@@ -57,6 +57,10 @@ single-generator would teach the wrong shape to the next author.
   ``03/04/2026`` while the fact says ``2026-04-03``, which is the divergence
   ``render/values`` exists to prevent. A date's *format* is not a fact about
   the world; ISO is the wire, and prose already writes dates in words.
+* **Digit *grouping* is open and the rest of the date is not.** ``grouping``
+  carries how many digits each group holds, because South Asia groups by three
+  then twos (12,34,567) and no separator character can say that. It is read
+  from CLDR rather than authored.
 * **``currency_unit`` (thousands/millions) stays on the archetype.** A bank
   reports in millions and a grocer in thousands in the same country; that is a
   fact about the company's scale, not about the jurisdiction. ``currency``
@@ -95,6 +99,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
+from importlib.resources import files
 from pathlib import Path
 from typing import Any, Literal
 
@@ -227,6 +232,20 @@ class Locale:
     selecting ``germany`` gets EUR without the author having to remember to say
     so twice, and that a locale whose figures are spelled ``1.234,56`` cannot
     be paired with AUD by accident."""
+
+    grouping: tuple[int, ...] = (3,)
+    """How many digits each group of the integer part holds, rightmost first.
+
+    `(3,)` is every jurisdiction that groups by thousands. `(3, 2)` is the
+    South Asian system: India writes 12,34,567 and not 1,234,567, and its
+    regulated filings are denominated in lakh and crore, so a rupee figure
+    printed with Western grouping is wrong in the same way `(1,234)` in a
+    German memo is wrong. The value comes from CLDR through babel
+    (`tools/ingest_locales.py` reads the decimal pattern) rather than being
+    authored, because the pattern is the published fact.
+
+    Defaulted to thousands so every `Locale(...)` call and JSON document
+    written before this field existed stays valid and byte-identical."""
 
     given_extended: tuple[str, ...] = ()
     family_extended: tuple[str, ...] = ()
@@ -513,8 +532,9 @@ class Locale:
     def suffixes_for(self, industry: str) -> tuple[str, ...]:
         """What a company in *industry* is called here, after its brand word.
 
-        *industry* is a registered engine name (``retail``, ``banking``,
-        ``insurance``) — see ``industry_suffixes``. ``retail`` resolves to
+        *industry* is a registered engine name — ``domains.names()``, which is
+        ``retail``, ``banking``, ``insurance`` and ``procurement`` — see
+        ``industry_suffixes``. ``retail`` resolves to
         ``company_suffixes``, which is the one pool this locale has always had
         and is retail's by construction.
 
@@ -522,8 +542,9 @@ class Locale:
         posture as ``named``'s: an unknown engine name is a configuration error
         rather than a typo, and a silent fallback would make that vertical
         unbuildable in this jurisdiction without anywhere to report why. Every
-        shipped locale answers for all three shipped engines, so this is never
-        raised by a shipped build. A new vertical registering itself in
+        shipped locale answers for every registered engine and
+        ``test_locales_generated`` holds that, so this is never raised by a
+        shipped build. A new vertical registering itself in
         ``locales.register`` must ensure every preset carries an entry for it.
         """
         if industry == "retail":
@@ -593,6 +614,8 @@ class Locale:
         ``format_value`` reading as one sentence.
         """
         text = f"{abs(value):,.{places}f}"
+        if tuple(self.grouping) != (3,):
+            text = self._regroup(text, places)
         if self.group_separator == "," and self.decimal_separator == ".":
             return text
         # `translate` maps each character once against the original string, so
@@ -602,6 +625,27 @@ class Locale:
         return text.translate(str.maketrans({
             ",": self.group_separator, ".": self.decimal_separator,
         }))
+
+    def _regroup(self, text: str, places: int) -> str:
+        """Re-cut an already-grouped magnitude into this locale's group sizes.
+
+        Python groups by threes and has no option not to, so the cheapest
+        correct route is to strip its commas and re-insert them: the primary
+        group is the rightmost, and every group left of it takes the second
+        size, which is what makes India's 12,34,567 out of 1234567.
+        """
+        whole, _, fraction = text.replace(",", "").partition(".")
+        primary, *rest = self.grouping
+        repeat = rest[0] if rest else primary
+        head, tail = whole[:-primary], whole[-primary:]
+        groups = [tail]
+        while len(head) > repeat:
+            head, group = head[:-repeat], head[-repeat:]
+            groups.append(group)
+        if head:
+            groups.append(head)
+        regrouped = ",".join(reversed(groups))
+        return f"{regrouped}.{fraction}" if places else regrouped
 
     def negate(self, spelled: str) -> str:
         """An already-spelled magnitude, marked negative this locale's way."""
@@ -644,6 +688,11 @@ class Locale:
         # that embeds a Locale *object* therefore embeds the deep pools too,
         # which is correct: that recipe's corpus drew from them, and a replay
         # against a later, longer data file would rename its people.
+        # Same conditional rule: a locale that groups by thousands writes no
+        # key, so every document written before this field existed round-trips
+        # unchanged and no default build's recipe grows a line.
+        if tuple(self.grouping) != (3,):
+            payload["grouping"] = list(self.grouping)
         if self.given_extended:
             payload["given_extended"] = list(self.given_extended)
         if self.family_extended:
@@ -1120,11 +1169,63 @@ GULF = Locale(
 #: calendar and not the digits, Germany on the digits, the Gulf on the week. A
 #: registry where every entry moved every axis would teach an author that
 #: locales come in undifferentiated flavours.
+#: The ten jurisdictions the process catalogue builds companies in and no
+#: preset above answered for. Data rather than four hundred lines of literals,
+#: and generated rather than authored: `tools/ingest_locales.py` reads the
+#: regions from pycountry's ISO 3166-2 table, the cities from geonamescache by
+#: population, the names from names-dataset (romanised, surname contamination
+#: filtered) or Faker where that does not carry the country, the currency and
+#: the whole digit grammar from CLDR through babel, and the fixed-date holidays
+#: from the holidays package. Nothing here is invented, which is the point: ten
+#: hand-written name pools would have been ten fabrications, and an Indian
+#: telecom called Rafferty in Australian dollars was the alternative.
+#:
+#: These carry no byte-identity obligation. No corpus was ever built in any of
+#: them, so the base pools are simply the head of the generated file rather
+#: than a literal frozen against history.
+_SHIPPED = "_data/locales/locales@1.json"
+
+
+def _generated() -> dict[str, Locale]:
+    """Build the generated presets. A malformed file fails at import."""
+    payload = json.loads(
+        files("worldloom").joinpath(_SHIPPED).read_text(encoding="utf-8")
+    )
+    if payload.get("schema") != "worldloom.locales/v1":
+        raise ValueError(f"{_SHIPPED}: unexpected schema {payload.get('schema')!r}")
+    built: dict[str, Locale] = {}
+    for name, row in sorted(payload["locales"].items()):
+        pack = _vocabulary_pack(name)
+        built[name] = Locale(
+            regions=tuple(row["regions"]),
+            cities=tuple((city, country) for city, country in row["cities"]),
+            given=tuple(row["given"]),
+            family=tuple(row["family"]),
+            given_extended=pack["given"],
+            family_extended=pack["family"],
+            company_suffixes=tuple(row["company_suffixes"]),
+            industry_suffixes=tuple(
+                (engine, tuple(pool)) for engine, pool in sorted(row["industry_suffixes"].items())
+            ),
+            currency=row["currency"],
+            group_separator=row["group_separator"],
+            decimal_separator=row["decimal_separator"],
+            grouping=tuple(row["grouping"]),
+            negative=row["negative"],
+            percent_gap=row["percent_gap"],
+            holidays=tuple((month, day) for month, day in row["holidays"]),
+            fiscal_year_start_month=row["fiscal_year_start_month"],
+            about=row["about"],
+        )
+    return built
+
+
 LOCALES: dict[str, Locale] = {
     "australia": AUSTRALIA,
     "united_kingdom": UNITED_KINGDOM,
     "germany": GERMANY,
     "gulf": GULF,
+    **_generated(),
 }
 
 #: What an un-overridden build uses, and what every corpus built before this
@@ -1200,6 +1301,7 @@ def from_document(payload: Mapping[str, Any] | str) -> Locale:
         family_extended=tuple(str(entry) for entry in payload.get("family_extended", ())),
         group_separator=str(payload.get("group_separator", ",")),
         decimal_separator=str(payload.get("decimal_separator", ".")),
+        grouping=tuple(int(size) for size in payload.get("grouping", (3,))),
         negative=str(payload.get("negative", "parenthesised")),  # type: ignore[arg-type]
         percent_gap=str(payload.get("percent_gap", "")),
         industry_suffixes=tuple(

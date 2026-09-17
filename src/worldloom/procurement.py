@@ -1113,7 +1113,14 @@ _mosaic_module.register_engine("procurement", _mosaic_module.STRUCTURE + (
 ))
 
 register_domain(Domain(
+    # The engine's key is a *function*, and the company it builds is an
+    # infrastructure services group. Procure-to-pay is not an industry: the
+    # process catalogue carries a procurement function for all twelve
+    # industries it ships, and any of them can run this cycle. `industry`
+    # below is what stops a listing putting this engine beside `retail` and
+    # `banking` as though a company could be "a procurement".
     name="procurement",
+    industry="Infrastructure services and contracting",
     archetype_keys=PROCUREMENT_ARCHETYPES,
     default_archetype="midsize_infrastructure_services",
     world=ProcureToPayWorld,

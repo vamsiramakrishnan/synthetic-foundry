@@ -9,6 +9,13 @@ on:
   push:
     tags: ["v*"]
 
+# One release at a time, and never cancelled: a run that has already uploaded
+# to an index cannot be re-run under the same version, so a second push of the
+# same tag waits rather than racing the publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -50,6 +57,12 @@ jobs:
 
       - name: Build sdist and wheel
         run: pipx run build
+
+      - name: The package metadata is one PyPI will accept
+        # `build` succeeding says nothing about whether the index will take the
+        # result: a README PyPI cannot render, or a classifier it does not
+        # know, is rejected at upload, after the version number is spent.
+        run: pipx run twine check --strict dist/*
 
       - name: The wheel works bare, and degrades legibly
         run: |

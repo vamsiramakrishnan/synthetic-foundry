@@ -130,6 +130,16 @@ class Studio:
         compilation = compile_company(spec.structure) if spec.structure else None
         findings = [{"code": "company_unmet", "message": finding,
                      "acknowledged": finding in spec.acknowledged_unmet} for finding in resolution.unmet]
+        if spec.structure is not None:
+            # A country with no shipped locale builds in the default one and
+            # used to say nothing about it. It is a stated limit of the build,
+            # not a gap the operator can close from the console, so it is
+            # acknowledged and does not withhold readiness.
+            from ..industry import locale_finding
+
+            gap = locale_finding(spec.structure.countries)
+            if gap is not None:
+                findings.append({"code": "locale_missing", "message": gap, "acknowledged": True})
         findings.extend({"code": "workflow_missing", "message": f"{c.title}: define an executable workflow", "acknowledged": False}
                         for c in spec.use_cases if c.scenario is None and c.id not in {t.use_case_id for t in spec.native_tasks})
         if not spec.use_cases:
@@ -411,8 +421,13 @@ class Studio:
             # records are read, and its facts are in the ledger they cite.
             # Before compilation, as a rebuild replays it: a step first, the
             # derived layer after.
+            from ..process_bindings.ownership import materialize_owners
             from ..recipe import apply_process_structure
 
+            # The units that sell are the pack's divisions; the ones that only
+            # own processes are formed here, with no trading revenue allocated
+            # to them. Before the declaration, so the event names every unit.
+            world = materialize_owners(world, spec.structure)
             world = apply_process_structure(world, spec.structure)
         if spec.episodes:
             world = world.compile()

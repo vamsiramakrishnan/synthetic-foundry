@@ -39,7 +39,14 @@ from worldloom import sdk
 retail = sdk.company("retail", seed=8128)
 bank = sdk.company("banking", seed=8128)
 insurer = sdk.company("insurance", seed=8128)
-procurement = sdk.company("procurement", seed=8128)
+# `procurement` is the engine's key, not an industry: it builds an
+# infrastructure services and contracting group, and procure-to-pay is the
+# function its episode exercises. `domains.describes(name)` says so, and
+# `worldloom pack targets` prints it. Every industry has a procurement
+# function. The process catalogue carries one for all twelve it ships, so
+# `industry.project("telecom", ..., lobs=("procurement",))` is how you get
+# that function inside some other industry.
+contractor = sdk.company("procurement", seed=8128)
 ```
 
 `sdk.company(name)` is the registry-driven entry point. It automatically supports

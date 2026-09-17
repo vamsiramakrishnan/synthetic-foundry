@@ -15,12 +15,13 @@ def qualify_command(
     limit: Annotated[int | None, typer.Option("--limit", min=1, help="Maximum qualified outputs; uncovered interactions remain in the report.")] = None,
     strength: Annotated[int, typer.Option("--strength", min=1, max=4, help="Interaction strength for selection after qualification.")] = 2,
     profile_path: Annotated[Path | None, typer.Option("--profile", help="Existing enterprise ScenarioProfile JSON.")] = None,
-    dag_shape: Annotated[list[str] | None, typer.Option("--dag-shape", help="Executable DAG shape; repeat or use * for the versioned catalogue.")] = None,
+    dag_shape: Annotated[list[str] | None, typer.Option("--dag-shape", help="Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground.")] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Replace an existing qualification export.")] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Print the complete qualification report.")] = False,
 ) -> None:
     """Qualify actual evidence and execution, then select enterprise coverage."""
     from .cli import _load, _refuse
+    from .enterprise_dag import resolve_shapes
     from .enterprise_sdk import EnterpriseEvalHarness
     from .enterprise_specs import ScenarioProfile
     from .validate import CoherenceError
@@ -38,8 +39,9 @@ def qualify_command(
             _refuse("scenario_profile_rejected", str(error))
     harness = harness.with_profile(harness.profile.model_copy(update={"strengths": strength}))
     try:
-        if dag_shape:
-            harness = harness.with_dag_grammar() if dag_shape == ["*"] else harness.with_dag_grammar(*dag_shape)
+        shapes = resolve_shapes(dag_shape)
+        if shapes:
+            harness = harness.with_dag_grammar(*shapes)
         result = harness.qualify(pool_size=pool_size, max_selected=limit)
     except (ValueError, KeyError, CoherenceError) as error:
         _refuse("enterprise_qualification_failed", str(error))

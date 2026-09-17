@@ -189,17 +189,40 @@ def materialize_corpus(
         for capability in data.capabilities
     }
     required_pairs = sorted({(requirement.connector, requirement.entity) for query in planned for requirement in query.generation.source_requirements})
+    # How many records a pair must supply is the largest minimum any planned row
+    # asks of it, not one. A shape that maps over its sources (`map_read`) or
+    # needs a witness for both branches (`conditional`) raises that minimum to
+    # two, and topping the pool up to exactly one left those rows materializing
+    # and then refusing to compile — which is why they were opt-in.
+    demanded: dict[tuple[str, str], int] = {}
+    for query in planned:
+        for requirement in query.generation.source_requirements:
+            key = (requirement.connector, requirement.entity)
+            demanded[key] = max(demanded.get(key, 1), requirement.minimum)
     for connector, entity in required_pairs:
-        if any(record.connector == connector and _entity_matches(connector, entity, record.entity)
-               for record in records):
+        present = sum(record.connector == connector and _entity_matches(connector, entity, record.entity)
+                      for record in records)
+        shortfall = demanded.get((connector, entity), 1) - present
+        if shortfall <= 0:
             continue
+        # A row that filters its sources by a predicate must read real evidence:
+        # a filler record satisfies the count and not the claim, so the honest
+        # answer is still a refusal that names what is short.
         if strict_sources or any(requirement.predicate is not None for query in planned
                                  for requirement in query.generation.source_requirements
                                  if (requirement.connector, requirement.entity) == (connector, entity)):
-            raise ValueError(f"missing_source: {connector}:{entity}; generate operational evidence before planning this query")
-        record_id = content_key("query-required-record", connector, entity, world.company.id)
+            raise ValueError(
+                f"missing_source: {connector}:{entity} has {present} record(s) and a planned row"
+                f" needs {demanded[(connector, entity)]}; generate operational evidence"
+                " before planning this query"
+            )
         stable_field = stable_fields.get((connector, entity), "stable_id")
-        records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, stable_field: record_id, "generated_for_query_requirements": True}))
+        for index in range(present, present + shortfall):
+            # The first filler keeps the key it has always had, so every corpus
+            # that only ever needed one is byte-identical; the rest are indexed.
+            parts = ("query-required-record", connector, entity, world.company.id)
+            record_id = content_key(*parts) if index == 0 else content_key(*parts, str(index))
+            records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, stable_field: record_id, "generated_for_query_requirements": True}))
     destinations: dict[tuple[str, str], str] = {}
     for query in planned:
         mutation = query.generation.mutation

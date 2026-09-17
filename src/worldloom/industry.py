@@ -56,7 +56,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.resources import files
@@ -249,6 +249,117 @@ def industry_of(
         if re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered):
             best, found = phrase, key
     return found
+
+
+def function_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every phrase that names a function family, to the family it names.
+
+    The family key and its label, spelled with spaces. Built from the
+    catalogue rather than authored, so a catalogue that adds a family is
+    matchable the moment it ships.
+    """
+    cat = catalogue if catalogue is not None else load_catalogue()
+    words: dict[str, str] = {}
+    for family, label in (cat.get("function_families") or {}).items():
+        words[family.replace("_", " ").casefold()] = family
+        if isinstance(label, str) and label:
+            words.setdefault(label.casefold(), family)
+    return words
+
+
+def stream_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every phrase that names a value stream, to the stream it names.
+
+    Separate from `function_words` because a stream is not a function: the
+    shipped `procure_to_pay` spans four families and `order_to_cash` nine, so
+    folding a stream into one family would contradict the catalogue's own
+    activity ownership.
+    """
+    cat = catalogue if catalogue is not None else load_catalogue()
+    words: dict[str, str] = {}
+    for stream, row in (cat.get("value_streams") or {}).items():
+        words[stream.replace("_", " ").casefold()] = stream
+        name = row.get("name") if isinstance(row, dict) else None
+        if isinstance(name, str) and name:
+            words.setdefault(name.casefold(), stream)
+    return words
+
+
+def _longest_match(description: str, words: Mapping[str, str]) -> str | None:
+    lowered = description.casefold()
+    best = ""
+    found: str | None = None
+    for phrase, key in sorted(words.items()):
+        if len(phrase) <= len(best):
+            continue
+        if re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered):
+            best, found = phrase, key
+    return found
+
+
+def function_of(
+    description: str, *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """The function family *description* names, or ``None``.
+
+    A function is not an industry, and the two are asked for in the same
+    words. "Procurement" names a function every industry has: the catalogue
+    carries a procurement family for all twelve it ships, so a company can
+    *have* one and cannot *be* one. This exists so a caller that found no
+    industry can say which function was named instead of reporting nothing
+    recognisable. Longest phrase wins, at word boundaries, exactly as
+    `industry_of` matches an industry.
+    """
+    return _longest_match(description, function_words(catalogue))
+
+
+def stream_of(
+    description: str, *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """The value stream *description* names, or ``None``. Same rule as above."""
+    return _longest_match(description, stream_words(catalogue))
+
+
+def function_finding(
+    description: str, *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """Say so when a description names a function or a stream, not an industry.
+
+    `None` when the description names an industry, or names neither. Otherwise
+    one sentence a caller prints as-is, naming the industry argument that gets
+    the asker what they wanted.
+    """
+    if industry_of(description, catalogue=catalogue) is not None:
+        return None
+    cat = catalogue if catalogue is not None else load_catalogue()
+    industries = sorted(cat.get("industry_overlays") or {})
+    example = industries[0] if industries else "retail"
+    family = function_of(description, catalogue=cat)
+    if family is not None:
+        spelling = family.replace("_", " ")
+        return (
+            f"{spelling!r} is a function, not an industry: every company has one,"
+            f" and this catalogue carries it for all {len(industries)} industries"
+            f" it ships. Name the industry and the function comes with it:"
+            f" industry.project({example!r}, ..., lobs=({family!r},)) builds a"
+            f" company whose {spelling} line is the one under test."
+        )
+    stream = stream_of(description, catalogue=cat)
+    if stream is None:
+        return None
+    spelling = stream.replace("_", " ")
+    owners = sorted({
+        activity[3]
+        for activity in (cat["value_streams"][stream].get("activities") or [])
+        if len(activity) > 3
+    })
+    return (
+        f"{spelling!r} is a value stream, not an industry, and not one function"
+        f" either: this catalogue runs it across {len(owners)} function families"
+        f" ({', '.join(owners)}). Name the industry and the stream runs inside"
+        f" it: industry.project({example!r}, ...) builds a company whose"
+        f" {spelling} line crosses those families the way the catalogue says."
+    )
 
 
 def register_kinds(catalogue: dict[str, Any] | None = None) -> tuple[str, ...]:
@@ -668,6 +779,27 @@ class ProcessLine(Model):
     """Activity ids, sorted."""
     bindings: int
     situations: int
+    """Every verb crossed with every channel: how many ways this line can be
+    asked about. Not how many distinct things it can be asked, which is
+    `distinct_answers`."""
+    distinct_answers: int = 0
+    """How many distinct answers this line's requests actually ground. A verb
+    and a channel change the wording of a request, never its ground truth, so
+    this is the honest size of the evalset a line supports; `situations` is
+    the larger number of phrasings over it. Zero when the lines were derived
+    without their requests."""
+    workforce_share: float = 0.0
+    """The share of this industry's workforce that works in this line's
+    function, measured rather than assumed: `staffing.family_shares` reads it
+    from the Bureau of Labor Statistics' occupational employment by industry.
+
+    A share and not a headcount, because a programme knows the industry and
+    not how many people the company employs. A caller holding a total turns
+    these into people with `staffing.allocate`, which renormalises over the
+    families the company actually models.
+
+    Zero when the table carries no employment for this industry or this
+    family, which is a gap to state rather than a reason to split evenly."""
     reads: int
     writes: int
     systems: tuple[str, ...]
@@ -704,7 +836,20 @@ class IndustryProgramme(Model):
     lines: tuple[ProcessLine, ...]
     bindings: int
     situations: int
+    """Every verb crossed with every channel over every binding: the number of
+    ways this company can be asked, not the number of things it can be asked."""
     requests: int
+    distinct_answers: int = 0
+    """The distinct ground truths those requests rest on. Report this as the
+    size of the evalset: a verb and a channel change a request's wording and
+    leave its answer alone, so `requests` counts phrasings over these."""
+    staffing_release: str = ""
+    """The employment release each line's `workforce_share` was measured
+    from, or `""` when this industry is not carried.
+
+    Named on the programme rather than left implicit because a share is
+    only as current as the survey behind it: a reader comparing two
+    programmes has to be able to see they rest on the same one."""
     facts: int
     records: int = 0
     """System-of-record records derived for the company (`sor.records`)."""
@@ -779,12 +924,29 @@ def lines(
     *,
     catalogue: dict[str, Any] | None = None,
     table: dict[str, Any] | None = None,
+    requests: Sequence[Request] = (),
 ) -> tuple[ProcessLine, ...]:
-    """Every LOB × stream cell with at least one bound activity, with its counts."""
+    """Every LOB × stream cell with at least one bound activity, with its counts.
+
+    Pass *requests* to fill each line's `distinct_answers`: the count of
+    distinct ground truths its requests rest on, which is the honest size of
+    the evalset the line supports. Without them the field stays zero and only
+    the phrasing count, `situations`, is known.
+
+    Each line also carries `workforce_share`, the measured share of the
+    industry's employment that works in its function (`staffing`). Zero for an
+    industry or a family the published table does not carry.
+    """
+    from . import staffing
+
     cat = catalogue if catalogue is not None else load_catalogue()
     emulators = table if table is not None else emulated_systems()
+    shares = staffing.family_shares(compiled.industry)
     names = stream_names(cat)
     titles = {spec.name: spec.title for spec in lobs}
+    grounded: dict[tuple[str, str], set[str]] = {}
+    for request in requests:
+        grounded.setdefault((request.lob, request.stream), set()).add(request.expected_answer)
     cells: dict[tuple[str, str], list[ActivityBinding]] = {}
     for row in _bound(compiled):
         cells.setdefault((row.function, row.stream), []).append(row)
@@ -809,6 +971,8 @@ def lines(
                 activities=tuple(sorted({row.activity_id for row in rows})),
                 bindings=len(rows),
                 situations=reads + writes,
+                distinct_answers=len(grounded.get((family, stream), ())),
+            workforce_share=shares.get(family, 0.0),
                 reads=reads,
                 writes=writes,
                 systems=tuple(sorted({row.sor_product for row in rows})),
@@ -877,6 +1041,7 @@ def programme(
     on a record set is asked about the latest of them.
     """
     from . import domains
+    from . import staffing as staffing_module
 
     cat = catalogue if catalogue is not None else load_catalogue()
     company = default_company(spec) if isinstance(spec, str) else spec
@@ -890,13 +1055,25 @@ def programme(
     derived_requests = tuple(
         requests(compiled, lobs, fact_ids=fact_index(derived_facts), records=derived_records)
     )
-    derived_lines = lines(compiled, lobs, catalogue=cat)
+    derived_lines = lines(compiled, lobs, catalogue=cat, requests=derived_requests)
     world_engine = engine if engine is not None else compiled.industry
     if domains.by_name(world_engine) is None:
         world_engine = ""
     findings = lint(lobs) + standing_findings(derived_requests, lobs)
+    gap = locale_finding(company.countries, catalogue=cat)
+    if gap is not None:
+        findings.append(gap)
+    if not staffing_module.family_shares(compiled.industry):
+        findings.append(
+            f"no measured employment for {compiled.industry!r}: every line's"
+            " workforce_share is 0, so nothing here says how big a line is."
+            " `tools/ingest_bls_oes.py` builds the table from the Bureau of"
+            " Labor Statistics' occupational employment by industry; an"
+            " industry it does not carry needs a crosswalk entry."
+        )
     unemulated = sorted({name for line in derived_lines for name in line.unemulated})
     summary = IndustryProgramme(
+        staffing_release=staffing_module.release() if staffing_module.family_shares(compiled.industry) else "",
         industry=compiled.industry,
         company=compiled.company,
         operating_model=company.operating_model,
@@ -908,6 +1085,7 @@ def programme(
         bindings=len(_bound(compiled)),
         situations=sum(line.situations for line in derived_lines),
         requests=len(derived_requests),
+        distinct_answers=len({request.expected_answer for request in derived_requests}),
         facts=len(derived_facts),
         records=len(derived_records),
         record_requests=sum(1 for request in derived_requests if request.expected_record_ids),
@@ -1118,7 +1296,7 @@ def use_cases(
                 owner=owner,
                 lob=line.lob,
                 activities=line.activities,
-                count=max(1, min(line.situations, count_ceiling)),
+                count=max(1, min(line.distinct_answers or line.situations, count_ceiling)),
                 scenario=scenario,
                 construction=design,
             )
@@ -1131,26 +1309,52 @@ def use_cases(
 # ---------------------------------------------------------------------------
 
 
-def divisions(structure: CompanySpec) -> tuple[Any, ...]:
-    """The company's business units as the pack units a Studio project builds.
+#: The unit archetypes that carry no trading revenue. `ownership.materialize_owners`
+#: makes them real World entities without allocating any, so they are business
+#: units of the company and never revenue divisions of it.
+SUPPORT_ARCHETYPES: frozenset[str] = frozenset({"shared_service_centre", "group_function"})
 
-    One unit per declared business unit, named as declared, its kind the
-    unit's archetype and its share an equal cut of the group, so the world's
-    units are the ones the bindings name and a process fact can be about the
-    unit that owns it.
+
+def divisions(
+    structure: CompanySpec, *, compiled: CompiledCatalogue | None = None
+) -> tuple[Any, ...]:
+    """The company's revenue divisions as the pack units a Studio project builds.
+
+    A division is a unit that sells something: the revenue archetypes, never a
+    shared service centre or a group function, which reach the world through
+    `ownership.materialize_owners` with no revenue allocated to them. Pass
+    *compiled* to weight each division by the bindings it owns; without it the
+    revenue is cut equally, which is a statement about ignorance and not about
+    the company. The shipped structures give each revenue unit the same
+    streams, so that weight divides them evenly too: the catalogue knows who
+    owns which process and nothing about who earns what. An authored company
+    with uneven ownership is where the weight starts to say something.
+
+    A structure whose units are all support units has no revenue division to
+    name, so every unit is taken instead: a pack's shares must decompose the
+    group, and refusing to build is worse than one flat cut.
     """
     from .packs import PackUnit
 
-    count = len(structure.bus)
-    share = round(1.0 / count, 4)
+    earning = [unit for unit in structure.bus if unit.archetype not in SUPPORT_ARCHETYPES]
+    units = earning or list(structure.bus)
+    weights = [1.0] * len(units)
+    if compiled is not None:
+        owned = Counter(row.owner_bu for row in _bound(compiled))
+        measured = [float(owned.get(unit.name, 0)) for unit in units]
+        if sum(measured) > 0 and all(value > 0 for value in measured):
+            weights = measured
+    total = sum(weights)
+    shares = [round(weight / total, 4) for weight in weights]
+    shares[-1] = round(1.0 - sum(shares[:-1]), 4)
     return tuple(
         PackUnit(
             key=re.sub(r"[^a-z0-9_]+", "_", unit.name.lower()).strip("_"),
             name=unit.name,
             kind=unit.archetype,
-            share=share if index < count - 1 else round(1.0 - share * (count - 1), 4),
+            share=share,
         )
-        for index, unit in enumerate(structure.bus)
+        for unit, share in zip(units, shares, strict=True)
     )
 
 
@@ -1164,6 +1368,26 @@ COUNTRY_LOCALES: dict[str, str] = {
     "GB": "united_kingdom", "UK": "united_kingdom",
     "DE": "germany", "AT": "germany",
     "AE": "gulf",
+    # The ten the shipped industries operate in that had no locale, so a
+    # company in any of them was built with Australian names, cities, calendar
+    # and digit grammar while the catalogue denominated its records in the
+    # local currency. `tools/ingest_locales.py` generates them; one country
+    # each, because none of these jurisdictions shares another's calendar.
+    "CN": "china",
+    "HK": "hong_kong",
+    "ID": "indonesia",
+    "IN": "india",
+    "JP": "japan",
+    "MY": "malaysia",
+    "SG": "singapore",
+    "TW": "taiwan",
+    # TH and VN are deliberately absent. A locale has to be able to staff a
+    # company, and no library publishes a romanised surname pool deep enough
+    # for either: Faker's Thai surnames romanise to 314 distinct forms where a
+    # deep pool needs 500, and Vietnamese surnames are carried nowhere but
+    # Faker, which has ten. `tools/ingest_locales.UNSERVED` records both, and
+    # `locale_finding` keeps saying so rather than padding a pool with names
+    # nobody published.
 }
 DEFAULT_GEO = "australia"
 
@@ -1171,6 +1395,48 @@ DEFAULT_GEO = "australia"
 def geo_for(countries: Sequence[str]) -> str:
     """The locale of the first of *countries* that has one, else `DEFAULT_GEO`."""
     return next((COUNTRY_LOCALES[c] for c in countries if c in COUNTRY_LOCALES), DEFAULT_GEO)
+
+
+def unlocalised(countries: Sequence[str]) -> tuple[str, ...]:
+    """The countries in *countries* that no shipped locale answers for.
+
+    Ten of the twelve countries the shipped industries operate in are here:
+    a locale is names, cities, a calendar, a currency and a digit grammar,
+    and four of them ship. The catalogue knows every country's currency, tax
+    and fiscal year; the world that renders them does not.
+    """
+    return tuple(sorted({c for c in countries if c not in COUNTRY_LOCALES}))
+
+
+def locale_finding(
+    countries: Sequence[str], *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """What a company in *countries* loses to the locale it is built in, or None.
+
+    None when every country has a locale. Otherwise the sentence names the
+    countries, the locale actually used and the currency the catalogue
+    declares for them, so a reader sees an Indian telecom's Australian names
+    and AUD figures as a stated limit rather than finding them in the output.
+    """
+    missing = unlocalised(countries)
+    if not missing:
+        return None
+    cat = catalogue if catalogue is not None else load_catalogue()
+    variants = cat.get("regional_variants", {})
+    declared = sorted({
+        variants[code]["currency"]
+        for code in missing
+        if code in variants and variants[code].get("currency")
+    })
+    geo = geo_for(countries)
+    money = f" The catalogue denominates them in {', '.join(declared)}." if declared else ""
+    return (
+        f"a locale for {', '.join(missing)}: none ships, so the company's names,"
+        f" cities, calendar, figure grammar and currency are {geo!r}."
+        f"{money} Connector records carry the catalogue's own currency per country,"
+        " so records and rendered documents disagree on the money."
+        " Write a locale and `locales.register` it to close the gap."
+    )
 
 
 #: The unit archetypes that earn revenue; the function they bind most is the
@@ -1336,7 +1602,7 @@ def project(
         company=document,
         seed=seed,
         structure=structure,
-        divisions=divisions(structure),
+        divisions=divisions(structure, compiled=derived.compiled),
         lobs=selected,
         use_cases=cases,
         acknowledged_unmet=tuple(resolution.unmet),
@@ -1532,6 +1798,15 @@ def describe(industry: str) -> dict[str, Any]:
         "lines": len(summary.lines),
         "bindings": summary.bindings,
         "situations": summary.situations,
+        "distinct_answers": summary.distinct_answers,
+        "staffing_release": summary.staffing_release,
+        # The measured shape of the workforce, largest function first. A share
+        # per family rather than per line: several lines of one family are one
+        # department, and the employment survey counts the department.
+        "workforce": dict(sorted(
+            {line.lob: line.workforce_share for line in summary.lines if line.workforce_share}.items(),
+            key=lambda item: (-item[1], item[0]),
+        )),
         "reads": summary.reads,
         "writes": summary.writes,
         "facts": summary.facts,
@@ -1544,6 +1819,11 @@ def describe(industry: str) -> dict[str, Any]:
 
 
 __all__ = [
+    "function_finding",
+    "function_of",
+    "function_words",
+    "stream_of",
+    "stream_words",
     "COUNT_CEILING",
     "EMULATED_SYSTEMS",
     "EPOCH",
@@ -1574,6 +1854,8 @@ __all__ = [
     "stream_names",
     "use_cases",
     "COUNTRY_LOCALES",
+    "locale_finding",
+    "unlocalised",
     "DEFAULT_GEO",
     "geo_for",
     "rederive",
