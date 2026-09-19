@@ -17,6 +17,7 @@ from pydantic import (
 
 from .connector_definition import ConnectorFieldDefinition, load_connector_definition
 from .enterprise_specs import (
+    RECORD_ADDRESSED,
     ContentAction,
     CoverageProfile,
     Operation,
@@ -521,6 +522,10 @@ def _connector_label(registry: SpecRegistry, name: str, *, role: Literal["source
 #: the lint and then raised `KeyError` here at plan time, and `delete` is the
 #: operation the DAG shapes exist to grade. `test_every_write_operation_can_be_
 #: phrased` holds the two in step.
+#: The operations whose target must exist before the write. Kept as values so
+#: a row, which carries strings, is compared without an enum round-trip.
+_RECORD_ADDRESSED = frozenset(member.value for member in RECORD_ADDRESSED)
+
 ACTION_INSTRUCTIONS: dict[str, str] = {
     "create": "Create a new",
     "update": "Update the existing",
@@ -626,7 +631,7 @@ def _plan(world: World, row: dict[str, str], registry: SpecRegistry) -> PlannedE
         )
     )
     target_state, target_state_field = _mutation_state(workflow, row)
-    mutation = MutationRequirement(connector=row["destination"], entity=row["destination_entity"], operation=row["operation"], output_format=row["output_format"], preexisting_record=row["operation"] in {"update", "patch", "upsert", "reply"}, target_state=target_state, target_state_field=target_state_field)
+    mutation = MutationRequirement(connector=row["destination"], entity=row["destination_entity"], operation=row["operation"], output_format=row["output_format"], preexisting_record=row["operation"] in _RECORD_ADDRESSED, target_state=target_state, target_state_field=target_state_field)
     artifact = {
         "xlsx": ArtifactRequirement(format="xlsx", sheets=("Summary", "Detail", "Exceptions", "Provenance"), charts=("status_breakdown", "period_trend")),
         "pptx": ArtifactRequirement(format="pptx", slides=("Title", "Executive summary", "Metrics", "Risks", "Actions", "Sources"), charts=("status_breakdown", "period_trend")),

@@ -124,6 +124,29 @@ first written up, before the waves above it landed.
   `delete` was among the unphrased, which is the operation the DAG shapes exist
   to grade. `ACTION_INSTRUCTIONS` now covers all thirteen write operations and
   a test holds it level with the `Operation` enum.
+- Phrasing every operation exposed two that the specs advertised and nothing
+  served. `jira.issue` said `attach` and `link`, `confluence.page`, both
+  ServiceNow entities and `email.message` said `attach`, and no connector
+  definition has a tool for any of them: a profile selecting one passed the
+  lint, rendered a prompt and refused at row compilation. The specs now
+  advertise only what a definition serves, and a test holds every builtin
+  spec to that.
+- A `delete`, `move`, `comment` or `forward` addresses a record that has to
+  exist, but only `update`, `patch`, `upsert` and `reply` asked the corpus for
+  a destination fixture, so a row planning one of the others fell back to a
+  source record id, which can belong to another connector. `RECORD_ADDRESSED`
+  names the ten operations that need an existing target, and `plan_queries`
+  marks each as `preexisting_record`. A delete or move reads its target
+  before the write, the way the delete chain already did, because the
+  trajectory law `destructive_without_read` holds the reference to the same
+  rule it holds the agent to; and neither binds evidence fields, because
+  their tools take only the record id. A profile whose destination deletes
+  now plans, grounds, compiles and runs: 12 of 12 rows on a project-built
+  world, every delete met. `move` is withdrawn from the specs for now: its
+  tools need a parent folder the corpus does not materialise, so a planned
+  move failed validation at the emulator. It returns with that fixture. No
+  shipped workflow selects any of these operations, so every shipped plan is
+  byte-identical.
 - Wiring Slack and Microsoft Teams into the registry grew the row space by
   nothing, because no builtin workflow named them. Each back-office workflow
   now posts a notification to Slack or Teams beside its record, page, file or

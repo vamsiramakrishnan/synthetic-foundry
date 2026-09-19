@@ -121,16 +121,35 @@ def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpr
         result = "deduplicated"
 
     def write(identifier: str, condition: ResultCondition | None = None) -> None:
-        bindings = (
-            {"body": ResultReference(node=result, select="all", encoding="json")}
-            if mutation.operation in {"reply", "forward", "comment"}
-            else {"fields.evidence": ResultReference(node=result, select="all"),
-                  "fields.evidence_count": ResultReference(node=result, select="count")}
-        )
+        # What the write carries from the reads. A message carries the result
+        # as its body; a record write carries it as evidence fields; a delete
+        # or move carries nothing, because its tool takes only the record id
+        # (and a parent), and an argument the tool does not accept is a row
+        # the compiler refuses.
+        if mutation.operation in {"reply", "forward", "comment"}:
+            bindings = {"body": ResultReference(node=result, select="all", encoding="json")}
+        elif mutation.operation in {"delete", "move"}:
+            bindings = {}
+        else:
+            bindings = {"fields.evidence": ResultReference(node=result, select="all"),
+                        "fields.evidence_count": ResultReference(node=result, select="count")}
+        parents = (result,)
+        if mutation.operation in {"delete", "move"}:
+            # A destructive write addresses a record the run has read: the
+            # trajectory law `destructive_without_read` demands it of every
+            # agent, so the reference reads the target first and the write
+            # takes its id from that read, never from a source record.
+            nodes.append(EnterpriseDagNode(
+                id=f"target-{identifier}", kind="verify", operation="read",
+                connector=mutation.connector, entity=mutation.entity,
+                depends_on=(result,), condition=condition,
+            ))
+            parents = (f"target-{identifier}",)
+            bindings = {"id": ResultReference(node=f"target-{identifier}", path=("id",))}
         nodes.append(EnterpriseDagNode(
             id=identifier, kind="write", operation=mutation.operation,
             connector=mutation.connector, entity=mutation.entity,
-            depends_on=(result,), condition=condition,
+            depends_on=parents, condition=condition,
             bindings=bindings,
         ))
         nodes.append(EnterpriseDagNode(

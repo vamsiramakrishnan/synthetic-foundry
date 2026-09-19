@@ -390,3 +390,47 @@ def test_plans_are_the_same_from_one_run_to_the_next() -> None:
     second, second_report = plan_queries(world, registry=registry, profile=profile.coverage, limit=7)
     assert [query.model_dump_json() for query in first] == [query.model_dump_json() for query in second]
     assert first_report == second_report
+
+
+def test_every_advertised_destination_operation_is_served_by_its_definition() -> None:
+    """A spec may not advertise an operation the connector definition cannot run.
+
+    Found by review: `jira.issue.attach`, `jira.issue.link`, `confluence.page.attach`
+    and three more passed the profile lint and the prompt renderer, then refused
+    at row compilation because no tool serves them. An alias that maps one
+    operation to several tools is not a gap; the compiler picks the member from
+    the output format.
+    """
+    from worldloom.enterprise_runner import canonical_operation
+    from worldloom.eval_connectors import builtin_connector_definitions
+
+    definitions = builtin_connector_definitions()
+    unserved = []
+    for spec in BUILTIN_CONNECTORS:
+        definition = definitions[spec.name]
+        for entity in spec.entities:
+            for operation in entity.operations:
+                canonical = canonical_operation(operation.value, preexisting_record=True)
+                try:
+                    definition.tool_for(entity.name, canonical)
+                except KeyError as error:
+                    if "does not define operation" in str(error):
+                        unserved.append(f"{spec.name}.{entity.name}.{operation.value}")
+    assert unserved == []
+
+
+def test_record_addressed_operations_plan_a_preexisting_destination() -> None:
+    """A delete, move, comment or forward needs a record to address.
+
+    Found by review: only update, patch, upsert and reply asked for a
+    destination fixture, so a profile selecting `delete` planned a row whose
+    write fell back to a source record id from another connector.
+    """
+    from worldloom.enterprise_queries import _RECORD_ADDRESSED
+    from worldloom.enterprise_specs import RECORD_ADDRESSED, Operation
+
+    assert {"delete", "move", "comment", "forward", "reply", "update", "patch", "upsert"} <= _RECORD_ADDRESSED
+    assert not {"create", "draft", "send"} & _RECORD_ADDRESSED
+    reads = {Operation.SEARCH, Operation.LIST, Operation.READ}
+    fresh = {Operation.CREATE, Operation.DRAFT, Operation.SEND}
+    assert set(RECORD_ADDRESSED) == set(Operation) - reads - fresh
