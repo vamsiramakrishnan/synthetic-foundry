@@ -11,6 +11,47 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A use case's capability and difficulty are read off its rows (Generation)
+
+- Every use case `industry.use_cases` derived carried `evidence_reconciliation`
+  at `medium`. The spec was assigned the first and left the second at its
+  default, and the one branch that could vary keyed on `line.writes`, which
+  is never zero because every activity type suits at least one write verb. A
+  healthcare company's fifty-eight use cases had one capability and one
+  difficulty while its rows spanned eight activity types and one to three
+  evidence channels each.
+- `industry.activity_capability` reads the activity type: a report is a
+  `search`, a reconcile step is a `reconcile`, and everything else acts on
+  evidence, which keeps the name `evidence_reconciliation`.
+  `industry.activity_difficulty` reads two things the row declares: an
+  exception path, and evidence in more than one channel. Both make the
+  activity hard, one makes it medium, neither makes it easy. A line takes the
+  most demanding of its activities, and `ProcessLine.capability` and
+  `ProcessLine.difficulty` carry the result into the use case's `EvalSpec`.
+  Nothing is drawn, hashed or rotated to spread the values.
+- A uniform property stays uniform and is said. Every activity the shipped
+  catalogue declares carries an exception path, so no shipped use case is
+  easy. `IndustryProgramme.uniformity` carries one sentence per value the
+  use cases cannot show, naming the row property that keeps it out with its
+  count; `capabilities` and `difficulties` carry the counts, and
+  `worldloom industry programme <industry> --describe` prints all three.
+  Healthcare now spans three capabilities (3 search, 50 evidence, 5
+  reconcile) and two difficulties (18 medium, 40 hard).
+- The construction's closing step is named for the capability
+  (`summarise`, `act`, `reconcile`), so a line whose only activity is a
+  report is no longer asked to reconcile, and a search line summarises and
+  extracts where every line used to reconcile and generate.
+- `request_template` reads as a request the line's owner would make.
+  `work admit to discharge for Billing (Corporate Services; SG)` is now
+  `Move Bill and claim forward for Corporate Services in SG: find the
+  evidence Admit to Discharge leaves in SAP S/4HANA, act on it, and send
+  the result back to whoever asked.` Every noun is the rows' own: the
+  activity names in catalogue order, the owning units, the countries, the
+  stream and the systems of record. A line of more than three activities
+  names its first and last and counts the rest.
+- `industry.unlocalised` said four locales shipped and ten countries had
+  none. Twelve ship, and the two countries without one are TH and VN. The
+  docstring now says so, and why.
 ### A covering plan that stops when it is done
 
 - `worldloom enterprise-evals plan` could not finish on any shipped profile.
