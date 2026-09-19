@@ -11,6 +11,71 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The planner grounds every row in the world it plans for
+
+- The documented loop starts with `worldloom enterprise-evals build <world>
+  <cases> --limit N --dag-shape '*'`. On every shipped world and profile it
+  exited 1 at validate with findings like `query <id>: evidence <rid> carries
+  no fact (servicenow:incident)`. Two causes shared one missing predicate.
+  The corpus builder selected source records by position, so a pool of
+  thirty-eight Jira issues with one fact-less record put that record into
+  twenty queries. The planner admitted rows over sources the world had no
+  records for, the builder minted fact-less filler records to meet the
+  count, and the validator refused them.
+- `enterprise_evidence.carries_evidence` is the validator's acceptance rule,
+  stated once: a record is evidence when it carries a World fact or a valid
+  pinned observation. The validator uses it, and the builder now selects by
+  it. Selection is a stable sort of the pool in its existing order with
+  evidence-bearing records first, so a pool whose leading records all carry
+  evidence selects exactly what it selected before. A record without
+  evidence is taken only when no evidence-bearing record is left.
+- The planner reads the world's groundable inventory before it plans a row.
+  `enterprise_grounding.groundable_inventory` counts, for each source a
+  registry names, the evidence-bearing records the world offers it, through
+  the same `generate_connector_data` call the build makes and the same
+  entity aliases the builder resolves. A source with fewer such records
+  than its role's minimum is inadmissible for that world. `_groundable` is
+  the sibling of `_admissible`, applied where lanes are built, so the
+  candidate stream and the derived required set describe one space and the
+  report still says `exact: true`. A mapped read or a conditional demands
+  two witnesses of a source, so those shapes are not decided for a row
+  whose source has one. `CoverageReport.ungroundable_sources` names what the
+  world could not ground, as sorted `connector:entity` strings, and the
+  `plan` and `build` commands print it. A profile the world grounds nothing
+  of is refused with the code `ungroundable_world`, naming the sources,
+  rather than exported as an empty corpus. `enterprise-evals space` has no
+  world and is unchanged.
+- The filler is a tripwire. A query that still reaches materialization over
+  a source the world cannot ground raises `ungroundable_source`, naming the
+  query and the source, instead of minting a record the validator refuses
+  later. Destination fixtures for record-addressed writes are untouched.
+- On `examples/hospital` the default profile builds in two seconds and
+  names `email:thread`, `salesforce:account`, `salesforce:case`,
+  `salesforce:opportunity` and `servicenow:incident` as ungroundable; the
+  back-office and omnichannel-retailer profiles build too. `email:thread`
+  is ungroundable on every world the builtin projections serve: the email
+  projection emits `message` records and the definition does not alias
+  `thread` to them, so email as a source grounds only through the
+  operational projections, which do emit threads. That gap is recorded
+  here, not fixed.
+- Byte identity. A plan whose sources all ground is the plan it was:
+  measured on a narrowed profile over `jira`, `confluence` and `sharepoint`,
+  the full 1,518-row plan, its first 40 rows, a 40-row built corpus, and
+  the pipeline test's 12-row corpus on `examples/retail-close` are
+  byte-identical before and after this change. A plan over an ungroundable
+  source changes, because its rows are gone; no such plan ever built a
+  corpus. Two pinned plans moved for that reason and say so where they are
+  pinned: the narrowed retail profile over `jira`, `confluence` and `email`
+  on `examples/hospital` (312 rows, 167 of them over `email:thread`, 183
+  `email:thread` findings at validate) now plans 171 rows, and the unbound
+  operational profile's first three rows (two of which failed validation)
+  are now three Jira rows. No built corpus changes bytes, so this is not a
+  Generation change.
+- Qualification and dataset generation plan the world-free space
+  (`plan_queries(..., ground=False)`). They execute every query under
+  `strict_sources` and record its refusal by name in their own ledgers, so a
+  pool's identity and its report do not depend on the inventory.
+
 ### The reference passes its own case set
 
 - The reference agent is the executable ceiling for a case set, and on a

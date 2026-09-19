@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from .connector_definition import ConnectorFieldDefinition, load_connector_definition
+from .enterprise_grounding import groundable_inventory
 from .enterprise_specs import (
     RECORD_ADDRESSED,
     ContentAction,
@@ -31,6 +32,7 @@ from .models import Model
 from .predicates import Predicate, RelativeTime
 
 if TYPE_CHECKING:
+    from .connector_data import ConnectorProjectionRegistry
     from .world import World
 
 
@@ -142,6 +144,12 @@ class CoverageReport(Model):
     #: limit cut it short, which read as full coverage of a space it never
     #: finished walking.
     exact: bool = True
+    #: Sources the world could not ground, as sorted ``connector:entity``
+    #: strings: the world holds fewer evidence-bearing records for the source
+    #: than its role's minimum, so no planned row reads it. The candidate
+    #: space, ``required_interactions`` and ``holes`` all describe the
+    #: groundable space, and this names what was left out of it.
+    ungroundable_sources: tuple[str, ...] = ()
 
     @property
     def complete(self) -> bool:
@@ -196,11 +204,12 @@ _CONSTRAINED = ("operation", "output_format", "content_action", "failure")
 
 
 def _admissible(operation: str, output_format: str, action: str, failure: str) -> bool:
-    """The one validity predicate.
+    """The one validity predicate over the dimensions that vary inside a lane.
 
     The candidate stream and the required-set derivation both call it, so the
     derived set is exact by construction, not by two copies of the rules
-    staying in agreement.
+    staying in agreement. ``_groundable`` is its sibling for a lane's
+    sources, applied where lanes are built so both consumers see one lane set.
     """
     if operation in {"update", "patch"} and failure == "missing_stable_id":
         return False
@@ -209,6 +218,36 @@ def _admissible(operation: str, output_format: str, action: str, failure: str) -
     if output_format == "xlsx" and action not in {"extract", "compare", "reconcile", "generate", "render"}:
         return False
     return True
+
+
+#: Evidence-bearing record counts by (connector, entity), from
+#: ``enterprise_grounding.groundable_inventory``. ``None`` means no world is
+#: in hand (``enterprise-evals space``), and every source grounds.
+GroundableInventory = Mapping[tuple[str, str], int]
+
+
+def _groundable(role: SourceRole, entity: str, inventory: GroundableInventory | None) -> bool:
+    """The world holds at least the role's minimum of evidence-bearing records for the source.
+
+    A row planned over a source below this line cannot validate: the corpus
+    builder has no evidence to select, and a filler record carries none. The
+    shipped worlds and profiles all aborted there, at the last step, on rows
+    the planner could have refused at the first.
+    """
+    if inventory is None:
+        return True
+    return inventory.get((role.connector, entity), 0) >= role.minimum
+
+
+def ungroundable_sources(registry: SpecRegistry, inventory: GroundableInventory | None) -> tuple[str, ...]:
+    """The sources ``_groundable`` refuses, as sorted ``connector:entity`` strings."""
+    return tuple(sorted({
+        f"{role.connector}:{entity}"
+        for workflow in registry.workflows.values()
+        for role in workflow.sources
+        for entity in role.entities
+        if not _groundable(role, entity, inventory)
+    }))
 
 
 @dataclass(frozen=True)
@@ -253,14 +292,26 @@ class _Lane:
 
 
 def _row_lanes(
-    registry: SpecRegistry, profile: CoverageProfile
+    registry: SpecRegistry, profile: CoverageProfile, inventory: GroundableInventory | None = None,
 ) -> list[list[_Lane]]:
-    """Independent valid-row lanes, one per semantic connector lane, grouped by workflow."""
+    """Independent valid-row lanes, one per semantic connector lane, grouped by workflow.
+
+    A lane whose sources the world cannot ground is not built. The stream and
+    the required-set derivation both read lanes from here, so the groundable
+    space is one space, and the lanes that do survive are the same lanes in
+    the same order as before: a world that grounds every source builds the
+    same walk, byte for byte.
+    """
     lanes_by_workflow: list[list[_Lane]] = []
     for workflow in registry.workflows.values():
         workflow_lanes: list[_Lane] = []
         for sources in _source_combinations(workflow, profile):
             for variants in _source_variants(sources, registry):
+                if not all(
+                    _groundable(role, entity, inventory)
+                    for role, (_, entity, _) in zip(sources, variants, strict=True)
+                ):
+                    continue
                 source_set = "+".join(item[0] for item in variants)
                 source_entities = "+".join(
                     f"{connector}:{entity}" for connector, entity, _ in variants
@@ -301,7 +352,8 @@ def _row_lanes(
 
 
 def required_interactions(
-    registry: SpecRegistry, profile: CoverageProfile, strength: int, dag_shapes: tuple[str, ...] = ()
+    registry: SpecRegistry, profile: CoverageProfile, strength: int, dag_shapes: tuple[str, ...] = (),
+    *, inventory: GroundableInventory | None = None,
 ) -> set[_Interaction]:
     """The exact t-way interaction set of the whole valid candidate space,
     derived from the lane domains without enumerating a row.
@@ -321,6 +373,10 @@ def required_interactions(
     across them: the admissible tuples by domain, the projections by domain
     and key subset, and a batch of interactions is added once per distinct
     (domain, constant values) pair rather than once per lane.
+
+    ``inventory`` is the world's groundable inventory when a world is in
+    hand: the lanes are then the groundable lanes, and a shape that demands
+    more evidence of a source than the world holds is not decided for it.
     """
     bound_keys = (*_CONSTRAINED, "dag_shape") if dag_shapes else _CONSTRAINED
     required: set[_Interaction] = set()
@@ -328,7 +384,7 @@ def required_interactions(
     interned: dict[tuple[Any, ...], tuple[Any, ...]] = {}
     projections: dict[tuple[Any, ...], tuple[tuple[str, ...], ...]] = {}
     added: set[tuple[Any, ...]] = set()
-    for group in _row_lanes(registry, profile):
+    for group in _row_lanes(registry, profile, inventory):
         for lane in group:
             free = lane.free()
             domains = (lane.operations, lane.formats, lane.actions, lane.failures)
@@ -357,7 +413,7 @@ def required_interactions(
                     probe = (operation, output_format, failure)
                     if probe not in shapes:
                         stub = {**fixed, "operation": operation, "output_format": output_format, "failure": failure}
-                        shapes[probe] = compatible_shapes(stub, dag_shapes)
+                        shapes[probe] = compatible_shapes(stub, dag_shapes, inventory=inventory)
                     with_shapes.update((operation, output_format, action, failure, shape) for shape in shapes[probe])
                 admissible = frozenset(with_shapes)
             else:
@@ -398,19 +454,25 @@ def _project(
     return tuple(sorted(result))
 
 
-def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | None = None) -> Iterator[dict[str, str]]:
+def valid_rows(
+    registry: SpecRegistry | None = None, profile: CoverageProfile | None = None,
+    *, inventory: GroundableInventory | None = None,
+) -> Iterator[dict[str, str]]:
     """Stream supported rows fairly across semantic connector lanes.
 
     Round-robin ordering makes a bounded exhaustive prefix representative: a
     2,000-row corpus reaches every workflow and connector shape instead of
     spending its whole budget inside the first workflow's first source tuple.
+
+    With an ``inventory`` the rows are the groundable rows of that world.
+    Without one (``enterprise-evals space`` has no world) every source grounds.
     """
     registry = registry or builtin_registry()
     profile = profile or CoverageProfile()
     # Two-level fairness: rotate workflows, then rotate semantic connector
     # lanes inside that workflow. This prevents a workflow with more possible
     # connector permutations from dominating every bounded prefix.
-    active = deque(deque(lane.rows() for lane in group) for group in _row_lanes(registry, profile) if group)
+    active = deque(deque(lane.rows() for lane in group) for group in _row_lanes(registry, profile, inventory) if group)
     emitted = 0
     while active:
         workflow_lanes = active.popleft()
@@ -669,24 +731,47 @@ def plan_queries(
     shard_index: int | None = None,
     shard_count: int | None = None,
     dag_shapes: tuple[str, ...] = (),
+    projections: ConnectorProjectionRegistry | None = None,
+    ground: bool = True,
 ) -> tuple[Iterator[PlannedEnterpriseQuery], CoverageReport | None]:
+    """Plan the queries a world can ground, and report what it could not.
+
+    ``projections`` are the connector projections the build will materialise
+    with; the groundable inventory is read through them so planning and
+    materialisation see the same records. A world that grounds no source of
+    any workflow is refused here, naming the sources, rather than exported as
+    an empty corpus.
+
+    ``ground=False`` plans the world-free space. Qualification and dataset
+    generation ask for it: they ground every query by executing it under
+    ``strict_sources`` and record the refusal per query in their own ledger,
+    so a pool's identity and its ledger do not depend on the inventory.
+    """
     registry = registry or builtin_registry()
     profile = profile or CoverageProfile()
     findings = registry.review()
     if findings:
         raise ValueError("invalid registry: " + "; ".join(findings))
-    rows: Iterable[dict[str, str]] = valid_rows(registry, profile)
+    inventory = groundable_inventory(world, registry, projections=projections) if ground else None
+    ungroundable = ungroundable_sources(registry, inventory)
+    if not any(_row_lanes(registry, profile, inventory)):
+        raise ValueError(
+            "ungroundable_world: no workflow has a source combination this world can ground;"
+            f" ungroundable sources: {', '.join(ungroundable)}"
+        )
+    rows: Iterable[dict[str, str]] = valid_rows(registry, profile, inventory=inventory)
     if dag_shapes:
         from .enterprise_dag_planning import compatible_shapes
 
         def expanded(candidates: Iterable[dict[str, str]]) -> Iterator[dict[str, str]]:
             emitted = False
             for candidate in candidates:
-                for shape in compatible_shapes(candidate, dag_shapes):
+                for shape in compatible_shapes(candidate, dag_shapes, inventory=inventory):
                     emitted = True
                     yield {**candidate, "dag_shape": shape}
             if not emitted:
-                raise ValueError("requested DAG shapes admit no executable workflow")
+                detail = f"; ungroundable sources: {', '.join(ungroundable)}" if ungroundable else ""
+                raise ValueError("requested DAG shapes admit no executable workflow" + detail)
 
         rows = expanded(rows)
     if (shard_index is None) != (shard_count is None):
@@ -705,10 +790,11 @@ def plan_queries(
         rows = itertools.islice(rows, shard_index, None, shard_count)
     report = None
     if strategy == "covering":
-        required = required_interactions(registry, profile, profile.strengths, dag_shapes)
+        required = required_interactions(registry, profile, profile.strengths, dag_shapes, inventory=inventory)
         selected, report = constrained_cover(
             rows, profile.strengths, limit=limit, required=required, partial=sharded,
         )
+        report = report.model_copy(update={"ungroundable_sources": ungroundable})
         rows = selected
     elif limit is not None:
         rows = itertools.islice(rows, limit)

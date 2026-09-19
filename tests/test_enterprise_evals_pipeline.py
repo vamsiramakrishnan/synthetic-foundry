@@ -277,23 +277,45 @@ def test_a_selection_that_admits_no_workflow_is_refused(tmp_path: Path) -> None:
     assert "no workflow survives" in result.output
 
 
-def test_build_refuses_original_profile_whose_change_evidence_is_only_a_placeholder(tmp_path: Path) -> None:
+def test_build_plans_around_a_source_the_world_cannot_ground_and_names_it(tmp_path: Path) -> None:
+    """The original profile asks for ServiceNow change requests, and the
+    golden retail world has none. The build used to mint a fact-less filler
+    record for them and abort at validate with `carries no fact`. The planner
+    now leaves those rows out, the build completes, and the report names the
+    source it could not ground."""
     result = RUNNER.invoke(app, [
         "enterprise-evals", "build", "examples/retail-close", str(tmp_path / "out"),
         "--profile", str(_profile(tmp_path)), "--limit", "12",
     ])
-    assert result.exit_code == 1, result.output
-    assert "carries no fact (servicenow:change_request)" in result.output
-    assert not (tmp_path / "out" / "manifest.json").exists()
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.output)
+    assert summary["queries"] == 12
+    assert summary["coverage"]["ungroundable_sources"] == ["servicenow:change_request"]
+    assert (tmp_path / "out" / "manifest.json").exists()
+    rows = [json.loads(line) for line in (tmp_path / "out" / "queries.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert rows and all("servicenow:change_request" not in row["dimensions"]["source_entities"] for row in rows)
 
 
 SHIPPED_RETAIL_PROFILE = Path("examples/enterprise-evals/omnichannel-retailer.json")
 
-#: SHA-256 of the 312 rows the narrowed retail profile below plans for
-#: `examples/hospital`, captured from the code at 8884546, before the cover
-#: could stop at saturation. The walk is the same walk stopped early, so the
-#: bytes must not move.
-NARROWED_PLAN_DIGEST = "d32f9fe1eed6ffd8b5528baa8c642c2632a5f6d988017605414879345d735194"
+#: SHA-256 of the 171 rows the narrowed retail profile below plans for
+#: `examples/hospital`. Until the planner read the world's groundable
+#: inventory it planned 312 rows (digest d32f9fe1eed6ffd8b5528baa8c642c26
+#: 32a5f6d988017605414879345d735194, captured at 8884546): 167 of them read
+#: `email:thread`, which the builtin email projection never emits, so the
+#: build of that plan failed at validate with 183 `carries no fact
+#: (email:thread)` findings. It never produced a corpus. All 145 rows of the
+#: 312 that read no thread are among the 171; the other 26 cover interactions
+#: an email row used to cover. The plan below pins a profile whose every
+#: source grounds, so a change to the walk itself still shows.
+NARROWED_PLAN_DIGEST = "3191831f48b10f448fc2858e31409c3f227b556f7f9206784eb3244b330b0e66"
+
+#: SHA-256 of the first 40 rows the same narrowing plans for `examples/hospital`
+#: when its connectors are `jira`, `confluence` and `sharepoint`, all of which
+#: the world grounds. Captured from the code at 29b40bd, before the planner
+#: read the inventory, so this is the byte-identity claim: a plan whose
+#: sources all ground is the plan it was.
+GROUNDED_PLAN_DIGEST = "10cc12a288714350cebb5eaef9b4425eda39776b0b3ba6b43796eb39239d3372"
 
 
 def _narrowed_retail_profile(path: Path) -> Path:
@@ -341,7 +363,25 @@ def test_a_narrowed_profile_plans_the_same_bytes_as_before(tmp_path: Path) -> No
     assert result.exit_code == 0, result.output
     assert hashlib.sha256(out.read_bytes()).hexdigest() == NARROWED_PLAN_DIGEST
     summary = json.loads(result.output)
-    assert summary["selected"] == 312
+    assert summary["selected"] == 171
     assert summary["truncated"] is False and summary["exact"] is True
-    assert summary["required_interactions"] == summary["covered_interactions"] == 1307
+    assert summary["required_interactions"] == summary["covered_interactions"] == 824
     assert summary["hole_count"] == 0
+    assert summary["ungroundable_sources"] == ["email:thread"]
+
+
+def test_a_plan_whose_sources_all_ground_is_byte_identical_to_before_grounding(tmp_path: Path) -> None:
+    out = tmp_path / "plan.jsonl"
+    profile = json.loads(_narrowed_retail_profile(tmp_path / "narrow.json").read_text(encoding="utf-8"))
+    profile["connectors"] = ["jira", "confluence", "sharepoint"]
+    (tmp_path / "grounded.json").write_text(json.dumps(profile), encoding="utf-8")
+    result = RUNNER.invoke(app, [
+        "enterprise-evals", "plan", "examples/hospital", str(out),
+        "--profile", str(tmp_path / "grounded.json"), "--limit", "40",
+    ])
+    assert result.exit_code == 0, result.output
+    assert hashlib.sha256(out.read_bytes()).hexdigest() == GROUNDED_PLAN_DIGEST
+    summary = json.loads(result.output)
+    assert summary["selected"] == 40
+    assert summary["required_interactions"] == 3336 and summary["covered_interactions"] == 593
+    assert summary["ungroundable_sources"] == []

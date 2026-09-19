@@ -447,7 +447,8 @@ def test_a_strict_corpus_that_outruns_its_evidence_names_the_counts():
 
     Under `strict_sources` the materializer must not invent evidence, so a
     pair short of what a planned row asks for is refused with both numbers
-    rather than topped up.
+    rather than topped up. The planner no longer plans a mapped read over a
+    source with one record, so the row is raised by hand here.
     """
     from worldloom.enterprise_corpus import materialize_corpus
     from worldloom.enterprise_queries import plan_queries
@@ -456,6 +457,9 @@ def test_a_strict_corpus_that_outruns_its_evidence_names_the_counts():
 
     world = World.load("retail-close")
     queries, _ = plan_queries(world, profile=CoverageProfile(strengths=1, connector_counts=(1,), failures=("none",)),
-                              strategy="exhaustive", limit=40, dag_shapes=("map_read",))
-    with pytest.raises(ValueError, match=r"record\(s\) and a planned row needs"):
-        materialize_corpus(world, queries, strict_sources=True)
+                              strategy="exhaustive", limit=1)
+    query = next(iter(queries))
+    sources = tuple(source.model_copy(update={"minimum": 1_000}) for source in query.generation.source_requirements)
+    query = query.model_copy(update={"generation": query.generation.model_copy(update={"source_requirements": sources})})
+    with pytest.raises(ValueError, match=r"record\(s\) and a planned row needs 1000"):
+        materialize_corpus(world, (query,), strict_sources=True)

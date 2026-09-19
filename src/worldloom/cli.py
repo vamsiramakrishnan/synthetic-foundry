@@ -202,7 +202,8 @@ def enterprise_evals_plan(
         if scenario
         else CoverageProfile(strengths=strength)
     )
-    queries, report = plan_queries(
+    queries, report = _plan_grounded(
+        plan_queries,
         world,
         registry=registry,
         profile=coverage,
@@ -418,7 +419,8 @@ def enterprise_evals_build(
         if scenario
         else CoverageProfile(strengths=strength)
     )
-    queries, report = plan_queries(
+    queries, report = _plan_grounded(
+        plan_queries,
         world,
         registry=registry,
         profile=coverage,
@@ -677,6 +679,7 @@ _REFUSALS: dict[str, str] = {
     "eval_unconstructible": "no candidate could be made to satisfy the eval design; data.findings names the seam per refusal",
     "engine_lacks_roles": "a facet implies roles and this engine has no role table to append them to",
     "enterprise_qualification_failed": "enterprise qualification could not evaluate the requested pool; detail names the contract",
+    "ungroundable_world": "the world holds no evidence-bearing records for any source combination of the selected workflows; the message names the sources",
     "episode_replaces_nothing": "the episode declares it replaces a loop this build does not run",
     "estate_unavailable": "an estate was asked for in a vertical with no landscape vocabulary",
     "exactly_one": "exactly one of a set of mutually exclusive flags must be given",
@@ -869,6 +872,23 @@ def _coverage_summary(report: Any) -> dict[str, Any]:
     data = report.model_dump(mode="json")
     holes = data.pop("holes")
     return {**data, "hole_count": len(holes), "hole_examples": holes[:8]}
+
+
+def _plan_grounded(plan: Any, world: Any, **options: Any) -> Any:
+    """Plan, turning the planner's refusal of an ungroundable world into a CLI refusal.
+
+    `plan_queries` raises `ValueError` when no workflow has a source
+    combination the world can ground, and names the sources. A profile that
+    reads systems the world never projected (the shipped back-office profile
+    on a world without a system of record) is the ordinary way to reach it,
+    so it is a refusal with a code, not a traceback.
+    """
+    try:
+        return plan(world, **options)
+    except ValueError as exc:
+        if not str(exc).startswith("ungroundable_world:"):
+            raise
+        _refuse("ungroundable_world", f"[red]error:[/red] {escape(str(exc))}")
 
 
 def _scenario_registry(scenario: Any, apply: Any, builtin: Any) -> Any:

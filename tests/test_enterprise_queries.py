@@ -362,10 +362,14 @@ def test_shards_cover_their_own_slices_and_their_union_covers_the_space() -> Non
     shard is an independent walk. The trade is stated by the report: a shard's
     holes are relative to the whole space, and the union of the shards'
     selections is complete because the union of their slices is the space."""
+    from worldloom.enterprise_grounding import groundable_inventory
+
     world = World.load("examples/retail-close")
     profile = _small_profile()
     registry = apply_scenario_profile(builtin_registry(), profile)
-    required = required_interactions(registry, profile.coverage, 2)
+    # The planner walks the groundable space of this world, so the whole
+    # space the shards' holes are relative to is derived from its inventory.
+    required = required_interactions(registry, profile.coverage, 2, inventory=groundable_inventory(world, registry))
     shards = [
         plan_queries(world, registry=registry, profile=profile.coverage, shard_index=index, shard_count=3)
         for index in range(3)
