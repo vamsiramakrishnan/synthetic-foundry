@@ -2,8 +2,19 @@ from __future__ import annotations
 
 import itertools
 
-from worldloom.enterprise_queries import constrained_cover, valid_rows
+import pytest
+
+from worldloom import enterprise_queries
+from worldloom.connector_definition import builtin_connector_definitions
+from worldloom.enterprise_queries import (
+    _connector_label,
+    _render,
+    constrained_cover,
+    plan_queries,
+    valid_rows,
+)
 from worldloom.enterprise_specs import (
+    BUILTIN_CONNECTORS,
     ContentAction,
     CoverageProfile,
     DestinationRole,
@@ -11,6 +22,7 @@ from worldloom.enterprise_specs import (
     Operation,
     ScenarioProfile,
     SourceRole,
+    SpecRegistry,
     WorkflowSpec,
     apply_scenario_profile,
     builtin_registry,
@@ -18,6 +30,7 @@ from worldloom.enterprise_specs import (
     canonical_action,
     load_enterprise_spec,
 )
+from worldloom.world import World
 
 
 def test_modify_is_explicitly_canonicalized() -> None:
@@ -116,3 +129,128 @@ def test_bounded_prefix_is_balanced_across_major_dimensions() -> None:
         "diamond",
     }
     assert {row["verification"] for row in rows} == {"readback", "cross_system"}
+
+
+# The connector definitions carried fourteen connectors while the planner's
+# registry carried eight, hand-written and never compared. A scenario profile
+# naming `slack` was refused as unknown while the emulator stood ready to
+# serve it. The tests below hold the two catalogues to each other by name,
+# entity and operation, so the next definition added without a spec fails
+# here and not in a user's profile.
+
+#: The eight specs written before the definitions existed carry `patch`,
+#: `upsert`, `attach` and `link`, which no definition maps to a tool. They are
+#: kept because planned rows already name them; a spec added after the
+#: definitions may not take them.
+ORIGINAL_CONNECTORS = frozenset({"jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email", "sor"})
+LEGACY_OPERATIONS = frozenset({Operation.PATCH, Operation.UPSERT, Operation.ATTACH, Operation.LINK})
+
+#: Which definition operation keys carry each spec operation. `list` is the
+#: definition's `search` where the product's search is a listing call, and a
+#: `draft` is the definition's `draft` or a `create` that makes a draft.
+GROUNDING = {
+    Operation.SEARCH: {"search"},
+    Operation.LIST: {"search"},
+    Operation.READ: {"read"},
+    Operation.CREATE: {"create"},
+    Operation.UPDATE: {"update"},
+    Operation.DELETE: {"delete"},
+    Operation.MOVE: {"move"},
+    Operation.COMMENT: {"comment"},
+    Operation.DRAFT: {"draft", "create"},
+    Operation.SEND: {"send"},
+    Operation.REPLY: {"reply"},
+    Operation.FORWARD: {"forward"},
+}
+
+
+def test_every_connector_definition_has_a_planner_spec() -> None:
+    registry = builtin_registry()
+
+    assert set(registry.connectors) == set(builtin_connector_definitions())
+    assert registry.review() == ()
+    # The order is the tuple's, so a dump of the built-in spec is stable.
+    assert list(registry.connectors) == [spec.name for spec in BUILTIN_CONNECTORS]
+
+
+def test_spec_entities_and_operations_are_carried_by_their_definitions() -> None:
+    definitions = builtin_connector_definitions()
+    for name, spec in builtin_registry().connectors.items():
+        definition = definitions[name]
+        for entity in spec.entities:
+            # An alias such as jira's `issue` resolves to its members; a name
+            # the definition does not know raises here.
+            members = definition.entity_members(entity.name)
+            carried = {op for member in members for op in definition.entities[member].ops}
+            for operation in entity.operations:
+                if operation in LEGACY_OPERATIONS:
+                    assert name in ORIGINAL_CONNECTORS, f"{name}.{entity.name} carries {operation.value}, which no definition maps to a tool"
+                    continue
+                assert GROUNDING[operation] & carried, f"{name}.{entity.name} spec operation {operation.value} is not in the definition's {sorted(carried)}"
+            if name == "onedrive":
+                # The definition types the drive item per format, so the
+                # spec's formats are entity names there, not free labels.
+                assert set(entity.formats) <= set(definition.entities)
+
+
+def test_render_reads_the_display_name_from_the_spec() -> None:
+    registry = builtin_registry()
+    workflow = WorkflowSpec(
+        name="chat_digest", purpose="channel digest",
+        sources=(SourceRole(connector="slack", entities=("thread",)), SourceRole(connector="teamwork_graph", entities=("work_item",))),
+        destinations=(DestinationRole(connector="teams", entities=("channel_message",), operations=(Operation.CREATE,)),),
+        content_actions=(ContentAction.SUMMARIZE,), audiences=("manager",),
+        prompt_template="Use {sources}. {action_instruction} {output_label} in {destination}.{failure_instruction}",
+    )
+    row = {
+        "workflow": "chat_digest", "source_set": "slack+teamwork_graph", "source_entities": "slack:thread+teamwork_graph:work_item",
+        "input_formats": "record+record", "destination": "teams", "destination_entity": "channel_message", "operation": "create",
+        "output_format": "record", "content_action": "summarize", "audience": "manager", "topology": "chain", "failure": "none", "verification": "readback",
+    }
+
+    text = _render(World.load("examples/retail-close"), workflow, row, registry)
+
+    assert "the relevant Slack thread" in text
+    assert "the relevant Teamwork Graph work item" in text
+    assert "in Microsoft Teams." in text
+
+
+def _legacy_source_label(name: str) -> str:
+    return name.replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").replace("jira", "Jira").replace("salesforce", "Salesforce").replace("confluence", "Confluence").replace("drive", "Drive").replace("email", "email")
+
+
+def _legacy_destination_label(name: str) -> str:
+    return name.replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").title()
+
+
+def test_the_original_eight_keep_the_labels_their_rows_were_rendered_with() -> None:
+    """The replace chain and `.title()` the renderer used are the oracle here,
+    reproduced verbatim, so a spec's `display_name` can be corrected without
+    moving the text of a row that already exists."""
+    registry = builtin_registry()
+    for name in sorted(ORIGINAL_CONNECTORS):
+        assert _connector_label(registry, name, role="source") == _legacy_source_label(name)
+        assert _connector_label(registry, name, role="destination") == _legacy_destination_label(name)
+
+
+def test_narrowed_profile_plans_byte_identically(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same narrowed profile, planned with the spec's labels and with the
+    old chain swapped back in, must write the same bytes."""
+    profile = ScenarioProfile(
+        name="narrow", industry="retail", company_description="An omnichannel retailer.",
+        workflows=("executive_digest",), connectors=("jira", "confluence", "email"),
+        coverage=CoverageProfile(name="narrow", strengths=2, connector_counts=(1, 2), failures=("none", "permission_denied")),
+    )
+    world = World.load("examples/retail-close")
+    registry = apply_scenario_profile(builtin_registry(), profile)
+
+    queries, _ = plan_queries(world, registry=registry, profile=profile.coverage)
+    current = [query.model_dump_json() for query in queries]
+
+    def legacy(registry: SpecRegistry, name: str, *, role: str) -> str:
+        return _legacy_source_label(name) if role == "source" else _legacy_destination_label(name)
+
+    monkeypatch.setattr(enterprise_queries, "_connector_label", legacy)
+    queries, _ = plan_queries(world, registry=registry, profile=profile.coverage)
+    assert current == [query.model_dump_json() for query in queries]
+    assert len(current) > 100

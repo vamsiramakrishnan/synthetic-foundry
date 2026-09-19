@@ -304,14 +304,35 @@ def constrained_cover(rows: Iterable[dict[str, str]], strength: int) -> tuple[tu
     return tuple(chosen), report
 
 
-def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str]) -> str:
+#: What the request text called the first eight connectors before it read
+#: `ConnectorSpec.display_name`, where the two differ. Sources went through a
+#: chain of `str.replace` calls that knew seven names and left the rest as
+#: typed, so `drive` printed as "Drive" and `email` and `sor` stayed lower
+#: case. Destinations went through `str.title()`, which lower-cases the second
+#: capital, so ServiceNow printed as "Servicenow" and SharePoint as
+#: "Sharepoint". Every planned query row that exists was rendered that way,
+#: and its text must not move, so the old strings are pinned here by name and
+#: the spec's display name serves everything else: the six connectors added
+#: after the chain was written, and any connector a scenario profile authors.
+_LEGACY_SOURCE_LABELS = {"drive": "Drive", "email": "email", "sor": "sor"}
+_LEGACY_DESTINATION_LABELS = {"servicenow": "Servicenow", "sharepoint": "Sharepoint", "drive": "Drive", "sor": "Sor"}
+
+
+def _connector_label(registry: SpecRegistry, name: str, *, role: Literal["source", "destination"]) -> str:
+    pinned = (_LEGACY_SOURCE_LABELS if role == "source" else _LEGACY_DESTINATION_LABELS).get(name)
+    if pinned is not None:
+        return pinned
+    return registry.connectors[name].display_name
+
+
+def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str], registry: SpecRegistry) -> str:
     formats = row["input_formats"].split("+")
     entities = [value.split(":", 1)[1] for value in row["source_entities"].split("+")]
     source_names = []
     for connector, entity, input_format in zip(
         row["source_set"].split("+"), entities, formats, strict=True
     ):
-        display = connector.replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").replace("jira", "Jira").replace("salesforce", "Salesforce").replace("confluence", "Confluence").replace("drive", "Drive").replace("email", "email")
+        display = _connector_label(registry, connector, role="source")
         format_label = {
             "xlsx": "Excel workbook",
             "pptx": "presentation",
@@ -343,7 +364,7 @@ def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str]) -> str
         "stale_source": " Prefer the authoritative current version and identify stale evidence.",
         "version_conflict": " Do not overwrite a newer version; return the conflict for review.",
     }[row["failure"]]
-    return workflow.prompt_template.format(period=world.period or "current-period", purpose=workflow.purpose, company=world.company.name, audience=row["audience"], sources=sources, action_instruction=action_instruction, output_label=row["output_format"].upper() if row["output_format"] != "record" else row["destination_entity"].replace("_", " "), destination=row["destination"].replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").title(), verification_instruction="read the saved result back and verify the change" if row["verification"] == "readback" else "verify the result against the authoritative source", failure_instruction=failure_instruction)
+    return workflow.prompt_template.format(period=world.period or "current-period", purpose=workflow.purpose, company=world.company.name, audience=row["audience"], sources=sources, action_instruction=action_instruction, output_label=row["output_format"].upper() if row["output_format"] != "record" else row["destination_entity"].replace("_", " "), destination=_connector_label(registry, row["destination"], role="destination"), verification_instruction="read the saved result back and verify the change" if row["verification"] == "readback" else "verify the result against the authoritative source", failure_instruction=failure_instruction)
 
 
 def _mutation_state(workflow: WorkflowSpec, row: Mapping[str, str]) -> tuple[str | None, str]:
@@ -415,7 +436,7 @@ def _plan(world: World, row: dict[str, str], registry: SpecRegistry) -> PlannedE
     transform = {"id": "transform", "kind": row["content_action"], "connector": "model", "entity": row["output_format"], "depends_on": [node["id"] for node in read_nodes]}
     write = {"id": "write", "kind": row["operation"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["transform"]}
     verify = {"id": "verify", "kind": row["verification"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["write"]}
-    request = _render(world, workflow, row)
+    request = _render(world, workflow, row, registry)
     for source in sources:
         if source.required_fields:
             request += f" Filter {source.connector}/{source.entity} to records with non-null {', '.join(source.required_fields)} and include those fields in the result."

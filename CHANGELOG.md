@@ -11,6 +11,40 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The planner knows every connector the emulator serves
+
+- The connector definitions carried fourteen connectors. The enterprise-evals
+  planner's registry carried eight, hand-written and never compared against
+  them. A scenario profile naming `slack` or `teams` was refused as an unknown
+  connector while the emulator stood ready to serve it, and the seventy-six
+  tools of `onedrive`, `outlook`, `slack`, `teams`, `rovo` and
+  `teamwork_graph` were out of the eval space's reach. `builtin_registry()`
+  now carries a `ConnectorSpec` for all fourteen.
+- Each new spec mirrors its definition entity for entity. Every operation on
+  it is one the definition maps to a tool, so `patch` and `upsert`, which no
+  definition carries, stay off the six; a workflow that asks for one is
+  reported by `review()` rather than planned. A test holds the two catalogues
+  to each other by name, entity and operation, so a definition added without a
+  spec fails there and not in a user's profile.
+- Maturity is not a gate. The repository has no rule that hides an `eap` or
+  `product_surface` connector: the definitions expose `rovo` and
+  `teamwork_graph` unconditionally and the binding carries their maturity
+  through as data. The specs follow suit, and the four `ga` connectors and the
+  two others are wired the same way.
+- The request text now takes a connector's name from its spec's
+  `display_name`. It used to go through a chain of `str.replace` calls that
+  knew seven names, so any connector added later printed in lower case, and
+  through `str.title()` for the destination, which printed ServiceNow as
+  "Servicenow". The strings those two paths produced for the original eight
+  are pinned by name, so every planned row that exists renders byte for byte
+  as before, and a test proves it on a narrowed profile. A connector a profile
+  authors itself now renders its `display_name` in the request text; its query
+  ids do not move, because they are keyed on the row, not on the text.
+- The shipped scenario profiles list their connectors explicitly and plan the
+  same bytes. The default profile spans fourteen connectors but no built-in
+  workflow names the new six, so its candidate space is unchanged: past the
+  ten million ceiling before and after.
+
 ### Eight locales, generated from published data (Generation)
 
 - Four locales shipped and the catalogue built companies in fourteen

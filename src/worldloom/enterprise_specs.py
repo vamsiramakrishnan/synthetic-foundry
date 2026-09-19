@@ -246,6 +246,24 @@ BUILTIN_CONNECTORS = (
     ConnectorSpec(name="salesforce", display_name="Salesforce", entities=(_entity("account", "id", READ + MUTATE), _entity("contact", "id", READ + MUTATE), _entity("opportunity", "id", READ + MUTATE), _entity("case", "id", READ + MUTATE)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
     ConnectorSpec(name="email", display_name="Email", entities=(_entity("message", "message_id", READ + (Operation.DRAFT, Operation.SEND, Operation.REPLY, Operation.FORWARD, Operation.ATTACH)), _entity("thread", "thread_id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
     _sor_connector(),
+    # The six below mirror `builtin_connector_definitions()` entity for entity,
+    # because for a long while they did not exist at all: the definitions
+    # carried fourteen connectors and this tuple eight, so a scenario profile
+    # naming `slack` was refused as unknown while the emulator stood ready to
+    # serve it. Each operation is one the definition maps to a tool. `patch`
+    # and `upsert`, which no definition carries, stay off them, so a workflow
+    # asking for one is reported by `review()` instead of planned. `list` is
+    # the definition's `search` where the product's search is a listing call.
+    # Maturity is not a gate here, and it is not one anywhere else either: the
+    # definitions expose `rovo` (product_surface) and `teamwork_graph` (eap)
+    # unconditionally and the binding carries the maturity through as data,
+    # so the specs follow suit.
+    ConnectorSpec(name="onedrive", display_name="OneDrive", entities=(_entity("file", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE, Operation.MOVE), "docx", "xlsx", "pptx", "pdf"), _entity("folder", "id", READ + (Operation.CREATE, Operation.DELETE, Operation.MOVE))), content_actions=tuple(ContentAction)),
+    ConnectorSpec(name="outlook", display_name="Outlook", entities=(_entity("message", "id", READ + (Operation.CREATE, Operation.DRAFT, Operation.UPDATE, Operation.SEND, Operation.REPLY, Operation.FORWARD, Operation.COMMENT, Operation.DELETE, Operation.MOVE)), _entity("mail_folder", "id", READ + (Operation.CREATE,)), _entity("attachment", "id", READ + (Operation.CREATE, Operation.DELETE))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    ConnectorSpec(name="slack", display_name="Slack", entities=(_entity("channel", "id", READ + (Operation.CREATE,)), _entity("message", "ts", READ + (Operation.CREATE, Operation.UPDATE, Operation.COMMENT, Operation.REPLY, Operation.DELETE)), _entity("thread", "ts", READ + (Operation.COMMENT, Operation.REPLY)), _entity("file", "id", READ), _entity("user", "id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    ConnectorSpec(name="teams", display_name="Microsoft Teams", entities=(_entity("team", "id", READ), _entity("channel", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)), _entity("chat", "id", READ + (Operation.CREATE,)), _entity("channel_message", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.COMMENT, Operation.REPLY, Operation.DELETE)), _entity("chat_message", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)), _entity("member", "id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    ConnectorSpec(name="rovo", display_name="Rovo", entities=tuple(_entity(name, "ari", READ) for name in ("document", "message", "work_item", "person", "team", "project", "goal")), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
+    ConnectorSpec(name="teamwork_graph", display_name="Teamwork Graph", entities=tuple(_entity(name, "ari", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)) for name in ("document", "message", "work_item", "project", "comment", "pull_request", "repository", "space")) + tuple(_entity(name, "ari", READ) for name in ("team", "user", "goal")), content_actions=(ContentAction.EXTRACT, ContentAction.COMPARE)),
 )
 
 
