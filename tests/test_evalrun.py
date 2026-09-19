@@ -1000,3 +1000,140 @@ def test_comparison_and_summary_speak_only_of_observed_axes(grammar_corpus: Any)
     executed = session.summary("reference")
     assert executed.exact_match_rate == 1.0 and executed.mean_calls is not None and executed.mean_calls > 0
 
+
+
+# -- grader defects found by the reference on a project-built world ----------
+
+
+def _list_item_row(nodes: list[dict[str, Any]], edges: list[list[str]], assertions: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"id": "li", "query": "Read the stale row, then act on it.",
+            "expected_dag": {"nodes": nodes, "edges": edges}, "assertions": assertions}
+
+
+def _list_item_service(case: EvalCase) -> Any:
+    return service_for((case,), _records(), definitions={"sharepoint": load_connector_definition("sharepoint")})
+
+
+def test_an_update_the_plan_then_deletes_is_met_from_the_spans() -> None:
+    """A delete chain updates a record and then removes it; the post-state cannot show the update.
+
+    Found by the reference on a project-built world: the update read
+    "<fid> is gone" and the case failed on its own ceiling. The service's
+    span recorded the update, and the delete that followed is the other half
+    of the same plan, so the update is met when the expectation names no
+    target state to check.
+    """
+    row = _list_item_row(
+        [{"id": "read", "server": "sharepoint", "tool": "get_list_items", "fixture": "l1", "entity": "list_item", "op": "search"},
+         {"id": "write", "server": "sharepoint", "tool": "update_list_item", "fixture": "l1", "entity": "list_item", "op": "update"},
+         {"id": "delete", "server": "sharepoint", "tool": "delete_list_item", "fixture": "l1", "entity": "list_item", "op": "delete"}],
+        [["read", "write"], ["write", "delete"]],
+        [{"type": "tool_called", "node": node} for node in ("read", "write", "delete")]
+        + [{"type": "deleted", "node": "delete", "fixture": "l1"}],
+    )
+    case = case_from_row(row)
+    agent = ScriptedAgent([("sharepoint.get_list_items", {"entity": "list_item", "max_results": 10}),
+                           ("sharepoint.update_list_item", {"id": "item-1", "fields": {"name": "Reviewed row"}}),
+                           ("sharepoint.delete_list_item", {"id": "item-1"})])
+    result = run_case(_list_item_service(case), case, agent)
+    assert result.score is not None, result.error
+    by_node = {match.expected.node: match for match in result.score.outcomes.structured}
+    assert by_node["write"].met and by_node["write"].detail == "updated, then deleted by the plan"
+    assert by_node["delete"].met
+    assert result.score.passed, result.score.model_dump()
+
+
+def test_a_second_update_on_one_record_is_attributed_to_the_node_that_made_it() -> None:
+    """Two nodes update the same record in turn; the diff shows one update.
+
+    Found by the reference on `write_chain` rows: the marker update read
+    "no record of the entity changed" because the first update had claimed
+    the only changed record. A node's own successful spans say what it wrote.
+    """
+    row = _list_item_row(
+        [{"id": "read", "server": "sharepoint", "tool": "get_list_items", "fixture": "l1", "entity": "list_item", "op": "search"},
+         {"id": "write", "server": "sharepoint", "tool": "update_list_item", "fixture": "l1", "entity": "list_item", "op": "update"},
+         {"id": "write-marker", "server": "sharepoint", "tool": "update_list_item", "entity": "list_item", "op": "update"}],
+        [["read", "write"], ["write", "write-marker"]],
+        [{"type": "tool_called", "node": node} for node in ("read", "write", "write-marker")],
+    )
+    case = case_from_row(row)
+    agent = ScriptedAgent([("sharepoint.get_list_items", {"entity": "list_item", "max_results": 10}),
+                           ("sharepoint.update_list_item", {"id": "item-1", "fields": {"name": "Reviewed row"}}),
+                           ("sharepoint.update_list_item", {"id": "item-1", "fields": {"verified": True}})])
+    result = run_case(_list_item_service(case), case, agent)
+    assert result.score is not None, result.error
+    matches = {match.expected.node: match for match in result.score.outcomes.structured}
+    assert matches["write"].met and matches["write-marker"].met, result.score.outcomes.model_dump()
+    assert matches["write-marker"].record == "l1"
+    assert result.score.outcomes.collateral == ()
+
+
+def test_a_failure_point_an_honoured_failure_blocked_is_not_expected() -> None:
+    """A delete chain expects `not_found` from the readback after the delete.
+
+    When the write the chain starts from is denied, the readback never runs.
+    The grader counted it as a failure the agent did not honour and scored
+    the reference 0.9 on its own trajectory. A point on a node an honoured
+    failure blocked is unreachable, so it is not expected; a point the agent
+    did reach and meet still counts.
+    """
+    from worldloom.evalrun import grade_trajectory
+
+    row = _list_item_row(
+        [{"id": "read", "server": "sharepoint", "tool": "get_list_items", "fixture": "l1", "entity": "list_item", "op": "search"},
+         {"id": "write", "server": "sharepoint", "tool": "create_list_item", "entity": "list_item", "op": "create"},
+         {"id": "verify-write", "server": "sharepoint", "tool": "get_list_item", "entity": "list_item", "op": "readback"},
+         {"id": "delete", "server": "sharepoint", "tool": "delete_list_item", "entity": "list_item", "op": "delete"},
+         {"id": "verify-deleted", "server": "sharepoint", "tool": "get_list_item", "entity": "list_item", "op": "readback"}],
+        [["read", "write"], ["write", "verify-write"], ["verify-write", "delete"], ["delete", "verify-deleted"]],
+        [{"type": "failure_at", "node": "verify-deleted", "kind": "not_found", "writes_persist": False, "blocked_nodes": []},
+         {"type": "failure_at", "node": "write", "kind": "denied", "writes_persist": False,
+          "blocked_nodes": ["verify-write", "delete", "verify-deleted"]}],
+    )
+    case = case_from_row(row)
+    denied = [{"id": "s1", "node": "read", "tool": "sharepoint.get_list_items", "args": {}, "reads": ["l1"], "writes": []},
+              {"id": "s2", "node": "write", "tool": "sharepoint.create_list_item", "args": {"name": "x"}, "reads": [], "writes": [],
+               "error": {"kind": "denied", "code": 403}}]
+    grade = grade_trajectory(case, denied)
+    assert (grade.failures_expected, grade.failures_honoured) == (1, 1), grade.model_dump()
+    assert grade.passed
+
+    # The write went through: the chain reaches the readback, which must fail.
+    reached = [denied[0],
+               {"id": "s2", "node": "write", "tool": "sharepoint.create_list_item", "args": {"name": "x"}, "reads": [], "writes": ["n1"]},
+               {"id": "s3", "node": "verify-write", "tool": "sharepoint.get_list_item", "args": {"id": "n1"}, "reads": ["n1"], "writes": []},
+               {"id": "s4", "node": "delete", "tool": "sharepoint.delete_list_item", "args": {"id": "n1"}, "reads": [], "writes": ["n1"]},
+               {"id": "s5", "node": "verify-deleted", "tool": "sharepoint.get_list_item", "args": {"id": "n1"}, "reads": [], "writes": [],
+                "error": {"kind": "not_found", "code": 404}}]
+    grade = grade_trajectory(case, reached)
+    assert (grade.failures_expected, grade.failures_honoured) == (2, 1), "the denial was designed and did not happen"
+
+
+def test_a_partial_write_on_a_delete_names_no_created_record() -> None:
+    """A designed `partial_write` on a write that makes nothing has no record to check.
+
+    Found once a delete could be planned as the primary write: its id is
+    bound from the read before it, so the node carries no fixture, and the
+    contract asked the grader to find a *created* record with the delete's
+    name. The delete's persisted effect is the `deleted` assertion's to grade.
+    """
+    from worldloom.enterprise_failures import compile_failure_contract
+
+    row = {"expected_dag": {"nodes": [
+        {"id": "target", "server": "sharepoint", "tool": "get_file", "entity": "file", "op": "read", "fixture": "f1"},
+        {"id": "write", "server": "sharepoint", "tool": "delete_file", "entity": "file", "op": "delete", "payload": {}},
+        {"id": "verify-write", "server": "sharepoint", "tool": "get_file", "entity": "file", "op": "read"},
+    ], "edges": [["target", "write"], ["write", "verify-write"]]},
+        "assertions": [],
+        "state_overrides": [{"kind": "partial_write", "connector": "sharepoint", "record_id": None,
+                             "details": {"fail_after": 1, "rollback": False}}]}
+    compiled = compile_failure_contract(row)
+    failure = next(a for a in compiled["assertions"] if a["type"] == "failure_at" and a["node"] == "write")
+    assert failure["writes_persist"] and "created_record" not in failure and "fixture" not in failure
+
+    created = {**row, "expected_dag": {**row["expected_dag"], "nodes": [
+        {**row["expected_dag"]["nodes"][1], "tool": "create_file", "op": "create", "payload": {"name": "pack.pdf"}}]}}
+    compiled = compile_failure_contract(created)
+    failure = next(a for a in compiled["assertions"] if a["type"] == "failure_at" and a["node"] == "write")
+    assert failure["created_record"] == {"server": "sharepoint", "entity": "file", "name": "pack.pdf"}

@@ -230,6 +230,9 @@ if TYPE_CHECKING:
         RunSummary as RunSummary,
     )
     from .results import (
+        append_result as append_result,
+    )
+    from .results import (
         compare as compare,
     )
     from .results import (
@@ -402,6 +405,7 @@ _EXPORTS: dict[str, str] = {
     'summarize': '.results',
     'to_studio_rows': '.results',
     'tool_annotations': '.safety',
+    'append_result': '.results',
     'write_run': '.results',
     'write_studio_csv': '.results',
 }
@@ -548,6 +552,7 @@ __all__ = [
     "compare",
     "import_served",
     "import_studio_results",
+    "append_result",
     "read_run",
     "summarize",
     "to_studio_rows",

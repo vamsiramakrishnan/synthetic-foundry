@@ -576,3 +576,26 @@ def test_a_non_loopback_bind_says_what_it_gives_away():
     assert reachable_host("0.0.0.0") == "127.0.0.1"
     assert reachable_host("192.168.1.10") == "192.168.1.10"
     assert reachable_host("::1") == "[::1]"
+
+
+def test_the_adapter_salvages_a_fenced_object_and_names_an_empty_turn():
+    """A turn that ended with prose around the object, or with nothing, is read or refused by name.
+
+    Measured on a real run: eight turns of reads and then a ninth whose reply
+    was empty, reported as `Expecting value: line 1 column 1 (char 0)` from
+    the JSON decoder. The adapter now says which harness returned nothing and
+    how the turn ended, and it reads an object a model wrapped in a fence.
+    """
+    from worldloom.studio.harness import parse_object
+
+    fenced = 'Here is the call.\n```json\n{"call": {"tool": "sor.search_records", "args": {"entity": "journal_entry"}}}\n```\n'
+    assert parse_object(fenced, name="claude") == {"call": {"tool": "sor.search_records", "args": {"entity": "journal_entry"}}}
+    assert parse_object('  {"answer": "done"} ', name="claude") == {"answer": "done"}
+    with pytest.raises(ValueError, match="claude returned no text for the turn \\(subtype='success', num_turns=3\\)"):
+        parse_object("", name="claude", envelope={"subtype": "success", "num_turns": 3, "result": ""})
+    with pytest.raises(ValueError, match="returned no JSON object; it said: 'I would search"):
+        parse_object("I would search the ledger first.", name="claude")
+    with pytest.raises(ValueError, match="malformed JSON"):
+        parse_object('{"call": {"tool": }', name="codex")
+    with pytest.raises(ValueError, match="must return a JSON object"):
+        parse_object("[1, 2]", name="codex")

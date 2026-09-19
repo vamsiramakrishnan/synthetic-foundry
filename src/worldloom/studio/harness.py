@@ -151,10 +151,39 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
             raw = value if isinstance(value, str) else json.dumps(value)
         if len(raw) > 4_000_000:
             raise ValueError("coding harness response exceeds 4 MB")
-        value = json.loads(raw)
-        if not isinstance(value, dict):
-            raise ValueError("coding harness must return a JSON object")
-        return value
+        return parse_object(raw, name=name, envelope=envelope if name != "codex" else None)
+
+
+def parse_object(raw: str, *, name: str, envelope: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The one JSON object a harness turn must return, salvaged from what it said.
+
+    The instruction asks for exactly one object without a fence. A model that
+    complied except for a fence, or that wrote a sentence before the object,
+    is still answering the turn; the object is taken from the first `{` to
+    the matching `}`. An empty reply is refused with the envelope's own
+    account of why the turn ended, because the earlier `Expecting value:
+    line 1 column 1` said nothing anyone could act on.
+    """
+    text = raw.strip()
+    if not text:
+        detail = ""
+        if envelope:
+            detail = " (" + ", ".join(f"{key}={envelope[key]!r}" for key in ("subtype", "stop_reason", "num_turns") if key in envelope) + ")"
+        raise ValueError(f"{name} returned no text for the turn{detail}")
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError(f"{name} returned no JSON object; it said: {text[:200]!r}") from None
+        try:
+            value = json.loads(text[start:end + 1])
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{name} returned malformed JSON ({error.msg} at {error.pos}); it said: {text[:200]!r}") from None
+    if not isinstance(value, dict):
+        raise ValueError("coding harness must return a JSON object")
+    return value
 
 
 def main() -> None:

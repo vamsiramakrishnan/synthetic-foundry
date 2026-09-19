@@ -11,6 +11,48 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The reference passes its own case set
+
+- The reference agent is the executable ceiling for a case set, and on a
+  project-built world with the back-office profile it scored 35 of 40. Every
+  miss was the grader's, not the agent's. Two `delete_chain` rows expected
+  `not_found` from the readback after the delete, but a designed failure
+  upstream (a denied write, a missing stable id) blocked that readback, so it
+  never ran and the grader counted an unhonoured failure. One `delete_chain`
+  row updated a record and then deleted it; the update read "is gone". Two
+  `write_chain` rows updated a record the same run created, or a record
+  another node had already updated; the diff attributed the change to the
+  first node and the marker update read "no record of the entity changed".
+- `grade_trajectory` no longer expects a failure point on a node an honoured
+  failure blocked; a point the agent did reach and meet still counts.
+  `grade_outcomes` reads an update node's own successful spans, as the
+  service recorded them, before it falls back to the diff, so a second update
+  on one record is attributed to the node that made it. An update whose
+  record the plan's own delete then removed is met from the span when the
+  expectation names no target state to check; with one, it stays "is gone".
+- Once a delete could be the primary write, two more graders were wrong about
+  it. `compile_failure_contract` asked for a *created record* on a
+  `partial_write` at a delete whose id is bound from the read before it, and
+  the DAG trace grader reported `state_missing` for the record the delete
+  removed. A created record is now asked of writes that create, and a
+  delete's absent record is its effect, not a missing state.
+- After: back-office 40 of 40, the delete probe 12 of 12, both with every axis
+  at 1.0. Four regression tests hold each reading.
+- `evalrun run` appends every graded case to `results.jsonl` as it lands. A
+  coding-harness run of three cases hit its 40-minute wall clock and left
+  nothing, because the ledger was written only at the end. A killed run now
+  leaves every case that finished, and a run that completes rewrites the same
+  lines, so its bytes do not depend on the checkpoint. `--progress` prints
+  one line per case to stderr, with seconds under `--timed`.
+- The single-case rerun measured the harness path: eight turns of reads in
+  805 seconds, about 100 seconds per turn, each turn a fresh `claude -p`
+  process over the whole transcript. The ninth turn returned no text and the
+  adapter died with `Expecting value: line 1 column 1 (char 0)`, which named
+  nothing. `studio.harness.parse_object` now reads an object a model wrapped
+  in a fence or a sentence, and refuses an empty turn by harness name with
+  the envelope's own `subtype` and `num_turns`. Size `--timeout` in hundreds
+  of seconds per turn and `--limit` in single digits for a first harness run.
+
 ### The corpus remembers what it was asked for (Generation)
 
 - The section below this one made `build --inspired-by "a mid-size Singaporean

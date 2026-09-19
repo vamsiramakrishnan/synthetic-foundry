@@ -497,6 +497,7 @@ worldloom evalrun run <CORPUS>
 | `--max-turns` | Turns the --exec child may take per case. |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
+| `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |
 | `--rater` | grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam). |
 | `--rater-timeout` | Seconds an exec: rater child may run per answer. |
 | `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
