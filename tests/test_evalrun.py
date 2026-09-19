@@ -1159,3 +1159,30 @@ def test_a_compiled_snapshot_and_the_served_payload_mint_the_same_native_id() ->
     served = shape_payload(definition, _canonical_record(record))
     compiled = shape_payload(definition, runtime_records([record])[0])
     assert served["id"] == compiled["id"] == "10000001"
+
+
+def test_the_catalog_names_what_a_create_must_carry_and_the_emulator_names_what_is_missing() -> None:
+    """An agent can only supply the fields it can see, and a refusal has to say which one it lacked.
+
+    Measured on a real run: `confluence.create_page` without `space` was
+    refused as "A page with this title already exists in the space", the
+    connector's one validation text, and the agent spent five turns searching
+    for a page that never existed.
+    """
+    row = {"id": "cp", "query": "Write the pack to Confluence.",
+           "expected_dag": {"nodes": [
+               {"id": "write", "server": "confluence", "tool": "create_page", "entity": "page", "op": "create",
+                "payload": {"name": "Pack", "fields": {"space": "FIN"}}}], "edges": []},
+           "assertions": [{"type": "tool_called", "node": "write"}]}
+    case = case_from_row(row)
+    service = service_for((case,), [], definitions={"confluence": load_connector_definition("confluence")})
+    run_id = service.begin("agent", case.id)["run_id"]
+    catalog = {tool["name"]: tool for tool in service.tool_catalog("agent", run_id)}
+    assert catalog["confluence.create_page"]["required_on_create"] == {"page": ["space", "title"]}
+    assert "required_on_create" not in catalog["confluence.search"]
+    with pytest.raises(Exception) as refused:
+        service.call("agent", run_id, "confluence.create_page", {"entity": "page", "name": "Pack", "fields": {"body": "<p>x</p>"}})
+    assert "Required field 'space' is missing on create of page" in str(refused.value)
+    assert "already exists" not in str(refused.value)
+    created = service.call("agent", run_id, "confluence.create_page", {"entity": "page", "name": "Pack", "fields": {"space": "FIN", "body": "<p>x</p>"}})
+    assert created["title"] == "Pack"

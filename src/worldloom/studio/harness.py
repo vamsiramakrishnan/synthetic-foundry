@@ -19,6 +19,9 @@ from typing import Any
 #: The harness names this module adapts. A third is a custom JSON adapter.
 NAMES: tuple[str, ...] = ("codex", "claude")
 
+#: Turns re-asked when a reply is not one JSON object, before the turn is an error.
+RETRIES = 1
+
 #: What the child is being asked to be, keyed by the document it is handed.
 #: Every one of these seams ends in "return exactly one JSON object", so the
 #: wrapper's job is to say which role the object plays. Without this the
@@ -144,27 +147,42 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
         )
     prompt = (role + " Return exactly one JSON object, without a markdown fence.\n\n"
               + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False))
+    command_tools = role not in _ROLES.values()
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"
-        try:
-            command = command_for(name, output, native_output=native_output, tools=role not in _ROLES.values())
-            result = subprocess.run(command, input=prompt, text=True,
-                                    capture_output=True, timeout=timeout, shell=False)
-        except subprocess.TimeoutExpired as error:
-            raise ValueError("coding harness exceeded its configured timeout") from error
-        if result.returncode:
-            raise ValueError(f"{name} exited {result.returncode}; check its local installation and login")
-        if name == "codex":
-            raw = output.read_text(encoding="utf-8")
-        else:
-            envelope = json.loads(result.stdout)
-            if envelope.get("is_error"):
-                raise ValueError("Claude Code reported a failed authoring turn")
-            value = envelope.get("structured_output", envelope.get("result"))
-            raw = value if isinstance(value, str) else json.dumps(value)
-        if len(raw) > 4_000_000:
-            raise ValueError("coding harness response exceeds 4 MB")
-        return parse_object(raw, name=name, envelope=envelope if name != "codex" else None)
+        asked = prompt
+        for attempt in range(RETRIES + 1):
+            try:
+                command = command_for(name, output, native_output=native_output, tools=command_tools)
+                result = subprocess.run(command, input=asked, text=True,
+                                        capture_output=True, timeout=timeout, shell=False)
+            except subprocess.TimeoutExpired as error:
+                raise ValueError("coding harness exceeded its configured timeout") from error
+            if result.returncode:
+                raise ValueError(f"{name} exited {result.returncode}; check its local installation and login")
+            envelope: dict[str, Any] | None = None
+            if name == "codex":
+                raw = output.read_text(encoding="utf-8")
+            else:
+                envelope = json.loads(result.stdout)
+                if envelope.get("is_error"):
+                    raise ValueError("Claude Code reported a failed authoring turn")
+                value = envelope.get("structured_output", envelope.get("result"))
+                raw = value if isinstance(value, str) else json.dumps(value)
+            if len(raw) > 4_000_000:
+                raise ValueError("coding harness response exceeds 4 MB")
+            try:
+                return parse_object(raw, name=name, envelope=envelope)
+            except ValueError as error:
+                if attempt == RETRIES:
+                    raise
+                # One more turn, with the refusal in front of the document.
+                # A reply cut off inside a long body, or wrapped in prose,
+                # is the harness stumbling on the shape, not on the task;
+                # a second refusal is the harness's answer and stands.
+                asked = (f"Your previous reply was refused: {error}. Reply again with exactly one JSON object"
+                         " and nothing else. Keep any body text short.\n\n" + prompt)
+        raise AssertionError("unreachable")
 
 
 def parse_object(raw: str, *, name: str, envelope: dict[str, Any] | None = None) -> dict[str, Any]:

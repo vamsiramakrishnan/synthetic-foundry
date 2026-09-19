@@ -135,6 +135,17 @@ first written up, before the waves above it landed.
   touch nothing local, so `command_for` now gives them a child with no tools
   at all and no persisted session; the authoring and narration seams, which
   may read the project, keep plan mode.
+- The first case that graded (score 0.48: plan 0.25, trajectory 0.86,
+  outcomes 0.33) showed two more things the harness owed the agent. Its two
+  `confluence.create_page` calls carried no `space` and were refused as "A
+  page with this title already exists in the space", the connector's one
+  validation text, so it spent five turns searching for a page that never
+  existed. The emulator now names the missing field, and the tool catalogue
+  lists `required_on_create` per entity on every create tool, so an agent
+  can see what a create must carry. The second case died on a reply cut off
+  inside a 7,833-character HTML body; the adapter now re-asks once with the
+  refusal in front and a request for a short body, and a second refusal
+  stands.
 
 ### The corpus remembers what it was asked for (Generation)
 

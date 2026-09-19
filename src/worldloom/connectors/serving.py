@@ -512,11 +512,24 @@ class ConnectorEvaluationService:
                 connector, tool = self.tools[name]
                 if connector not in run.emulators:
                     continue
-                declared = self.definitions[connector].tool(tool)
+                definition = self.definitions[connector]
+                declared = definition.tool(tool)
                 safety = classify_tool(connector, tool, declared)
-                out.append({"name": name, "op": declared.op, "entities": list(declared.entities),
-                            "params": dict(declared.params), "annotations": tool_annotations(safety),
-                            "risk": safety.risk.value, "idempotency": safety.idempotency.value})
+                entry = {"name": name, "op": declared.op, "entities": list(declared.entities),
+                         "params": dict(declared.params), "annotations": tool_annotations(safety),
+                         "risk": safety.risk.value, "idempotency": safety.idempotency.value}
+                # What a create must carry, per entity, beyond `name`: the
+                # fields the emulator refuses without. An agent that cannot
+                # see them can only guess; a real run guessed twice and read
+                # the refusal as a duplicate title.
+                required = {
+                    entity: list(definition.entities[entity].required_on_create)
+                    for entity in declared.entities
+                    if declared.op == "create" and entity in definition.entities and definition.entities[entity].required_on_create
+                }
+                if required:
+                    entry["required_on_create"] = required
+                out.append(entry)
             return tuple(out)
 
     def score(self, principal: str, run_id: str, *, answer: str = "",

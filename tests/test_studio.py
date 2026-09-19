@@ -623,3 +623,29 @@ def test_the_evalrun_seams_run_the_child_without_tools(monkeypatch):
     invoke("claude", {"company": {}})
     for argv in commands[3:]:
         assert "plan" in argv and "--tools" not in argv
+
+
+def test_the_adapter_re_asks_once_when_a_reply_is_not_one_object(monkeypatch):
+    """A reply cut off inside a long body is re-asked once, with the refusal in front.
+
+    Measured: a `create_page` call whose HTML body ran to 7,833 characters
+    came back malformed and the case was an error row. One re-ask carries
+    the refusal and asks for a short body; a second refusal stands.
+    """
+    prompts = []
+    replies = iter(['{"result":"{\\"call\\": {\\"tool\\": \\"confluence.create_page\\", \\"arguments\\": {\\"fields\\": {\\"body\\": \\"<h1>"}',
+                    '{"result":"{\\"call\\": {\\"tool\\": \\"confluence.create_page\\"}}"}'])
+    def run(argv, **kwargs):
+        prompts.append(kwargs["input"])
+        return subprocess.CompletedProcess(argv, 0, next(replies), "")
+    monkeypatch.setattr(subprocess, "run", run)
+    assert invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"}) == {"call": {"tool": "confluence.create_page"}}
+    assert len(prompts) == 2 and prompts[1].startswith("Your previous reply was refused: claude returned no JSON object")
+    assert "Keep any body text short." in prompts[1] and prompts[1].endswith(prompts[0])
+
+    always_bad = iter(["{\"result\":\"not json\"}", "{\"result\":\"still not json\"}", "{\"result\":\"{}\"}"])
+    def bad(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 0, next(always_bad), "")
+    monkeypatch.setattr(subprocess, "run", bad)
+    with pytest.raises(ValueError, match="returned no JSON object; it said: 'still not json'"):
+        invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})

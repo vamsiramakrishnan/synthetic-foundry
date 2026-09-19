@@ -580,7 +580,11 @@ class ConnectorEmulator:
         entity_definition = self.definition.entities[selected]
         for required in entity_definition.required_on_create:
             if values.get(required) in (None, "", [], {}):
-                raise self._error("validation", field=required)
+                # The connector's own validation text is a duplicate-title
+                # message for Confluence, which sent a real agent hunting for
+                # a page that never existed. A missing field is named.
+                code, _template = self.definition.errors.get("validation", (400, ""))
+                raise ConnectorError(code, f"Required field '{required}' is missing on create of {selected}", "validation")
         if tool.idempotency is not None:
             key = tuple(freeze_key(values.get(part)) for part in tool.idempotency.key)
             replay = self._recent_creates.get((selected, *key))
