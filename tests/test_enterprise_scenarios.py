@@ -203,3 +203,41 @@ def test_back_office_widens_the_axes_and_grounds_on_bound_record_kinds() -> None
             if role.connector == "sor":
                 unbound = set(role.entities) - bound
                 assert not unbound, f"{workflow.name}: no catalogue company binds sor {sorted(unbound)}"
+
+
+@pytest.mark.parametrize(
+    "profile_path",
+    sorted((ROOT / "examples" / "enterprise-evals").glob("*.json")),
+    ids=lambda p: p.stem,
+)
+def test_every_shipped_profile_plans_within_a_bound(profile_path, tmp_path) -> None:
+    """No shipped profile could produce a queryset before the cover was bounded.
+
+    The default and the shipped retail profile were both killed at fifteen
+    minutes with nothing written, because `--limit` cut the cover's output
+    rather than its walk. A limited plan now returns in seconds on every
+    profile this repository ships, says it is truncated, and reports its
+    holes exactly. The bound is generous: the runs take about six seconds and
+    the point is termination, not a benchmark.
+    """
+    import json
+    import time
+
+    from typer.testing import CliRunner
+
+    from worldloom.cli import app
+
+    out = tmp_path / "plan.jsonl"
+    started = time.perf_counter()
+    result = CliRunner().invoke(app, [
+        "enterprise-evals", "plan", "examples/hospital", str(out),
+        "--profile", str(profile_path), "--limit", "40",
+    ])
+    elapsed = time.perf_counter() - started
+    assert result.exit_code == 0, result.output
+    assert elapsed < 120, elapsed
+    assert len(out.read_text(encoding="utf-8").splitlines()) == 40
+    summary = json.loads(result.output)
+    assert summary["selected"] == 40
+    assert summary["truncated"] is True and summary["exact"] is True
+    assert summary["hole_count"] == summary["required_interactions"] - summary["covered_interactions"]
