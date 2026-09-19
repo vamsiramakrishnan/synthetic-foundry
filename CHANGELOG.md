@@ -78,6 +78,15 @@ first written up, before the waves above it landed.
 
 ### The reference passes its own case set
 
+- With every shipped profile building, the reference ran on all five case
+  sets from `examples/hospital`. Four scored 40 of 40; the omnichannel profile
+  scored 33, every miss a `result_mismatch` on a Confluence search. The
+  compiled row's `input_snapshots` and the served emulator shaped the same
+  record to two ids: `runtime_records` set no `ident`, so the shaper minted a
+  hashed page id, while the emulator's own intake sets `ident` from
+  `external_id` and answered `10000001`. `runtime_records` now sets `ident`
+  the same way. After: five of five sets at 40 of 40.
+
 - The reference agent is the executable ceiling for a case set, and on a
   project-built world with the back-office profile it scored 35 of 40. Every
   miss was the grader's, not the agent's. Two `delete_chain` rows expected

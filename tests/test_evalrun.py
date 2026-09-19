@@ -1137,3 +1137,25 @@ def test_a_partial_write_on_a_delete_names_no_created_record() -> None:
     compiled = compile_failure_contract(created)
     failure = next(a for a in compiled["assertions"] if a["type"] == "failure_at" and a["node"] == "write")
     assert failure["created_record"] == {"server": "sharepoint", "entity": "file", "name": "pack.pdf"}
+
+
+def test_a_compiled_snapshot_and_the_served_payload_mint_the_same_native_id() -> None:
+    """`runtime_records` and the emulator's own intake shape one record to one id.
+
+    Found by the reference on the omnichannel profile: seven rows searched a
+    Confluence page and every one graded `result_mismatch`, because the
+    compiled snapshot minted a hashed page id (no `ident` on the runtime
+    record) while the served emulator answered with the external id.
+    """
+    from worldloom.connector_data import ConnectorRecord
+    from worldloom.connector_emulator import _canonical_record
+    from worldloom.connector_payload import shape_payload
+    from worldloom.enterprise_rows import runtime_records
+    from worldloom.eval_connectors import builtin_connector_definitions
+
+    record = ConnectorRecord(id="CONN-CONFLUENCE-TEST", connector="confluence", entity="page", external_id="10000001",
+                             title="Reserve Triangle Workbook", fields={"page_id": "10000001", "version": 1})
+    definition = builtin_connector_definitions()["confluence"]
+    served = shape_payload(definition, _canonical_record(record))
+    compiled = shape_payload(definition, runtime_records([record])[0])
+    assert served["id"] == compiled["id"] == "10000001"
