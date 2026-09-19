@@ -71,6 +71,19 @@ line's LOB, stream and owner so a Foundry run cannot satisfy it with another
 line's records. Every scenario is one `apply_scenario_profile` accepts against
 the builtin registry as it stands.
 
+**The capability and the difficulty are read off the rows too.** A use case's
+`EvalSpec` used to carry `evidence_reconciliation` at `medium` whatever the
+line's activities were. `industry.activity_capability` reads the activity type
+(a report is a `search`, a reconcile step is a `reconcile`, the rest act on
+evidence) and `industry.activity_difficulty` reads the declared exception path
+and the channels the evidence lands in: both make an activity hard, one makes
+it medium, neither makes it easy. A line takes the most demanding of its
+activities. Where a property is uniform across an industry the output stays
+uniform, and `IndustryProgramme.uniformity` says which property and why: every
+shipped activity declares an exception path, so no shipped use case is easy.
+The request template is written from the same rows, naming the activities,
+the owning units, the countries, the stream and the systems of record.
+
 ## What is emulated, and what is said out loud
 
 `_data/process-catalogue/emulated-systems@2.json` says which connector stands
@@ -300,6 +313,7 @@ derived = industry.programme("telecom")
 summary = derived.summary            # IndustryProgramme: lobs, lines, counts, unemulated, findings
 summary.by_lob()                     # situations per line of business
 summary.distinct_answers             # the ground truths under them: the evalset size
+summary.capabilities                 # use cases per capability; `difficulties` likewise, `uniformity` says why a zero
 derived.lobs                         # tuple[lob.Lob, ...], one per owning function family
 derived.requests[0].to_case()        # an EvaluationCase citing the derived facts
 derived.coverage()                   # CoverageReport against every situation offered

@@ -47,6 +47,16 @@ and whose construction `EvalSpec` constrains those sources to the line. A
 system no emulator stands in for is reported on the line and on the
 programme, never quietly replaced by one that does.
 
+**The capability and the difficulty are read off the rows too.** A use case
+used to be assigned `evidence_reconciliation` at `medium` whatever its
+activities were, so a fifty-eight-line healthcare set had one capability and
+one difficulty. `activity_capability` reads the activity type (a report is
+read-only, a reconcile step is a control, the rest act on evidence) and
+`activity_difficulty` reads the declared exception path and the channels the
+evidence lands in; a line takes the most demanding of its activities. Where
+a property is uniform across an industry the output is uniform, and
+`uniformity` says which property and why rather than spreading the values.
+
 Nothing here draws, samples or reads a clock. Ids are sequential in traversal
 order over sorted, declared data; facts are valid from a declared `as_of`.
 """
@@ -61,7 +71,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
+
+from pydantic import Field
 
 from . import factkinds, functions, sor
 from .connector_data import ConnectorRecord
@@ -762,6 +774,190 @@ def standing_findings(requested: Iterable[Request], lobs: Sequence[Lob]) -> list
 
 
 # ---------------------------------------------------------------------------
+# Capability and difficulty: read off the rows
+# ---------------------------------------------------------------------------
+
+#: Every use case the programme derived carried `evidence_reconciliation` at
+#: `medium`, because `use_cases` assigned the first and left the second at
+#: `EvalSpec`'s default while the rows it summarised said otherwise: a
+#: healthcare company's fifty-eight lines spanned eight activity types and
+#: one, two or three evidence channels each, and none of that reached the
+#: spec. The functions here read those properties, and nothing else: no
+#: verb, no channel a request happens to arrive on, no draw, no hash.
+
+Capability = Literal["search", "evidence_reconciliation", "reconcile"]
+Difficulty = Literal["easy", "medium", "hard"]
+
+#: What a use case asks of an agent, least demanding first. `search` reads
+#: the records and says what they show; `evidence_reconciliation` reads the
+#: evidence and acts on it, so a deliverable goes back; `reconcile` matches
+#: record sets and lists what does not agree. A line takes the most demanding
+#: capability any of its activities needs, because its count covers every one
+#: of them and an agent that cannot reconcile cannot finish the set.
+CAPABILITY_ORDER: tuple[Capability, ...] = ("search", "evidence_reconciliation", "reconcile")
+DIFFICULTY_ORDER: tuple[Difficulty, ...] = ("easy", "medium", "hard")
+
+#: The activity type whose work changes nothing: a report is read off the
+#: records. Every other type leaves something behind (a record, an approval,
+#: a decision, a message, an escalation), and a `reconcile` step is the
+#: control itself, so it is neither a read nor an act.
+READ_ONLY_TYPES: frozenset[str] = frozenset({"report"})
+CONTROL_TYPES: frozenset[str] = frozenset({"reconcile"})
+
+#: The step that closes a use case's construction after every source is read,
+#: named for what it does. Every line used to close on `reconcile`, which
+#: asserted a reconciliation of a line whose only activity was a report.
+CLOSING_STEP: dict[str, str] = {
+    "search": "summarise",
+    "evidence_reconciliation": "act",
+    "reconcile": "reconcile",
+}
+
+
+def activity_capability(row: ActivityBinding) -> Capability:
+    """What working one activity asks of an agent, from its declared type.
+
+    A control step (`CONTROL_TYPES`) reconciles: the three-way match and the
+    bank reconciliation are matching problems. A read-only step
+    (`READ_ONLY_TYPES`) is a search: the answer is read off the records and
+    nothing is written. Everything else acts on evidence: it captures,
+    approves, decides, executes, notifies or escalates, and the agent has to
+    find the evidence first and leave the deliverable behind.
+    """
+    if row.type in CONTROL_TYPES:
+        return "reconcile"
+    if row.type in READ_ONLY_TYPES:
+        return "search"
+    return "evidence_reconciliation"
+
+
+def _spreads(row: ActivityBinding) -> bool:
+    """Whether the row's evidence lands in more than one channel."""
+    return len(set(row.channels)) > 1
+
+
+def activity_difficulty(row: ActivityBinding) -> Difficulty:
+    """How hard one activity is to work, from two things the row declares.
+
+    An exception path (`exception`) means the agent must recognise the case
+    that trips the control rather than walk the happy path. Evidence in more
+    than one channel (`channels`) means it must chase that evidence across
+    systems; the catalogue's own `evidence_chase` template names
+    `channel_count` as its difficulty feature. Both make the activity hard,
+    one makes it medium, neither makes it easy.
+
+    Every activity the shipped catalogue declares carries an exception path,
+    so no shipped use case is easy. That is what the rows say, and
+    `uniformity` reports it instead of spreading the label.
+    """
+    exception = bool(row.exception.strip())
+    spread = _spreads(row)
+    if exception and spread:
+        return "hard"
+    if exception or spread:
+        return "medium"
+    return "easy"
+
+
+_Label = TypeVar("_Label", bound=str)
+
+
+def _most_demanding(values: Iterable[_Label], order: Sequence[_Label], what: str) -> _Label:
+    found = sorted(set(values), key=order.index)
+    if not found:
+        raise ValueError(f"a line with no bound activity has no {what}")
+    return found[-1]
+
+
+def line_capability(rows: Iterable[ActivityBinding]) -> Capability:
+    """The most demanding capability any of *rows* needs (`CAPABILITY_ORDER`)."""
+    return _most_demanding(
+        (activity_capability(row) for row in rows), CAPABILITY_ORDER, "capability"
+    )
+
+
+def line_difficulty(rows: Iterable[ActivityBinding]) -> Difficulty:
+    """The difficulty of the hardest of *rows* (`DIFFICULTY_ORDER`).
+
+    A use case's count covers every activity in its line, so a set with one
+    hard activity in it is not a medium set.
+    """
+    return _most_demanding(
+        (activity_difficulty(row) for row in rows), DIFFICULTY_ORDER, "difficulty"
+    )
+
+
+def uniformity(
+    lines: Sequence[ProcessLine], rows: Sequence[ActivityBinding]
+) -> tuple[str, ...]:
+    """A sentence per capability or difficulty the use cases cannot show, and why.
+
+    Empty when the supported lines span all three of each. Otherwise each
+    sentence names the value that is missing and the row property that
+    keeps it out, with counts, so a reader of a set with no easy use case
+    learns that every activity declares an exception path rather than
+    suspecting the derivation dropped a label. The honest output of a
+    uniform property is uniform; this is where that is said out loud.
+    """
+    supported = [line for line in lines if line.supported]
+    bound = [row for row in rows if row.binding_status == "bound"]
+    if not supported or not bound:
+        return ()
+    total = len(bound)
+    out: list[str] = []
+
+    capabilities = {line.capability for line in supported}
+    by_capability: Counter[str] = Counter(activity_capability(row) for row in bound)
+    for capability, phrase in (
+        ("search", "is a search"),
+        ("evidence_reconciliation", "acts on evidence"),
+        ("reconcile", "reconciles"),
+    ):
+        if capability in capabilities:
+            continue
+        held = by_capability.get(capability, 0)
+        if held == 0:
+            cause = {
+                "search": "no bound activity is read-only (type report)",
+                "evidence_reconciliation": "every bound activity is a report or a control step",
+                "reconcile": "no bound activity is a control step (type reconcile)",
+            }[capability]
+        else:
+            cause = (
+                f"each of the {held} such activities sits in a line beside activities"
+                " that need more, and a line takes the most demanding capability"
+                " its activities need"
+            )
+        out.append(f"no use case {phrase}: {cause}.")
+
+    difficulties = {line.difficulty for line in supported}
+    with_exception = sum(1 for row in bound if row.exception.strip())
+    spread = sum(1 for row in bound if _spreads(row))
+    by_difficulty: Counter[str] = Counter(activity_difficulty(row) for row in bound)
+    declared = (
+        f"{with_exception} of {total} bound activities declare an exception path"
+        f" and {spread} land their evidence in more than one channel"
+    )
+    for difficulty, needs in (
+        ("easy", "an activity with no exception path and evidence in one channel"),
+        ("medium", "an activity with an exception path or evidence in more than one channel, not both"),
+        ("hard", "an activity with an exception path and evidence in more than one channel"),
+    ):
+        if difficulty in difficulties:
+            continue
+        held = by_difficulty.get(difficulty, 0)
+        if held == 0:
+            cause = f"{difficulty} needs {needs}, and none does: {declared}"
+        else:
+            cause = (
+                f"the {held} {difficulty} activities each sit in a line beside a harder one,"
+                " and a line takes the difficulty of its hardest activity"
+            )
+        out.append(f"no use case is {difficulty}: {cause}.")
+    return tuple(out)
+
+
+# ---------------------------------------------------------------------------
 # Lines and the programme
 # ---------------------------------------------------------------------------
 
@@ -777,6 +973,12 @@ class ProcessLine(Model):
     countries: tuple[str, ...]
     activities: tuple[str, ...]
     """Activity ids, sorted."""
+    capability: Capability
+    """The most demanding capability the line's activities need
+    (`line_capability`), and the use case's."""
+    difficulty: Difficulty
+    """The difficulty of the line's hardest activity (`line_difficulty`), and
+    the use case's."""
     bindings: int
     situations: int
     """Every verb crossed with every channel: how many ways this line can be
@@ -864,6 +1066,17 @@ class IndustryProgramme(Model):
     """Every system and channel some line needed and no connector emulates."""
     unsupported_lines: tuple[str, ...]
     """Lines with no emulated source at all, as `lob/stream`."""
+    capabilities: dict[str, int] = Field(default_factory=dict)
+    """Use cases (supported lines) per capability, in `CAPABILITY_ORDER`. A
+    zero is a value the industry's rows cannot produce, and `uniformity`
+    says why."""
+    difficulties: dict[str, int] = Field(default_factory=dict)
+    """Use cases per difficulty, in `DIFFICULTY_ORDER`. Same reading."""
+    uniformity: tuple[str, ...] = ()
+    """One sentence per capability or difficulty no use case shows, naming
+    the row property that keeps it out (`uniformity`). Every shipped industry
+    carries at least one, because every shipped activity declares an
+    exception path and so none is easy."""
     findings: tuple[str, ...] = ()
     """LOB lint findings (root convention excluded) and standing findings.
     Empty for every shipped industry, and reported rather than raised so a
@@ -969,10 +1182,12 @@ def lines(
                 owners=tuple(sorted({row.owner_bu for row in rows})),
                 countries=tuple(sorted({row.country for row in rows})),
                 activities=tuple(sorted({row.activity_id for row in rows})),
+                capability=line_capability(rows),
+                difficulty=line_difficulty(rows),
                 bindings=len(rows),
                 situations=reads + writes,
                 distinct_answers=len(grounded.get((family, stream), ())),
-            workforce_share=shares.get(family, 0.0),
+                workforce_share=shares.get(family, 0.0),
                 reads=reads,
                 writes=writes,
                 systems=tuple(sorted({row.sor_product for row in rows})),
@@ -1072,7 +1287,17 @@ def programme(
             " industry it does not carry needs a crosswalk entry."
         )
     unemulated = sorted({name for line in derived_lines for name in line.unemulated})
+    supported_lines = [line for line in derived_lines if line.supported]
     summary = IndustryProgramme(
+        capabilities={
+            capability: sum(1 for line in supported_lines if line.capability == capability)
+            for capability in CAPABILITY_ORDER
+        },
+        difficulties={
+            difficulty: sum(1 for line in supported_lines if line.difficulty == difficulty)
+            for difficulty in DIFFICULTY_ORDER
+        },
+        uniformity=uniformity(derived_lines, compiled.rows),
         staffing_release=staffing_module.release() if staffing_module.family_shares(compiled.industry) else "",
         industry=compiled.industry,
         company=compiled.company,
@@ -1137,6 +1362,56 @@ def _slug(value: str) -> str:
     return value.replace("_", "-").replace(" ", "-").lower()
 
 
+def _join(items: Sequence[str]) -> str:
+    """`a`, `a and b`, `a, b and c`: how a person lists things."""
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + f" and {items[-1]}"
+
+
+#: How many activities a request names before it names the span instead.
+#: Three reads as a list; twelve reads as a catalogue dump.
+NAMED_ACTIVITIES = 3
+
+
+def request_for(line: ProcessLine, rows: Sequence[ActivityBinding]) -> str:
+    """The use case's request, as the person who owns the line would put it.
+
+    Every noun is the rows' own: the activity names in catalogue order, the
+    stream, the owning units, the countries and the systems of record. The
+    verb is the line's capability, which is read off the same rows. A line
+    of more than `NAMED_ACTIVITIES` activities names its first and last and
+    counts the rest, so a twelve-activity line is one sentence and not a
+    list. Nothing is invented and nothing is left as a placeholder: the
+    template used to read `work admit to discharge for Billing (Corporate
+    Services; SG)`, which is a slug with spaces in it.
+    """
+    if not rows:
+        raise ValueError(f"line {line.key!r} has no rows to write a request from")
+    names = list(dict.fromkeys(row.activity for row in rows))
+    if len(names) <= NAMED_ACTIVITIES:
+        activities = _join(names)
+    else:
+        activities = f"{names[0]} through {names[-1]} ({len(names)} activities)"
+    where = f"for {_join(list(line.owners))} in {_join(list(line.countries))}"
+    systems = _join(list(line.systems))
+    if line.capability == "search":
+        records = "records" if len(line.systems) == 1 else "record"
+        return (
+            f"Report on {activities} {where}: read what {systems} {records} for"
+            f" {line.stream_name} and say what it shows."
+        )
+    if line.capability == "reconcile":
+        return (
+            f"Reconcile {activities} {where}: match the {line.stream_name} records"
+            f" in {systems} and list what does not agree."
+        )
+    return (
+        f"Move {activities} forward {where}: find the evidence {line.stream_name}"
+        f" leaves in {systems}, act on it, and send the result back to whoever asked."
+    )
+
+
 def use_cases(
     derived: Programme,
     *,
@@ -1151,6 +1426,9 @@ def use_cases(
     construction `EvalSpec` requires each source constrained to the line's LOB,
     stream and owner, so a Foundry run cannot satisfy it with another line's
     records. `count` is the line's situations, capped at `count_ceiling`.
+    The spec's capability and difficulty are the line's own
+    (`ProcessLine.capability`, `ProcessLine.difficulty`), read off its rows,
+    and its request is written from them (`request_for`).
     """
     from .enterprise_specs import (
         ContentAction,
@@ -1166,10 +1444,14 @@ def use_cases(
     table = emulated_systems()
     destinations_table = table["destinations"]
     wanted = set(lines_selected) if lines_selected is not None else None
+    rows_by_line: dict[tuple[str, str], list[ActivityBinding]] = {}
+    for row in _bound(derived.compiled):
+        rows_by_line.setdefault((row.function, row.stream), []).append(row)
     out: list[UseCase] = []
     for line in derived.summary.lines:
         if not line.supported or (wanted is not None and line.key not in wanted):
             continue
+        rows = rows_by_line.get((line.lob, line.stream), [])
         by_connector: dict[str, list[str]] = {}
         for source in line.sources:
             connector, entity = source.split(".", 1)
@@ -1202,10 +1484,14 @@ def use_cases(
             f"work {line.stream_name.lower()} for {line.lob_title}"
             f" ({', '.join(line.owners)}; {', '.join(line.countries)})"
         )
+        # By the line's capability, not by `line.writes`: every activity type
+        # suits at least one write verb, so `writes` is never zero and the
+        # read-only branch never ran. A search line summarises and extracts;
+        # a line that acts or reconciles reconciles and generates.
         actions = (
-            (ContentAction.RECONCILE, ContentAction.GENERATE)
-            if line.writes
-            else (ContentAction.SUMMARIZE, ContentAction.EXTRACT)
+            (ContentAction.SUMMARIZE, ContentAction.EXTRACT)
+            if line.capability == "search"
+            else (ContentAction.RECONCILE, ContentAction.GENERATE)
         )
         workflow = WorkflowSpec(
             name=name,
@@ -1271,21 +1557,27 @@ def use_cases(
             for role in sources
             for entity in role.entities
         )
+        # The capability and the difficulty are the line's, read off its rows
+        # (`line_capability`, `line_difficulty`); the closing step is named
+        # for the capability so a report line is not asked to reconcile. One
+        # candidate, because a programme is one company and one world: the
+        # count is the line's answers, not attempts at instantiating it.
         design = EvalSpec(
             id=name,
-            capability="evidence_reconciliation",
+            capability=line.capability,
             persona=f"{line.lob}_head",
-            request_template=purpose,
+            request_template=request_for(line, rows),
             requirements=requirements,
             steps=(
                 *steps,
                 EvalStepSpec(
-                    id="reconcile",
-                    capability="reconcile",
+                    id=CLOSING_STEP[line.capability],
+                    capability=line.capability,
                     effect="transform",
                     depends_on=tuple(step.id for step in steps),
                 ),
             ),
+            difficulty=line.difficulty,
             candidate_count=1,
         )
         out.append(
@@ -1400,10 +1692,14 @@ def geo_for(countries: Sequence[str]) -> str:
 def unlocalised(countries: Sequence[str]) -> tuple[str, ...]:
     """The countries in *countries* that no shipped locale answers for.
 
-    Ten of the twelve countries the shipped industries operate in are here:
-    a locale is names, cities, a calendar, a currency and a digit grammar,
-    and four of them ship. The catalogue knows every country's currency, tax
-    and fiscal year; the world that renders them does not.
+    The shipped industries operate in twelve countries and ten of them have
+    a locale: twelve locales ship (`locales.LOCALES`), eight of them
+    generated from published data by `tools/ingest_locales.py`. TH and VN
+    are the two left, and they stay out on purpose: a locale is names,
+    cities, a calendar, a currency and a digit grammar, and no library
+    publishes a romanised surname pool deep enough to staff a company in
+    either (see `COUNTRY_LOCALES`). The catalogue knows every country's
+    currency, tax and fiscal year; the world that renders them does not.
     """
     return tuple(sorted({c for c in countries if c not in COUNTRY_LOCALES}))
 
@@ -1814,6 +2110,12 @@ def describe(industry: str) -> dict[str, Any]:
         "intents": dict(sorted(intent_counts.items())),
         "unemulated": list(summary.unemulated),
         "unsupported_lines": list(summary.unsupported_lines),
+        # What the use cases span, read off the rows, and a sentence for each
+        # value they cannot show. A zero here is the rows' answer, not a gap
+        # in the derivation, and the sentence beside it says which property.
+        "capabilities": dict(summary.capabilities),
+        "difficulties": dict(summary.difficulties),
+        "uniformity": list(summary.uniformity),
         "findings": list(summary.findings),
     }
 
@@ -1836,6 +2138,18 @@ __all__ = [
     "ProcessLine",
     "Programme",
     "Request",
+    "CAPABILITY_ORDER",
+    "CLOSING_STEP",
+    "NAMED_ACTIVITIES",
+    "CONTROL_TYPES",
+    "DIFFICULTY_ORDER",
+    "READ_ONLY_TYPES",
+    "activity_capability",
+    "activity_difficulty",
+    "line_capability",
+    "line_difficulty",
+    "request_for",
+    "uniformity",
     "derive_lobs",
     "describe",
     "emulated_systems",
