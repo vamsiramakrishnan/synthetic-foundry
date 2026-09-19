@@ -180,6 +180,14 @@ first written up, before the waves above it landed.
   line, the closing instruction says to fill a field rather than write JSON,
   and the adapter reads a reply stringified one level down as the object it
   meant. Three real turns in a row came back as a well-formed call.
+- The sealed run graded three of three cases with no error row: 0.24, 0.67
+  and 0.71 against a reference ceiling of 1.0, in 36 minutes for 60 calls.
+  The 0.24 is a finding about the query, not the agent: it says "Create a
+  new HTML in Confluence", the destination entity is `page`, and the agent
+  created a blogpost, which graded as collateral with the page unwritten.
+  The prompt renderer names the format and not the entity whenever the
+  format is not `record`. Naming both would change every rendered query,
+  so it is left as a stated gap rather than changed here.
 
 ### The corpus remembers what it was asked for (Generation)
 
