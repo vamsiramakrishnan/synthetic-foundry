@@ -39,11 +39,6 @@ first written up, before the waves above it landed.
   unmet: 1`. The findings themselves stay on the recipe in `world.json`.
 - Nothing about what gets built changed. Only what is recorded.
 
-- A planned queryset's bytes no longer depend on the operating system. The
-  `plan` writer opened its file in text mode, so Windows wrote `\r\n` and the
-  same 312 rows hashed to a different digest than on Linux. It now writes
-  `\n` like every other byte-stable writer here.
-
 ### A use case's capability and difficulty are read off its rows (Generation)
 
 - Every use case `industry.use_cases` derived carried `evidence_reconciliation`
@@ -116,6 +111,11 @@ first written up, before the waves above it landed.
   place of the full hole list. A truncated run on a shipped profile leaves
   some sixty thousand real holes, five megabytes on one line. The SDK's
   `CoverageReport.holes` keeps the full list.
+- A planned queryset's bytes no longer depend on the operating system. The
+  `plan` writer opened its file in text mode, so Windows wrote `\r\n` and the
+  same 312 rows hashed to a different digest than on Linux. It now writes
+  `\n` like every other byte-stable writer here.
+
 ### Every write operation has a prompt, and the back-office workflows post to chat
 
 - `review()` accepts any operation an entity declares, but the prompt renderer
