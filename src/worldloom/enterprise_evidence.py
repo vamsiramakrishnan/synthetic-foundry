@@ -11,8 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol
 
 _SCOPE = "operational_simulation_not_macro_reconciliation"
 _DIGEST = re.compile(r"[0-9a-f]{64}")
@@ -85,4 +85,28 @@ def observation_evidence(fields: Mapping[str, Any]) -> tuple[tuple[str, ...], tu
     return evidence, ()
 
 
-__all__ = ["observation_evidence"]
+class EvidenceRecord(Protocol):
+    """What ``carries_evidence`` reads off a connector record."""
+
+    @property
+    def fact_ids(self) -> Sequence[str]: ...
+
+    @property
+    def fields(self) -> Mapping[str, Any]: ...
+
+
+def carries_evidence(record: EvidenceRecord) -> bool:
+    """A record is evidence when it carries a World fact or a pinned observation.
+
+    This is the validator's acceptance rule, stated once so the corpus builder
+    selects by the same rule the validator refuses by. Before it existed the
+    builder took records by position and the validator then refused the one
+    fact-less record in a pool of thirty-eight, twenty queries deep, aborting
+    the whole export.
+    """
+    if record.fact_ids:
+        return True
+    return bool(observation_evidence(record.fields)[0])
+
+
+__all__ = ["EvidenceRecord", "carries_evidence", "observation_evidence"]

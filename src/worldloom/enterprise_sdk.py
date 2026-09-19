@@ -107,7 +107,7 @@ class EnterpriseEvalHarness:
         return replace(self, limit=count)
 
     def plan(self) -> tuple[tuple[PlannedEnterpriseQuery, ...], CoverageReport | None]:
-        queries, report = plan_queries(self.world, registry=self.registry, profile=self.profile, strategy=self.strategy, limit=self.limit, dag_shapes=self.dag_shapes)
+        queries, report = plan_queries(self.world, registry=self.registry, profile=self.profile, strategy=self.strategy, limit=self.limit, dag_shapes=self.dag_shapes, projections=self.projections)
         planned = tuple(queries)
         binder = self._case_binder(planned)
         if binder is not None:
@@ -136,9 +136,12 @@ class EnterpriseEvalHarness:
         """Execute a finite exhaustive pool before selecting semantic and case coverage.
 
         The pool uses the planner's interleaved exhaustive order, independently
-        of ``take`` or the ordinary planning strategy. ``take`` supplies the
-        output cap unless ``max_selected`` overrides it. One lookahead query
-        establishes whether the bounded pool exhausted the requested space.
+        of ``take`` or the ordinary planning strategy, and of the world's
+        groundable inventory: qualification grounds each query by executing it
+        and refuses per query, with the reason, in its own report. ``take``
+        supplies the output cap unless ``max_selected`` overrides it. One
+        lookahead query establishes whether the bounded pool exhausted the
+        requested space.
         """
         from .enterprise_qualification import qualify_queries
 
@@ -148,7 +151,7 @@ class EnterpriseEvalHarness:
         if cap is not None and cap < 1:
             raise ValueError("max_selected must be positive")
         queries, _ = plan_queries(self.world, registry=self.registry, profile=self.profile,
-                                  strategy="exhaustive", dag_shapes=self.dag_shapes)
+                                  strategy="exhaustive", dag_shapes=self.dag_shapes, ground=False)
         bounded = tuple(islice(queries, pool_size + 1))
         pool = bounded[:pool_size]
         return qualify_queries(self.world, pool, pool_size=pool_size,
@@ -190,6 +193,7 @@ class EnterpriseEvalHarness:
             shard_index=index,
             shard_count=count,
             dag_shapes=self.dag_shapes,
+            projections=self.projections,
         )
         planned = tuple(queries)
         binder = self._case_binder(planned)

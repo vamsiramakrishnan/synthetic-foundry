@@ -115,13 +115,20 @@ def test_case_binding_increases_coverage_and_reloads_executable(vertical: str, d
 
 
 def test_unbound_query_bytes_remain_exact_and_roundtrip(tmp_path: Path) -> None:
+    # Three rows over `jira:issue`. Before the planner read the world's
+    # groundable inventory the three were one row each over jira, ServiceNow
+    # incidents and email threads (5092 bytes, digest c3a48c77d2545ea72bb553
+    # 0e64236b4832445d68fbde13b39416b67691553b4c). This world's builtin
+    # projections hold no incidents and no threads, so two of those three
+    # rows failed validation when built; the pin is the plan that validates.
     world = RetailWorld(seed=8128).build()
     queries, _ = EnterpriseEvalHarness.from_world(world).with_scenario(operational_profile("retail")).take(3).plan()
+    assert [tuple(f"{s.connector}:{s.entity}" for s in q.generation.source_requirements) for q in queries] == [("jira:issue",)] * 3
     path = tmp_path / "queries.jsonl"
     export_queries(queries, path)
     original = path.read_bytes()
-    assert len(original) == 5092
-    assert hashlib.sha256(original).hexdigest() == "c3a48c77d2545ea72bb5530e64236b4832445d68fbde13b39416b67691553b4c"
+    assert len(original) == 5138
+    assert hashlib.sha256(original).hexdigest() == "fbd9e080f27520908f9d68911a93109c7c061c26fabf5ddc27be23616cf663dd"
     assert b'"predicate"' not in original
     assert all("predicate" not in source for query in queries for source in query.model_dump()["generation"]["source_requirements"])
     loaded = tuple(iter_queries(path))

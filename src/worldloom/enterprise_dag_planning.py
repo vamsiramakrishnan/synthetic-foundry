@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -42,7 +43,33 @@ def _admits_delete(connector: str, entity: str, output_format: str) -> bool:
     return True
 
 
-def compatible_shapes(row: dict[str, str], requested: tuple[str, ...]) -> tuple[str, ...]:
+def _shape_grounds(template: dict[str, Any], row: dict[str, str], inventory: Mapping[tuple[str, str], int]) -> bool:
+    """The world holds the evidence a shape demands of each source beyond the role's minimum.
+
+    ``apply_dag_shape`` raises a source's minimum to two for a mapped read
+    (every source) and for a conditional (its first source, by a draw on the
+    query id that lands on two half the time). A world with one evidence
+    record for that source would then materialise a filler and fail at
+    validate, so the shape is not decided for the row. The conditional draw
+    cannot be reproduced from a stub row, so a conditional asks for both
+    witnesses.
+    """
+    sources = row["source_entities"].split("+")
+    if template["reads"] == "map":
+        demands = [2] * len(sources)
+    elif template["control"] == "conditional":
+        demands = [2, *[1] * (len(sources) - 1)]
+    else:
+        return True
+    return all(
+        inventory.get((source.split(":", 1)[0], source.split(":", 1)[1]), 0) >= demand
+        for source, demand in zip(sources, demands, strict=True)
+    )
+
+
+def compatible_shapes(
+    row: dict[str, str], requested: tuple[str, ...], *, inventory: Mapping[tuple[str, str], int] | None = None,
+) -> tuple[str, ...]:
     catalogue = shape_catalogue()
     names = tuple(sorted(catalogue)) if requested == ("*",) else requested
     if len(names) != len(set(names)):
@@ -61,6 +88,8 @@ def compatible_shapes(row: dict[str, str], requested: tuple[str, ...]) -> tuple[
         if name == "write_chain" and not _admits_update(row["destination"], row["destination_entity"], row["output_format"]):
             continue
         if name == "delete_chain" and not _admits_delete(row["destination"], row["destination_entity"], row["output_format"]):
+            continue
+        if inventory is not None and not _shape_grounds(catalogue[name], row, inventory):
             continue
         compatible.append(name)
     return tuple(compatible)

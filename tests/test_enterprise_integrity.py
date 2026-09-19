@@ -171,13 +171,17 @@ def test_provenance_requires_the_expected_facts_and_successful_evidence_reads() 
     assert score_trace(query("permission_denied"), ()).failure_handling == 1.0
 
 
-def test_validate_reports_unanswerable_placeholder_without_changing_default_materialization() -> None:
+def test_a_source_the_world_cannot_ground_trips_materialization_instead_of_minting_evidence() -> None:
+    """A filler record used to meet the count here and fail at validate as
+    `carries no fact`. The planner now refuses such a source, so a query that
+    still reaches materialization over one is a defect, and the refusal names
+    the query and the source."""
     planned = query()
     source = SourceRequirement(connector="servicenow", entity="change_request")
     planned = planned.model_copy(update={"generation": planned.generation.model_copy(update={"source_requirements": (source,)})})
     world = World.load(Path("examples/retail-close"))
-    corpus = materialize_corpus(world, (planned,))
-    assert any("carries no fact (servicenow:change_request)" in finding for finding in validate_corpus(corpus))
+    with pytest.raises(ValueError, match=rf"ungroundable_source: query {planned.id} needs 1 servicenow:change_request record\(s\) for evidence and this world has 0 \(0 carrying evidence\)"):
+        materialize_corpus(world, (planned,))
     with pytest.raises(ValueError, match="missing_source"):
         materialize_corpus(world, (planned,), strict_sources=True)
 
