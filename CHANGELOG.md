@@ -11,6 +11,34 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The corpus remembers what it was asked for (Generation)
+
+- The section below this one made `build --inspired-by "a mid-size Singaporean
+  hospital group"` print `unmet:` before it exported a retailer. The line
+  reached the terminal once and nowhere else. The recipe recorded `archetype`,
+  the shape that got built, and nothing said what was asked for. A corpus
+  handed to someone else could not say it was a stand-in, and a downstream
+  eval pipeline had no way to detect the substitution: `enterprise-evals plan`
+  grounds queries in the world that exists, and every check it runs is a
+  consistency check against that world.
+- The recipe now carries two more keys. `inspired_by` is the description the
+  build was asked for, from `--inspired-by` or from a specification's
+  `industry`. `unmet` is the list of findings the build could not meet, in
+  the words `unmet:` printed. Both paths write the same shape, so a
+  substitution has one record whichever flag reached for it.
+- Both keys are written only when something went unmet. A description the
+  registry recognises built exactly what it named, and `archetype` already says
+  so. A default build writes neither key and is byte-identical to the one built
+  before this change. A corpus that does carry them changes `world.json` by
+  design, which is why this section is marked Generation.
+- `recipe.rebuild` carries the keys through, so `worldloom verify` still proves
+  a substituted corpus is its own record. A world spec that cannot carry them
+  gets them back on the recipe after the build, the way a locale does.
+- `worldloom inspect` adds one row for such a corpus: `Built as
+  omnichannel_retailer; asked for 'a mid-size Singaporean hospital group';
+  unmet: 1`. The findings themselves stay on the recipe in `world.json`.
+- Nothing about what gets built changed. Only what is recorded.
+
 ### A described company that could not be built says so
 
 - `build --inspired-by "a mid-size Singaporean hospital group"` built Greyfell

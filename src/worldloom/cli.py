@@ -1510,11 +1510,27 @@ def build(
     # built, and its consequences are then indistinguishable from the flags'
     # own — which is the whole design: a specification is a *composer*, so
     # everything below this block is the code that already existed, reading
-    # values that arrived by a shorter route. Nothing about a spec reaches the
-    # recipe; its consequences do, exactly as `--facet` records consequences
-    # rather than facet names.
+    # values that arrived by a shorter route. Its consequences reach the
+    # recipe, exactly as `--facet` records consequences rather than facet
+    # names, and one thing besides: what it asked for and could not have,
+    # below, because a record of consequences alone cannot say a substitution
+    # happened.
     resolution = None
     annual_revenue: int | None = None
+    #: What this build was asked to be, and what it could not meet. Set by the
+    #: `--spec` path and the `--inspired-by` path alike, and recorded on the
+    #: recipe by `_asked` below. Both paths used to print `unmet:` and record
+    #: nothing, so the corpus handed to someone else, or to `enterprise-evals
+    #: plan`, had no way to say it was a stand-in. Recording it for one path
+    #: alone would have recreated the inconsistency 8884546 removed.
+    #:
+    #: The description is recorded only when something went unmet, the rule
+    #: the `unmet:` line already follows: a description the registry
+    #: recognises built exactly what it named, `archetype` says so, and a
+    #: second key on every described corpus would teach a reader to skip the
+    #: one that marks a stand-in.
+    asked_for: str | None = None
+    unmet_wants: tuple[str, ...] = ()
     if spec is not None:
         subsumed = [
             flag for flag, given in (
@@ -1578,6 +1594,13 @@ def build(
         )
         for want in resolution.unmet:
             console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
+        # The description, only when it is what decided the shape: `_shape_of`
+        # reads `industry` only when no `archetype` was named, and a recipe
+        # that said "asked for a hospital" over a shape the author chose by key
+        # would be reporting a substitution that never happened.
+        unmet_wants = resolution.unmet
+        if unmet_wants and resolution.spec.industry and not resolution.spec.archetype:
+            asked_for = resolution.spec.industry
 
     pack_obj = None if resolution is None else resolution.pack
     if pack is not None:
@@ -1653,7 +1676,9 @@ def build(
         recognised = archetype_registry.matched(inspired_by)
         shape = recognised if recognised is not None else archetype_registry.inspired_by(inspired_by)
         if recognised is None:
-            for want in company_for_description.unmet_for_description(inspired_by, shape):
+            asked_for = inspired_by
+            unmet_wants = tuple(company_for_description.unmet_for_description(inspired_by, shape))
+            for want in unmet_wants:
                 console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
         domain = domains.for_archetype(shape.key)
     else:
@@ -2079,6 +2104,40 @@ def build(
             return built
         return built.extend(recipe=with_locale(built.recipe, locale))
 
+    def _asked(builder: Any) -> Any:
+        """*builder* carrying what this build was asked for, untouched when nothing.
+
+        On the builder, so `build_recipe` writes the keys beside everything
+        else it records and a rebuild through `recipe.rebuild` writes them the
+        same way. `_localised`'s posture for a spec that has no such field: a
+        domain registered outside this repository can still be asked for
+        something it cannot be, and `_asked_recipe` puts the record on the
+        recipe after the build instead.
+        """
+        if asked_for is None and not unmet_wants:
+            return builder
+        from dataclasses import replace as _replace_asked
+
+        try:
+            return _replace_asked(builder, asked_for=asked_for, unmet=tuple(unmet_wants))
+        except TypeError:
+            return builder
+
+    def _asked_recipe(built: Any) -> Any:
+        """The record of what was asked for, on a world whose spec would not take it.
+
+        A no-op when the builder took it, because `build_recipe` wrote the keys
+        itself. Exactly the fallback `recipe.rebuild` uses, so the two paths
+        cannot drift.
+        """
+        from .recipe import INSPIRED_BY_KEY, UNMET_KEY, with_asked_for
+
+        if asked_for is None and not unmet_wants:
+            return built
+        if INSPIRED_BY_KEY in built.recipe or UNMET_KEY in built.recipe:
+            return built
+        return built.extend(recipe=with_asked_for(built.recipe, asked_for, unmet_wants))
+
     def _shaped(built: Any) -> Any:
         """*built* with its structural genome recorded on its recipe.
 
@@ -2237,7 +2296,7 @@ def build(
                    else {"policies": policies or resolution.policies}),
             )
         ))
-        world = _shaped(_localised_recipe(_localised(builder).build()))
+        world = _shaped(_asked_recipe(_localised_recipe(_asked(_localised(builder)).build())))
         # The built-in runs unless an authored episode declared itself its
         # stand-in. Announced rather than silent: a skipped episode is a
         # different corpus, and the one thing worse than the collision is a
@@ -2325,7 +2384,7 @@ def build(
             carried_year = getattr(builder, "seasonality", None)
             if carried_year is not None:
                 claimed_calendar.append(carried_year)
-        world = _shaped(_localised_recipe(_localised(builder).build()))
+        world = _shaped(_asked_recipe(_localised_recipe(_asked(_localised(builder)).build())))
 
     if priors is not None:
         from .recipe import with_prior_receipts
