@@ -146,6 +146,24 @@ first written up, before the waves above it landed.
   inside a 7,833-character HTML body; the adapter now re-asks once with the
   refusal in front and a request for a short body, and a second refusal
   stands.
+- With both cases grading, the plan axis read 0.0 on each and both branches
+  of a conditional were expected, although the agent had created the page
+  and read it back. The grammar attribution binds every node's arguments
+  from the reference flow and demands equality: the fixture id inside the
+  search predicate, the reference's own name and evidence fields on the
+  create. An agent that is not the reference never reproduces those bytes,
+  so nothing it did attributed. A call now attributes by shape when the
+  strict pass finds nothing: the node's tool, its tool ancestors completed,
+  its condition holding on what was observed, the entity the node names, and
+  a target that resolves to the fixture or to a record a parent made. A read
+  attributed by shape stands only if it read the node's record; a refused
+  call stands only when the refusal is the node's designed failure. A record
+  read through search instead of get is still read, and the receipt of a page
+  is read as a page whichever node it landed on. The two recorded runs,
+  replayed: 0.43 became 0.81 (plan 0.79, trajectory 0.98, outcomes 0.67)
+  and 0.41 became 0.71 (plan 0.79, trajectory 0.69, outcomes 0.67). The
+  execution-contract assertions still hold the reference's bytes, so an
+  external agent's `passed` stays false on them; the axes are its measure.
 
 ### The corpus remembers what it was asked for (Generation)
 

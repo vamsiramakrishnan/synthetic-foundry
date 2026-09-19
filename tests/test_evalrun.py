@@ -1186,3 +1186,89 @@ def test_the_catalog_names_what_a_create_must_carry_and_the_emulator_names_what_
     assert "already exists" not in str(refused.value)
     created = service.call("agent", run_id, "confluence.create_page", {"entity": "page", "name": "Pack", "fields": {"space": "FIN", "body": "<p>x</p>"}})
     assert created["title"] == "Pack"
+
+
+def test_an_external_agents_own_arguments_attribute_by_shape(grammar_corpus: Any) -> None:
+    """An agent that is not the reference never reproduces the reference's bytes.
+
+    Measured on a real harness run: twenty calls, the page created and read
+    back, plan 0.0 and both conditional branches expected, because the grammar
+    attribution bound every node's arguments from the reference flow and
+    demanded equality (the fixture id inside the search predicate, the
+    reference's own name and evidence fields on the create). A call now
+    attributes by shape when the strict pass finds nothing: the node's tool,
+    its tool ancestors completed, its condition holding on what was observed,
+    and a target that resolves to the fixture or to a record a parent made.
+    A read attributed by shape stands only if it read the node's record; a
+    refused call stands only if the refusal is the node's designed failure.
+    """
+    from worldloom.evalrun import AgentResponse, CallableAgent
+
+    cases = cases_from_corpus(grammar_corpus)
+    case = next(case for case in cases if case.plan.shape == "conditional" and not case.row.get("state_overrides"))
+    fixture = next(node["fixture"] for node in case.row["expected_dag"]["nodes"] if node["id"] == "read-0")
+    records = grammar_corpus.connector_data.records
+
+    def explorer(task: Any, tools: Any) -> AgentResponse:
+        # A refusal at the right tool: the agent's own mistake, not the plan step.
+        try:
+            tools.call("servicenow.search_records", entity="incident", query="stock availability")
+        except Exception:
+            pass
+        # A search that misses the record the node is for reads something else.
+        tools.call("servicenow.search_records", entity="incident", max_results=1, predicate={"id": ["in", ["INC-NOT-THERE"]]})
+        # The read: broad, on the agent's own terms, and it returns the fixture.
+        found = tools.call("servicenow.search_records", entity="incident", max_results=50)
+        assert found["items"]
+        # The write: the agent's own subject, no evidence fields.
+        draft = tools.call("email.create_draft", entity="message", name="Stock exceptions for Ironvale",
+                           fields={"subject": "Stock exceptions for Ironvale", "body": "<p>See attached.</p>"})
+        tools.call("email.get_message", id=draft["id"])
+        return AgentResponse(answer="Drafted the exception review.")
+
+    result = run_case(service_for(cases, records), case, CallableAgent(explorer, name="explorer"))
+    assert result.graded and result.score is not None, result.error
+    by_ordinal = {span["ordinal"]: span["node"] for span in result.spans}
+    assert by_ordinal[1] is None and by_ordinal[2] is None, "a refusal and a miss do not attribute"
+    assert by_ordinal[3] == "read-0" and fixture in result.spans[2]["reads"]
+    taken = "write-primary" if result.spans[2]["items"] >= 2 else "write-fallback"
+    assert by_ordinal[4] == taken and by_ordinal[5] == f"verify-{taken}"
+    score = result.score
+    assert score.plan.missing_nodes == () and score.plan.unattributed_calls == 2
+    matches = {match.expected.node: match for match in score.outcomes.structured}
+    assert matches[taken].met and matches[taken].detail == ""
+    other = "write-fallback" if taken == "write-primary" else "write-primary"
+    assert matches[other].met and matches[other].detail == "branch not taken"
+    assert score.trajectory.safety == ()
+
+
+def test_a_record_read_through_search_attributes_to_the_get_node(grammar_corpus: Any) -> None:
+    """A `get` node is a record read; an agent that finds the record by search read it.
+
+    Measured on a real harness run: a `deep_chain` case whose read is
+    `sor.get_record` scored plan 0.0 because the agent listed the entity
+    with `sor.search_records` and the fixture came back among twenty items.
+    The shape pass accepts any read tool on the connector for a read node
+    with a fixture, and the receipt of a page is read as a page whichever
+    node it landed on.
+    """
+    from worldloom.evalrun import AgentResponse, CallableAgent
+
+    cases = cases_from_corpus(grammar_corpus)
+    case = next(case for case in cases if case.plan.shape == "map_read" and not case.row.get("state_overrides"))
+    read = next(node for node in case.row["expected_dag"]["nodes"] if node["id"] == "read-0")
+    fetch = next(node for node in case.row["expected_dag"]["nodes"] if node["id"] == "fetch-0")
+    assert fetch["op"] == "get" and read["op"] == "search"
+
+    def lister(task: Any, tools: Any) -> AgentResponse:
+        connector = read["server"]
+        found = tools.call(f"{connector}.{read['tool']}", entity=read["entity"], max_results=50)
+        for item in found["items"]:
+            tools.call(f"{connector}.{fetch['tool']}", id=item.get("sys_id") or item["id"])
+        return AgentResponse(answer="Read them all.")
+
+    result = run_case(service_for(cases, grammar_corpus.connector_data.records), case, CallableAgent(lister, name="lister"))
+    assert result.graded and result.score is not None, result.error
+    attributed = [span["node"] for span in result.spans if span["node"]]
+    assert attributed[0] == "read-0" and "fetch-0" in attributed
+    assert "read-0" not in result.score.plan.missing_nodes and "fetch-0" not in result.score.plan.missing_nodes
