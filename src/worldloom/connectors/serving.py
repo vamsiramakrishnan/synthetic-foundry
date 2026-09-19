@@ -472,7 +472,8 @@ class ConnectorEvaluationService:
                 # search that missed it read something else. A refused call
                 # stands only when the refusal is the node's designed failure;
                 # an agent's own mistake at the right tool is not the plan step.
-                planned = next((item for item in self.rows[run.query_id]["expected_dag"]["nodes"] if item["id"] == node), {})
+                planned: Mapping[str, Any] = next(
+                    (item for item in self.rows[run.query_id]["expected_dag"]["nodes"] if item["id"] == node), {})
                 wanted = {str(value) for value in (*planned.get("fixtures", ()), planned.get("fixture")) if value}
                 designed = {str(a.get("kind")) for a in self.rows[run.query_id].get("assertions", ())
                             if a.get("type") == "failure_at" and str(a.get("node")) == node}
