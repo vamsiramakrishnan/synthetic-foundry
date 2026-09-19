@@ -275,8 +275,10 @@ def test_the_adapter_tells_the_child_which_seam_it_is_answering(monkeypatch):
     assert "{{fact:ID}}" in prompts[-1]
     invoke("claude", {"company": {}})
     assert "authoring request" in prompts[-1]
-    # Every seam ends the same way, whatever the role.
-    assert all("exactly one JSON object" in prompt for prompt in prompts)
+    # Every seam ends with the reply contract: the structured fields for the
+    # evalrun seams, one JSON object for the rest.
+    assert all("fill exactly one of its top-level fields" in prompt for prompt in prompts[:3])
+    assert all("exactly one JSON object" in prompt for prompt in prompts[3:])
     assert all("Do not modify project files." in prompt or "authoring" in prompt for prompt in prompts)
 
 
@@ -654,3 +656,27 @@ def test_the_adapter_re_asks_once_when_a_reply_is_not_one_object(monkeypatch):
     monkeypatch.setattr(subprocess, "run", bad)
     with pytest.raises(ValueError, match="returned no JSON object; it said: 'still not json'"):
         invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})
+
+
+def test_a_reply_the_harness_stringified_is_read_as_the_object_it_meant():
+    """Under structured output a harness wrote the call as JSON text inside a field.
+
+    Measured twice on real turns: `{"call": "{\"tool\": ...}"}` under a
+    schema that admitted any object, then `{"answer": "{\"call\": {...}}"}`
+    under a schema whose keys were all optional. The API refuses a `oneOf`
+    at the top level that would have required one key, so the adapter reads
+    such a reply as the object it meant, and the seam's own schema goes on
+    the command line.
+    """
+    from worldloom.studio.harness import parse_object, reply_schema
+
+    call = {"tool": "sor.search_records", "arguments": {"entity": "journal_entry"}}
+    assert parse_object(json.dumps({"call": json.dumps(call)}), name="claude") == {"call": call}
+    assert parse_object(json.dumps({"answer": json.dumps({"call": call})}), name="claude") == {"call": call}
+    assert parse_object(json.dumps({"answer": "Done: 3 records."}), name="claude") == {"answer": "Done: 3 records."}
+    assert parse_object(json.dumps({"answer": "{not json"}), name="claude") == {"answer": "{not json"}
+    schema = json.loads(reply_schema({"schema": "worldloom.evalrun-turn/v2"}))
+    assert schema["type"] == "object" and set(schema["properties"]) == {"call", "ask", "answer", "artifacts"}
+    assert "oneOf" not in schema
+    assert reply_schema({"schema": "worldloom.evalrun-plan/v1"}) and reply_schema({"schema": "worldloom.evalrun-rating/v1"})
+    assert reply_schema({"company": {}}) is None

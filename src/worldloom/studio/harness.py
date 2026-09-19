@@ -12,6 +12,7 @@ import os
 import shlex
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -22,9 +23,53 @@ NAMES: tuple[str, ...] = ("codex", "claude")
 #: Turns re-asked when a reply is not one JSON object, before the turn is an error.
 RETRIES = 1
 
-#: The structured-output schema for the evalrun seams: one object, any keys.
-#: The turn document states the reply shapes; the schema only rules out prose.
-_ANY_OBJECT = '{"type": "object", "additionalProperties": true}'
+_STRINGS = {"type": "array", "items": {"type": "string"}}
+_FREE = {"type": "object", "additionalProperties": True}
+
+#: The structured-output schema per evalrun seam. A schema that admitted any
+#: object let the harness serialise the nested call as a string ("call":
+#: "{\"tool\": ...}"), so each seam states the shape its reader parses:
+#: `ExecAgent` for a turn, `parse_plan` for a plan, `exec_rater` for a rating.
+_REPLY_SCHEMAS: dict[str, dict[str, Any]] = {
+    # The API refuses `oneOf` at the top level, so the three reply shapes
+    # share one object with every key optional; `_unwrapped` reads a reply
+    # the harness wrote as a string inside one of them.
+    "worldloom.evalrun-turn/v2": {
+        "type": "object",
+        "properties": {
+            "call": {"type": "object", "properties": {"tool": {"type": "string"}, "arguments": _FREE},
+                     "required": ["tool", "arguments"], "additionalProperties": False},
+            "ask": {"type": "object", "properties": {"question": {"type": "string"}, "about": _STRINGS},
+                    "required": ["question"], "additionalProperties": False},
+            "answer": {"type": "string"},
+            "artifacts": {"type": "array", "items": {
+                "type": "object", "properties": {"name": {"type": "string"}, "text": {"type": "string"}, "cites": _STRINGS},
+                "required": ["name", "text"], "additionalProperties": False}},
+        },
+        "additionalProperties": False,
+    },
+    "worldloom.evalrun-plan/v1": {
+        "type": "object",
+        "properties": {"plan": {"type": "object", "properties": {"nodes": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"id": {"type": "string"}, "tool": {"type": "string"}, "depends_on": _STRINGS},
+            "required": ["tool"], "additionalProperties": False}}}, "required": ["nodes"], "additionalProperties": False}},
+        "required": ["plan"], "additionalProperties": False,
+    },
+    "worldloom.evalrun-rating/v1": {
+        "type": "object",
+        "properties": {"score": {"type": "number"}, "rationale": {"type": "string"}},
+        "required": ["score"], "additionalProperties": False,
+    },
+}
+
+
+def reply_schema(payload: Mapping[str, Any]) -> str | None:
+    """The structured-output schema for the seam this document belongs to, as JSON."""
+    schema = payload.get("schema")
+    if isinstance(schema, str) and schema in _REPLY_SCHEMAS:
+        return json.dumps(_REPLY_SCHEMAS[schema], sort_keys=True)
+    return None
 
 #: What the child is being asked to be, keyed by the document it is handed.
 #: Every one of these seams ends in "return exactly one JSON object", so the
@@ -106,7 +151,8 @@ def adapter_command(name: str, *, timeout: float = 590, allow_native_writes: boo
     return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
 
 
-def command_for(name: str, output: Path, *, native_output: Path | None = None, tools: bool = True) -> list[str]:
+def command_for(name: str, output: Path, *, native_output: Path | None = None, tools: bool = True,
+                schema: str | None = None) -> list[str]:
     """The child process for one turn.
 
     `tools=False` is the evalrun seams: the agent under test, the planner and
@@ -128,10 +174,10 @@ def command_for(name: str, output: Path, *, native_output: Path | None = None, t
             return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan"]
         # No built-in tools, no MCP servers from the operator's own settings
         # (a real run made "errant tool calls" through them), no persisted
-        # session, and a structured reply: the schema admits any object, so
-        # the harness cannot answer with prose or a body cut off mid-string.
+        # session, and a structured reply in the seam's own shape, so the
+        # harness cannot answer with prose or a body cut off mid-string.
         return ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config",
-                "--no-session-persistence", "--json-schema", _ANY_OBJECT]
+                "--no-session-persistence", *(["--json-schema", schema] if schema else [])]
     raise ValueError("choose codex or claude, or configure a custom JSON adapter")
 
 
@@ -154,15 +200,18 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
             _NO_WRITES,
             "Write submitted native files only inside output_directory; keep every input file unchanged.",
         )
-    prompt = (role + " Return exactly one JSON object, without a markdown fence.\n\n"
-              + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False))
     command_tools = role not in _ROLES.values()
+    structured = None if command_tools else reply_schema(payload)
+    closing = (" Reply through the structured output: fill exactly one of its top-level fields, as an object"
+               " or a string as the schema says, never as JSON text inside a string."
+               if structured else " Return exactly one JSON object, without a markdown fence.")
+    prompt = role + closing + "\n\n" + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False)
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"
         asked = prompt
         for attempt in range(RETRIES + 1):
             try:
-                command = command_for(name, output, native_output=native_output, tools=command_tools)
+                command = command_for(name, output, native_output=native_output, tools=command_tools, schema=structured)
                 # The evalrun seams run from an empty directory: a child started
                 # in the repository loads its project instructions and skills
                 # and answered a turn "in the Worldloom project".
@@ -227,6 +276,32 @@ def parse_object(raw: str, *, name: str, envelope: dict[str, Any] | None = None)
             raise ValueError(f"{name} returned malformed JSON ({error.msg} at {error.pos}); it said: {text[:200]!r}") from None
     if not isinstance(value, dict):
         raise ValueError("coding harness must return a JSON object")
+    return _unwrapped(value)
+
+
+_REPLY_KEYS = ("call", "ask", "answer", "plan")
+
+
+def _unwrapped(value: dict[str, Any]) -> dict[str, Any]:
+    """A reply the harness serialised one level down, read as the object it meant.
+
+    Under structured output a harness wrote `{"call": "{\"tool\": ...}"}` and
+    then `{"answer": "{\"call\": {...}}"}`: the object it meant, as a string
+    inside one of the reply keys. A string that parses to an object carrying a
+    reply key is that object.
+    """
+    for key in _REPLY_KEYS:
+        held = value.get(key)
+        if isinstance(held, str) and held.lstrip().startswith("{"):
+            try:
+                inner = json.loads(held)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(inner, dict):
+                if key == "answer" and any(reply in inner for reply in _REPLY_KEYS):
+                    return _unwrapped(inner)
+                if key != "answer":
+                    return {**value, key: inner}
     return value
 
 

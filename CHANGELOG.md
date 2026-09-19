@@ -171,8 +171,15 @@ first written up, before the waves above it landed.
   servers, ran in the repository and so loaded its project instructions,
   and answered in free text. The evalrun child now runs with
   `--strict-mcp-config`, from an empty directory, and with a structured
-  reply (`--json-schema`, one object, any keys), so it cannot call what the
-  case did not serve, cannot read the project, and cannot answer in prose.
+  reply, so it cannot call what the case did not serve, cannot read the
+  project, and cannot answer in prose. The schema took two measured turns to
+  get right: one that admitted any object had the harness write the call as
+  JSON text inside `call`, and one with every reply key optional had it
+  write the call inside `answer`; the API refuses a `oneOf` that would
+  require one key. Each seam now states its own typed shape on the command
+  line, the closing instruction says to fill a field rather than write JSON,
+  and the adapter reads a reply stringified one level down as the object it
+  meant. Three real turns in a row came back as a well-formed call.
 
 ### The corpus remembers what it was asked for (Generation)
 
