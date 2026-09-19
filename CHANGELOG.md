@@ -39,6 +39,11 @@ first written up, before the waves above it landed.
   unmet: 1`. The findings themselves stay on the recipe in `world.json`.
 - Nothing about what gets built changed. Only what is recorded.
 
+- A planned queryset's bytes no longer depend on the operating system. The
+  `plan` writer opened its file in text mode, so Windows wrote `\r\n` and the
+  same 312 rows hashed to a different digest than on Linux. It now writes
+  `\n` like every other byte-stable writer here.
+
 ### A use case's capability and difficulty are read off its rows (Generation)
 
 - Every use case `industry.use_cases` derived carried `evidence_reconciliation`

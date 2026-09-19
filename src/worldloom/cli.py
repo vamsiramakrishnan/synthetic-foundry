@@ -212,7 +212,11 @@ def enterprise_evals_plan(
         shard_count=shard_count,
         dag_shapes=resolve_shapes(dag_shape),
     )
-    with output.open("w", encoding="utf-8") as handle:
+    # newline="\n", the rule `corpus.py` and `batch.py` already keep: text mode
+    # otherwise substitutes the platform line ending, and the Windows job
+    # proved it, hashing 312 identical rows to a different digest than Linux.
+    # A plan's bytes are a claim about the walk, not about the OS.
+    with output.open("w", encoding="utf-8", newline="\n") as handle:
         for query in queries:
             handle.write(query.model_dump_json() + "\n")
     if report is not None:
