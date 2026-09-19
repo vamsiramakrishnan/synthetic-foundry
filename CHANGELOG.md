@@ -11,6 +11,31 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A described company that could not be built says so
+
+- `build --inspired-by "a mid-size Singaporean hospital group"` built Greyfell
+  Retail Group, an omnichannel retailer in Wellington whose largest unit was
+  Food, and reported `coherent: 5064 checks passed`. Nothing said a
+  substitution had happened. The same description through `--spec` had always
+  reported it as `unmet`; the build path resolved through the same fallback and
+  never asked whether anything matched.
+- `company.unmet_for_description` is now the one function that words it, and
+  both callers use it, so the two cannot tell a reader different stories about
+  the same substitution. It names the industry it did recognise, the shape that
+  got built instead, and the command that does work: "no registered domain
+  builds a 'healthcare' world, so the world is built with the
+  'omnichannel_retailer' shape … `worldloom industry programme healthcare`
+  derives its lines of business, processes, requests and counts".
+- Falling back still beats raising, which is why the build still succeeds. What
+  changed is that it is no longer quiet. A description the registry recognises
+  reports nothing, because a notice on every build teaches the reader to skip
+  the one that matters.
+- No bytes moved. The resolved shape is what it always was, so every corpus
+  built from a description is byte-identical to the one built before this.
+- Still missing, and missing on both paths equally: neither the specification
+  nor the description path *persists* the substitution into the corpus. A world
+  handed to someone else still cannot say it was built as a stand-in.
+
 ### Eight locales, generated from published data (Generation)
 
 - Four locales shipped and the catalogue built companies in fourteen

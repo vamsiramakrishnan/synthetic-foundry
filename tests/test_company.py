@@ -406,6 +406,63 @@ def test_a_bare_string_rival_is_refused_naming_the_fix() -> None:
         company.from_document({"rivals": "Coles"})
 
 
+def test_an_unrecognised_description_says_so_through_one_shared_voice() -> None:
+    """The walk that found this: `--inspired-by "a mid-size Singaporean hospital
+    group"` built Greyfell Retail Group, largest unit Food, and printed
+    "coherent: 5064 checks passed". `--spec` reported the same substitution as
+    `unmet` and the build path simply never asked, so the same substitution had
+    two stories depending on which flag you reached for. `unmet_for_description`
+    is the one that words it, and both callers use it.
+    """
+    from worldloom import archetypes
+
+    description = "a mid-size Singaporean hospital group"
+    assert archetypes.matched(description) is None
+    shape = archetypes.inspired_by(description)
+    assert shape.key == "omnichannel_retailer"
+
+    direct = company.unmet_for_description(description, shape)
+    assert len(direct) == 1
+    # It names the industry it *did* recognise, what got built instead, and the
+    # command that does work for it. A miss that only said "unrecognised" would
+    # be true and useless.
+    assert "healthcare" in direct[0]
+    assert "omnichannel_retailer" in direct[0]
+    assert "worldloom industry programme healthcare" in direct[0]
+
+    # The specification path reaches the identical sentence, which is the
+    # property that stops the two drifting.
+    resolved = company.resolve(company.from_document({"industry": description}))
+    assert direct[0] in resolved.unmet
+
+
+@pytest.mark.parametrize("description,expected", [
+    # The catalogue knows the industry: name the programme that exists.
+    ("a Bavarian machine-tool maker", "manufacturing"),
+    # A function is not an industry: say which slot the asker filled wrongly.
+    ("accounts payable", "is a function"),
+    # Nothing recognised it at all: say that, and what to reach for instead.
+    ("a purveyor of fine kazoos", "nothing recognised it"),
+])
+def test_every_kind_of_miss_is_worded_for_what_it_actually_is(description: str, expected: str) -> None:
+    from worldloom import archetypes
+
+    assert archetypes.matched(description) is None
+    found = company.unmet_for_description(description, archetypes.inspired_by(description))
+    assert expected in found[0], found
+
+
+def test_a_recognised_description_reports_nothing() -> None:
+    """No substitution happened, so there is nothing to confess. A notice on
+    every build would train the reader to skip the one that matters."""
+    from worldloom import archetypes
+
+    for description in ("a large Australian retailer like Woolworths", "a mid-size Australian bank"):
+        assert archetypes.matched(description) is not None
+        resolved = company.resolve(company.from_document({"industry": description}))
+        assert not any("nothing recognised it" in want for want in resolved.unmet)
+
+
 def test_a_facets_own_unmet_consequences_survive() -> None:
     resolved = company.resolve(company.from_document({"facets": {"listing": "listed"}}))
     assert any("analyst consensus" in want for want in resolved.unmet)
@@ -769,3 +826,46 @@ def test_an_engine_named_after_a_function_says_what_it_builds() -> None:
     for name in ("retail", "banking", "insurance"):
         assert domains.by_name(name).industry == ""
         assert domains.describes(name) == name
+
+
+# ---------------------------------------------------------------------------
+# The build path, which is where the silence actually was
+# ---------------------------------------------------------------------------
+
+
+def test_the_build_command_reports_the_substitution_it_makes(tmp_path) -> None:
+    """The end-to-end property, not just the helper's return value.
+
+    `--inspired-by` resolves through the same fallback `--spec` does, but it
+    called `archetypes.inspired_by` directly and so had nothing to report. The
+    corpus that came out was a supermarket announced as coherent. The build
+    still succeeds — falling back beats raising for a caller who wants a world
+    — but it no longer does it quietly.
+    """
+    from typer.testing import CliRunner
+
+    from worldloom.cli import app
+
+    result = CliRunner().invoke(app, [
+        "build", "--seed", "4242",
+        "--inspired-by", "a mid-size Singaporean hospital group",
+        "--periods", "1", "--out", str(tmp_path / "corpus"),
+    ])
+    assert result.exit_code == 0, result.output
+    assert "unmet:" in result.output
+    assert "healthcare" in result.output
+    assert "omnichannel_retailer" in result.output
+
+
+def test_a_recognised_description_builds_without_a_notice(tmp_path) -> None:
+    from typer.testing import CliRunner
+
+    from worldloom.cli import app
+
+    result = CliRunner().invoke(app, [
+        "build", "--seed", "4242",
+        "--inspired-by", "a mid-size Australian bank",
+        "--periods", "1", "--out", str(tmp_path / "corpus"),
+    ])
+    assert result.exit_code == 0, result.output
+    assert "unmet:" not in result.output

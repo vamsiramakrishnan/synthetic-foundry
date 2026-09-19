@@ -1640,7 +1640,21 @@ def build(
                 registered=list(domains.names()),
             )
     elif inspired_by:
-        shape = archetype_registry.inspired_by(inspired_by)
+        # `inspired_by` falls back to the mid-size retailer for a description it
+        # does not recognise. That is deliberate and stays, but it used to be
+        # *silent*: `--inspired-by "a Singaporean hospital group"` built
+        # Greyfell Retail Group, largest unit Food, and printed "coherent".
+        # A specification through `--spec` has always reported the same
+        # substitution as `unmet`; this path simply never asked. It asks now,
+        # through the one function that words it, so the two cannot drift into
+        # telling different stories about the same substitution.
+        from . import company as company_for_description
+
+        recognised = archetype_registry.matched(inspired_by)
+        shape = recognised if recognised is not None else archetype_registry.inspired_by(inspired_by)
+        if recognised is None:
+            for want in company_for_description.unmet_for_description(inspired_by, shape):
+                console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
         domain = domains.for_archetype(shape.key)
     else:
         try:

@@ -1068,6 +1068,57 @@ def resolve(spec: CompanySpec) -> Resolution:
     )
 
 
+def unmet_for_description(description: str, fallback: Any) -> list[str]:
+    """What a description failed to get, when no archetype phrase matched it.
+
+    `archetypes.inspired_by` falls back rather than raising, which is right for
+    a caller who would rather have a world than an error and wrong for a
+    describer: "a Bavarian machine-tool maker" would silently become a
+    supermarket group. `archetypes.matched` says whether anything matched, so
+    the miss can be reported as a miss, and when the process catalogue knows
+    the industry the report names the programme that does exist for it rather
+    than only what does not.
+
+    Public, and called from two places on purpose. `_shape_of` reports it for a
+    company specification; `build --inspired-by` reports it for a bare
+    description, which resolves through the same fallback and used to say
+    nothing at all — a corpus built as a supermarket when a hospital was asked
+    for, announced as coherent. One function so the two cannot drift into
+    telling the user different stories about the same substitution.
+
+    *fallback* is the archetype the description actually resolved to.
+    """
+    from .industry import function_finding, industry_of
+
+    known = industry_of(description)
+    named_a_function = function_finding(description)
+    if known is not None:
+        return [
+            f"an engine for {description!r}: no registered domain builds"
+            f" a {known!r} world, so the world is built with the"
+            f" {fallback.key!r} shape. The process catalogue knows the industry,"
+            f" and `worldloom industry programme {known}` derives its lines"
+            " of business, processes, requests and counts; say `archetype`"
+            " or write a pack to shape the world itself."
+        ]
+    if named_a_function is not None:
+        # The description named something a company *has*. Saying "no archetype
+        # recognised it" would be true and useless: the asker named a real
+        # thing in the wrong slot.
+        return [
+            f"an industry for {description!r}: it resolved to"
+            f" {fallback.key!r}, the shape an unrecognised industry falls"
+            f" back to. {named_a_function}"
+        ]
+    return [
+        f"an archetype for {description!r}: nothing recognised it, so"
+        f" it resolved to {fallback.key!r}, the shape an unrecognised"
+        " industry falls back to. Say `archetype` to be certain,"
+        " `vocabulary` to keep the shape and change the words, or"
+        " write a pack whose units are this business's own."
+    ]
+
+
 def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[str]]:
     """The archetype a description names, and the engine that owns it.
 
@@ -1091,43 +1142,7 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
         recognised = archetypes.matched(spec.industry)
         base = recognised if recognised is not None else archetypes.inspired_by(spec.industry)
         if recognised is None:
-            # `inspired_by` falls back rather than raising, which is right for a
-            # caller who would rather have a world than an error and wrong for a
-            # describer: "a Bavarian machine-tool maker" would silently become a
-            # supermarket group. `matched` says whether anything matched, so
-            # the miss is reported as a miss, and when the process catalogue
-            # knows the industry the report names the programme that does
-            # exist for it rather than only what does not.
-            from .industry import function_finding, industry_of
-
-            known = industry_of(spec.industry)
-            named_a_function = function_finding(spec.industry)
-            if known is not None:
-                unmet.append(
-                    f"an engine for {spec.industry!r}: no registered domain builds"
-                    f" a {known!r} world, so the world is built with the"
-                    f" {base.key!r} shape. The process catalogue knows the industry,"
-                    f" and `worldloom industry programme {known}` derives its lines"
-                    " of business, processes, requests and counts; say `archetype`"
-                    " or write a pack to shape the world itself."
-                )
-            elif named_a_function is not None:
-                # The description named something a company *has*. Saying "no
-                # archetype recognised it" would be true and useless: the
-                # asker named a real thing in the wrong slot.
-                unmet.append(
-                    f"an industry for {spec.industry!r}: it resolved to"
-                    f" {base.key!r}, the shape an unrecognised industry falls"
-                    f" back to. {named_a_function}"
-                )
-            else:
-                unmet.append(
-                    f"an archetype for {spec.industry!r}: nothing recognised it, so"
-                    f" it resolved to {base.key!r}, the shape an unrecognised"
-                    " industry falls back to. Say `archetype` to be certain,"
-                    " `vocabulary` to keep the shape and change the words, or"
-                    " write a pack whose units are this business's own."
-                )
+            unmet.extend(unmet_for_description(spec.industry, base))
     elif engine:
         registered = domains.by_name(engine)
         if registered is None or not registered.default_archetype:
