@@ -64,7 +64,15 @@ worldloom enterprise-evals score query.json trace.json --fixture fixture.json
 ```
 
 Industry workflows belong in a `ScenarioProfile` as `additional_workflows` and
-`additional_processes`; do not add industry names to the query planner. Use
+`additional_processes`; do not add industry names to the query planner. Four
+profiles ship in `examples/enterprise-evals/`: `financial-services.json`
+(the builtin workflows with a regulated vocabulary), `mutual-bank.json`,
+`omnichannel-retailer.json`, and `back-office.json` (month-end close,
+three-way match exceptions, onboarding readiness and contract renewal, read
+from the `sor` connector beside the channels). The back-office profile needs
+a world built from a catalogue project, because only such a world carries
+`sor` records. `tests/test_enterprise_scenarios.py` loads every shipped
+profile. Use
 covering mode to prove t-way coverage and bounded exhaustive mode to stream a
 large, balanced corpus. Both routes must remain deterministic. Covering mode
 examines the entire selection before applying `--limit`; narrow the profile

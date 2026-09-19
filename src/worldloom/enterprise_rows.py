@@ -383,10 +383,17 @@ def runtime_records(records: Iterable[Any]) -> tuple[dict[str, Any], ...]:
         fields = dict(held.get("fields") or {})
         if held.get("title") and "title" not in fields:
             fields["title"] = held["title"]
+        # `ident` is the product key the emulator shapes a native id from
+        # (`connector_emulator._canonical_record` sets it from `external_id`).
+        # Left unset here, a compiled row's `input_snapshots` minted a hashed
+        # page id while the served emulator answered with the external id,
+        # and every search over a Confluence page graded `result_mismatch`.
+        ident = held.get("ident") or held.get("external_id")
         out.append(
             {
                 **held,
                 **fields,
+                **({"ident": ident} if ident not in (None, "") else {}),
                 "fid": str(held.get("fid") or held.get("id")),
                 "server": str(held.get("server") or held.get("connector")),
                 "fields": fields,

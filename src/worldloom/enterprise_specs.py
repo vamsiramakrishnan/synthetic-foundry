@@ -223,6 +223,11 @@ def _entity(name: str, stable_id: str, operations: tuple[Operation, ...], *forma
 
 READ = (Operation.SEARCH, Operation.LIST, Operation.READ)
 MUTATE = (Operation.CREATE, Operation.UPDATE, Operation.PATCH, Operation.UPSERT)
+#: Operations that address a record which must already exist at the
+#: destination. The planner materialises a destination fixture for these;
+#: a create, draft or send makes its own record.
+RECORD_ADDRESSED = (Operation.UPDATE, Operation.PATCH, Operation.UPSERT, Operation.DELETE, Operation.MOVE,
+                    Operation.COMMENT, Operation.ATTACH, Operation.LINK, Operation.REPLY, Operation.FORWARD)
 FILES = ("docx", "xlsx", "pptx", "pdf", "csv", "html", "markdown")
 
 def _sor_connector() -> ConnectorSpec:
@@ -238,14 +243,32 @@ def _sor_connector() -> ConnectorSpec:
 
 
 BUILTIN_CONNECTORS = (
-    ConnectorSpec(name="jira", display_name="Jira", entities=(_entity("issue", "key", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH, Operation.LINK)),), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
-    ConnectorSpec(name="confluence", display_name="Confluence", entities=(_entity("page", "page_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH), "html", "markdown", "pdf"),), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="sharepoint", display_name="SharePoint", entities=(_entity("file", "item_id", READ + MUTATE + (Operation.DELETE, Operation.MOVE), *FILES), _entity("list_item", "item_id", READ + MUTATE)), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="drive", display_name="Google Drive", entities=(_entity("file", "file_id", READ + MUTATE + (Operation.DELETE, Operation.MOVE), *FILES),), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="servicenow", display_name="ServiceNow", entities=(_entity("incident", "sys_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH)), _entity("change_request", "sys_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
+    ConnectorSpec(name="jira", display_name="Jira", entities=(_entity("issue", "key", READ + MUTATE + (Operation.COMMENT,)),), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
+    ConnectorSpec(name="confluence", display_name="Confluence", entities=(_entity("page", "page_id", READ + MUTATE + (Operation.COMMENT,), "html", "markdown", "pdf"),), content_actions=tuple(ContentAction)),
+    ConnectorSpec(name="sharepoint", display_name="SharePoint", entities=(_entity("file", "item_id", READ + MUTATE + (Operation.DELETE,), *FILES), _entity("list_item", "item_id", READ + MUTATE)), content_actions=tuple(ContentAction)),
+    ConnectorSpec(name="drive", display_name="Google Drive", entities=(_entity("file", "file_id", READ + MUTATE + (Operation.DELETE,), *FILES),), content_actions=tuple(ContentAction)),
+    ConnectorSpec(name="servicenow", display_name="ServiceNow", entities=(_entity("incident", "sys_id", READ + MUTATE + (Operation.COMMENT,)), _entity("change_request", "sys_id", READ + MUTATE + (Operation.COMMENT,))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
     ConnectorSpec(name="salesforce", display_name="Salesforce", entities=(_entity("account", "id", READ + MUTATE), _entity("contact", "id", READ + MUTATE), _entity("opportunity", "id", READ + MUTATE), _entity("case", "id", READ + MUTATE)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
-    ConnectorSpec(name="email", display_name="Email", entities=(_entity("message", "message_id", READ + (Operation.DRAFT, Operation.SEND, Operation.REPLY, Operation.FORWARD, Operation.ATTACH)), _entity("thread", "thread_id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    ConnectorSpec(name="email", display_name="Email", entities=(_entity("message", "message_id", READ + (Operation.DRAFT, Operation.SEND, Operation.REPLY, Operation.FORWARD)), _entity("thread", "thread_id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
     _sor_connector(),
+    # The six below mirror `builtin_connector_definitions()` entity for entity,
+    # because for a long while they did not exist at all: the definitions
+    # carried fourteen connectors and this tuple eight, so a scenario profile
+    # naming `slack` was refused as unknown while the emulator stood ready to
+    # serve it. Each operation is one the definition maps to a tool. `patch`
+    # and `upsert`, which no definition carries, stay off them, so a workflow
+    # asking for one is reported by `review()` instead of planned. `list` is
+    # the definition's `search` where the product's search is a listing call.
+    # Maturity is not a gate here, and it is not one anywhere else either: the
+    # definitions expose `rovo` (product_surface) and `teamwork_graph` (eap)
+    # unconditionally and the binding carries the maturity through as data,
+    # so the specs follow suit.
+    ConnectorSpec(name="onedrive", display_name="OneDrive", entities=(_entity("file", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE), "docx", "xlsx", "pptx", "pdf"), _entity("folder", "id", READ + (Operation.CREATE, Operation.DELETE))), content_actions=tuple(ContentAction)),
+    ConnectorSpec(name="outlook", display_name="Outlook", entities=(_entity("message", "id", READ + (Operation.CREATE, Operation.DRAFT, Operation.UPDATE, Operation.SEND, Operation.REPLY, Operation.FORWARD, Operation.COMMENT, Operation.DELETE)), _entity("mail_folder", "id", READ + (Operation.CREATE,)), _entity("attachment", "id", READ + (Operation.CREATE, Operation.DELETE))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    ConnectorSpec(name="slack", display_name="Slack", entities=(_entity("channel", "id", READ + (Operation.CREATE,)), _entity("message", "ts", READ + (Operation.CREATE, Operation.UPDATE, Operation.COMMENT, Operation.REPLY, Operation.DELETE)), _entity("thread", "ts", READ + (Operation.COMMENT, Operation.REPLY)), _entity("file", "id", READ), _entity("user", "id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    ConnectorSpec(name="teams", display_name="Microsoft Teams", entities=(_entity("team", "id", READ), _entity("channel", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)), _entity("chat", "id", READ + (Operation.CREATE,)), _entity("channel_message", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.COMMENT, Operation.REPLY, Operation.DELETE)), _entity("chat_message", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)), _entity("member", "id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
+    ConnectorSpec(name="rovo", display_name="Rovo", entities=tuple(_entity(name, "ari", READ) for name in ("document", "message", "work_item", "person", "team", "project", "goal")), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
+    ConnectorSpec(name="teamwork_graph", display_name="Teamwork Graph", entities=tuple(_entity(name, "ari", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)) for name in ("document", "message", "work_item", "project", "comment", "pull_request", "repository", "space")) + tuple(_entity(name, "ari", READ) for name in ("team", "user", "goal")), content_actions=(ContentAction.EXTRACT, ContentAction.COMPARE)),
 )
 
 

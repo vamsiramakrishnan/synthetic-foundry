@@ -59,7 +59,15 @@ ASSISTANT_ALLOWED_TOKENS = ("CLAUDE.md", ".claude/")
 
 def _prose_files() -> Iterator[Path]:
     for pattern in PROSE_GLOBS:
-        yield from sorted(ROOT.glob(pattern))
+        # Agent worktrees are checked out under `.claude/worktrees/` by the
+        # coding harness. They are other branches' trees, not this one's
+        # prose, and their copies of pre-existing files re-enter the gate
+        # under a path prefix the exclusions above never match: five parallel
+        # worktrees turned 0 findings into 70 without a single edited file.
+        for path in sorted(ROOT.glob(pattern)):
+            if path.relative_to(ROOT).parts[:2] == (".claude", "worktrees"):
+                continue
+            yield path
 
 
 def _offences(path: Path) -> list[str]:

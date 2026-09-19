@@ -179,13 +179,32 @@ def summarize(report: RunReport) -> RunSummary:
 # -- ledger -------------------------------------------------------------------
 
 
+def _result_line(result: CaseResult) -> str:
+    return json.dumps(result.model_dump(mode="json"), sort_keys=True, default=str) + "\n"
+
+
+def append_result(directory: Path, result: CaseResult) -> None:
+    """One graded case onto ``results.jsonl`` as it lands.
+
+    A run over a slow agent can take longer than the wall clock it is given.
+    Written only at the end, a killed run leaves nothing; written as each
+    case completes, it leaves every case that finished. ``write_run`` then
+    rewrites the same lines in the same order, so a run that completes is
+    byte-identical whether or not it checkpointed.
+    """
+
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / "results.jsonl").open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(_result_line(result))
+
+
 def write_run(directory: Path, report: RunReport) -> RunSummary:
     """``run.json`` (identity), ``results.jsonl`` (one case per line), ``summary.json``."""
 
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / "results.jsonl").open("w", encoding="utf-8", newline="\n") as handle:
         for result in report.results:
-            handle.write(json.dumps(result.model_dump(mode="json"), sort_keys=True, default=str) + "\n")
+            handle.write(_result_line(result))
     summary = summarize(report)
     write_json(directory / "run.json", {"schema": RUN_SCHEMA, "agent": report.agent, "principal": report.principal,
                                         "case_set": report.case_set, "cases": len(report.results)})
@@ -458,6 +477,7 @@ __all__ = [
     "Comparison",
     "RunSlice",
     "RunSummary",
+    "append_result",
     "compare",
     "import_served",
     "import_studio_results",

@@ -1000,3 +1000,275 @@ def test_comparison_and_summary_speak_only_of_observed_axes(grammar_corpus: Any)
     executed = session.summary("reference")
     assert executed.exact_match_rate == 1.0 and executed.mean_calls is not None and executed.mean_calls > 0
 
+
+
+# -- grader defects found by the reference on a project-built world ----------
+
+
+def _list_item_row(nodes: list[dict[str, Any]], edges: list[list[str]], assertions: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"id": "li", "query": "Read the stale row, then act on it.",
+            "expected_dag": {"nodes": nodes, "edges": edges}, "assertions": assertions}
+
+
+def _list_item_service(case: EvalCase) -> Any:
+    return service_for((case,), _records(), definitions={"sharepoint": load_connector_definition("sharepoint")})
+
+
+def test_an_update_the_plan_then_deletes_is_met_from_the_spans() -> None:
+    """A delete chain updates a record and then removes it; the post-state cannot show the update.
+
+    Found by the reference on a project-built world: the update read
+    "<fid> is gone" and the case failed on its own ceiling. The service's
+    span recorded the update, and the delete that followed is the other half
+    of the same plan, so the update is met when the expectation names no
+    target state to check.
+    """
+    row = _list_item_row(
+        [{"id": "read", "server": "sharepoint", "tool": "get_list_items", "fixture": "l1", "entity": "list_item", "op": "search"},
+         {"id": "write", "server": "sharepoint", "tool": "update_list_item", "fixture": "l1", "entity": "list_item", "op": "update"},
+         {"id": "delete", "server": "sharepoint", "tool": "delete_list_item", "fixture": "l1", "entity": "list_item", "op": "delete"}],
+        [["read", "write"], ["write", "delete"]],
+        [{"type": "tool_called", "node": node} for node in ("read", "write", "delete")]
+        + [{"type": "deleted", "node": "delete", "fixture": "l1"}],
+    )
+    case = case_from_row(row)
+    agent = ScriptedAgent([("sharepoint.get_list_items", {"entity": "list_item", "max_results": 10}),
+                           ("sharepoint.update_list_item", {"id": "item-1", "fields": {"name": "Reviewed row"}}),
+                           ("sharepoint.delete_list_item", {"id": "item-1"})])
+    result = run_case(_list_item_service(case), case, agent)
+    assert result.score is not None, result.error
+    by_node = {match.expected.node: match for match in result.score.outcomes.structured}
+    assert by_node["write"].met and by_node["write"].detail == "updated, then deleted by the plan"
+    assert by_node["delete"].met
+    assert result.score.passed, result.score.model_dump()
+
+
+def test_a_second_update_on_one_record_is_attributed_to_the_node_that_made_it() -> None:
+    """Two nodes update the same record in turn; the diff shows one update.
+
+    Found by the reference on `write_chain` rows: the marker update read
+    "no record of the entity changed" because the first update had claimed
+    the only changed record. A node's own successful spans say what it wrote.
+    """
+    row = _list_item_row(
+        [{"id": "read", "server": "sharepoint", "tool": "get_list_items", "fixture": "l1", "entity": "list_item", "op": "search"},
+         {"id": "write", "server": "sharepoint", "tool": "update_list_item", "fixture": "l1", "entity": "list_item", "op": "update"},
+         {"id": "write-marker", "server": "sharepoint", "tool": "update_list_item", "entity": "list_item", "op": "update"}],
+        [["read", "write"], ["write", "write-marker"]],
+        [{"type": "tool_called", "node": node} for node in ("read", "write", "write-marker")],
+    )
+    case = case_from_row(row)
+    agent = ScriptedAgent([("sharepoint.get_list_items", {"entity": "list_item", "max_results": 10}),
+                           ("sharepoint.update_list_item", {"id": "item-1", "fields": {"name": "Reviewed row"}}),
+                           ("sharepoint.update_list_item", {"id": "item-1", "fields": {"verified": True}})])
+    result = run_case(_list_item_service(case), case, agent)
+    assert result.score is not None, result.error
+    matches = {match.expected.node: match for match in result.score.outcomes.structured}
+    assert matches["write"].met and matches["write-marker"].met, result.score.outcomes.model_dump()
+    assert matches["write-marker"].record == "l1"
+    assert result.score.outcomes.collateral == ()
+
+
+def test_a_failure_point_an_honoured_failure_blocked_is_not_expected() -> None:
+    """A delete chain expects `not_found` from the readback after the delete.
+
+    When the write the chain starts from is denied, the readback never runs.
+    The grader counted it as a failure the agent did not honour and scored
+    the reference 0.9 on its own trajectory. A point on a node an honoured
+    failure blocked is unreachable, so it is not expected; a point the agent
+    did reach and meet still counts.
+    """
+    from worldloom.evalrun import grade_trajectory
+
+    row = _list_item_row(
+        [{"id": "read", "server": "sharepoint", "tool": "get_list_items", "fixture": "l1", "entity": "list_item", "op": "search"},
+         {"id": "write", "server": "sharepoint", "tool": "create_list_item", "entity": "list_item", "op": "create"},
+         {"id": "verify-write", "server": "sharepoint", "tool": "get_list_item", "entity": "list_item", "op": "readback"},
+         {"id": "delete", "server": "sharepoint", "tool": "delete_list_item", "entity": "list_item", "op": "delete"},
+         {"id": "verify-deleted", "server": "sharepoint", "tool": "get_list_item", "entity": "list_item", "op": "readback"}],
+        [["read", "write"], ["write", "verify-write"], ["verify-write", "delete"], ["delete", "verify-deleted"]],
+        [{"type": "failure_at", "node": "verify-deleted", "kind": "not_found", "writes_persist": False, "blocked_nodes": []},
+         {"type": "failure_at", "node": "write", "kind": "denied", "writes_persist": False,
+          "blocked_nodes": ["verify-write", "delete", "verify-deleted"]}],
+    )
+    case = case_from_row(row)
+    denied = [{"id": "s1", "node": "read", "tool": "sharepoint.get_list_items", "args": {}, "reads": ["l1"], "writes": []},
+              {"id": "s2", "node": "write", "tool": "sharepoint.create_list_item", "args": {"name": "x"}, "reads": [], "writes": [],
+               "error": {"kind": "denied", "code": 403}}]
+    grade = grade_trajectory(case, denied)
+    assert (grade.failures_expected, grade.failures_honoured) == (1, 1), grade.model_dump()
+    assert grade.passed
+
+    # The write went through: the chain reaches the readback, which must fail.
+    reached = [denied[0],
+               {"id": "s2", "node": "write", "tool": "sharepoint.create_list_item", "args": {"name": "x"}, "reads": [], "writes": ["n1"]},
+               {"id": "s3", "node": "verify-write", "tool": "sharepoint.get_list_item", "args": {"id": "n1"}, "reads": ["n1"], "writes": []},
+               {"id": "s4", "node": "delete", "tool": "sharepoint.delete_list_item", "args": {"id": "n1"}, "reads": [], "writes": ["n1"]},
+               {"id": "s5", "node": "verify-deleted", "tool": "sharepoint.get_list_item", "args": {"id": "n1"}, "reads": [], "writes": [],
+                "error": {"kind": "not_found", "code": 404}}]
+    grade = grade_trajectory(case, reached)
+    assert (grade.failures_expected, grade.failures_honoured) == (2, 1), "the denial was designed and did not happen"
+
+
+def test_a_partial_write_on_a_delete_names_no_created_record() -> None:
+    """A designed `partial_write` on a write that makes nothing has no record to check.
+
+    Found once a delete could be planned as the primary write: its id is
+    bound from the read before it, so the node carries no fixture, and the
+    contract asked the grader to find a *created* record with the delete's
+    name. The delete's persisted effect is the `deleted` assertion's to grade.
+    """
+    from worldloom.enterprise_failures import compile_failure_contract
+
+    row = {"expected_dag": {"nodes": [
+        {"id": "target", "server": "sharepoint", "tool": "get_file", "entity": "file", "op": "read", "fixture": "f1"},
+        {"id": "write", "server": "sharepoint", "tool": "delete_file", "entity": "file", "op": "delete", "payload": {}},
+        {"id": "verify-write", "server": "sharepoint", "tool": "get_file", "entity": "file", "op": "read"},
+    ], "edges": [["target", "write"], ["write", "verify-write"]]},
+        "assertions": [],
+        "state_overrides": [{"kind": "partial_write", "connector": "sharepoint", "record_id": None,
+                             "details": {"fail_after": 1, "rollback": False}}]}
+    compiled = compile_failure_contract(row)
+    failure = next(a for a in compiled["assertions"] if a["type"] == "failure_at" and a["node"] == "write")
+    assert failure["writes_persist"] and "created_record" not in failure and "fixture" not in failure
+
+    created = {**row, "expected_dag": {**row["expected_dag"], "nodes": [
+        {**row["expected_dag"]["nodes"][1], "tool": "create_file", "op": "create", "payload": {"name": "pack.pdf"}}]}}
+    compiled = compile_failure_contract(created)
+    failure = next(a for a in compiled["assertions"] if a["type"] == "failure_at" and a["node"] == "write")
+    assert failure["created_record"] == {"server": "sharepoint", "entity": "file", "name": "pack.pdf"}
+
+
+def test_a_compiled_snapshot_and_the_served_payload_mint_the_same_native_id() -> None:
+    """`runtime_records` and the emulator's own intake shape one record to one id.
+
+    Found by the reference on the omnichannel profile: seven rows searched a
+    Confluence page and every one graded `result_mismatch`, because the
+    compiled snapshot minted a hashed page id (no `ident` on the runtime
+    record) while the served emulator answered with the external id.
+    """
+    from worldloom.connector_data import ConnectorRecord
+    from worldloom.connector_emulator import _canonical_record
+    from worldloom.connector_payload import shape_payload
+    from worldloom.enterprise_rows import runtime_records
+    from worldloom.eval_connectors import builtin_connector_definitions
+
+    record = ConnectorRecord(id="CONN-CONFLUENCE-TEST", connector="confluence", entity="page", external_id="10000001",
+                             title="Reserve Triangle Workbook", fields={"page_id": "10000001", "version": 1})
+    definition = builtin_connector_definitions()["confluence"]
+    served = shape_payload(definition, _canonical_record(record))
+    compiled = shape_payload(definition, runtime_records([record])[0])
+    assert served["id"] == compiled["id"] == "10000001"
+
+
+def test_the_catalog_names_what_a_create_must_carry_and_the_emulator_names_what_is_missing() -> None:
+    """An agent can only supply the fields it can see, and a refusal has to say which one it lacked.
+
+    Measured on a real run: `confluence.create_page` without `space` was
+    refused as "A page with this title already exists in the space", the
+    connector's one validation text, and the agent spent five turns searching
+    for a page that never existed.
+    """
+    row = {"id": "cp", "query": "Write the pack to Confluence.",
+           "expected_dag": {"nodes": [
+               {"id": "write", "server": "confluence", "tool": "create_page", "entity": "page", "op": "create",
+                "payload": {"name": "Pack", "fields": {"space": "FIN"}}}], "edges": []},
+           "assertions": [{"type": "tool_called", "node": "write"}]}
+    case = case_from_row(row)
+    service = service_for((case,), [], definitions={"confluence": load_connector_definition("confluence")})
+    run_id = service.begin("agent", case.id)["run_id"]
+    catalog = {tool["name"]: tool for tool in service.tool_catalog("agent", run_id)}
+    assert catalog["confluence.create_page"]["required_on_create"] == {"page": ["space", "title"]}
+    assert "required_on_create" not in catalog["confluence.search"]
+    with pytest.raises(Exception) as refused:
+        service.call("agent", run_id, "confluence.create_page", {"entity": "page", "name": "Pack", "fields": {"body": "<p>x</p>"}})
+    assert "Required field 'space' is missing on create of page" in str(refused.value)
+    assert "already exists" not in str(refused.value)
+    created = service.call("agent", run_id, "confluence.create_page", {"entity": "page", "name": "Pack", "fields": {"space": "FIN", "body": "<p>x</p>"}})
+    assert created["title"] == "Pack"
+
+
+def test_an_external_agents_own_arguments_attribute_by_shape(grammar_corpus: Any) -> None:
+    """An agent that is not the reference never reproduces the reference's bytes.
+
+    Measured on a real harness run: twenty calls, the page created and read
+    back, plan 0.0 and both conditional branches expected, because the grammar
+    attribution bound every node's arguments from the reference flow and
+    demanded equality (the fixture id inside the search predicate, the
+    reference's own name and evidence fields on the create). A call now
+    attributes by shape when the strict pass finds nothing: the node's tool,
+    its tool ancestors completed, its condition holding on what was observed,
+    and a target that resolves to the fixture or to a record a parent made.
+    A read attributed by shape stands only if it read the node's record; a
+    refused call stands only if the refusal is the node's designed failure.
+    """
+    from worldloom.evalrun import AgentResponse, CallableAgent
+
+    cases = cases_from_corpus(grammar_corpus)
+    case = next(case for case in cases if case.plan.shape == "conditional" and not case.row.get("state_overrides"))
+    fixture = next(node["fixture"] for node in case.row["expected_dag"]["nodes"] if node["id"] == "read-0")
+    records = grammar_corpus.connector_data.records
+
+    def explorer(task: Any, tools: Any) -> AgentResponse:
+        # A refusal at the right tool: the agent's own mistake, not the plan step.
+        try:
+            tools.call("servicenow.search_records", entity="incident", query="stock availability")
+        except Exception:
+            pass
+        # A search that misses the record the node is for reads something else.
+        tools.call("servicenow.search_records", entity="incident", max_results=1, predicate={"id": ["in", ["INC-NOT-THERE"]]})
+        # The read: broad, on the agent's own terms, and it returns the fixture.
+        found = tools.call("servicenow.search_records", entity="incident", max_results=50)
+        assert found["items"]
+        # The write: the agent's own subject, no evidence fields.
+        draft = tools.call("email.create_draft", entity="message", name="Stock exceptions for Ironvale",
+                           fields={"subject": "Stock exceptions for Ironvale", "body": "<p>See attached.</p>"})
+        tools.call("email.get_message", id=draft["id"])
+        return AgentResponse(answer="Drafted the exception review.")
+
+    result = run_case(service_for(cases, records), case, CallableAgent(explorer, name="explorer"))
+    assert result.graded and result.score is not None, result.error
+    by_ordinal = {span["ordinal"]: span["node"] for span in result.spans}
+    assert by_ordinal[1] is None and by_ordinal[2] is None, "a refusal and a miss do not attribute"
+    assert by_ordinal[3] == "read-0" and fixture in result.spans[2]["reads"]
+    taken = "write-primary" if result.spans[2]["items"] >= 2 else "write-fallback"
+    assert by_ordinal[4] == taken and by_ordinal[5] == f"verify-{taken}"
+    score = result.score
+    assert score.plan.missing_nodes == () and score.plan.unattributed_calls == 2
+    matches = {match.expected.node: match for match in score.outcomes.structured}
+    assert matches[taken].met and matches[taken].detail == ""
+    other = "write-fallback" if taken == "write-primary" else "write-primary"
+    assert matches[other].met and matches[other].detail == "branch not taken"
+    assert score.trajectory.safety == ()
+
+
+def test_a_record_read_through_search_attributes_to_the_get_node(grammar_corpus: Any) -> None:
+    """A `get` node is a record read; an agent that finds the record by search read it.
+
+    Measured on a real harness run: a `deep_chain` case whose read is
+    `sor.get_record` scored plan 0.0 because the agent listed the entity
+    with `sor.search_records` and the fixture came back among twenty items.
+    The shape pass accepts any read tool on the connector for a read node
+    with a fixture, and the receipt of a page is read as a page whichever
+    node it landed on.
+    """
+    from worldloom.evalrun import AgentResponse, CallableAgent
+
+    cases = cases_from_corpus(grammar_corpus)
+    case = next(case for case in cases if case.plan.shape == "map_read" and not case.row.get("state_overrides"))
+    read = next(node for node in case.row["expected_dag"]["nodes"] if node["id"] == "read-0")
+    fetch = next(node for node in case.row["expected_dag"]["nodes"] if node["id"] == "fetch-0")
+    assert fetch["op"] == "get" and read["op"] == "search"
+
+    def lister(task: Any, tools: Any) -> AgentResponse:
+        connector = read["server"]
+        found = tools.call(f"{connector}.{read['tool']}", entity=read["entity"], max_results=50)
+        for item in found["items"]:
+            tools.call(f"{connector}.{fetch['tool']}", id=item.get("sys_id") or item["id"])
+        return AgentResponse(answer="Read them all.")
+
+    result = run_case(service_for(cases, grammar_corpus.connector_data.records), case, CallableAgent(lister, name="lister"))
+    assert result.graded and result.score is not None, result.error
+    attributed = [span["node"] for span in result.spans if span["node"]]
+    assert attributed[0] == "read-0" and "fetch-0" in attributed
+    assert "read-0" not in result.score.plan.missing_nodes and "fetch-0" not in result.score.plan.missing_nodes

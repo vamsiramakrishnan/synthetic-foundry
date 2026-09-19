@@ -33,7 +33,7 @@ from pydantic import Field
 
 from ..models import Model
 from .agents import AgentResponse
-from .contract import EvalCase, StructuredOutcome
+from .contract import EvalCase, FailurePoint, StructuredOutcome
 from .safety import ErrorCode, OperationSafety, error_code_for, is_retryable
 
 Spans = Sequence[Any]
@@ -326,13 +326,21 @@ def grade_trajectory(
             seen_reads.update(str(value) for value in span.get("writes", ()))
 
     honoured = 0
+
+    def _met(failure: FailurePoint) -> bool:
+        return any((span.get("error") or {}).get("kind") == failure.kind
+                   for span in materialized if str(span.get("node")) == failure.node)
+
     # A conditional row designs one failure per branch; only the branch the
     # results selected can meet its failure, so the other is not expected.
-    expected_points = [failure for failure in case.trajectory.failures if failure.node not in skipped]
+    # Neither is a failure on a node an honoured failure blocked: a delete
+    # chain expects `not_found` from the readback after the delete, and when
+    # the write it starts from is denied, that readback never runs.
+    unreachable = {node for failure in case.trajectory.failures if _met(failure) for node in failure.blocked_nodes}
+    expected_points = [failure for failure in case.trajectory.failures
+                       if failure.node not in skipped and (failure.node not in unreachable or _met(failure))]
     for failure in expected_points:
-        at_node = [span for span in materialized if str(span.get("node")) == failure.node]
-        met = any((span.get("error") or {}).get("kind") == failure.kind for span in at_node)
-        if not met:
+        if not _met(failure):
             continue
         first = next(index for index, span in enumerate(materialized)
                      if str(span.get("node")) == failure.node and (span.get("error") or {}).get("kind") == failure.kind)
@@ -520,6 +528,13 @@ def grade_outcomes(
     # A mapped write (`for_each`) is one node and as many records as items:
     # every candidate it produced belongs to it, not to the collateral.
     mapped = {str(node["id"]) for node in (case.row.get("expected_dag") or {}).get("nodes", ()) if node.get("for_each")}
+    # Records the plan's own delete expectations removed: present before the
+    # run, gone after it. An update on one of them cannot be read back from
+    # the post-state, and the spans say whether it happened.
+    removed_by_plan = {
+        str(outcome.fixture) for outcome in case.outcomes.structured
+        if outcome.kind == "delete" and outcome.fixture and outcome.fixture in before and outcome.fixture not in after
+    }
     matches: list[OutcomeMatch] = []
     for expected in case.outcomes.structured:
         met, record, detail = False, None, ""
@@ -569,20 +584,40 @@ def grade_outcomes(
                 detail = f"no {expected.connector}/{expected.entity} record was created"
         elif expected.kind == "update":
             fid = expected.fixture
+            # What this node's own successful spans wrote, as the service
+            # recorded it. The diff alone cannot attribute a second change
+            # to the node that made it: a record created and then marked in
+            # one run shows as created, and a record two nodes update in
+            # turn shows as one update.
+            own_writes = [str(raw) for span in materialized
+                          if str(span.get("node")) == expected.node and not span.get("error")
+                          for raw in span.get("writes", ())]
             if fid is None:
                 # No fixture named: any changed record of the entity satisfies
                 # the shape; the assertion layer has already refused to grade
-                # target state without a fixture, and this mirrors that.
+                # target state without a fixture, and this mirrors that. The
+                # node's own writes come first, then any other changed record
+                # no earlier expectation claimed.
                 members = _members(definitions, expected.connector, expected.entity)
-                candidates = [f for f in diff.updated if f not in covered and str(after[f].get("entity") or "") in members]
+                candidates = [f for f in dict.fromkeys(own_writes) if f in after and (f in diff.updated or f in diff.created)]
+                candidates.extend(f for f in diff.updated if f not in covered and f not in candidates
+                                  and str(after[f].get("entity") or "") in members)
                 fid = candidates[0] if candidates else None
                 if expected.node in mapped:
                     claimed = tuple(candidates)
             if fid is None:
                 detail = "no record of the entity changed"
+            elif fid not in after and fid in own_writes and fid in removed_by_plan and not expected.fields:
+                # Updated, then deleted by the plan's own delete node. The
+                # service recorded the update; the post-state cannot show it,
+                # because the delete that follows is the other half of the
+                # same plan. A target state could not be checked, so only an
+                # expectation without one is met this way.
+                met, record = True, fid
+                detail = "updated, then deleted by the plan"
             elif fid not in after:
                 detail = f"{fid} is gone"
-            elif fid not in diff.updated:
+            elif fid not in diff.updated and fid not in diff.created:
                 detail = f"{fid} is unchanged"
             else:
                 wrong = {key: value for key, value in expected.fields.items() if after[fid].get(key) != value}

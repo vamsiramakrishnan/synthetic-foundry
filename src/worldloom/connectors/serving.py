@@ -60,6 +60,10 @@ class _Run:
     #: attempts. An agent that keeps probing the surface is not the same
     #: trajectory as one that did not.
     refusals: list[dict[str, Any]] = field(default_factory=list)
+    #: Ordinals of spans attributed to a node by shape rather than by the
+    #: reference's own arguments; `call` keeps such an attribution only when
+    #: the call bore it out.
+    structural: set[int] = field(default_factory=set)
     #: Every record as it stood when the run began. `score` diffs the live
     #: state against it, so an external agent's outcomes are graded from what
     #: it changed, never from what it reported.
@@ -304,7 +308,96 @@ class ConnectorEvaluationService:
             consumed = tuple(dict.fromkeys(identifier for parent in node.depends_on
                                            for identifier in producers.get(parent, ())))
             return node.id, consumed
+        structural = self._structural_attribution(run, program, wire, outputs, producers, name, arguments)
+        if structural is not None:
+            run.structural.add(len(run.spans) + 1)
+            return structural
         return None, self._consumed(run, arguments)
+
+    def _structural_attribution(
+        self, run: _Run, program: Any, wire: Mapping[str, Mapping[str, Any]], outputs: Mapping[str, list[Any]],
+        producers: Mapping[str, list[str]], name: str, arguments: Mapping[str, Any],
+    ) -> tuple[str, tuple[str, ...]] | None:
+        """Attribute an external agent's call by shape when its arguments are its own.
+
+        The pass above binds a node's arguments from the reference flow and
+        demands equality: the fixture id inside the search predicate, the
+        reference's own page name and evidence fields on the create. An agent
+        that is not the reference never reproduces those bytes, so every call
+        it made was unattributed and its plan graded 0.0 however well it did
+        the task. Measured on a real run: twenty calls, the page created and
+        read back, plan 0.0, both conditional branches expected.
+
+        Shape is: the node's tool, every tool ancestor already completed, the
+        node's condition holding on what was observed, the entity the node
+        names, and a target that resolves to the node's fixture or to a
+        record a parent produced. A source read with a fixture is attributed
+        now and kept only if the call then read that record (`call` checks).
+        """
+        from ..enterprise_dag import condition_matches
+
+        connector, tool = self.tools[name]
+        definition = self.definitions[connector]
+        called_op = definition.tool(tool).op
+        emulator = run.emulators[connector]
+        completed = {span.node for span in run.spans if span.node and not span.error}
+        by_id = {node.id: node for node in program.nodes}
+        read_ops = {"search", "get", "read", "list"}
+
+        def tool_ancestors(node: Any) -> set[str]:
+            found: set[str] = set()
+            frontier = list(node.depends_on)
+            while frontier:
+                parent = by_id[frontier.pop()]
+                if parent.kind == "transform":
+                    frontier.extend(parent.depends_on)
+                else:
+                    found.add(parent.id)
+            return found
+
+        raw_id = arguments.get("id")
+        fid = None
+        if raw_id is not None:
+            fid = emulator.by_ident.get(str(raw_id), _recorded_aliases(outputs).get(str(raw_id), str(raw_id)))
+        for node in program.nodes:
+            if node.kind == "transform":
+                continue
+            same_tool = f"{node.connector}.{wire[node.id]['tool']}" == name
+            # A source record read through search instead of get is still
+            # read; `call` keeps the attribution only if the fixture came back.
+            read_alias = (node.connector == connector and called_op in read_ops
+                          and node.operation in read_ops and bool(wire[node.id].get("fixture") or wire[node.id].get("fixtures")))
+            if not (same_tool or read_alias):
+                continue
+            if node.id in completed:
+                continue
+            ancestors = tool_ancestors(node)
+            if not ancestors <= completed:
+                continue
+            if node.condition and (node.condition.reference.node not in outputs
+                                   or not condition_matches(node.condition, outputs)):
+                continue
+            wanted_entity = arguments.get("entity")
+            if wanted_entity and str(wanted_entity) != node.entity and not (
+                    definition.entity_matches(node.entity, str(wanted_entity))
+                    or definition.entity_matches(str(wanted_entity), node.entity)):
+                continue
+            if node.operation not in {"search", "create", "send", "post", "upload"} and called_op != "search":
+                if fid is None:
+                    continue
+                fixture = wire[node.id].get("fixture")
+                if fixture is not None:
+                    if str(fixture) != fid:
+                        continue
+                else:
+                    produced = {record for span in run.spans if span.node in ancestors and not span.error
+                                for record in (*span.reads, *span.writes)}
+                    if fid not in produced:
+                        continue
+            consumed = tuple(dict.fromkeys(identifier for parent in node.depends_on
+                                           for identifier in producers.get(parent, ())))
+            return node.id, consumed
+        return None
 
     def _consumed(self, run: _Run, arguments: Mapping[str, Any]) -> tuple[str, ...]:
         def references(value: Any) -> set[str]:
@@ -373,6 +466,23 @@ class ConnectorEvaluationService:
             local = trial.trace[-1]
             span = replace(local, id=f"s{len(run.spans) + 1}", ordinal=len(run.spans) + 1,
                            actor=principal)
+            if node is not None and span.ordinal in run.structural:
+                # Attributed by shape, so the call itself has to bear it out. A
+                # read stands only if it read the record the node is for; a
+                # search that missed it read something else. A refused call
+                # stands only when the refusal is the node's designed failure;
+                # an agent's own mistake at the right tool is not the plan step.
+                planned: Mapping[str, Any] = next(
+                    (item for item in self.rows[run.query_id]["expected_dag"]["nodes"] if item["id"] == node), {})
+                wanted = {str(value) for value in (*planned.get("fixtures", ()), planned.get("fixture")) if value}
+                designed = {str(a.get("kind")) for a in self.rows[run.query_id].get("assertions", ())
+                            if a.get("type") == "failure_at" and str(a.get("node")) == node}
+                reads_record = planned.get("node_kind") in {"read", "search", "get", "extract"} or planned.get("op") in {"search", "read", "get"}
+                missed_read = error is None and wanted and reads_record and not wanted & set(local.reads)
+                own_mistake = error is not None and error.kind not in designed
+                if missed_read or own_mistake:
+                    span = replace(span, node=None, consumed_from=())
+                    run.structural.discard(span.ordinal)
             if error is not None:
                 span = replace(span, error={"code": error.code, "kind": error.kind, "message": error.message})
             if rollback:
@@ -512,11 +622,24 @@ class ConnectorEvaluationService:
                 connector, tool = self.tools[name]
                 if connector not in run.emulators:
                     continue
-                declared = self.definitions[connector].tool(tool)
+                definition = self.definitions[connector]
+                declared = definition.tool(tool)
                 safety = classify_tool(connector, tool, declared)
-                out.append({"name": name, "op": declared.op, "entities": list(declared.entities),
-                            "params": dict(declared.params), "annotations": tool_annotations(safety),
-                            "risk": safety.risk.value, "idempotency": safety.idempotency.value})
+                entry = {"name": name, "op": declared.op, "entities": list(declared.entities),
+                         "params": dict(declared.params), "annotations": tool_annotations(safety),
+                         "risk": safety.risk.value, "idempotency": safety.idempotency.value}
+                # What a create must carry, per entity, beyond `name`: the
+                # fields the emulator refuses without. An agent that cannot
+                # see them can only guess; a real run guessed twice and read
+                # the refusal as a duplicate title.
+                required = {
+                    entity: list(definition.entities[entity].required_on_create)
+                    for entity in declared.entities
+                    if declared.op == "create" and entity in definition.entities and definition.entities[entity].required_on_create
+                }
+                if required:
+                    entry["required_on_create"] = required
+                out.append(entry)
             return tuple(out)
 
     def score(self, principal: str, run_id: str, *, answer: str = "",

@@ -167,6 +167,8 @@ def build_recipe(
     locale: Any = None,
     master_data: Mapping[str, Any] | None = None,
     policies: str | None = None,
+    inspired_by: str | None = None,
+    unmet: Sequence[str] = (),
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -226,6 +228,20 @@ def build_recipe(
         **({} if not policies or policies == "none" else {
             "policies": _policies_payload(policies)
         }),
+        # Same conditional rule, and the one pair of keys here that changes
+        # nothing about what is built. `archetype` says what got built and
+        # nothing else in a corpus said what was *asked for*: `build
+        # --inspired-by "a Singaporean hospital group"` printed one `unmet:`
+        # line, exported an omnichannel retailer, and the corpus handed to
+        # anyone else had no memory of the hospital. A downstream eval pipeline
+        # grounding queries in that world could not tell it was a stand-in,
+        # because every check it runs is a consistency check against the world
+        # that exists. So the description rides the recipe, and so does each
+        # finding the build could not meet. Absent on a build that asked for
+        # nothing and met everything, which is what keeps the default build's
+        # bytes where they were.
+        **({} if inspired_by is None else {INSPIRED_BY_KEY: inspired_by}),
+        **({} if not unmet else {UNMET_KEY: sorted(unmet)}),
         "steps": [],
     }
 
@@ -266,6 +282,35 @@ def _master_data_payload(master_data: Mapping[str, Any]) -> dict[str, int]:
 
 #: Where the estate's vocabulary lives on a recipe, when one was chosen.
 LANDSCAPE_KEY = "landscape"
+
+#: What the build was asked to be, and what it could not meet, written only
+#: when something went unmet: a description the registry recognised built what
+#: it named, and `archetype` already says so. Read by `worldloom inspect` and
+#: by no build: a rebuild resolves the `archetype` key, which is the shape that
+#: was actually built. The first is named for the flag that supplies it; a
+#: specification's `industry` lands in the same key, because it is the same
+#: claim arriving by a shorter route.
+INSPIRED_BY_KEY = "inspired_by"
+UNMET_KEY = "unmet"
+
+
+def with_asked_for(
+    recipe: dict[str, Any], inspired_by: str | None, unmet: Sequence[str] = ()
+) -> dict[str, Any]:
+    """A copy of *recipe* recording what the build asked for and could not meet.
+
+    ``with_locale``'s posture, one key pair along: the seam for a world already
+    built whose spec could not carry the record, which is what a domain
+    registered outside this repository needs and what ``rebuild`` falls back to
+    for exactly that domain. A spec that can carry it writes the same keys
+    itself through ``build_recipe``, so the two paths converge on one recipe.
+    Same conditional rule as the builder: nothing is written for nothing.
+    """
+    return {
+        **recipe,
+        **({} if inspired_by is None else {INSPIRED_BY_KEY: inspired_by}),
+        **({} if not unmet else {UNMET_KEY: sorted(unmet)}),
+    }
 
 
 def _landscape_document(landscape: Any) -> Any:
@@ -817,6 +862,26 @@ def _with_locale(spec: Any, locale: Any) -> tuple[Any, bool]:
         return spec, False
 
 
+def _with_asked_for(spec: Any, inspired_by: Any, unmet: Any) -> tuple[Any, bool]:
+    """*spec* rebound to what the recipe says was asked for, and whether it took it.
+
+    ``_with_locale``'s posture, for ``_with_locale``'s reason: the record is not
+    a build input. A spec without the fields still builds this corpus exactly,
+    so refusing it would make an out-of-tree vertical unrebuildable over two
+    keys it never read. The caller re-attaches them through ``with_asked_for``
+    instead, and the recipe comes out the same either way, which is what
+    ``verify`` byte-compares.
+    """
+    if inspired_by is None and not unmet:
+        return spec, False
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, asked_for=inspired_by, unmet=tuple(unmet or ())), True
+    except TypeError:
+        return spec, False
+
+
 def _with_master_data(spec: Any, master_data: Any) -> Any:
     """*spec* rebound to a recorded master-data request, or untouched.
 
@@ -1012,6 +1077,9 @@ def rebuild(
         spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         spec = _with_unit_roles(spec, recipe.get(UNIT_ROLES_KEY))
+        spec, asked = _with_asked_for(
+            spec, recipe.get(INSPIRED_BY_KEY), recipe.get(UNMET_KEY)
+        )
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
         try:
@@ -1048,6 +1116,9 @@ def rebuild(
         spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         spec = _with_unit_roles(spec, recipe.get(UNIT_ROLES_KEY))
+        spec, asked = _with_asked_for(
+            spec, recipe.get(INSPIRED_BY_KEY), recipe.get(UNMET_KEY)
+        )
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 
     # Passed to the spec above, and this is the fallback for a spec that could
@@ -1072,6 +1143,13 @@ def rebuild(
     # it was given, never the resolved `Locale`.
     if recipe.get(LOCALE_KEY) is not None and not localised:
         world = world.extend(recipe={**world.recipe, LOCALE_KEY: recipe[LOCALE_KEY]})
+    # The locale's fallback, for the record of what was asked for: a spec that
+    # could not take it rebuilds the same world, and the keys go back on the
+    # recipe so `verify` compares the bytes the corpus shipped with.
+    if not asked and (recipe.get(INSPIRED_BY_KEY) is not None or recipe.get(UNMET_KEY)):
+        world = world.extend(recipe=with_asked_for(
+            world.recipe, recipe.get(INSPIRED_BY_KEY), recipe.get(UNMET_KEY) or ()
+        ))
     if provenance:
         world = world.extend(recipe={**world.recipe, **provenance})
 
@@ -1221,9 +1299,9 @@ register_step(PROCESS_STRUCTURE_STEP, ("structure",), ApplyProcessStructure)
 
 
 __all__ = [
-    "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "PROCESS_STRUCTURE_EVENT", "PROCESS_STRUCTURE_KEY",
-    "PROCESS_STRUCTURE_STEP", "RecipeError", "STEPS",
+    "INSPIRED_BY_KEY", "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "PROCESS_STRUCTURE_EVENT",
+    "PROCESS_STRUCTURE_KEY", "PROCESS_STRUCTURE_STEP", "RecipeError", "STEPS", "UNMET_KEY",
     "apply_process_structure", "build_recipe", "has_actor_step", "locale_of", "presentation_of",
-    "process_structure_of", "rebuild", "register_step", "with_locale", "with_presentation",
-    "with_prior_receipts", "with_process_structure", "with_step",
+    "process_structure_of", "rebuild", "register_step", "with_asked_for", "with_locale",
+    "with_presentation", "with_prior_receipts", "with_process_structure", "with_step",
 ]

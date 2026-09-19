@@ -11,6 +11,429 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The planner grounds every row in the world it plans for
+
+- The documented loop starts with `worldloom enterprise-evals build <world>
+  <cases> --limit N --dag-shape '*'`. On every shipped world and profile it
+  exited 1 at validate with findings like `query <id>: evidence <rid> carries
+  no fact (servicenow:incident)`. Two causes shared one missing predicate.
+  The corpus builder selected source records by position, so a pool of
+  thirty-eight Jira issues with one fact-less record put that record into
+  twenty queries. The planner admitted rows over sources the world had no
+  records for, the builder minted fact-less filler records to meet the
+  count, and the validator refused them.
+- `enterprise_evidence.carries_evidence` is the validator's acceptance rule,
+  stated once: a record is evidence when it carries a World fact or a valid
+  pinned observation. The validator uses it, and the builder now selects by
+  it. Selection is a stable sort of the pool in its existing order with
+  evidence-bearing records first, so a pool whose leading records all carry
+  evidence selects exactly what it selected before. A record without
+  evidence is taken only when no evidence-bearing record is left.
+- The planner reads the world's groundable inventory before it plans a row.
+  `enterprise_grounding.groundable_inventory` counts, for each source a
+  registry names, the evidence-bearing records the world offers it, through
+  the same `generate_connector_data` call the build makes and the same
+  entity aliases the builder resolves. A source with fewer such records
+  than its role's minimum is inadmissible for that world. `_groundable` is
+  the sibling of `_admissible`, applied where lanes are built, so the
+  candidate stream and the derived required set describe one space and the
+  report still says `exact: true`. A mapped read or a conditional demands
+  two witnesses of a source, so those shapes are not decided for a row
+  whose source has one. `CoverageReport.ungroundable_sources` names what the
+  world could not ground, as sorted `connector:entity` strings, and the
+  `plan` and `build` commands print it. A profile the world grounds nothing
+  of is refused with the code `ungroundable_world`, naming the sources,
+  rather than exported as an empty corpus. `enterprise-evals space` has no
+  world and is unchanged.
+- The filler is a tripwire. A query that still reaches materialization over
+  a source the world cannot ground raises `ungroundable_source`, naming the
+  query and the source, instead of minting a record the validator refuses
+  later. Destination fixtures for record-addressed writes are untouched.
+- On `examples/hospital` the default profile builds in two seconds and
+  names `email:thread`, `salesforce:account`, `salesforce:case`,
+  `salesforce:opportunity` and `servicenow:incident` as ungroundable; the
+  back-office and omnichannel-retailer profiles build too. `email:thread`
+  is ungroundable on every world the builtin projections serve: the email
+  projection emits `message` records and the definition does not alias
+  `thread` to them, so email as a source grounds only through the
+  operational projections, which do emit threads. That gap is recorded
+  here, not fixed.
+- Byte identity. A plan whose sources all ground is the plan it was:
+  measured on a narrowed profile over `jira`, `confluence` and `sharepoint`,
+  the full 1,518-row plan, its first 40 rows, a 40-row built corpus, and
+  the pipeline test's 12-row corpus on `examples/retail-close` are
+  byte-identical before and after this change. A plan over an ungroundable
+  source changes, because its rows are gone; no such plan ever built a
+  corpus. Two pinned plans moved for that reason and say so where they are
+  pinned: the narrowed retail profile over `jira`, `confluence` and `email`
+  on `examples/hospital` (312 rows, 167 of them over `email:thread`, 183
+  `email:thread` findings at validate) now plans 171 rows, and the unbound
+  operational profile's first three rows (two of which failed validation)
+  are now three Jira rows. No built corpus changes bytes, so this is not a
+  Generation change.
+- Qualification and dataset generation plan the world-free space
+  (`plan_queries(..., ground=False)`). They execute every query under
+  `strict_sources` and record its refusal by name in their own ledgers, so a
+  pool's identity and its report do not depend on the inventory.
+
+### The reference passes its own case set
+
+- With every shipped profile building, the reference ran on all five case
+  sets from `examples/hospital`. Four scored 40 of 40; the omnichannel profile
+  scored 33, every miss a `result_mismatch` on a Confluence search. The
+  compiled row's `input_snapshots` and the served emulator shaped the same
+  record to two ids: `runtime_records` set no `ident`, so the shaper minted a
+  hashed page id, while the emulator's own intake sets `ident` from
+  `external_id` and answered `10000001`. `runtime_records` now sets `ident`
+  the same way. After: five of five sets at 40 of 40.
+
+- The reference agent is the executable ceiling for a case set, and on a
+  project-built world with the back-office profile it scored 35 of 40. Every
+  miss was the grader's, not the agent's. Two `delete_chain` rows expected
+  `not_found` from the readback after the delete, but a designed failure
+  upstream (a denied write, a missing stable id) blocked that readback, so it
+  never ran and the grader counted an unhonoured failure. One `delete_chain`
+  row updated a record and then deleted it; the update read "is gone". Two
+  `write_chain` rows updated a record the same run created, or a record
+  another node had already updated; the diff attributed the change to the
+  first node and the marker update read "no record of the entity changed".
+- `grade_trajectory` no longer expects a failure point on a node an honoured
+  failure blocked; a point the agent did reach and meet still counts.
+  `grade_outcomes` reads an update node's own successful spans, as the
+  service recorded them, before it falls back to the diff, so a second update
+  on one record is attributed to the node that made it. An update whose
+  record the plan's own delete then removed is met from the span when the
+  expectation names no target state to check; with one, it stays "is gone".
+- Once a delete could be the primary write, two more graders were wrong about
+  it. `compile_failure_contract` asked for a *created record* on a
+  `partial_write` at a delete whose id is bound from the read before it, and
+  the DAG trace grader reported `state_missing` for the record the delete
+  removed. A created record is now asked of writes that create, and a
+  delete's absent record is its effect, not a missing state.
+- After: back-office 40 of 40, the delete probe 12 of 12, both with every axis
+  at 1.0. Four regression tests hold each reading.
+- `evalrun run` appends every graded case to `results.jsonl` as it lands. A
+  coding-harness run of three cases hit its 40-minute wall clock and left
+  nothing, because the ledger was written only at the end. A killed run now
+  leaves every case that finished, and a run that completes rewrites the same
+  lines, so its bytes do not depend on the checkpoint. `--progress` prints
+  one line per case to stderr, with seconds under `--timed`.
+- The single-case rerun measured the harness path: eight turns of reads in
+  805 seconds, about 100 seconds per turn, each turn a fresh `claude -p`
+  process over the whole transcript. The ninth turn returned no text and the
+  adapter died with `Expecting value: line 1 column 1 (char 0)`, which named
+  nothing. `studio.harness.parse_object` now reads an object a model wrapped
+  in a fence or a sentence, and refuses an empty turn by harness name with
+  the envelope's own `subtype` and `num_turns`. Size `--timeout` in hundreds
+  of seconds per turn and `--limit` in single digits for a first harness run.
+- The two-case rerun named the cause of the empty turn. The adapter ran the
+  child in plan mode to keep it off the project files, and on the sixteenth
+  turn the child answered in prose that plan mode restricted it to read-only
+  actions and required a tool it did not have; the other case timed out
+  after fourteen turns of reads, about 120 seconds each. The agent under
+  test, the planner and the judge answer from the document on stdin and
+  touch nothing local, so `command_for` now gives them a child with no tools
+  at all and no persisted session; the authoring and narration seams, which
+  may read the project, keep plan mode.
+- The first case that graded (score 0.48: plan 0.25, trajectory 0.86,
+  outcomes 0.33) showed two more things the harness owed the agent. Its two
+  `confluence.create_page` calls carried no `space` and were refused as "A
+  page with this title already exists in the space", the connector's one
+  validation text, so it spent five turns searching for a page that never
+  existed. The emulator now names the missing field, and the tool catalogue
+  lists `required_on_create` per entity on every create tool, so an agent
+  can see what a create must carry. The second case died on a reply cut off
+  inside a 7,833-character HTML body; the adapter now re-asks once with the
+  refusal in front and a request for a short body, and a second refusal
+  stands.
+- With both cases grading, the plan axis read 0.0 on each and both branches
+  of a conditional were expected, although the agent had created the page
+  and read it back. The grammar attribution binds every node's arguments
+  from the reference flow and demands equality: the fixture id inside the
+  search predicate, the reference's own name and evidence fields on the
+  create. An agent that is not the reference never reproduces those bytes,
+  so nothing it did attributed. A call now attributes by shape when the
+  strict pass finds nothing: the node's tool, its tool ancestors completed,
+  its condition holding on what was observed, the entity the node names, and
+  a target that resolves to the fixture or to a record a parent made. A read
+  attributed by shape stands only if it read the node's record; a refused
+  call stands only when the refusal is the node's designed failure. A record
+  read through search instead of get is still read, and the receipt of a page
+  is read as a page whichever node it landed on. The two recorded runs,
+  replayed: 0.43 became 0.81 (plan 0.79, trajectory 0.98, outcomes 0.67)
+  and 0.41 became 0.71 (plan 0.79, trajectory 0.69, outcomes 0.67). The
+  execution-contract assertions still hold the reference's bytes, so an
+  external agent's `passed` stays false on them; the axes are its measure.
+- A live three-case run with attribution on graded two cases (0.74 and 0.67)
+  and lost the third to a reply that opened "I made several errant tool
+  calls that don't belong to this task" and then cut off inside its body.
+  The child had no built-in tools but still had the operator's own MCP
+  servers, ran in the repository and so loaded its project instructions,
+  and answered in free text. The evalrun child now runs with
+  `--strict-mcp-config`, from an empty directory, and with a structured
+  reply, so it cannot call what the case did not serve, cannot read the
+  project, and cannot answer in prose. The schema took two measured turns to
+  get right: one that admitted any object had the harness write the call as
+  JSON text inside `call`, and one with every reply key optional had it
+  write the call inside `answer`; the API refuses a `oneOf` that would
+  require one key. Each seam now states its own typed shape on the command
+  line, the closing instruction says to fill a field rather than write JSON,
+  and the adapter reads a reply stringified one level down as the object it
+  meant. Three real turns in a row came back as a well-formed call.
+- The sealed run graded three of three cases with no error row: 0.24, 0.67
+  and 0.71 against a reference ceiling of 1.0, in 36 minutes for 60 calls.
+  The 0.24 is a finding about the query, not the agent: it says "Create a
+  new HTML in Confluence", the destination entity is `page`, and the agent
+  created a blogpost, which graded as collateral with the page unwritten.
+  The prompt renderer names the format and not the entity whenever the
+  format is not `record`. Naming both would change every rendered query,
+  so it is left as a stated gap rather than changed here.
+
+### The corpus remembers what it was asked for (Generation)
+
+- The section below this one made `build --inspired-by "a mid-size Singaporean
+  hospital group"` print `unmet:` before it exported a retailer. The line
+  reached the terminal once and nowhere else. The recipe recorded `archetype`,
+  the shape that got built, and nothing said what was asked for. A corpus
+  handed to someone else could not say it was a stand-in, and a downstream
+  eval pipeline had no way to detect the substitution: `enterprise-evals plan`
+  grounds queries in the world that exists, and every check it runs is a
+  consistency check against that world.
+- The recipe now carries two more keys. `inspired_by` is the description the
+  build was asked for, from `--inspired-by` or from a specification's
+  `industry`. `unmet` is the list of findings the build could not meet, in
+  the words `unmet:` printed. Both paths write the same shape, so a
+  substitution has one record whichever flag reached for it.
+- Both keys are written only when something went unmet. A description the
+  registry recognises built exactly what it named, and `archetype` already says
+  so. A default build writes neither key and is byte-identical to the one built
+  before this change. A corpus that does carry them changes `world.json` by
+  design, which is why this section is marked Generation.
+- `recipe.rebuild` carries the keys through, so `worldloom verify` still proves
+  a substituted corpus is its own record. A world spec that cannot carry them
+  gets them back on the recipe after the build, the way a locale does.
+- `worldloom inspect` adds one row for such a corpus: `Built as
+  omnichannel_retailer; asked for 'a mid-size Singaporean hospital group';
+  unmet: 1`. The findings themselves stay on the recipe in `world.json`.
+- Nothing about what gets built changed. Only what is recorded.
+
+### A use case's capability and difficulty are read off its rows (Generation)
+
+- Every use case `industry.use_cases` derived carried `evidence_reconciliation`
+  at `medium`. The spec was assigned the first and left the second at its
+  default, and the one branch that could vary keyed on `line.writes`, which
+  is never zero because every activity type suits at least one write verb. A
+  healthcare company's fifty-eight use cases had one capability and one
+  difficulty while its rows spanned eight activity types and one to three
+  evidence channels each.
+- `industry.activity_capability` reads the activity type: a report is a
+  `search`, a reconcile step is a `reconcile`, and everything else acts on
+  evidence, which keeps the name `evidence_reconciliation`.
+  `industry.activity_difficulty` reads two things the row declares: an
+  exception path, and evidence in more than one channel. Both make the
+  activity hard, one makes it medium, neither makes it easy. A line takes the
+  most demanding of its activities, and `ProcessLine.capability` and
+  `ProcessLine.difficulty` carry the result into the use case's `EvalSpec`.
+  Nothing is drawn, hashed or rotated to spread the values.
+- A uniform property stays uniform and is said. Every activity the shipped
+  catalogue declares carries an exception path, so no shipped use case is
+  easy. `IndustryProgramme.uniformity` carries one sentence per value the
+  use cases cannot show, naming the row property that keeps it out with its
+  count; `capabilities` and `difficulties` carry the counts, and
+  `worldloom industry programme <industry> --describe` prints all three.
+  Healthcare now spans three capabilities (3 search, 50 evidence, 5
+  reconcile) and two difficulties (18 medium, 40 hard).
+- The construction's closing step is named for the capability
+  (`summarise`, `act`, `reconcile`), so a line whose only activity is a
+  report is no longer asked to reconcile, and a search line summarises and
+  extracts where every line used to reconcile and generate.
+- `request_template` reads as a request the line's owner would make.
+  `work admit to discharge for Billing (Corporate Services; SG)` is now
+  `Move Bill and claim forward for Corporate Services in SG: find the
+  evidence Admit to Discharge leaves in SAP S/4HANA, act on it, and send
+  the result back to whoever asked.` Every noun is the rows' own: the
+  activity names in catalogue order, the owning units, the countries, the
+  stream and the systems of record. A line of more than three activities
+  names its first and last and counts the rest.
+- `industry.unlocalised` said four locales shipped and ten countries had
+  none. Twelve ship, and the two countries without one are TH and VN. The
+  docstring now says so, and why.
+### A covering plan that stops when it is done
+
+- `worldloom enterprise-evals plan` could not finish on any shipped profile.
+  The default candidate space holds over two million rows. The pairwise cover
+  walked every one of them, and `--limit` only cut the result afterwards, so
+  `--limit 40` ran for fifteen minutes and wrote nothing. The limit now caps
+  the walk itself. The rows are the prefix the unlimited walk would choose,
+  in the same order, and the command returns in seconds. A run that completed
+  before produces the same bytes: a narrowed profile that gave 312 rows still
+  gives those 312 rows.
+- The planner now knows the exact set of interactions the space requires. It
+  derives the set from each lane's domains under the same admissibility
+  predicate the candidate stream applies, so it enumerates no rows, and it
+  refuses a row that falls outside the set. The walk stops at saturation, and
+  `holes` lists the required interactions the selection misses.
+- `CoverageReport` says when it is partial. `truncated` means a limit stopped
+  the walk with candidates unexamined. `exact` means `required_interactions`
+  and `holes` describe the whole space. The streaming report used to set
+  `required_interactions` equal to `covered_interactions` whatever happened,
+  which read as full coverage of a space it never finished walking.
+  `complete` is now false for a selection that has not proved itself.
+- `--shard-index` and `--shard-count` split the candidate stream before the
+  cover, so shards run in parallel over their own slices. Before, every shard
+  first walked the whole space and then kept every nth chosen row. A shard
+  covers its slice, the union of the shards' selections covers the whole
+  space, and a shard's holes are relative to the whole space. Sharded
+  covering output changes as a result; exhaustive sharding is unchanged.
+- The `plan` and `build` commands print `hole_count` and `hole_examples` in
+  place of the full hole list. A truncated run on a shipped profile leaves
+  some sixty thousand real holes, five megabytes on one line. The SDK's
+  `CoverageReport.holes` keeps the full list.
+- A planned queryset's bytes no longer depend on the operating system. The
+  `plan` writer opened its file in text mode, so Windows wrote `\r\n` and the
+  same 312 rows hashed to a different digest than on Linux. It now writes
+  `\n` like every other byte-stable writer here.
+
+### Every write operation has a prompt, and the back-office workflows post to chat
+
+- `review()` accepts any operation an entity declares, but the prompt renderer
+  phrased only the seven the builtin workflows use. A profile whose destination
+  said `comment` passed the lint and raised `KeyError` at plan time, and
+  `delete` was among the unphrased, which is the operation the DAG shapes exist
+  to grade. `ACTION_INSTRUCTIONS` now covers all thirteen write operations and
+  a test holds it level with the `Operation` enum.
+- Phrasing every operation exposed two that the specs advertised and nothing
+  served. `jira.issue` said `attach` and `link`, `confluence.page`, both
+  ServiceNow entities and `email.message` said `attach`, and no connector
+  definition has a tool for any of them: a profile selecting one passed the
+  lint, rendered a prompt and refused at row compilation. The specs now
+  advertise only what a definition serves, and a test holds every builtin
+  spec to that.
+- A `delete`, `move`, `comment` or `forward` addresses a record that has to
+  exist, but only `update`, `patch`, `upsert` and `reply` asked the corpus for
+  a destination fixture, so a row planning one of the others fell back to a
+  source record id, which can belong to another connector. `RECORD_ADDRESSED`
+  names the ten operations that need an existing target, and `plan_queries`
+  marks each as `preexisting_record`. A delete or move reads its target
+  before the write, the way the delete chain already did, because the
+  trajectory law `destructive_without_read` holds the reference to the same
+  rule it holds the agent to; and neither binds evidence fields, because
+  their tools take only the record id. A profile whose destination deletes
+  now plans, grounds, compiles and runs: 12 of 12 rows on a project-built
+  world, every delete met. `move` is withdrawn from the specs for now: its
+  tools need a parent folder the corpus does not materialise, so a planned
+  move failed validation at the emulator. It returns with that fixture. No
+  shipped workflow selects any of these operations, so every shipped plan is
+  byte-identical.
+- Wiring Slack and Microsoft Teams into the registry grew the row space by
+  nothing, because no builtin workflow named them. Each back-office workflow
+  now posts a notification to Slack or Teams beside its record, page, file or
+  email, so a run reaches a chat destination as well as a document one.
+- The prose gate skipped nothing under `.claude/worktrees/`. Five parallel
+  agent worktrees there turned 0 findings into 70 without an edited file, all
+  from their copies of pre-existing files. The gate now skips that prefix.
+
+### A back-office scenario, and the shipped scenarios are tested
+
+- The enterprise-evals planner shipped four workflows, and every one was
+  shaped like a service desk: incidents, changes, customer accounts, an
+  executive digest. The two industry profiles added banking and retail
+  workflows over the same channels. Nothing closed a month, matched an
+  invoice, onboarded a starter or renewed a contract, which is the work
+  that stresses an agent differently from triage.
+  `examples/enterprise-evals/back-office.json` adds four such workflows:
+  `finance_month_end_close`, `procurement_exception_review`,
+  `hr_onboarding_readiness` and `contract_renewal_review`. Each reads the
+  `sor` connector beside the channels: journals, accounts, bank statements
+  and consolidations for the close; purchase orders, goods receipts,
+  invoice receipts and open items for the match; workers, positions and
+  requisitions for onboarding; contracts and orders for the renewal. Two of
+  them write back to `sor` (a case, a contract) as well as to a page, a
+  file or an email.
+- The four widen the axes rather than the name list. Together they use
+  every topology, add `classify` and `transform` to the content actions the
+  builtin workflows emit, add `csv` to the output formats, and set
+  audiences a controller or a people partner would recognise. Their
+  templates read as a request a manager types. Every `sor` entity they
+  name is one a catalogue company binds records for: `employee` and
+  `vendor_bill` are connector entities, but no industry's default company
+  holds records of them, so a row over them would materialise evidence
+  carrying no fact and be refused at validation.
+- The profile needs a world built from a catalogue project (`worldloom
+  industry project`, then a Studio snapshot), because only such a world
+  carries `sor` records. On the golden retail corpus its `sor` rows refuse
+  with the same finding that any shipped profile's rows meet on a world
+  that lacks their records. The description notes that chat and post
+  destinations can be added when those connectors land.
+- Nothing loaded the shipped profiles before.
+  `tests/test_enterprise_scenarios.py` loads every file in
+  `examples/enterprise-evals/`, merges it onto the builtin registry, and
+  asserts that `review()` finds nothing, that every named workflow exists
+  and survives the connector selection, that every role names a connector
+  and entity the merged registry carries, that every template uses only
+  the planner's placeholders, and that every destination operation is one
+  the planner can phrase. A `comment` destination passes `review()` and
+  fails at plan time, so that last check is the one the loader could not
+  make. Nothing builtin moved: every plan made without a profile is
+  byte-identical.
+### The planner knows every connector the emulator serves
+
+- The connector definitions carried fourteen connectors. The enterprise-evals
+  planner's registry carried eight, hand-written and never compared against
+  them. A scenario profile naming `slack` or `teams` was refused as an unknown
+  connector while the emulator stood ready to serve it, and the seventy-six
+  tools of `onedrive`, `outlook`, `slack`, `teams`, `rovo` and
+  `teamwork_graph` were out of the eval space's reach. `builtin_registry()`
+  now carries a `ConnectorSpec` for all fourteen.
+- Each new spec mirrors its definition entity for entity. Every operation on
+  it is one the definition maps to a tool, so `patch` and `upsert`, which no
+  definition carries, stay off the six; a workflow that asks for one is
+  reported by `review()` rather than planned. A test holds the two catalogues
+  to each other by name, entity and operation, so a definition added without a
+  spec fails there and not in a user's profile.
+- Maturity is not a gate. The repository has no rule that hides an `eap` or
+  `product_surface` connector: the definitions expose `rovo` and
+  `teamwork_graph` unconditionally and the binding carries their maturity
+  through as data. The specs follow suit, and the four `ga` connectors and the
+  two others are wired the same way.
+- The request text now takes a connector's name from its spec's
+  `display_name`. It used to go through a chain of `str.replace` calls that
+  knew seven names, so any connector added later printed in lower case, and
+  through `str.title()` for the destination, which printed ServiceNow as
+  "Servicenow". The strings those two paths produced for the original eight
+  are pinned by name, so every planned row that exists renders byte for byte
+  as before, and a test proves it on a narrowed profile. A connector a profile
+  authors itself now renders its `display_name` in the request text; its query
+  ids do not move, because they are keyed on the row, not on the text.
+- The shipped scenario profiles list their connectors explicitly and plan the
+  same bytes. The default profile spans fourteen connectors but no built-in
+  workflow names the new six, so its candidate space is unchanged: past the
+  ten million ceiling before and after.
+### A described company that could not be built says so
+
+- `build --inspired-by "a mid-size Singaporean hospital group"` built Greyfell
+  Retail Group, an omnichannel retailer in Wellington whose largest unit was
+  Food, and reported `coherent: 5064 checks passed`. Nothing said a
+  substitution had happened. The same description through `--spec` had always
+  reported it as `unmet`; the build path resolved through the same fallback and
+  never asked whether anything matched.
+- `company.unmet_for_description` is now the one function that words it, and
+  both callers use it, so the two cannot tell a reader different stories about
+  the same substitution. It names the industry it did recognise, the shape that
+  got built instead, and the command that does work: "no registered domain
+  builds a 'healthcare' world, so the world is built with the
+  'omnichannel_retailer' shape … `worldloom industry programme healthcare`
+  derives its lines of business, processes, requests and counts".
+- Falling back still beats raising, which is why the build still succeeds. What
+  changed is that it is no longer quiet. A description the registry recognises
+  reports nothing, because a notice on every build teaches the reader to skip
+  the one that matters.
+- No bytes moved. The resolved shape is what it always was, so every corpus
+  built from a description is byte-identical to the one built before this.
+- Still missing, and missing on both paths equally: neither the specification
+  nor the description path *persists* the substitution into the corpus. A world
+  handed to someone else still cannot say it was built as a stand-in.
+
 ### Eight locales, generated from published data (Generation)
 
 - Four locales shipped and the catalogue built companies in fourteen

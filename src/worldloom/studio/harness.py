@@ -12,12 +12,64 @@ import os
 import shlex
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
 #: The harness names this module adapts. A third is a custom JSON adapter.
 NAMES: tuple[str, ...] = ("codex", "claude")
+
+#: Turns re-asked when a reply is not one JSON object, before the turn is an error.
+RETRIES = 1
+
+_STRINGS = {"type": "array", "items": {"type": "string"}}
+_FREE = {"type": "object", "additionalProperties": True}
+
+#: The structured-output schema per evalrun seam. A schema that admitted any
+#: object let the harness serialise the nested call as a string ("call":
+#: "{\"tool\": ...}"), so each seam states the shape its reader parses:
+#: `ExecAgent` for a turn, `parse_plan` for a plan, `exec_rater` for a rating.
+_REPLY_SCHEMAS: dict[str, dict[str, Any]] = {
+    # The API refuses `oneOf` at the top level, so the three reply shapes
+    # share one object with every key optional; `_unwrapped` reads a reply
+    # the harness wrote as a string inside one of them.
+    "worldloom.evalrun-turn/v2": {
+        "type": "object",
+        "properties": {
+            "call": {"type": "object", "properties": {"tool": {"type": "string"}, "arguments": _FREE},
+                     "required": ["tool", "arguments"], "additionalProperties": False},
+            "ask": {"type": "object", "properties": {"question": {"type": "string"}, "about": _STRINGS},
+                    "required": ["question"], "additionalProperties": False},
+            "answer": {"type": "string"},
+            "artifacts": {"type": "array", "items": {
+                "type": "object", "properties": {"name": {"type": "string"}, "text": {"type": "string"}, "cites": _STRINGS},
+                "required": ["name", "text"], "additionalProperties": False}},
+        },
+        "additionalProperties": False,
+    },
+    "worldloom.evalrun-plan/v1": {
+        "type": "object",
+        "properties": {"plan": {"type": "object", "properties": {"nodes": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"id": {"type": "string"}, "tool": {"type": "string"}, "depends_on": _STRINGS},
+            "required": ["tool"], "additionalProperties": False}}}, "required": ["nodes"], "additionalProperties": False}},
+        "required": ["plan"], "additionalProperties": False,
+    },
+    "worldloom.evalrun-rating/v1": {
+        "type": "object",
+        "properties": {"score": {"type": "number"}, "rationale": {"type": "string"}},
+        "required": ["score"], "additionalProperties": False,
+    },
+}
+
+
+def reply_schema(payload: Mapping[str, Any]) -> str | None:
+    """The structured-output schema for the seam this document belongs to, as JSON."""
+    schema = payload.get("schema")
+    if isinstance(schema, str) and schema in _REPLY_SCHEMAS:
+        return json.dumps(_REPLY_SCHEMAS[schema], sort_keys=True)
+    return None
 
 #: What the child is being asked to be, keyed by the document it is handed.
 #: Every one of these seams ends in "return exactly one JSON object", so the
@@ -99,7 +151,18 @@ def adapter_command(name: str, *, timeout: float = 590, allow_native_writes: boo
     return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
 
 
-def command_for(name: str, output: Path, *, native_output: Path | None = None) -> list[str]:
+def command_for(name: str, output: Path, *, native_output: Path | None = None, tools: bool = True,
+                schema: str | None = None) -> list[str]:
+    """The child process for one turn.
+
+    `tools=False` is the evalrun seams: the agent under test, the planner and
+    the judge answer from the document on stdin and touch nothing local, so
+    the child gets no tools at all. Plan mode was the earlier way to keep it
+    off the files, and it cost the run: after sixteen turns of reads the
+    child answered in prose that plan mode restricted it to read-only actions
+    and required a tool it did not have. The authoring and narration seams
+    may read the project, so they keep plan mode.
+    """
     if name == "codex":
         return ["codex", "exec", "--sandbox", "workspace-write" if native_output else "read-only",
                 *(["--cd", str(native_output)] if native_output else []), "--skip-git-repo-check",
@@ -107,7 +170,14 @@ def command_for(name: str, output: Path, *, native_output: Path | None = None) -
     if native_output is not None:
         raise ValueError("native output writes require codex or a custom JSON adapter")
     if name == "claude":
-        return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan"]
+        if tools:
+            return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan"]
+        # No built-in tools, no MCP servers from the operator's own settings
+        # (a real run made "errant tool calls" through them), no persisted
+        # session, and a structured reply in the seam's own shape, so the
+        # harness cannot answer with prose or a body cut off mid-string.
+        return ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config",
+                "--no-session-persistence", *(["--json-schema", schema] if schema else [])]
     raise ValueError("choose codex or claude, or configure a custom JSON adapter")
 
 
@@ -130,31 +200,109 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
             _NO_WRITES,
             "Write submitted native files only inside output_directory; keep every input file unchanged.",
         )
-    prompt = (role + " Return exactly one JSON object, without a markdown fence.\n\n"
-              + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False))
+    command_tools = role not in _ROLES.values()
+    structured = None if command_tools else reply_schema(payload)
+    closing = (" Reply through the structured output: fill exactly one of its top-level fields, as an object"
+               " or a string as the schema says, never as JSON text inside a string."
+               if structured else " Return exactly one JSON object, without a markdown fence.")
+    prompt = role + closing + "\n\n" + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False)
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"
+        asked = prompt
+        for attempt in range(RETRIES + 1):
+            try:
+                command = command_for(name, output, native_output=native_output, tools=command_tools, schema=structured)
+                # The evalrun seams run from an empty directory: a child started
+                # in the repository loads its project instructions and skills
+                # and answered a turn "in the Worldloom project".
+                workdir = temp if (name == "claude" and not command_tools) else None
+                result = subprocess.run(command, input=asked, text=True, cwd=workdir,
+                                        capture_output=True, timeout=timeout, shell=False)
+            except subprocess.TimeoutExpired as error:
+                raise ValueError("coding harness exceeded its configured timeout") from error
+            if result.returncode:
+                raise ValueError(f"{name} exited {result.returncode}; check its local installation and login")
+            envelope: dict[str, Any] | None = None
+            if name == "codex":
+                raw = output.read_text(encoding="utf-8")
+            else:
+                envelope = json.loads(result.stdout)
+                if envelope.get("is_error"):
+                    raise ValueError("Claude Code reported a failed authoring turn")
+                value = envelope.get("structured_output", envelope.get("result"))
+                raw = value if isinstance(value, str) else json.dumps(value)
+            if len(raw) > 4_000_000:
+                raise ValueError("coding harness response exceeds 4 MB")
+            try:
+                return parse_object(raw, name=name, envelope=envelope)
+            except ValueError as error:
+                if attempt == RETRIES:
+                    raise
+                # One more turn, with the refusal in front of the document.
+                # A reply cut off inside a long body, or wrapped in prose,
+                # is the harness stumbling on the shape, not on the task;
+                # a second refusal is the harness's answer and stands.
+                asked = (f"Your previous reply was refused: {error}. Reply again with exactly one JSON object"
+                         " and nothing else. Keep any body text short.\n\n" + prompt)
+        raise AssertionError("unreachable")
+
+
+def parse_object(raw: str, *, name: str, envelope: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The one JSON object a harness turn must return, salvaged from what it said.
+
+    The instruction asks for exactly one object without a fence. A model that
+    complied except for a fence, or that wrote a sentence before the object,
+    is still answering the turn; the object is taken from the first `{` to
+    the matching `}`. An empty reply is refused with the envelope's own
+    account of why the turn ended, because the earlier `Expecting value:
+    line 1 column 1` said nothing anyone could act on.
+    """
+    text = raw.strip()
+    if not text:
+        detail = ""
+        if envelope:
+            detail = " (" + ", ".join(f"{key}={envelope[key]!r}" for key in ("subtype", "stop_reason", "num_turns") if key in envelope) + ")"
+        raise ValueError(f"{name} returned no text for the turn{detail}")
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError(f"{name} returned no JSON object; it said: {text[:200]!r}") from None
         try:
-            result = subprocess.run(command_for(name, output, native_output=native_output), input=prompt, text=True,
-                                    capture_output=True, timeout=timeout, shell=False)
-        except subprocess.TimeoutExpired as error:
-            raise ValueError("coding harness exceeded its configured timeout") from error
-        if result.returncode:
-            raise ValueError(f"{name} exited {result.returncode}; check its local installation and login")
-        if name == "codex":
-            raw = output.read_text(encoding="utf-8")
-        else:
-            envelope = json.loads(result.stdout)
-            if envelope.get("is_error"):
-                raise ValueError("Claude Code reported a failed authoring turn")
-            value = envelope.get("structured_output", envelope.get("result"))
-            raw = value if isinstance(value, str) else json.dumps(value)
-        if len(raw) > 4_000_000:
-            raise ValueError("coding harness response exceeds 4 MB")
-        value = json.loads(raw)
-        if not isinstance(value, dict):
-            raise ValueError("coding harness must return a JSON object")
-        return value
+            value = json.loads(text[start:end + 1])
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{name} returned malformed JSON ({error.msg} at {error.pos}); it said: {text[:200]!r}") from None
+    if not isinstance(value, dict):
+        raise ValueError("coding harness must return a JSON object")
+    return _unwrapped(value)
+
+
+_REPLY_KEYS = ("call", "ask", "answer", "plan")
+
+
+def _unwrapped(value: dict[str, Any]) -> dict[str, Any]:
+    """A reply the harness serialised one level down, read as the object it meant.
+
+    Under structured output a harness wrote `{"call": "{\"tool\": ...}"}` and
+    then `{"answer": "{\"call\": {...}}"}`: the object it meant, as a string
+    inside one of the reply keys. A string that parses to an object carrying a
+    reply key is that object.
+    """
+    for key in _REPLY_KEYS:
+        held = value.get(key)
+        if isinstance(held, str) and held.lstrip().startswith("{"):
+            try:
+                inner = json.loads(held)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(inner, dict):
+                if key == "answer" and any(reply in inner for reply in _REPLY_KEYS):
+                    return _unwrapped(inner)
+                if key != "answer":
+                    return {**value, key: inner}
+    return value
 
 
 def main() -> None:

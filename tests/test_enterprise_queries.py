@@ -2,8 +2,22 @@ from __future__ import annotations
 
 import itertools
 
-from worldloom.enterprise_queries import constrained_cover, valid_rows
+import pytest
+
+from worldloom import enterprise_queries
+from worldloom.connector_definition import builtin_connector_definitions
+from worldloom.enterprise_dag import default_shapes
+from worldloom.enterprise_queries import (
+    _connector_label,
+    _render,
+    _subsets,
+    constrained_cover,
+    plan_queries,
+    required_interactions,
+    valid_rows,
+)
 from worldloom.enterprise_specs import (
+    BUILTIN_CONNECTORS,
     ContentAction,
     CoverageProfile,
     DestinationRole,
@@ -11,6 +25,7 @@ from worldloom.enterprise_specs import (
     Operation,
     ScenarioProfile,
     SourceRole,
+    SpecRegistry,
     WorkflowSpec,
     apply_scenario_profile,
     builtin_registry,
@@ -18,6 +33,7 @@ from worldloom.enterprise_specs import (
     canonical_action,
     load_enterprise_spec,
 )
+from worldloom.world import World
 
 
 def test_modify_is_explicitly_canonicalized() -> None:
@@ -116,3 +132,309 @@ def test_bounded_prefix_is_balanced_across_major_dimensions() -> None:
         "diamond",
     }
     assert {row["verification"] for row in rows} == {"readback", "cross_system"}
+
+
+# The connector definitions carried fourteen connectors while the planner's
+# registry carried eight, hand-written and never compared. A scenario profile
+# naming `slack` was refused as unknown while the emulator stood ready to
+# serve it. The tests below hold the two catalogues to each other by name,
+# entity and operation, so the next definition added without a spec fails
+# here and not in a user's profile.
+
+#: The eight specs written before the definitions existed carry `patch`,
+#: `upsert`, `attach` and `link`, which no definition maps to a tool. They are
+#: kept because planned rows already name them; a spec added after the
+#: definitions may not take them.
+ORIGINAL_CONNECTORS = frozenset({"jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email", "sor"})
+LEGACY_OPERATIONS = frozenset({Operation.PATCH, Operation.UPSERT, Operation.ATTACH, Operation.LINK})
+
+#: Which definition operation keys carry each spec operation. `list` is the
+#: definition's `search` where the product's search is a listing call, and a
+#: `draft` is the definition's `draft` or a `create` that makes a draft.
+GROUNDING = {
+    Operation.SEARCH: {"search"},
+    Operation.LIST: {"search"},
+    Operation.READ: {"read"},
+    Operation.CREATE: {"create"},
+    Operation.UPDATE: {"update"},
+    Operation.DELETE: {"delete"},
+    Operation.MOVE: {"move"},
+    Operation.COMMENT: {"comment"},
+    Operation.DRAFT: {"draft", "create"},
+    Operation.SEND: {"send"},
+    Operation.REPLY: {"reply"},
+    Operation.FORWARD: {"forward"},
+}
+
+
+def test_every_connector_definition_has_a_planner_spec() -> None:
+    registry = builtin_registry()
+
+    assert set(registry.connectors) == set(builtin_connector_definitions())
+    assert registry.review() == ()
+    # The order is the tuple's, so a dump of the built-in spec is stable.
+    assert list(registry.connectors) == [spec.name for spec in BUILTIN_CONNECTORS]
+
+
+def test_spec_entities_and_operations_are_carried_by_their_definitions() -> None:
+    definitions = builtin_connector_definitions()
+    for name, spec in builtin_registry().connectors.items():
+        definition = definitions[name]
+        for entity in spec.entities:
+            # An alias such as jira's `issue` resolves to its members; a name
+            # the definition does not know raises here.
+            members = definition.entity_members(entity.name)
+            carried = {op for member in members for op in definition.entities[member].ops}
+            for operation in entity.operations:
+                if operation in LEGACY_OPERATIONS:
+                    assert name in ORIGINAL_CONNECTORS, f"{name}.{entity.name} carries {operation.value}, which no definition maps to a tool"
+                    continue
+                assert GROUNDING[operation] & carried, f"{name}.{entity.name} spec operation {operation.value} is not in the definition's {sorted(carried)}"
+            if name == "onedrive":
+                # The definition types the drive item per format, so the
+                # spec's formats are entity names there, not free labels.
+                assert set(entity.formats) <= set(definition.entities)
+
+
+def test_render_reads_the_display_name_from_the_spec() -> None:
+    registry = builtin_registry()
+    workflow = WorkflowSpec(
+        name="chat_digest", purpose="channel digest",
+        sources=(SourceRole(connector="slack", entities=("thread",)), SourceRole(connector="teamwork_graph", entities=("work_item",))),
+        destinations=(DestinationRole(connector="teams", entities=("channel_message",), operations=(Operation.CREATE,)),),
+        content_actions=(ContentAction.SUMMARIZE,), audiences=("manager",),
+        prompt_template="Use {sources}. {action_instruction} {output_label} in {destination}.{failure_instruction}",
+    )
+    row = {
+        "workflow": "chat_digest", "source_set": "slack+teamwork_graph", "source_entities": "slack:thread+teamwork_graph:work_item",
+        "input_formats": "record+record", "destination": "teams", "destination_entity": "channel_message", "operation": "create",
+        "output_format": "record", "content_action": "summarize", "audience": "manager", "topology": "chain", "failure": "none", "verification": "readback",
+    }
+
+    text = _render(World.load("examples/retail-close"), workflow, row, registry)
+
+    assert "the relevant Slack thread" in text
+    assert "the relevant Teamwork Graph work item" in text
+    assert "in Microsoft Teams." in text
+
+
+def _legacy_source_label(name: str) -> str:
+    return name.replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").replace("jira", "Jira").replace("salesforce", "Salesforce").replace("confluence", "Confluence").replace("drive", "Drive").replace("email", "email")
+
+
+def _legacy_destination_label(name: str) -> str:
+    return name.replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").title()
+
+
+def test_the_original_eight_keep_the_labels_their_rows_were_rendered_with() -> None:
+    """The replace chain and `.title()` the renderer used are the oracle here,
+    reproduced verbatim, so a spec's `display_name` can be corrected without
+    moving the text of a row that already exists."""
+    registry = builtin_registry()
+    for name in sorted(ORIGINAL_CONNECTORS):
+        assert _connector_label(registry, name, role="source") == _legacy_source_label(name)
+        assert _connector_label(registry, name, role="destination") == _legacy_destination_label(name)
+
+
+def test_narrowed_profile_plans_byte_identically(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same narrowed profile, planned with the spec's labels and with the
+    old chain swapped back in, must write the same bytes."""
+    profile = ScenarioProfile(
+        name="narrow", industry="retail", company_description="An omnichannel retailer.",
+        workflows=("executive_digest",), connectors=("jira", "confluence", "email"),
+        coverage=CoverageProfile(name="narrow", strengths=2, connector_counts=(1, 2), failures=("none", "permission_denied")),
+    )
+    world = World.load("examples/retail-close")
+    registry = apply_scenario_profile(builtin_registry(), profile)
+
+    queries, _ = plan_queries(world, registry=registry, profile=profile.coverage)
+    current = [query.model_dump_json() for query in queries]
+
+    def legacy(registry: SpecRegistry, name: str, *, role: str) -> str:
+        return _legacy_source_label(name) if role == "source" else _legacy_destination_label(name)
+
+    monkeypatch.setattr(enterprise_queries, "_connector_label", legacy)
+    queries, _ = plan_queries(world, registry=registry, profile=profile.coverage)
+    assert current == [query.model_dump_json() for query in queries]
+    assert len(current) > 100
+
+
+def test_every_write_operation_can_be_phrased() -> None:
+    """`review()` accepts any operation an entity declares; `_render` must phrase it.
+
+    Found by the back-office scenario: a destination saying `comment` passed
+    the lint and raised `KeyError` at plan time. The read operations are
+    sources, never destinations, so they are the only members left out.
+    """
+    from worldloom.enterprise_queries import ACTION_INSTRUCTIONS
+    from worldloom.enterprise_specs import Operation
+
+    reads = {Operation.SEARCH.value, Operation.LIST.value, Operation.READ.value}
+    writes = {member.value for member in Operation} - reads
+    assert writes <= set(ACTION_INSTRUCTIONS), sorted(writes - set(ACTION_INSTRUCTIONS))
+    assert all(text and text[0].isupper() for text in ACTION_INSTRUCTIONS.values())
+#: Two connectors, one workflow, three failures chosen so that every
+#: admissibility rule prunes something: 5,760 valid rows, 35,840 with the
+#: default DAG shapes. Small enough to enumerate in a test, large enough that
+#: a derived set which merely resembled the truth would be caught.
+def _small_profile() -> ScenarioProfile:
+    return ScenarioProfile.model_validate({
+        "name": "small",
+        "industry": "retail",
+        "company_description": "Retail service operations.",
+        "connectors": ["servicenow", "confluence"],
+        "workflows": ["incident_review"],
+        "coverage": {
+            "name": "small", "connector_counts": [1],
+            "failures": ["none", "missing_stable_id", "version_conflict"],
+            "max_candidates": 1_000_000,
+        },
+    })
+
+
+@pytest.mark.parametrize("strength", [2, 3])
+@pytest.mark.parametrize("shapes", [(), default_shapes()])
+def test_required_interactions_are_derived_exactly(strength: int, shapes: tuple[str, ...]) -> None:
+    """The set the cover stops at is the set enumeration would find.
+
+    The derivation never looks at a row, so the only proof that it agrees
+    with the stream is to enumerate the stream and compare. The DAG shape
+    path is checked too: a shape is decided per row, and the derivation
+    decides it from a stub row instead.
+    """
+    from worldloom.enterprise_dag_planning import compatible_shapes
+
+    profile = _small_profile()
+    registry = apply_scenario_profile(builtin_registry(), profile)
+    rows = list(valid_rows(registry, profile.coverage))
+    if shapes:
+        rows = [{**row, "dag_shape": shape} for row in rows for shape in compatible_shapes(row, shapes)]
+    enumerated = {interaction for row in rows for interaction in _subsets(row, strength)}
+    assert required_interactions(registry, profile.coverage, strength, shapes) == enumerated
+
+
+def test_a_limit_yields_the_prefix_of_the_unlimited_walk_and_says_so() -> None:
+    """`--limit 40` on the default profile ran for fifteen minutes and wrote
+    nothing, because the cap was applied to the cover's output after the walk
+    had scanned millions of candidates. The cap now stops the walk, and the
+    report admits what the selection has not proved."""
+    world = World.load("examples/retail-close")
+    profile = _small_profile()
+    registry = apply_scenario_profile(builtin_registry(), profile)
+    unlimited, full = plan_queries(world, registry=registry, profile=profile.coverage)
+    limited, report = plan_queries(world, registry=registry, profile=profile.coverage, limit=5)
+    assert [query.id for query in limited] == [query.id for query in unlimited][:5]
+    assert full.complete and not full.truncated and full.exact and full.holes == ()
+    assert report.truncated and report.exact and not report.complete
+    assert report.candidates < full.candidates
+    assert report.covered_interactions < report.required_interactions == full.required_interactions
+    assert len(report.holes) == report.required_interactions - report.covered_interactions
+
+
+def test_a_cover_without_the_required_set_does_not_claim_what_it_cannot_prove() -> None:
+    rows = (
+        {"a": "1", "b": "1", "c": "1"},
+        {"a": "1", "b": "2", "c": "2"},
+        {"a": "2", "b": "1", "c": "2"},
+        {"a": "2", "b": "2", "c": "1"},
+    )
+    _, exhausted = constrained_cover(rows, 2)
+    assert exhausted.exact and exhausted.complete and not exhausted.truncated
+
+    selected, cut = constrained_cover(rows, 2, limit=1)
+    assert len(selected) == 1
+    assert cut.truncated and not cut.exact and not cut.complete
+    assert cut.required_interactions == cut.covered_interactions  # a lower bound, and labelled as one
+
+    _, sliced = constrained_cover(rows, 2, partial=True)
+    assert not sliced.truncated and not sliced.exact and not sliced.complete
+
+    required = {interaction for row in rows for interaction in _subsets(row, 2)}
+    _, proven = constrained_cover(rows, 2, limit=1, required=required)
+    assert proven.truncated and proven.exact and not proven.complete
+    assert set(proven.holes) == required - _subsets(rows[0], 2)
+    with pytest.raises(ValueError, match="outside the derived required set"):
+        constrained_cover(rows, 2, required=set(itertools.islice(required, 3)))
+
+
+def test_shards_cover_their_own_slices_and_their_union_covers_the_space() -> None:
+    """Sharding splits the candidate stream, not the cover's output, so each
+    shard is an independent walk. The trade is stated by the report: a shard's
+    holes are relative to the whole space, and the union of the shards'
+    selections is complete because the union of their slices is the space."""
+    from worldloom.enterprise_grounding import groundable_inventory
+
+    world = World.load("examples/retail-close")
+    profile = _small_profile()
+    registry = apply_scenario_profile(builtin_registry(), profile)
+    # The planner walks the groundable space of this world, so the whole
+    # space the shards' holes are relative to is derived from its inventory.
+    required = required_interactions(registry, profile.coverage, 2, inventory=groundable_inventory(world, registry))
+    shards = [
+        plan_queries(world, registry=registry, profile=profile.coverage, shard_index=index, shard_count=3)
+        for index in range(3)
+    ]
+    union: set[tuple[tuple[str, str], ...]] = set()
+    for queries, report in shards:
+        covered = {interaction for query in queries for interaction in _subsets(query.dimensions, 2)}
+        assert report.exact
+        assert len(covered) == report.covered_interactions
+        assert set(report.holes) == required - covered
+        union |= covered
+    assert union == required
+    ids = [query.id for queries, _ in shards for query in queries]
+    assert len(ids) == len(set(ids))
+
+
+def test_plans_are_the_same_from_one_run_to_the_next() -> None:
+    world = World.load("examples/retail-close")
+    profile = _small_profile()
+    registry = apply_scenario_profile(builtin_registry(), profile)
+    first, first_report = plan_queries(world, registry=registry, profile=profile.coverage, limit=7)
+    second, second_report = plan_queries(world, registry=registry, profile=profile.coverage, limit=7)
+    assert [query.model_dump_json() for query in first] == [query.model_dump_json() for query in second]
+    assert first_report == second_report
+
+
+def test_every_advertised_destination_operation_is_served_by_its_definition() -> None:
+    """A spec may not advertise an operation the connector definition cannot run.
+
+    Found by review: `jira.issue.attach`, `jira.issue.link`, `confluence.page.attach`
+    and three more passed the profile lint and the prompt renderer, then refused
+    at row compilation because no tool serves them. An alias that maps one
+    operation to several tools is not a gap; the compiler picks the member from
+    the output format.
+    """
+    from worldloom.enterprise_runner import canonical_operation
+    from worldloom.eval_connectors import builtin_connector_definitions
+
+    definitions = builtin_connector_definitions()
+    unserved = []
+    for spec in BUILTIN_CONNECTORS:
+        definition = definitions[spec.name]
+        for entity in spec.entities:
+            for operation in entity.operations:
+                canonical = canonical_operation(operation.value, preexisting_record=True)
+                try:
+                    definition.tool_for(entity.name, canonical)
+                except KeyError as error:
+                    if "does not define operation" in str(error):
+                        unserved.append(f"{spec.name}.{entity.name}.{operation.value}")
+    assert unserved == []
+
+
+def test_record_addressed_operations_plan_a_preexisting_destination() -> None:
+    """A delete, move, comment or forward needs a record to address.
+
+    Found by review: only update, patch, upsert and reply asked for a
+    destination fixture, so a profile selecting `delete` planned a row whose
+    write fell back to a source record id from another connector.
+    """
+    from worldloom.enterprise_queries import _RECORD_ADDRESSED
+    from worldloom.enterprise_specs import RECORD_ADDRESSED, Operation
+
+    assert {"delete", "move", "comment", "forward", "reply", "update", "patch", "upsert"} <= _RECORD_ADDRESSED
+    assert not {"create", "draft", "send"} & _RECORD_ADDRESSED
+    reads = {Operation.SEARCH, Operation.LIST, Operation.READ}
+    fresh = {Operation.CREATE, Operation.DRAFT, Operation.SEND}
+    assert set(RECORD_ADDRESSED) == set(Operation) - reads - fresh

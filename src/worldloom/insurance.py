@@ -362,6 +362,13 @@ class InsuranceWorld:
     """Reference tables at scale — `RetailWorld.master_data`, verbatim: the
     same knob, the same no-op default, the same counts-on-the-recipe replay."""
 
+    asked_for: str | None = None
+    """What this world was asked to be: `RetailWorld.asked_for`, verbatim,
+    including why the field is not called `inspired_by`."""
+
+    unmet: tuple[str, ...] = ()
+    """What that description could not have: `RetailWorld.unmet`, verbatim."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> InsuranceWorld:
         """A world shaped like the insurer *description* names. Shape only."""
@@ -428,6 +435,8 @@ class InsuranceWorld:
             locale=self.locale,
             master_data=self.master_data,
             policies=self.policies,
+            inspired_by=self.asked_for,
+            unmet=self.unmet,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = insurance_org.generate(

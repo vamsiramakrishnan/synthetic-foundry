@@ -41,6 +41,17 @@ def telecom() -> industry.Programme:
     return industry.programme("telecom")
 
 
+@pytest.fixture(scope="module")
+def healthcare() -> industry.Programme:
+    """The industry whose fifty-eight use cases all read `evidence_reconciliation`
+    at `medium` before the capability and the difficulty were read off the rows."""
+    return industry.programme("healthcare")
+
+
+def _bound(derived: industry.Programme) -> list:
+    return [row for row in derived.compiled.rows if row.binding_status == "bound"]
+
+
 # -- lines of business ------------------------------------------------------
 
 
@@ -422,6 +433,187 @@ def test_the_count_ceiling_is_applied_and_visible(telecom: industry.Programme) -
     assert industry.COUNT_CEILING == 100_000
 
 
+# -- capability and difficulty, read off the rows ---------------------------
+
+
+def test_a_use_case_carries_the_capability_and_difficulty_its_rows_justify(
+    healthcare: industry.Programme,
+) -> None:
+    """Every healthcare use case used to be `evidence_reconciliation` at
+    `medium`. The rows never said that: they span eight activity types and one
+    to three evidence channels, so the derived set spans capabilities and
+    difficulties, and each use case wears its own line's."""
+    cases = healthcare.use_cases()
+    rows = _bound(healthcare)
+    # The rows justify a spread: report-only lines, control steps, and evidence
+    # in one channel on some activities and in several on others.
+    assert {row.type for row in rows} >= {"report", "reconcile", "execute"}
+    assert {len(set(row.channels)) > 1 for row in rows} == {True, False}
+    capabilities = {case.construction.capability for case in cases}  # type: ignore[union-attr]
+    difficulties = {case.construction.difficulty for case in cases}  # type: ignore[union-attr]
+    assert len(capabilities) >= 2 and len(difficulties) >= 2
+    assert capabilities == {"search", "evidence_reconciliation", "reconcile"}
+    assert difficulties == {"medium", "hard"}
+    supported = [line for line in healthcare.summary.lines if line.supported]
+    for case, line in zip(cases, supported, strict=True):
+        assert case.construction is not None
+        assert case.construction.capability == line.capability
+        assert case.construction.difficulty == line.difficulty
+        closing = case.construction.steps[-1]
+        assert closing.id == industry.CLOSING_STEP[line.capability]
+        assert closing.capability == line.capability
+        assert set(closing.depends_on) == {step.id for step in case.construction.steps[:-1]}
+        assert case.construction.candidate_count == 1
+    # The summary counts the same use cases the same way.
+    summary = healthcare.summary
+    assert list(summary.capabilities) == list(industry.CAPABILITY_ORDER)
+    assert list(summary.difficulties) == list(industry.DIFFICULTY_ORDER)
+    assert sum(summary.capabilities.values()) == sum(summary.difficulties.values()) == len(cases)
+    assert summary.capabilities == {
+        capability: sum(1 for case in cases if case.construction.capability == capability)  # type: ignore[union-attr]
+        for capability in industry.CAPABILITY_ORDER
+    }
+    # A uniform property stays uniform and is said. Every shipped activity
+    # declares an exception path, so no use case is easy, and the sentence
+    # names that property with its count rather than spreading the label.
+    assert all(row.exception.strip() for row in rows)
+    assert summary.difficulties["easy"] == 0
+    assert [sentence.split(":")[0] for sentence in summary.uniformity] == ["no use case is easy"]
+    assert f"{len(rows)} of {len(rows)} bound activities declare an exception path" in summary.uniformity[0]
+    # Derived, so the same rows give the same labels, twice.
+    again = industry.programme("healthcare")
+    assert [case.model_dump(mode="json") for case in again.use_cases()] == [
+        case.model_dump(mode="json") for case in cases
+    ]
+
+
+def test_the_capability_and_the_difficulty_are_functions_of_the_row(
+    telecom: industry.Programme,
+) -> None:
+    """Two rows that differ only in `type` differ in capability and in nothing
+    else; two that differ only in `exception` differ in difficulty and in
+    nothing else. No draw, no clock, no hash, no position in the set."""
+    # Any row whose evidence spreads and whose exception path is declared, made
+    # an `execute` so the type is known; every other property stays the row's.
+    row = next(
+        row for row in _bound(telecom) if len(set(row.channels)) > 1 and row.exception.strip()
+    ).model_copy(update={"type": "execute"})
+    assert industry.activity_capability(row) == "evidence_reconciliation"
+    assert industry.activity_difficulty(row) == "hard"
+
+    # `type` moves the capability and leaves the difficulty where it was.
+    report = row.model_copy(update={"type": "report"})
+    control = row.model_copy(update={"type": "reconcile"})
+    assert industry.activity_capability(report) == "search"
+    assert industry.activity_capability(control) == "reconcile"
+    assert industry.activity_difficulty(report) == industry.activity_difficulty(row)
+    assert industry.activity_difficulty(control) == industry.activity_difficulty(row)
+    for kind in ("capture", "approve", "decide", "notify", "escalate"):
+        assert industry.activity_capability(row.model_copy(update={"type": kind})) == "evidence_reconciliation"
+
+    # `exception` moves the difficulty and leaves the capability where it was.
+    no_exception = row.model_copy(update={"exception": ""})
+    assert industry.activity_difficulty(no_exception) == "medium"
+    assert industry.activity_capability(no_exception) == industry.activity_capability(row)
+    # Whitespace is not an exception path.
+    assert industry.activity_difficulty(row.model_copy(update={"exception": "   "})) == "medium"
+    # So does the number of channels the evidence lands in; the two together
+    # make hard, either alone medium, neither easy.
+    one_channel = row.model_copy(update={"channels": ("system_record",)})
+    assert industry.activity_difficulty(one_channel) == "medium"
+    assert industry.activity_difficulty(one_channel.model_copy(update={"exception": ""})) == "easy"
+    # A duplicated channel is still one channel.
+    assert industry.activity_difficulty(
+        no_exception.model_copy(update={"channels": ("email", "email")})
+    ) == "easy"
+
+    # A line takes the most demanding of its rows, in the declared orders.
+    assert industry.line_capability([report, row]) == "evidence_reconciliation"
+    assert industry.line_capability([report, control]) == "reconcile"
+    assert industry.line_capability([report, report]) == "search"
+    easy = one_channel.model_copy(update={"exception": ""})
+    assert industry.line_difficulty([easy, no_exception]) == "medium"
+    assert industry.line_difficulty([easy, row]) == "hard"
+    assert industry.line_difficulty([easy]) == "easy"
+    with pytest.raises(ValueError, match="no bound activity"):
+        industry.line_capability([])
+
+
+def test_uniformity_names_the_property_that_keeps_a_value_out(
+    healthcare: industry.Programme,
+) -> None:
+    """The honest output of a uniform property is uniform, plus a sentence
+    saying which property. Strip the exception paths and the sentence follows
+    the rows: the set gains easy, loses hard, and says why."""
+    rows = _bound(healthcare)
+    lines = healthcare.summary.lines
+    assert industry.uniformity(lines, rows) == healthcare.summary.uniformity
+    assert [s.split(":")[0] for s in healthcare.summary.uniformity] == ["no use case is easy"]
+
+    stripped = tuple(row.model_copy(update={"exception": ""}) for row in healthcare.compiled.rows)
+    relined = industry.lines(
+        healthcare.compiled.model_copy(update={"rows": stripped}), healthcare.lobs
+    )
+    assert {line.difficulty for line in relined} == {"easy", "medium"}
+    assert {line.capability for line in relined} == {line.capability for line in lines}
+    sentences = industry.uniformity(relined, stripped)
+    assert [s.split(":")[0] for s in sentences] == ["no use case is hard"]
+    assert f"0 of {len(rows)} bound activities declare an exception path" in sentences[0]
+
+    # A single-type catalogue cannot search or reconcile, and says so once each.
+    executes = tuple(row.model_copy(update={"type": "execute"}) for row in healthcare.compiled.rows)
+    relined = industry.lines(
+        healthcare.compiled.model_copy(update={"rows": executes}), healthcare.lobs
+    )
+    sentences = industry.uniformity(relined, executes)
+    assert [s.split(":")[0] for s in sentences] == [
+        "no use case is a search",
+        "no use case reconciles",
+        "no use case is easy",
+    ]
+    assert "no bound activity is read-only (type report)" in sentences[0]
+    assert "no bound activity is a control step (type reconcile)" in sentences[1]
+
+    # Nothing to say when there is nothing to say it about.
+    assert industry.uniformity((), rows) == ()
+
+
+def test_a_use_case_request_reads_as_a_request_and_names_only_what_the_rows_carry(
+    healthcare: industry.Programme,
+) -> None:
+    """`work admit to discharge for Billing (Corporate Services; SG)` was a slug
+    with spaces in it. The request now names the activities, the owning units,
+    the countries, the stream and the systems, every one of them the rows' own,
+    with the verb the line's capability supplies, and leaves no placeholder."""
+    cases = healthcare.use_cases()
+    supported = [line for line in healthcare.summary.lines if line.supported]
+    by_line: dict[tuple[str, str], list] = {}
+    for row in _bound(healthcare):
+        by_line.setdefault((row.function, row.stream), []).append(row)
+    verbs = {"search": "Report on ", "reconcile": "Reconcile ", "evidence_reconciliation": "Move "}
+    for case, line in zip(cases, supported, strict=True):
+        assert case.construction is not None
+        text = case.construction.request_template
+        assert text == industry.request_for(line, by_line[(line.lob, line.stream)])
+        names = list(dict.fromkeys(row.activity for row in by_line[(line.lob, line.stream)]))
+        # Every activity when the line lists them, the first and the last when
+        # it counts them: a twelve-activity line is a sentence, not a dump.
+        named = names if len(names) <= industry.NAMED_ACTIVITIES else [names[0], names[-1]]
+        assert all(name in text for name in named), text
+        if len(names) > industry.NAMED_ACTIVITIES:
+            assert f"({len(names)} activities)" in text, text
+        assert all(owner in text for owner in line.owners), text
+        assert all(country in text for country in line.countries), text
+        assert line.stream_name in text, text
+        assert all(system in text for system in line.systems), text
+        assert text.startswith(verbs[line.capability]), text
+        assert text.endswith("."), text
+        for placeholder in ("{", "}", "<", ">", "TODO", "TBD", "..."):
+            assert placeholder not in text, text
+        assert not text.startswith("work "), text
+    assert any(len(line.activities) > industry.NAMED_ACTIVITIES for line in supported)
+
+
 # -- the whole programme, every industry -----------------------------------
 
 
@@ -540,6 +732,11 @@ def test_describe_reports_the_headline_numbers() -> None:
     assert described["lobs"] == len(described["by_lob"])
     assert described["findings"] == []
     assert sum(described["intents"].values()) == described["situations"]
+    # What the use cases span, and the sentence for what they cannot show.
+    assert list(described["capabilities"]) == list(industry.CAPABILITY_ORDER)
+    assert list(described["difficulties"]) == list(industry.DIFFICULTY_ORDER)
+    assert sum(described["capabilities"].values()) == described["lines"] - len(described["unsupported_lines"])
+    assert described["difficulties"]["easy"] == 0 and described["uniformity"]
 
 
 # -- what a description names ------------------------------------------------
