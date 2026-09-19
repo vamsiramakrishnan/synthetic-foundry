@@ -11,6 +11,50 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A back-office scenario, and the shipped scenarios are tested
+
+- The enterprise-evals planner shipped four workflows, and every one was
+  shaped like a service desk: incidents, changes, customer accounts, an
+  executive digest. The two industry profiles added banking and retail
+  workflows over the same channels. Nothing closed a month, matched an
+  invoice, onboarded a starter or renewed a contract, which is the work
+  that stresses an agent differently from triage.
+  `examples/enterprise-evals/back-office.json` adds four such workflows:
+  `finance_month_end_close`, `procurement_exception_review`,
+  `hr_onboarding_readiness` and `contract_renewal_review`. Each reads the
+  `sor` connector beside the channels: journals, accounts, bank statements
+  and consolidations for the close; purchase orders, goods receipts,
+  invoice receipts and open items for the match; workers, positions and
+  requisitions for onboarding; contracts and orders for the renewal. Two of
+  them write back to `sor` (a case, a contract) as well as to a page, a
+  file or an email.
+- The four widen the axes rather than the name list. Together they use
+  every topology, add `classify` and `transform` to the content actions the
+  builtin workflows emit, add `csv` to the output formats, and set
+  audiences a controller or a people partner would recognise. Their
+  templates read as a request a manager types. Every `sor` entity they
+  name is one a catalogue company binds records for: `employee` and
+  `vendor_bill` are connector entities, but no industry's default company
+  holds records of them, so a row over them would materialise evidence
+  carrying no fact and be refused at validation.
+- The profile needs a world built from a catalogue project (`worldloom
+  industry project`, then a Studio snapshot), because only such a world
+  carries `sor` records. On the golden retail corpus its `sor` rows refuse
+  with the same finding that any shipped profile's rows meet on a world
+  that lacks their records. The description notes that chat and post
+  destinations can be added when those connectors land.
+- Nothing loaded the shipped profiles before.
+  `tests/test_enterprise_scenarios.py` loads every file in
+  `examples/enterprise-evals/`, merges it onto the builtin registry, and
+  asserts that `review()` finds nothing, that every named workflow exists
+  and survives the connector selection, that every role names a connector
+  and entity the merged registry carries, that every template uses only
+  the planner's placeholders, and that every destination operation is one
+  the planner can phrase. A `comment` destination passes `review()` and
+  fails at plan time, so that last check is the one the loader could not
+  make. Nothing builtin moved: every plan made without a profile is
+  byte-identical.
+
 ### Eight locales, generated from published data (Generation)
 
 - Four locales shipped and the catalogue built companies in fourteen
