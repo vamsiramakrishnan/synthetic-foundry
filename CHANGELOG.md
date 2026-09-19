@@ -126,6 +126,15 @@ first written up, before the waves above it landed.
   in a fence or a sentence, and refuses an empty turn by harness name with
   the envelope's own `subtype` and `num_turns`. Size `--timeout` in hundreds
   of seconds per turn and `--limit` in single digits for a first harness run.
+- The two-case rerun named the cause of the empty turn. The adapter ran the
+  child in plan mode to keep it off the project files, and on the sixteenth
+  turn the child answered in prose that plan mode restricted it to read-only
+  actions and required a tool it did not have; the other case timed out
+  after fourteen turns of reads, about 120 seconds each. The agent under
+  test, the planner and the judge answer from the document on stdin and
+  touch nothing local, so `command_for` now gives them a child with no tools
+  at all and no persisted session; the authoring and narration seams, which
+  may read the project, keep plan mode.
 
 ### The corpus remembers what it was asked for (Generation)
 

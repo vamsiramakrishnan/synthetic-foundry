@@ -99,7 +99,17 @@ def adapter_command(name: str, *, timeout: float = 590, allow_native_writes: boo
     return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
 
 
-def command_for(name: str, output: Path, *, native_output: Path | None = None) -> list[str]:
+def command_for(name: str, output: Path, *, native_output: Path | None = None, tools: bool = True) -> list[str]:
+    """The child process for one turn.
+
+    `tools=False` is the evalrun seams: the agent under test, the planner and
+    the judge answer from the document on stdin and touch nothing local, so
+    the child gets no tools at all. Plan mode was the earlier way to keep it
+    off the files, and it cost the run: after sixteen turns of reads the
+    child answered in prose that plan mode restricted it to read-only actions
+    and required a tool it did not have. The authoring and narration seams
+    may read the project, so they keep plan mode.
+    """
     if name == "codex":
         return ["codex", "exec", "--sandbox", "workspace-write" if native_output else "read-only",
                 *(["--cd", str(native_output)] if native_output else []), "--skip-git-repo-check",
@@ -107,7 +117,9 @@ def command_for(name: str, output: Path, *, native_output: Path | None = None) -
     if native_output is not None:
         raise ValueError("native output writes require codex or a custom JSON adapter")
     if name == "claude":
-        return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan"]
+        if tools:
+            return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan"]
+        return ["claude", "-p", "--output-format", "json", "--tools", "", "--no-session-persistence"]
     raise ValueError("choose codex or claude, or configure a custom JSON adapter")
 
 
@@ -135,7 +147,8 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"
         try:
-            result = subprocess.run(command_for(name, output, native_output=native_output), input=prompt, text=True,
+            command = command_for(name, output, native_output=native_output, tools=role not in _ROLES.values())
+            result = subprocess.run(command, input=prompt, text=True,
                                     capture_output=True, timeout=timeout, shell=False)
         except subprocess.TimeoutExpired as error:
             raise ValueError("coding harness exceeded its configured timeout") from error

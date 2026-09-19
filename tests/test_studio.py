@@ -599,3 +599,27 @@ def test_the_adapter_salvages_a_fenced_object_and_names_an_empty_turn():
         parse_object('{"call": {"tool": }', name="codex")
     with pytest.raises(ValueError, match="must return a JSON object"):
         parse_object("[1, 2]", name="codex")
+
+
+def test_the_evalrun_seams_run_the_child_without_tools(monkeypatch):
+    """The agent under test, the planner and the judge answer from stdin and touch nothing.
+
+    Plan mode kept the child off the files and confused it: on a real run the
+    sixteenth turn was a sentence about plan mode's restrictions instead of a
+    tool call. The evalrun seams now disable every tool; the authoring and
+    narration seams, which may read the project, keep plan mode.
+    """
+    commands = []
+    def run(argv, **kwargs):
+        commands.append(argv)
+        return subprocess.CompletedProcess(argv, 0, '{"result":"{}"}', "")
+    monkeypatch.setattr(subprocess, "run", run)
+    invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})
+    invoke("claude", {"schema": "worldloom.evalrun-plan/v1", "query": "q"})
+    invoke("claude", {"schema": "worldloom.evalrun-rating/v1"})
+    for argv in commands:
+        assert "--tools" in argv and argv[argv.index("--tools") + 1] == "" and "plan" not in argv
+    invoke("claude", {"requests": [], "response_shape": {}})
+    invoke("claude", {"company": {}})
+    for argv in commands[3:]:
+        assert "plan" in argv and "--tools" not in argv
