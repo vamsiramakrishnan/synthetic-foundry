@@ -610,19 +610,24 @@ def test_the_evalrun_seams_run_the_child_without_tools(monkeypatch):
     narration seams, which may read the project, keep plan mode.
     """
     commands = []
+    workdirs = []
     def run(argv, **kwargs):
         commands.append(argv)
+        workdirs.append(kwargs.get("cwd"))
         return subprocess.CompletedProcess(argv, 0, '{"result":"{}"}', "")
     monkeypatch.setattr(subprocess, "run", run)
     invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})
     invoke("claude", {"schema": "worldloom.evalrun-plan/v1", "query": "q"})
     invoke("claude", {"schema": "worldloom.evalrun-rating/v1"})
+    assert all(workdir is not None and "worldloom-harness-" in str(workdir) for workdir in workdirs), "an empty working directory"
     for argv in commands:
         assert "--tools" in argv and argv[argv.index("--tools") + 1] == "" and "plan" not in argv
+        assert "--strict-mcp-config" in argv and "--json-schema" in argv and "--no-session-persistence" in argv
     invoke("claude", {"requests": [], "response_shape": {}})
     invoke("claude", {"company": {}})
     for argv in commands[3:]:
         assert "plan" in argv and "--tools" not in argv
+    assert workdirs[3:] == [None, None], "authoring and narration keep the caller's directory"
 
 
 def test_the_adapter_re_asks_once_when_a_reply_is_not_one_object(monkeypatch):

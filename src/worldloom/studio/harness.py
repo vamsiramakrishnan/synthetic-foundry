@@ -22,6 +22,10 @@ NAMES: tuple[str, ...] = ("codex", "claude")
 #: Turns re-asked when a reply is not one JSON object, before the turn is an error.
 RETRIES = 1
 
+#: The structured-output schema for the evalrun seams: one object, any keys.
+#: The turn document states the reply shapes; the schema only rules out prose.
+_ANY_OBJECT = '{"type": "object", "additionalProperties": true}'
+
 #: What the child is being asked to be, keyed by the document it is handed.
 #: Every one of these seams ends in "return exactly one JSON object", so the
 #: wrapper's job is to say which role the object plays. Without this the
@@ -122,7 +126,12 @@ def command_for(name: str, output: Path, *, native_output: Path | None = None, t
     if name == "claude":
         if tools:
             return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan"]
-        return ["claude", "-p", "--output-format", "json", "--tools", "", "--no-session-persistence"]
+        # No built-in tools, no MCP servers from the operator's own settings
+        # (a real run made "errant tool calls" through them), no persisted
+        # session, and a structured reply: the schema admits any object, so
+        # the harness cannot answer with prose or a body cut off mid-string.
+        return ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config",
+                "--no-session-persistence", "--json-schema", _ANY_OBJECT]
     raise ValueError("choose codex or claude, or configure a custom JSON adapter")
 
 
@@ -154,7 +163,11 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
         for attempt in range(RETRIES + 1):
             try:
                 command = command_for(name, output, native_output=native_output, tools=command_tools)
-                result = subprocess.run(command, input=asked, text=True,
+                # The evalrun seams run from an empty directory: a child started
+                # in the repository loads its project instructions and skills
+                # and answered a turn "in the Worldloom project".
+                workdir = temp if (name == "claude" and not command_tools) else None
+                result = subprocess.run(command, input=asked, text=True, cwd=workdir,
                                         capture_output=True, timeout=timeout, shell=False)
             except subprocess.TimeoutExpired as error:
                 raise ValueError("coding harness exceeded its configured timeout") from error

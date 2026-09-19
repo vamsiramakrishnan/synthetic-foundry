@@ -164,6 +164,15 @@ first written up, before the waves above it landed.
   and 0.41 became 0.71 (plan 0.79, trajectory 0.69, outcomes 0.67). The
   execution-contract assertions still hold the reference's bytes, so an
   external agent's `passed` stays false on them; the axes are its measure.
+- A live three-case run with attribution on graded two cases (0.74 and 0.67)
+  and lost the third to a reply that opened "I made several errant tool
+  calls that don't belong to this task" and then cut off inside its body.
+  The child had no built-in tools but still had the operator's own MCP
+  servers, ran in the repository and so loaded its project instructions,
+  and answered in free text. The evalrun child now runs with
+  `--strict-mcp-config`, from an empty directory, and with a structured
+  reply (`--json-schema`, one object, any keys), so it cannot call what the
+  case did not serve, cannot read the project, and cannot answer in prose.
 
 ### The corpus remembers what it was asked for (Generation)
 
