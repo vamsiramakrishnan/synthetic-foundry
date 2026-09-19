@@ -11,6 +11,22 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Every write operation has a prompt, and the back-office workflows post to chat
+
+- `review()` accepts any operation an entity declares, but the prompt renderer
+  phrased only the seven the builtin workflows use. A profile whose destination
+  said `comment` passed the lint and raised `KeyError` at plan time, and
+  `delete` was among the unphrased, which is the operation the DAG shapes exist
+  to grade. `ACTION_INSTRUCTIONS` now covers all thirteen write operations and
+  a test holds it level with the `Operation` enum.
+- Wiring Slack and Microsoft Teams into the registry grew the row space by
+  nothing, because no builtin workflow named them. Each back-office workflow
+  now posts a notification to Slack or Teams beside its record, page, file or
+  email, so a run reaches a chat destination as well as a document one.
+- The prose gate skipped nothing under `.claude/worktrees/`. Five parallel
+  agent worktrees there turned 0 findings into 70 without an edited file, all
+  from their copies of pre-existing files. The gate now skips that prefix.
+
 ### A back-office scenario, and the shipped scenarios are tested
 
 - The enterprise-evals planner shipped four workflows, and every one was

@@ -325,6 +325,30 @@ def _connector_label(registry: SpecRegistry, name: str, *, role: Literal["source
     return registry.connectors[name].display_name
 
 
+#: How a query's prompt phrases each destination operation. Keyed by every
+#: `Operation` a destination may carry, not just the seven the builtin
+#: workflows happen to use: `review()` accepts any operation the entity
+#: declares, so a profile whose destination said `comment` or `delete` passed
+#: the lint and then raised `KeyError` here at plan time, and `delete` is the
+#: operation the DAG shapes exist to grade. `test_every_write_operation_can_be_
+#: phrased` holds the two in step.
+ACTION_INSTRUCTIONS: dict[str, str] = {
+    "create": "Create a new",
+    "update": "Update the existing",
+    "patch": "Change only the affected fields in the",
+    "upsert": "Create the record if it is missing, otherwise update the",
+    "delete": "Delete the",
+    "move": "Move the",
+    "comment": "Add a comment to the",
+    "attach": "Attach the result to the",
+    "link": "Link the related records on the",
+    "draft": "Draft a",
+    "send": "Send a",
+    "reply": "Reply in the existing thread with a",
+    "forward": "Forward the existing thread as a",
+}
+
+
 def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str], registry: SpecRegistry) -> str:
     formats = row["input_formats"].split("+")
     entities = [value.split(":", 1)[1] for value in row["source_entities"].split("+")]
@@ -346,15 +370,7 @@ def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str], regist
         source_names.append(f"the relevant {display} {format_label}")
     sources = source_names[0] if len(source_names) == 1 else ", ".join(source_names[:-1]) + f", and {source_names[-1]}"
     operation = row["operation"]
-    action_instruction = {
-        "create": "Create a new",
-        "update": "Update the existing",
-        "patch": "Change only the affected fields in the",
-        "upsert": "Create the record if it is missing, otherwise update the",
-        "draft": "Draft a",
-        "send": "Send a",
-        "reply": "Reply in the existing thread with a",
-    }[operation]
+    action_instruction = ACTION_INSTRUCTIONS[operation]
     failure_instruction = {
         "none": "",
         "ambiguous_join": " Put ambiguous matches in a review section; do not guess.",

@@ -170,7 +170,7 @@ def test_back_office_widens_the_axes_and_grounds_on_bound_record_kinds() -> None
     path = ROOT / "examples" / "enterprise-evals" / "back-office.json"
     profile = _profile(path)
     raw = json.loads(path.read_text(encoding="utf-8"))
-    assert raw["connectors"] == ["jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email", "sor"]
+    assert raw["connectors"] == ["jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email", "sor", "slack", "teams"]
     assert profile.coverage.name == "back-office-pairwise"
     names = {workflow.name for workflow in profile.additional_workflows}
     assert {"finance_month_end_close", "procurement_exception_review", "hr_onboarding_readiness", "contract_renewal_review"} <= names
@@ -185,6 +185,13 @@ def test_back_office_widens_the_axes_and_grounds_on_bound_record_kinds() -> None
     authored_formats = {fmt for workflow in profile.additional_workflows for role in workflow.destinations for fmt in role.formats}
     assert "csv" in authored_formats - builtin_formats
     assert any(role.connector == "sor" for workflow in profile.additional_workflows for role in workflow.destinations)
+    # Wiring Slack and Teams into the registry grew nothing on its own: no
+    # builtin workflow names them, so the row space was unchanged. A chat
+    # destination on every back-office workflow is what makes them reachable.
+    chat = {("slack", "message"), ("teams", "channel_message")}
+    for workflow in profile.additional_workflows:
+        posted = {(role.connector, entity) for role in workflow.destinations for entity in role.entities}
+        assert posted & chat, f"{workflow.name} has no chat destination"
 
     # The industries `default_company` accepts, read from the same table it reads.
     bound: set[str] = set()

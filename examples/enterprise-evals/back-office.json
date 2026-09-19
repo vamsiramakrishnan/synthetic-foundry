@@ -1,7 +1,7 @@
 {
   "name": "back-office",
   "industry": "shared_services",
-  "company_description": "A multi-entity group whose finance, procurement, people and legal teams run month-end close, three-way match exceptions, new-hire onboarding and supplier contract renewals across a system of record, ticketing, document stores and email. Notification destinations (chat channels and posts) can be added to these workflows when those connectors land; every destination here is a record, a page, a file or an email.",
+  "company_description": "A multi-entity group whose finance, procurement, people and legal teams run month-end close, three-way match exceptions, new-hire onboarding and supplier contract renewals across a system of record, ticketing, document stores and email. Each workflow also posts a notification to Slack or Microsoft Teams beside its record, page, file or email, so a run exercises a chat destination as well as a document one.",
   "workflows": [
     "finance_month_end_close",
     "procurement_exception_review",
@@ -9,82 +9,526 @@
     "contract_renewal_review",
     "executive_digest"
   ],
-  "connectors": ["jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email", "sor"],
+  "connectors": [
+    "jira",
+    "confluence",
+    "sharepoint",
+    "drive",
+    "servicenow",
+    "salesforce",
+    "email",
+    "sor",
+    "slack",
+    "teams"
+  ],
   "additional_processes": [
-    {"name": "financial_close", "event_kinds": ["period_close", "journal_review", "reconciliation", "variance"], "connector_entities": {"sor": "journal_entry", "jira": "issue"}, "status_map": {"planned": "parked", "active": "posted", "completed": "reported"}},
-    {"name": "procure_to_pay", "event_kinds": ["requisition", "purchase_order", "goods_receipt", "match_exception"], "connector_entities": {"sor": "purchase_order", "jira": "issue"}, "status_map": {"planned": "created", "active": "blocked", "completed": "paid"}},
-    {"name": "hire_to_onboard", "event_kinds": ["offer_accepted", "access_provisioning", "equipment", "first_day"], "connector_entities": {"sor": "worker", "servicenow": "change_request"}, "status_map": {"planned": "hired", "active": "active", "completed": "active"}},
-    {"name": "contract_lifecycle", "event_kinds": ["renewal_notice", "negotiation", "signature", "expiry"], "connector_entities": {"sor": "contract", "email": "thread"}, "status_map": {"planned": "draft", "active": "negotiated", "completed": "signed"}}
+    {
+      "name": "financial_close",
+      "event_kinds": [
+        "period_close",
+        "journal_review",
+        "reconciliation",
+        "variance"
+      ],
+      "connector_entities": {
+        "sor": "journal_entry",
+        "jira": "issue"
+      },
+      "status_map": {
+        "planned": "parked",
+        "active": "posted",
+        "completed": "reported"
+      }
+    },
+    {
+      "name": "procure_to_pay",
+      "event_kinds": [
+        "requisition",
+        "purchase_order",
+        "goods_receipt",
+        "match_exception"
+      ],
+      "connector_entities": {
+        "sor": "purchase_order",
+        "jira": "issue"
+      },
+      "status_map": {
+        "planned": "created",
+        "active": "blocked",
+        "completed": "paid"
+      }
+    },
+    {
+      "name": "hire_to_onboard",
+      "event_kinds": [
+        "offer_accepted",
+        "access_provisioning",
+        "equipment",
+        "first_day"
+      ],
+      "connector_entities": {
+        "sor": "worker",
+        "servicenow": "change_request"
+      },
+      "status_map": {
+        "planned": "hired",
+        "active": "active",
+        "completed": "active"
+      }
+    },
+    {
+      "name": "contract_lifecycle",
+      "event_kinds": [
+        "renewal_notice",
+        "negotiation",
+        "signature",
+        "expiry"
+      ],
+      "connector_entities": {
+        "sor": "contract",
+        "email": "thread"
+      },
+      "status_map": {
+        "planned": "draft",
+        "active": "negotiated",
+        "completed": "signed"
+      }
+    }
   ],
   "additional_workflows": [
     {
-      "name": "finance_month_end_close", "purpose": "month-end close reconciliation and variance pack", "process": "financial_close",
+      "name": "finance_month_end_close",
+      "purpose": "month-end close reconciliation and variance pack",
+      "process": "financial_close",
       "sources": [
-        {"connector": "sor", "entities": ["journal_entry", "account", "bank_statement", "consolidation"]},
-        {"connector": "email", "entities": ["thread"]},
-        {"connector": "sharepoint", "entities": ["file"]},
-        {"connector": "drive", "entities": ["file"]}
+        {
+          "connector": "sor",
+          "entities": [
+            "journal_entry",
+            "account",
+            "bank_statement",
+            "consolidation"
+          ]
+        },
+        {
+          "connector": "email",
+          "entities": [
+            "thread"
+          ]
+        },
+        {
+          "connector": "sharepoint",
+          "entities": [
+            "file"
+          ]
+        },
+        {
+          "connector": "drive",
+          "entities": [
+            "file"
+          ]
+        }
       ],
       "destinations": [
-        {"connector": "confluence", "entities": ["page"], "operations": ["create", "update", "patch", "upsert"], "formats": ["html", "markdown"]},
-        {"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["xlsx", "docx", "pdf"]},
-        {"connector": "drive", "entities": ["file"], "operations": ["create", "update"], "formats": ["xlsx", "csv"]}
+        {
+          "connector": "confluence",
+          "entities": [
+            "page"
+          ],
+          "operations": [
+            "create",
+            "update",
+            "patch",
+            "upsert"
+          ],
+          "formats": [
+            "html",
+            "markdown"
+          ]
+        },
+        {
+          "connector": "sharepoint",
+          "entities": [
+            "file"
+          ],
+          "operations": [
+            "create",
+            "update",
+            "patch",
+            "upsert"
+          ],
+          "formats": [
+            "xlsx",
+            "docx",
+            "pdf"
+          ]
+        },
+        {
+          "connector": "drive",
+          "entities": [
+            "file"
+          ],
+          "operations": [
+            "create",
+            "update"
+          ],
+          "formats": [
+            "xlsx",
+            "csv"
+          ]
+        },
+        {
+          "connector": "teams",
+          "entities": [
+            "channel_message"
+          ],
+          "operations": [
+            "create"
+          ]
+        }
       ],
-      "content_actions": ["reconcile", "compare", "extract", "generate"], "audiences": ["executive", "manager", "analyst"],
-      "topologies": ["fan_in", "diamond", "chain"],
+      "content_actions": [
+        "reconcile",
+        "compare",
+        "extract",
+        "generate"
+      ],
+      "audiences": [
+        "executive",
+        "manager",
+        "analyst"
+      ],
+      "topologies": [
+        "fan_in",
+        "diamond",
+        "chain"
+      ],
       "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience} audience. Use {sources}. {action_instruction} {output_label} in {destination}. Tie every journal, bank and consolidation figure back to its ledger account and posting period, list unreconciled items with their ageing and owner, keep any reviewer notes the workbook or the email thread carries, then {verification_instruction}.{failure_instruction}"
     },
     {
-      "name": "procurement_exception_review", "purpose": "three-way match exception review", "process": "procure_to_pay",
+      "name": "procurement_exception_review",
+      "purpose": "three-way match exception review",
+      "process": "procure_to_pay",
       "sources": [
-        {"connector": "sor", "entities": ["purchase_order", "goods_receipt", "invoice_receipt", "ap_open_item"]},
-        {"connector": "email", "entities": ["thread"]},
-        {"connector": "jira", "entities": ["issue"]},
-        {"connector": "servicenow", "entities": ["incident"]}
+        {
+          "connector": "sor",
+          "entities": [
+            "purchase_order",
+            "goods_receipt",
+            "invoice_receipt",
+            "ap_open_item"
+          ]
+        },
+        {
+          "connector": "email",
+          "entities": [
+            "thread"
+          ]
+        },
+        {
+          "connector": "jira",
+          "entities": [
+            "issue"
+          ]
+        },
+        {
+          "connector": "servicenow",
+          "entities": [
+            "incident"
+          ]
+        }
       ],
       "destinations": [
-        {"connector": "sor", "entities": ["case"], "operations": ["update", "patch", "upsert"]},
-        {"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update"], "formats": ["docx", "pdf", "xlsx"]},
-        {"connector": "email", "entities": ["message"], "operations": ["draft", "reply"], "formats": ["html"]}
+        {
+          "connector": "sor",
+          "entities": [
+            "case"
+          ],
+          "operations": [
+            "update",
+            "patch",
+            "upsert"
+          ]
+        },
+        {
+          "connector": "sharepoint",
+          "entities": [
+            "file"
+          ],
+          "operations": [
+            "create",
+            "update"
+          ],
+          "formats": [
+            "docx",
+            "pdf",
+            "xlsx"
+          ]
+        },
+        {
+          "connector": "email",
+          "entities": [
+            "message"
+          ],
+          "operations": [
+            "draft",
+            "reply"
+          ],
+          "formats": [
+            "html"
+          ]
+        },
+        {
+          "connector": "slack",
+          "entities": [
+            "message"
+          ],
+          "operations": [
+            "create"
+          ]
+        }
       ],
-      "content_actions": ["reconcile", "classify", "extract", "generate"], "audiences": ["accounts_payable_lead", "procurement_manager", "controller"],
-      "topologies": ["chain", "fan_in", "diamond"],
+      "content_actions": [
+        "reconcile",
+        "classify",
+        "extract",
+        "generate"
+      ],
+      "audiences": [
+        "accounts_payable_lead",
+        "procurement_manager",
+        "controller"
+      ],
+      "topologies": [
+        "chain",
+        "fan_in",
+        "diamond"
+      ],
       "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Match each invoice to its purchase order and goods receipt by document number, state the quantity or price variance and which side is short, keep the vendor's explanation and the ticket history where they exist, and do not release a blocked bill, then {verification_instruction}.{failure_instruction}"
     },
     {
-      "name": "hr_onboarding_readiness", "purpose": "new-hire onboarding readiness check", "process": "hire_to_onboard",
+      "name": "hr_onboarding_readiness",
+      "purpose": "new-hire onboarding readiness check",
+      "process": "hire_to_onboard",
       "sources": [
-        {"connector": "sor", "entities": ["worker", "position", "job_requisition"]},
-        {"connector": "servicenow", "entities": ["change_request"]},
-        {"connector": "jira", "entities": ["issue"]},
-        {"connector": "email", "entities": ["thread"]}
+        {
+          "connector": "sor",
+          "entities": [
+            "worker",
+            "position",
+            "job_requisition"
+          ]
+        },
+        {
+          "connector": "servicenow",
+          "entities": [
+            "change_request"
+          ]
+        },
+        {
+          "connector": "jira",
+          "entities": [
+            "issue"
+          ]
+        },
+        {
+          "connector": "email",
+          "entities": [
+            "thread"
+          ]
+        }
       ],
       "destinations": [
-        {"connector": "confluence", "entities": ["page"], "operations": ["create", "update", "patch", "upsert"], "formats": ["html", "markdown"]},
-        {"connector": "email", "entities": ["message"], "operations": ["draft", "send"], "formats": ["html"]},
-        {"connector": "jira", "entities": ["issue"], "operations": ["update", "patch"]}
+        {
+          "connector": "confluence",
+          "entities": [
+            "page"
+          ],
+          "operations": [
+            "create",
+            "update",
+            "patch",
+            "upsert"
+          ],
+          "formats": [
+            "html",
+            "markdown"
+          ]
+        },
+        {
+          "connector": "email",
+          "entities": [
+            "message"
+          ],
+          "operations": [
+            "draft",
+            "send"
+          ],
+          "formats": [
+            "html"
+          ]
+        },
+        {
+          "connector": "jira",
+          "entities": [
+            "issue"
+          ],
+          "operations": [
+            "update",
+            "patch"
+          ]
+        },
+        {
+          "connector": "slack",
+          "entities": [
+            "message"
+          ],
+          "operations": [
+            "create"
+          ]
+        }
       ],
-      "content_actions": ["extract", "classify", "transform", "generate"], "audiences": ["hiring_manager", "people_partner", "it_service_desk"],
-      "topologies": ["fan_out", "chain", "fan_in"],
+      "content_actions": [
+        "extract",
+        "classify",
+        "transform",
+        "generate"
+      ],
+      "audiences": [
+        "hiring_manager",
+        "people_partner",
+        "it_service_desk"
+      ],
+      "topologies": [
+        "fan_out",
+        "chain",
+        "fan_in"
+      ],
       "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. For each starter, confirm the position and requisition agree with the employee record, show whether the access change and the epic's tasks are done before the start date, name what is still open and who owns it, use only the personal data the checklist needs, and keep the welcome draft's wording where a draft exists, then {verification_instruction}.{failure_instruction}"
     },
     {
-      "name": "contract_renewal_review", "purpose": "supplier contract renewal review", "process": "contract_lifecycle",
+      "name": "contract_renewal_review",
+      "purpose": "supplier contract renewal review",
+      "process": "contract_lifecycle",
       "sources": [
-        {"connector": "sor", "entities": ["contract", "purchase_order", "invoice_receipt"]},
-        {"connector": "sharepoint", "entities": ["file"]},
-        {"connector": "confluence", "entities": ["page"]},
-        {"connector": "email", "entities": ["thread"]}
+        {
+          "connector": "sor",
+          "entities": [
+            "contract",
+            "purchase_order",
+            "invoice_receipt"
+          ]
+        },
+        {
+          "connector": "sharepoint",
+          "entities": [
+            "file"
+          ]
+        },
+        {
+          "connector": "confluence",
+          "entities": [
+            "page"
+          ]
+        },
+        {
+          "connector": "email",
+          "entities": [
+            "thread"
+          ]
+        }
       ],
       "destinations": [
-        {"connector": "sor", "entities": ["contract"], "operations": ["update", "patch", "upsert"]},
-        {"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["docx", "pdf", "xlsx"]},
-        {"connector": "email", "entities": ["message"], "operations": ["draft", "reply"], "formats": ["html"]}
+        {
+          "connector": "sor",
+          "entities": [
+            "contract"
+          ],
+          "operations": [
+            "update",
+            "patch",
+            "upsert"
+          ]
+        },
+        {
+          "connector": "sharepoint",
+          "entities": [
+            "file"
+          ],
+          "operations": [
+            "create",
+            "update",
+            "patch",
+            "upsert"
+          ],
+          "formats": [
+            "docx",
+            "pdf",
+            "xlsx"
+          ]
+        },
+        {
+          "connector": "email",
+          "entities": [
+            "message"
+          ],
+          "operations": [
+            "draft",
+            "reply"
+          ],
+          "formats": [
+            "html"
+          ]
+        },
+        {
+          "connector": "teams",
+          "entities": [
+            "channel_message"
+          ],
+          "operations": [
+            "create"
+          ]
+        }
       ],
-      "content_actions": ["extract", "compare", "reconcile", "transform", "generate"], "audiences": ["legal_counsel", "category_manager", "finance_business_partner"],
-      "topologies": ["diamond", "fan_in", "fan_out", "chain"],
+      "content_actions": [
+        "extract",
+        "compare",
+        "reconcile",
+        "transform",
+        "generate"
+      ],
+      "audiences": [
+        "legal_counsel",
+        "category_manager",
+        "finance_business_partner"
+      ],
+      "topologies": [
+        "diamond",
+        "fan_in",
+        "fan_out",
+        "chain"
+      ],
       "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Compare the signed terms with what we actually ordered and paid over the term, flag any clause that departs from the standard terms page, carry the notice date and the vendor's latest offer where the thread has one, and distinguish the signed contract from working drafts, then {verification_instruction}.{failure_instruction}"
     }
   ],
-  "coverage": {"name": "back-office-pairwise", "strengths": 2, "connector_counts": [1, 2, 4, 6], "failures": ["none", "ambiguous_join", "missing_stable_id", "permission_denied", "partial_write", "stale_source", "version_conflict"], "max_candidates": 10000000}
+  "coverage": {
+    "name": "back-office-pairwise",
+    "strengths": 2,
+    "connector_counts": [
+      1,
+      2,
+      4,
+      6
+    ],
+    "failures": [
+      "none",
+      "ambiguous_join",
+      "missing_stable_id",
+      "permission_denied",
+      "partial_write",
+      "stale_source",
+      "version_conflict"
+    ],
+    "max_candidates": 10000000
+  }
 }

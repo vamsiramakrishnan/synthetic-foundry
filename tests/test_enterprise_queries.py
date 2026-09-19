@@ -254,3 +254,19 @@ def test_narrowed_profile_plans_byte_identically(monkeypatch: pytest.MonkeyPatch
     queries, _ = plan_queries(world, registry=registry, profile=profile.coverage)
     assert current == [query.model_dump_json() for query in queries]
     assert len(current) > 100
+
+
+def test_every_write_operation_can_be_phrased() -> None:
+    """`review()` accepts any operation an entity declares; `_render` must phrase it.
+
+    Found by the back-office scenario: a destination saying `comment` passed
+    the lint and raised `KeyError` at plan time. The read operations are
+    sources, never destinations, so they are the only members left out.
+    """
+    from worldloom.enterprise_queries import ACTION_INSTRUCTIONS
+    from worldloom.enterprise_specs import Operation
+
+    reads = {Operation.SEARCH.value, Operation.LIST.value, Operation.READ.value}
+    writes = {member.value for member in Operation} - reads
+    assert writes <= set(ACTION_INSTRUCTIONS), sorted(writes - set(ACTION_INSTRUCTIONS))
+    assert all(text and text[0].isupper() for text in ACTION_INSTRUCTIONS.values())
