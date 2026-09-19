@@ -11,6 +11,38 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A covering plan that stops when it is done
+
+- `worldloom enterprise-evals plan` could not finish on any shipped profile.
+  The default candidate space holds over two million rows. The pairwise cover
+  walked every one of them, and `--limit` only cut the result afterwards, so
+  `--limit 40` ran for fifteen minutes and wrote nothing. The limit now caps
+  the walk itself. The rows are the prefix the unlimited walk would choose,
+  in the same order, and the command returns in seconds. A run that completed
+  before produces the same bytes: a narrowed profile that gave 312 rows still
+  gives those 312 rows.
+- The planner now knows the exact set of interactions the space requires. It
+  derives the set from each lane's domains under the same admissibility
+  predicate the candidate stream applies, so it enumerates no rows, and it
+  refuses a row that falls outside the set. The walk stops at saturation, and
+  `holes` lists the required interactions the selection misses.
+- `CoverageReport` says when it is partial. `truncated` means a limit stopped
+  the walk with candidates unexamined. `exact` means `required_interactions`
+  and `holes` describe the whole space. The streaming report used to set
+  `required_interactions` equal to `covered_interactions` whatever happened,
+  which read as full coverage of a space it never finished walking.
+  `complete` is now false for a selection that has not proved itself.
+- `--shard-index` and `--shard-count` split the candidate stream before the
+  cover, so shards run in parallel over their own slices. Before, every shard
+  first walked the whole space and then kept every nth chosen row. A shard
+  covers its slice, the union of the shards' selections covers the whole
+  space, and a shard's holes are relative to the whole space. Sharded
+  covering output changes as a result; exhaustive sharding is unchanged.
+- The `plan` and `build` commands print `hole_count` and `hole_examples` in
+  place of the full hole list. A truncated run on a shipped profile leaves
+  some sixty thousand real holes, five megabytes on one line. The SDK's
+  `CoverageReport.holes` keeps the full list.
+
 ### Eight locales, generated from published data (Generation)
 
 - Four locales shipped and the catalogue built companies in fourteen

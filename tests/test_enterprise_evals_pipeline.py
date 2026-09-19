@@ -27,7 +27,9 @@ assertion here is the exact count.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -283,3 +285,63 @@ def test_build_refuses_original_profile_whose_change_evidence_is_only_a_placehol
     assert result.exit_code == 1, result.output
     assert "carries no fact (servicenow:change_request)" in result.output
     assert not (tmp_path / "out" / "manifest.json").exists()
+
+
+SHIPPED_RETAIL_PROFILE = Path("examples/enterprise-evals/omnichannel-retailer.json")
+
+#: SHA-256 of the 312 rows the narrowed retail profile below plans for
+#: `examples/hospital`, captured from the code at 8884546, before the cover
+#: could stop at saturation. The walk is the same walk stopped early, so the
+#: bytes must not move.
+NARROWED_PLAN_DIGEST = "d32f9fe1eed6ffd8b5528baa8c642c2632a5f6d988017605414879345d735194"
+
+
+def _narrowed_retail_profile(path: Path) -> Path:
+    """The hand-narrowed profile that completed before anything shipped did:
+    one workflow, three connectors, two failures, 73,600 candidates."""
+    data = json.loads(SHIPPED_RETAIL_PROFILE.read_text(encoding="utf-8"))
+    data.update(
+        workflows=["executive_digest"], additional_workflows=[],
+        connectors=["jira", "confluence", "email"],
+        coverage={
+            "name": "narrow", "strengths": 2, "connector_counts": [1, 2],
+            "failures": ["none", "permission_denied"], "max_candidates": 10_000_000,
+        },
+    )
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def test_plan_with_a_shipped_profile_and_a_limit_returns_in_seconds(tmp_path: Path) -> None:
+    """Killed at fifteen minutes with nothing written while the limit only
+    cut the cover's output; under seven seconds once it capped the walk."""
+    out = tmp_path / "plan.jsonl"
+    started = time.perf_counter()
+    result = RUNNER.invoke(app, [
+        "enterprise-evals", "plan", "examples/hospital", str(out),
+        "--profile", str(SHIPPED_RETAIL_PROFILE), "--limit", "40",
+    ])
+    elapsed = time.perf_counter() - started
+    assert result.exit_code == 0, result.output
+    assert elapsed < 60, elapsed
+    assert len(out.read_text(encoding="utf-8").splitlines()) == 40
+    summary = json.loads(result.output)
+    assert summary["selected"] == 40
+    assert summary["truncated"] is True and summary["exact"] is True
+    assert summary["hole_count"] == summary["required_interactions"] - summary["covered_interactions"] > 0
+    assert "holes" not in summary and len(summary["hole_examples"]) == 8
+
+
+def test_a_narrowed_profile_plans_the_same_bytes_as_before(tmp_path: Path) -> None:
+    out = tmp_path / "plan.jsonl"
+    result = RUNNER.invoke(app, [
+        "enterprise-evals", "plan", "examples/hospital", str(out),
+        "--profile", str(_narrowed_retail_profile(tmp_path / "narrow.json")),
+    ])
+    assert result.exit_code == 0, result.output
+    assert hashlib.sha256(out.read_bytes()).hexdigest() == NARROWED_PLAN_DIGEST
+    summary = json.loads(result.output)
+    assert summary["selected"] == 312
+    assert summary["truncated"] is False and summary["exact"] is True
+    assert summary["required_interactions"] == summary["covered_interactions"] == 1307
+    assert summary["hole_count"] == 0

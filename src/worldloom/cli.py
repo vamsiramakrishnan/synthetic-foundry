@@ -216,7 +216,7 @@ def enterprise_evals_plan(
         for query in queries:
             handle.write(query.model_dump_json() + "\n")
     if report is not None:
-        typer.echo(report.model_dump_json())
+        typer.echo(json.dumps(_coverage_summary(report), sort_keys=True))
 
 
 @enterprise_evals_app.command("housekeeping")
@@ -445,7 +445,7 @@ def enterprise_evals_build(
                 "queries": len(corpus.queries),
                 "records": len(corpus.connector_data.records),
                 "rendered_artifacts": len(rendered),
-                "coverage": report.model_dump(mode="json") if report else None,
+                "coverage": _coverage_summary(report) if report else None,
             },
             sort_keys=True,
         )
@@ -852,6 +852,19 @@ def _refuse_exec_error(exc: Any) -> NoReturn:
             "\n[dim]child stderr, last lines:[/dim]\n" + escape(exc.stderr_tail)
         )
     _refuse(exc.code, message, **exc.data)
+
+
+def _coverage_summary(report: Any) -> dict[str, Any]:
+    """The coverage report for the terminal, holes counted rather than listed.
+
+    A walk cut short by `--limit 40` on a shipped profile leaves some sixty
+    thousand real holes, five megabytes of JSON on one line. The count says
+    how far the selection is from complete and the first few holes say what
+    kind; the full list is the SDK's `CoverageReport.holes` to give.
+    """
+    data = report.model_dump(mode="json")
+    holes = data.pop("holes")
+    return {**data, "hole_count": len(holes), "hole_examples": holes[:8]}
 
 
 def _scenario_registry(scenario: Any, apply: Any, builtin: Any) -> Any:
