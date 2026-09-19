@@ -869,3 +869,112 @@ def test_a_recognised_description_builds_without_a_notice(tmp_path) -> None:
     ])
     assert result.exit_code == 0, result.output
     assert "unmet:" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# The corpus remembers what it was asked for
+# ---------------------------------------------------------------------------
+
+HOSPITAL = "a mid-size Singaporean hospital group"
+
+
+def _cli_build(out, *args: str):
+    from typer.testing import CliRunner
+
+    from worldloom import World
+    from worldloom.cli import app
+
+    result = CliRunner().invoke(app, [
+        "build", "--seed", "4242", "--periods", "1", "--out", str(out), *args,
+    ])
+    assert result.exit_code == 0, result.output
+    return World.load(str(out))
+
+
+@pytest.fixture(scope="module")
+def hospital_corpus(tmp_path_factory):
+    """One substituted corpus for the tests below: built for a hospital, as a
+    retailer. Module-scoped because every test reads it and none writes."""
+    out = tmp_path_factory.mktemp("asked-for") / "corpus"
+    return out, _cli_build(out, "--inspired-by", HOSPITAL)
+
+
+def test_a_default_build_records_neither_key(tmp_path) -> None:
+    """The byte-identity half of the contract, at the unit and at the command.
+
+    A key written unconditionally would put a new line in every recipe ever
+    written for a value that changes nothing, and the default build's byte
+    diff is what catches that. Asserted here so the next optional key cannot
+    quietly stop being optional.
+    """
+    plain = recipe.build_recipe(archetype="omnichannel_retailer", seed=4242)
+    assert recipe.INSPIRED_BY_KEY not in plain and recipe.UNMET_KEY not in plain
+    built = _cli_build(tmp_path / "plain", "--archetype", "omnichannel_retailer")
+    assert recipe.INSPIRED_BY_KEY not in built.recipe
+    assert recipe.UNMET_KEY not in built.recipe
+    assert "Built as" not in built.summary().to_dict()
+
+
+def test_an_unrecognised_description_is_remembered_by_the_corpus(hospital_corpus) -> None:
+    """The defect 8884546 left open. It printed `unmet:` once and exported a
+    retailer with no memory of the hospital, so a corpus handed to someone
+    else, or to `enterprise-evals plan`, could not say it was a stand-in.
+    `World.load` is the round trip: these are read back off `world.json`."""
+    _out, world = hospital_corpus
+    assert world.recipe["archetype"] == "omnichannel_retailer"
+    assert world.recipe[recipe.INSPIRED_BY_KEY] == HOSPITAL
+    (finding,) = world.recipe[recipe.UNMET_KEY]
+    assert "healthcare" in finding and "omnichannel_retailer" in finding
+    # And where a reader looks: one line, the shape, the ask, and a count.
+    row = world.summary().to_dict()["Built as"]
+    assert row == f"omnichannel_retailer; asked for {HOSPITAL!r}; unmet: 1"
+
+
+def test_a_specification_persists_the_same_record_as_a_description(
+    tmp_path, hospital_corpus
+) -> None:
+    """Both paths, one shape. Recording it for `--inspired-by` alone would
+    have recreated the two-stories inconsistency 8884546 removed."""
+    _out, described = hospital_corpus
+    spec = tmp_path / "hospital.json"
+    spec.write_text(json.dumps({"industry": HOSPITAL}), encoding="utf-8")
+    specified = _cli_build(tmp_path / "spec", "--spec", str(spec))
+    assert specified.recipe[recipe.INSPIRED_BY_KEY] == described.recipe[recipe.INSPIRED_BY_KEY]
+    assert specified.recipe[recipe.UNMET_KEY] == described.recipe[recipe.UNMET_KEY]
+
+
+def test_a_recognised_description_records_no_keys(tmp_path) -> None:
+    """The rule the `unmet:` line already follows: a description the registry
+    recognises built what it named, `archetype` says so, and a second key on
+    every described corpus would teach a reader to skip the one that marks a
+    stand-in."""
+    built = _cli_build(tmp_path / "bank", "--inspired-by", "a mid-size Australian bank")
+    assert built.recipe["archetype"] == "midsize_adi"
+    assert recipe.INSPIRED_BY_KEY not in built.recipe
+    assert recipe.UNMET_KEY not in built.recipe
+
+
+def test_a_corpus_carrying_the_record_rebuilds_and_verifies(hospital_corpus) -> None:
+    """`verify` byte-compares a rebuild against the corpus on disk, so the
+    rebuilt recipe must carry the keys the build wrote. A rebuild that
+    dropped them would fail the trust command over the record itself."""
+    from typer.testing import CliRunner
+
+    from worldloom.cli import app
+
+    out, world = hospital_corpus
+    assert recipe.rebuild(world.recipe).recipe == world.recipe
+    result = CliRunner().invoke(app, ["verify", str(out)])
+    assert result.exit_code == 0, result.output
+
+
+def test_the_record_can_be_attached_to_a_world_whose_spec_cannot_carry_it() -> None:
+    """`with_asked_for` is the fallback for a domain registered outside this
+    repository, and `rebuild` uses it, so it must write exactly what
+    `build_recipe` writes: the same keys, sorted the same, nothing for nothing."""
+    assert recipe.with_asked_for({"seed": 1}, None, ()) == {"seed": 1}
+    attached = recipe.with_asked_for({"seed": 1}, HOSPITAL, ("b", "a"))
+    assert attached == {"seed": 1, recipe.INSPIRED_BY_KEY: HOSPITAL, recipe.UNMET_KEY: ["a", "b"]}
+    assert recipe.build_recipe(
+        archetype="omnichannel_retailer", seed=1, inspired_by=HOSPITAL, unmet=("b", "a"),
+    )[recipe.UNMET_KEY] == ["a", "b"]
