@@ -164,9 +164,14 @@ def compile_failure_contract(row: Mapping[str, Any]) -> dict[str, Any]:
             "writes_persist": kind == "partial_write", "blocked_nodes": sorted(blocked),
         }
         operation = node.get("resolved_operation", node.get("op"))
-        if node.get("fixture") and operation not in {"create", "send", "draft", "post", "upload", "reply", "forward", "transform"}:
+        creates = operation in {"create", "send", "draft", "post", "upload", "reply", "forward", "transform"}
+        if node.get("fixture") and not creates:
             assertion["fixture"] = node["fixture"]
-        elif kind == "partial_write":
+        elif kind == "partial_write" and creates:
+            # Only a write that makes a record has a created record to check.
+            # A delete or update whose id is bound from an earlier read has
+            # no fixture here and makes nothing; its persisted effect is
+            # graded by the `deleted` or state assertion that names it.
             created: dict[str, Any] = {"server": node.get("server"), "entity": node.get("entity")}
             relation = {"reply": "reply_to", "forward": "forwarded_from", "transform": "derived_from"}.get(str(operation))
             if relation and node.get("fixture"):

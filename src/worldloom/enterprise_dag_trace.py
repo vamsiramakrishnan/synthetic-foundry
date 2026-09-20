@@ -173,7 +173,12 @@ def grade_execution_contract(
                     outputs[node.id].append(snapshots[fid])
                 elif node.kind in {"write", "verify"}:
                     held_record = (post_state or {}).get(fid)
-                    if held_record is None:
+                    if held_record is None and node.operation == "delete":
+                        # Absence is the effect a delete leaves; the `deleted`
+                        # assertion checks it. The node's output is the id it
+                        # removed, for the readback that binds to it.
+                        outputs[node.id].append(normalized_result({}, fid))
+                    elif held_record is None:
                         fails.append(f"state_missing:{node.id}:{fid}")
                     else:
                         outputs[node.id].append(normalized_result({"name": held_record.get("name") or held_record.get("title")}, fid))

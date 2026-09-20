@@ -275,8 +275,10 @@ def test_the_adapter_tells_the_child_which_seam_it_is_answering(monkeypatch):
     assert "{{fact:ID}}" in prompts[-1]
     invoke("claude", {"company": {}})
     assert "authoring request" in prompts[-1]
-    # Every seam ends the same way, whatever the role.
-    assert all("exactly one JSON object" in prompt for prompt in prompts)
+    # Every seam ends with the reply contract: the structured fields for the
+    # evalrun seams, one JSON object for the rest.
+    assert all("fill exactly one of its top-level fields" in prompt for prompt in prompts[:3])
+    assert all("exactly one JSON object" in prompt for prompt in prompts[3:])
     assert all("Do not modify project files." in prompt or "authoring" in prompt for prompt in prompts)
 
 
@@ -576,3 +578,105 @@ def test_a_non_loopback_bind_says_what_it_gives_away():
     assert reachable_host("0.0.0.0") == "127.0.0.1"
     assert reachable_host("192.168.1.10") == "192.168.1.10"
     assert reachable_host("::1") == "[::1]"
+
+
+def test_the_adapter_salvages_a_fenced_object_and_names_an_empty_turn():
+    """A turn that ended with prose around the object, or with nothing, is read or refused by name.
+
+    Measured on a real run: eight turns of reads and then a ninth whose reply
+    was empty, reported as `Expecting value: line 1 column 1 (char 0)` from
+    the JSON decoder. The adapter now says which harness returned nothing and
+    how the turn ended, and it reads an object a model wrapped in a fence.
+    """
+    from worldloom.studio.harness import parse_object
+
+    fenced = 'Here is the call.\n```json\n{"call": {"tool": "sor.search_records", "args": {"entity": "journal_entry"}}}\n```\n'
+    assert parse_object(fenced, name="claude") == {"call": {"tool": "sor.search_records", "args": {"entity": "journal_entry"}}}
+    assert parse_object('  {"answer": "done"} ', name="claude") == {"answer": "done"}
+    with pytest.raises(ValueError, match="claude returned no text for the turn \\(subtype='success', num_turns=3\\)"):
+        parse_object("", name="claude", envelope={"subtype": "success", "num_turns": 3, "result": ""})
+    with pytest.raises(ValueError, match="returned no JSON object; it said: 'I would search"):
+        parse_object("I would search the ledger first.", name="claude")
+    with pytest.raises(ValueError, match="malformed JSON"):
+        parse_object('{"call": {"tool": }', name="codex")
+    with pytest.raises(ValueError, match="must return a JSON object"):
+        parse_object("[1, 2]", name="codex")
+
+
+def test_the_evalrun_seams_run_the_child_without_tools(monkeypatch):
+    """The agent under test, the planner and the judge answer from stdin and touch nothing.
+
+    Plan mode kept the child off the files and confused it: on a real run the
+    sixteenth turn was a sentence about plan mode's restrictions instead of a
+    tool call. The evalrun seams now disable every tool; the authoring and
+    narration seams, which may read the project, keep plan mode.
+    """
+    commands = []
+    workdirs = []
+    def run(argv, **kwargs):
+        commands.append(argv)
+        workdirs.append(kwargs.get("cwd"))
+        return subprocess.CompletedProcess(argv, 0, '{"result":"{}"}', "")
+    monkeypatch.setattr(subprocess, "run", run)
+    invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})
+    invoke("claude", {"schema": "worldloom.evalrun-plan/v1", "query": "q"})
+    invoke("claude", {"schema": "worldloom.evalrun-rating/v1"})
+    assert all(workdir is not None and "worldloom-harness-" in str(workdir) for workdir in workdirs), "an empty working directory"
+    for argv in commands:
+        assert "--tools" in argv and argv[argv.index("--tools") + 1] == "" and "plan" not in argv
+        assert "--strict-mcp-config" in argv and "--json-schema" in argv and "--no-session-persistence" in argv
+    invoke("claude", {"requests": [], "response_shape": {}})
+    invoke("claude", {"company": {}})
+    for argv in commands[3:]:
+        assert "plan" in argv and "--tools" not in argv
+    assert workdirs[3:] == [None, None], "authoring and narration keep the caller's directory"
+
+
+def test_the_adapter_re_asks_once_when_a_reply_is_not_one_object(monkeypatch):
+    """A reply cut off inside a long body is re-asked once, with the refusal in front.
+
+    Measured: a `create_page` call whose HTML body ran to 7,833 characters
+    came back malformed and the case was an error row. One re-ask carries
+    the refusal and asks for a short body; a second refusal stands.
+    """
+    prompts = []
+    replies = iter(['{"result":"{\\"call\\": {\\"tool\\": \\"confluence.create_page\\", \\"arguments\\": {\\"fields\\": {\\"body\\": \\"<h1>"}',
+                    '{"result":"{\\"call\\": {\\"tool\\": \\"confluence.create_page\\"}}"}'])
+    def run(argv, **kwargs):
+        prompts.append(kwargs["input"])
+        return subprocess.CompletedProcess(argv, 0, next(replies), "")
+    monkeypatch.setattr(subprocess, "run", run)
+    assert invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"}) == {"call": {"tool": "confluence.create_page"}}
+    assert len(prompts) == 2 and prompts[1].startswith("Your previous reply was refused: claude returned no JSON object")
+    assert "Keep any body text short." in prompts[1] and prompts[1].endswith(prompts[0])
+
+    always_bad = iter(["{\"result\":\"not json\"}", "{\"result\":\"still not json\"}", "{\"result\":\"{}\"}"])
+    def bad(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 0, next(always_bad), "")
+    monkeypatch.setattr(subprocess, "run", bad)
+    with pytest.raises(ValueError, match="returned no JSON object; it said: 'still not json'"):
+        invoke("claude", {"schema": "worldloom.evalrun-turn/v2", "query": "q"})
+
+
+def test_a_reply_the_harness_stringified_is_read_as_the_object_it_meant():
+    """Under structured output a harness wrote the call as JSON text inside a field.
+
+    Measured twice on real turns: `{"call": "{\"tool\": ...}"}` under a
+    schema that admitted any object, then `{"answer": "{\"call\": {...}}"}`
+    under a schema whose keys were all optional. The API refuses a `oneOf`
+    at the top level that would have required one key, so the adapter reads
+    such a reply as the object it meant, and the seam's own schema goes on
+    the command line.
+    """
+    from worldloom.studio.harness import parse_object, reply_schema
+
+    call = {"tool": "sor.search_records", "arguments": {"entity": "journal_entry"}}
+    assert parse_object(json.dumps({"call": json.dumps(call)}), name="claude") == {"call": call}
+    assert parse_object(json.dumps({"answer": json.dumps({"call": call})}), name="claude") == {"call": call}
+    assert parse_object(json.dumps({"answer": "Done: 3 records."}), name="claude") == {"answer": "Done: 3 records."}
+    assert parse_object(json.dumps({"answer": "{not json"}), name="claude") == {"answer": "{not json"}
+    schema = json.loads(reply_schema({"schema": "worldloom.evalrun-turn/v2"}))
+    assert schema["type"] == "object" and set(schema["properties"]) == {"call", "ask", "answer", "artifacts"}
+    assert "oneOf" not in schema
+    assert reply_schema({"schema": "worldloom.evalrun-plan/v1"}) and reply_schema({"schema": "worldloom.evalrun-rating/v1"})
+    assert reply_schema({"company": {}}) is None

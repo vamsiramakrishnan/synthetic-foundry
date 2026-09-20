@@ -218,9 +218,14 @@ def run_command(
     rater: str | None = typer.Option(None, "--rater", help="grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam)."),
     rater_timeout: float = typer.Option(600.0, "--rater-timeout", help="Seconds an exec: rater child may run per answer."),
     timed: bool = typer.Option(False, "--timed", help="Record wall-clock latency per case. Off by default so a run is byte-reproducible."),
+    progress: bool = typer.Option(False, "--progress", help="Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed."),
     json_output: bool = typer.Option(False, "--json", help="Emit the summary as JSON."),
 ) -> None:
     """Run one agent over the case set, one isolated connector state per case, and grade.
+
+    Every graded case is appended to `results.jsonl` as it lands, so a run
+    killed by its wall clock leaves every case that finished; a run that
+    completes rewrites the same lines and is byte-identical either way.
 
     The reference agent walks each expected DAG through the same tool surface
     an external agent gets; its run is the executable ceiling for the set.
@@ -231,7 +236,7 @@ def run_command(
     """
     from ..cli import _refuse
     from .rater import GroundedRater
-    from .results import write_run
+    from .results import append_result, write_run
     from .runner import run_cases, service_for
 
     # Before the corpus: a typo in --harness should not wait on a build.
@@ -265,7 +270,21 @@ def run_command(
         service = service_for(cases, loaded.connector_data.records)
     except Exception as error:  # ServingError and its causes are all refusals here
         _refuse("service_unbuildable", str(error))
-    report = run_cases(service, cases, under_test, principal=principal, clock=clock, rater=grader)
+    # A fresh ledger: the checkpoint appends, and a stale file from an earlier
+    # run into the same directory would otherwise sit above this run's lines.
+    (out / "results.jsonl").unlink(missing_ok=True)
+    total = len(cases)
+
+    def _checkpoint(result: Any) -> None:
+        append_result(out, result)
+        if not progress:
+            return
+        done = sum(1 for _ in (out / "results.jsonl").open(encoding="utf-8"))
+        score = f"score {result.score.score}" if result.score is not None else f"error {result.error}"
+        seconds = f" {result.latency.ttlt}s" if result.latency is not None and result.latency.ttlt is not None else ""
+        typer.echo(f"[{done}/{total}] {result.case_id[:8]} {result.status} {score} {result.calls} call(s){seconds}", err=True)
+
+    report = run_cases(service, cases, under_test, principal=principal, clock=clock, rater=grader, on_result=_checkpoint)
     summary = write_run(out, report)
     _print_summary(summary, json_output)
 

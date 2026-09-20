@@ -105,6 +105,11 @@ def compile_dag_row(
         destination = spec.kind in {"write", "verify"}
         template_key = "write" if spec.kind == "write" else "verify" if spec.kind == "verify" else f"read-{spec.source_index}"
         template = templates.get(template_key, {})
+        if spec.kind == "verify" and "id" not in spec.bindings and not template.get("fixture"):
+            # A read of the destination before the write (a delete or move
+            # reads what it removes): the legacy readback follows the write's
+            # output and carries no fixture, so the target is the write's own.
+            template = {**template, "fixture": templates.get("write", {}).get("fixture")}
         tool, concrete = _tool_name(
             definition, spec.entity, spec.operation, query.id,
             mutation.output_format if destination else None,

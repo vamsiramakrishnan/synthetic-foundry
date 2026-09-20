@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping
-from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
@@ -15,7 +14,8 @@ from .connector_data import (
     ConnectorRecord,
     generate_connector_data,
 )
-from .enterprise_evidence import observation_evidence
+from .enterprise_evidence import carries_evidence, observation_evidence
+from .enterprise_grounding import entity_matches
 from .enterprise_queries import PlannedEnterpriseQuery, SourceRequirement
 from .ids import content_key
 from .models import Model
@@ -75,38 +75,10 @@ def _override(
     return StateOverride(kind=kind, connector=connector, record_id=target, details=details_by_kind[kind])
 
 
-def _entity_matches(connector: str, requested: str, actual: str) -> bool:
-    """Alias-aware: a source role asking for a ``file`` is met by a ``docx``.
-
-    File connectors project one record per artifact and format, under the
-    definition's entity for that format; the role vocabulary still says
-    ``file``, which the definition resolves through its alias.
-    """
-
-    if requested == actual:
-        return True
-    return _alias_matches(connector, requested, actual)
-
-
-@lru_cache(maxsize=4096)
-def _alias_matches(connector: str, requested: str, actual: str) -> bool:
-    # Memoised per triple: materialisation asks this once per requirement and
-    # record, and a corpus of ten thousand records must not parse the
-    # definition ten thousand times.
-    from .connector_definition import REFERENCE_CONNECTORS, load_connector_definition
-
-    if connector not in REFERENCE_CONNECTORS:
-        return False
-    try:
-        return load_connector_definition(connector).entity_matches(requested, actual)
-    except KeyError:
-        return False
-
-
 def source_matches(requirement: SourceRequirement, record: ConnectorRecord) -> bool:
     """The same source contract used by materialization and independent review."""
     if (record.connector != requirement.connector
-            or not _entity_matches(requirement.connector, requirement.entity, record.entity)):
+            or not entity_matches(requirement.connector, requirement.entity, record.entity)):
         return False
     if requirement.predicate is None:
         return True
@@ -151,12 +123,20 @@ def operational_record_case_id(record: ConnectorRecord) -> str:
 def _select_sources(
     records: list[ConnectorRecord], minimum: int, cases: tuple[str, ...],
 ) -> tuple[str, ...]:
+    # Evidence first. The validator accepts a selected record only when
+    # `carries_evidence` holds, and a pool of thirty-eight issues with one
+    # fact-less record put that record first for twenty queries, each of which
+    # the validator then refused. The sort is stable over the existing order
+    # (the pool's own order here, record id below), so a pool whose leading
+    # records all carry evidence selects exactly what it selected before. A
+    # record without evidence is taken only when no evidence-bearing one is left.
     if not cases:
-        return tuple(record.id for record in records[:minimum])
+        ranked = sorted(records, key=lambda record: not carries_evidence(record))
+        return tuple(record.id for record in ranked[:minimum])
     # A connector may carry several messages for one case. Picking a plain
     # prefix could meet the record count while silently omitting another case.
     chosen: list[str] = []
-    ordered = sorted(records, key=lambda record: record.id)
+    ordered = sorted(records, key=lambda record: (not carries_evidence(record), record.id))
     for case in cases:
         match = next((record for record in ordered if record.fields.get("case_id") == case), None)
         if match is None:
@@ -200,8 +180,9 @@ def materialize_corpus(
             key = (requirement.connector, requirement.entity)
             demanded[key] = max(demanded.get(key, 1), requirement.minimum)
     for connector, entity in required_pairs:
-        present = sum(record.connector == connector and _entity_matches(connector, entity, record.entity)
-                      for record in records)
+        matching = [record for record in records
+                    if record.connector == connector and entity_matches(connector, entity, record.entity)]
+        present = len(matching)
         shortfall = demanded.get((connector, entity), 1) - present
         if shortfall <= 0:
             continue
@@ -216,13 +197,23 @@ def materialize_corpus(
                 f" needs {demanded[(connector, entity)]}; generate operational evidence"
                 " before planning this query"
             )
-        stable_field = stable_fields.get((connector, entity), "stable_id")
-        for index in range(present, present + shortfall):
-            # The first filler keeps the key it has always had, so every corpus
-            # that only ever needed one is byte-identical; the rest are indexed.
-            parts = ("query-required-record", connector, entity, world.company.id)
-            record_id = content_key(*parts) if index == 0 else content_key(*parts, str(index))
-            records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, stable_field: record_id, "generated_for_query_requirements": True}))
+        # A tripwire, where a filler record used to be minted. The filler met
+        # the count and carried no fact, so the validator refused it and the
+        # whole export aborted at the last step. The planner now refuses a
+        # source the world cannot ground before a row is planned over it, so a
+        # query reaching this line is a planning defect, and the refusal names
+        # the query and the source instead of hiding the defect in a record.
+        short = sorted({
+            query.id for query in planned for requirement in query.generation.source_requirements
+            if (requirement.connector, requirement.entity) == (connector, entity) and requirement.minimum > present
+        })
+        grounded = sum(carries_evidence(record) for record in matching)
+        named = ", ".join(short[:3]) + (f" and {len(short) - 3} more" if len(short) > 3 else "")
+        raise ValueError(
+            f"ungroundable_source: query {named} needs {demanded[(connector, entity)]} {connector}:{entity}"
+            f" record(s) for evidence and this world has {present} ({grounded} carrying evidence);"
+            " plan against the world's groundable inventory instead of minting evidence"
+        )
     destinations: dict[tuple[str, str], str] = {}
     for query in planned:
         mutation = query.generation.mutation
@@ -459,7 +450,7 @@ def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
                 observed_facts.update(evidence_record.fact_ids)
                 evidence_ids, evidence_findings = observation_evidence(evidence_record.fields)
                 observed_evidence.update(evidence_ids)
-                if not evidence_record.fact_ids and not evidence_ids:
+                if not carries_evidence(evidence_record):
                     findings.append(f"query {query.id}: evidence {rid} carries no fact ({key})")
                 for finding in evidence_findings:
                     findings.append(f"query {query.id}: evidence {rid}: {finding}")

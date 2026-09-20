@@ -39,6 +39,13 @@ assert coverage is None or coverage.complete
 
 Use `.exhaustive().take(n)` for deterministic shards/smoke sets. The exhaustive iterator does not allocate the entire space. Covering mode emits a proof report containing required interactions, covered interactions, and holes.
 
+The planner plans only rows the world can ground. For each source a workflow
+names it counts the records the world offers that carry a fact or a pinned
+observation, and a source with fewer than its role's minimum is left out of
+the candidate space. The report's `ungroundable_sources` names those sources.
+A world that grounds no row of any selected workflow is refused as
+`ungroundable_world`. `space` has no world and counts the whole space.
+
 ## CLI
 
 ```console

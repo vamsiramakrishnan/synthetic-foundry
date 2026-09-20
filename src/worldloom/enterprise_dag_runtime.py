@@ -201,7 +201,12 @@ def observed_flow(row: Mapping[str, Any], spans: Iterable[Any]) -> tuple[dict[st
                 continue
             result = span.get("result")
             identities = span.get("writes") or span.get("reads") or ()
-            items = result.get("items", ()) if node.operation == "search" and isinstance(result, Mapping) else [result]
+            # A page of items is a page whichever node it was attributed to:
+            # an agent may read a `get` node's record through a search, and
+            # the receipt then carries one item per record it read.
+            page = result.get("items") if isinstance(result, Mapping) else None
+            paged = isinstance(page, list) and (node.operation == "search" or len(page) == len(identities))
+            items = page if isinstance(page, list) and paged else [result]
             if len(items) != len(identities) or any(not isinstance(item, Mapping) for item in items):
                 raise ValueError(f"missing_result_receipt:{node.id}")
             values.extend(normalized_result(value, str(fid)) for value, fid in zip(items, identities, strict=True))

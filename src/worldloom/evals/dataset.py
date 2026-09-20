@@ -128,8 +128,11 @@ def _commit_batch(root: Path, request: DatasetRequest, builder: DatasetBuilder, 
         # selector, planning budget or admission rules in the request.
         harness = built.harness.with_scenario(request.source.scenario)
         source = request.source
+        # World-free, like `EnterpriseEvalHarness.qualify`: every query in the
+        # pool is executed under `strict_sources` below and refused by name in
+        # the batch's own ledger, so the pool does not depend on the inventory.
         planned, _ = plan_queries(harness.world, registry=harness.registry, profile=harness.profile,
-                                  strategy="exhaustive", dag_shapes=source.dag_shapes)
+                                  strategy="exhaustive", dag_shapes=source.dag_shapes, ground=False)
         bounded = islice(planned, source.planning_budget)
         seen: set[str] = set()
         pool_list = []

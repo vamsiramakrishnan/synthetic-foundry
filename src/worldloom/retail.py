@@ -314,6 +314,25 @@ class RetailWorld:
     The recipe records the counts, never the rows, so a replay re-runs the
     same construction — ``lore_claims``' posture."""
 
+    asked_for: str | None = None
+    """The description this world was asked to be, when the build was given one
+    it could not meet in full (``build --inspired-by``, or a specification's
+    ``industry``). Recorded under the recipe's ``inspired_by`` key and read
+    back by no build: ``archetype`` is what got built, and this is what was
+    asked for. The two say the same thing until a description nothing
+    recognises falls back to the mid-size retailer, and that is the case the
+    record exists for, so a recognised description records nothing. Not named
+    ``inspired_by`` because the classmethod below already is, and a dataclass
+    field cannot share a name with a method on its own class. ``None`` writes
+    nothing, which keeps every corpus that asked for nothing byte-identical."""
+
+    unmet: tuple[str, ...] = ()
+    """What the description asked for that this build could not meet, in the
+    words ``company.resolve`` or ``company.unmet_for_description`` used at
+    build time. Those words used to reach the terminal once and nowhere else,
+    so a corpus handed on could not say it was a stand-in. Empty writes
+    nothing, the same rule as ``asked_for``."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int,
                     physics: Parameters = DEFAULT) -> RetailWorld:
@@ -410,6 +429,8 @@ class RetailWorld:
             locale=self.locale,
             master_data=self.master_data,
             policies=self.policies,
+            inspired_by=self.asked_for,
+            unmet=self.unmet,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = organisation.generate(
