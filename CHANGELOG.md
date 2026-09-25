@@ -11,6 +11,49 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Scale, live harnesses, and the last literals
+
+- **Dataset compiles run in parallel waves.** `batch_wave` (in a plan or a
+  Studio project) commits up to K batches at a time on worker processes
+  (`--workers`, `WORLDLOOM_DATASET_WORKERS`, `policy: dataset.workers`). The
+  output depends on K, which the plan records, and never on how many workers
+  ran it or in what order they finished. A resumed wave gives the same bytes.
+  At K=1, the default, the plan and every output are unchanged. On a 62-use-case
+  telecom company an 8-batch compile took 141 s instead of 205 s on four
+  shared cores; the first batch of each use case, which builds its harness,
+  dominates.
+- **`industry.evalrun_cases` indexes records** by binding and period instead
+  of scanning all of them for every request: banking takes 2.0 s instead of
+  523 s, and retail 1.2 s instead of 95 s. The rows are identical.
+- **Every live-harness path was run against a signed-in coding-harness CLI and works.** That
+  covers pack authoring (including a refusal round), the Studio company
+  interview, narration (also under `--pack industry:banking`) and harness
+  evalrun in plan and run modes. The runbook is `docs/live-harness.md`. Three
+  bugs were fixed:
+  - Harness children inherited the caller's session id and persisted a
+    transcript under it. They now run with `--no-session-persistence` and
+    without the session variables.
+  - The pack interview got the evalrun closing sentence.
+  - The narration rules showed `{{fact:ID}}` with doubled braces.
+- **Connector definitions are the single source.** `CAPABILITIES` and
+  `BUILTIN_CONNECTORS` are derived from a `catalog` block in each definition,
+  which holds the display name, entity verbs, stable id and formats. An
+  uploaded connector declares its own; an inconsistent catalog is refused
+  when the definition loads.
+- **The rater's text is in the prompts pack**, pinned to Eval Studio's
+  wording by a test. An industry pack cannot override `rater.*`.
+- **A loaded corpus knows who holds each role.** `World.role_holders()`
+  rebuilds the map from the recipe, so ticket assignees survive a reload and
+  a pack that renames titles. Nothing is added to the exported files.
+- **Structural decisions read stable section keys, not displayed headings**
+  (`SectionPlan.key`, `doctypes.RESERVED_KEYS`). The shipped outline headings
+  (117 `documents.outline.heading.*` keys) and the per-engine role titles
+  (54 `roles.title.*` keys) are prompts that a pack can override. An author's
+  own heading is displayed exactly as written.
+- **Generation:** none for a default build (verified byte-identical, also
+  for the bank, insurer, procurement and grocery archetypes). A compile with
+  `batch_wave > 1` records it in its plan.
+
 ### Every layer is a pack: found by name, layered, uploaded or authored by a harness
 
 - `worldloom.packkit` is one mechanism for every layer the product used to hold
