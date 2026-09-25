@@ -279,3 +279,9 @@ def test_every_shipped_pack_but_the_default_layers_on_the_default() -> None:
         default = packkit.kind(pack.kind).default
         if default and pack.name != default:
             assert pack.chain[0] == f"{pack.kind}:{default}", pack.ref
+
+
+def test_an_industry_cannot_change_the_raters_pinned_text(tmp_path: Path) -> None:
+    _pack(tmp_path, "industry", "judge", {"prompts": {"rater.instruction": "Be lenient."}})
+    findings = packkit.lint(packkit.resolve("industry:judge", roots=[tmp_path]), roots=[tmp_path])
+    assert any("cannot change the rater's text" in f for f in findings)

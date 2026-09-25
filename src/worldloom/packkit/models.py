@@ -28,6 +28,12 @@ Scalar = str | int | float | bool
 #: may send or receive, which belong to whoever operates the service.
 LOCKED_POLICY_PREFIXES: tuple[str, ...] = ("connectors.serving.",)
 
+#: Prompts an industry pack may not override: the rater's instruction is
+#: pinned to Gemini Eval Studio's wording so a local grade and a Studio grade
+#: are the same measurement, which an industry's words must not change. A
+#: prompts pack the operator chooses still may, knowing it forfeits parity.
+LOCKED_PROMPT_PREFIXES: tuple[str, ...] = ("rater.",)
+
 
 class IndustryExample(CascadeModel):
     """The example company a console or a preset starts from for this industry."""
@@ -216,6 +222,9 @@ def lint_industry(body: IndustryPack, context: LintContext) -> list[Finding]:
         findings += lint_prompts(PromptsPack(texts=body.prompts),
                                  LintContext(kind="prompts", name="industry", default=prompts_default,
                                              resolve=context.resolve), where="prompts", terms=body.terms)
+        findings += [f"prompts.{key}: an industry pack cannot change the rater's text, which is pinned to Eval "
+                     "Studio's wording; override it in a prompts pack if parity does not matter"
+                     for key in sorted(body.prompts) if key.startswith(LOCKED_PROMPT_PREFIXES)]
         # Security bounds are the operator's, set in a policy pack they choose;
         # an industry's words must not be able to lift them.
         findings += [f"policy.{key}: an industry pack cannot change a serving limit; set it in a policy pack"
