@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from .. import company, sdk
+from .. import company, packkit, sdk
 from ..corpus import write_json
 from ..evals.company_dataset import CompanyDatasetPlan, FrozenCompanyBuilder
 from ..evals.dataset import _files, _read, compile_dataset
 from ..evals.dataset_contract import DatasetStratum
-from ..process_bindings import compile_company, default_company, load_catalogue
+from ..process_bindings import compile_company, load_catalogue
 from ..providers import digest
 from ..world import World
-from .models import InterviewReply, ProjectSpec, RunOptions, UseCase
+from .models import InterviewReply, ProjectSpec, RunOptions
 from .store import ProjectStore, StudioConflict, canonical
 
 if TYPE_CHECKING:
@@ -25,11 +28,17 @@ if TYPE_CHECKING:
 
 
 def snapshot_intent(spec: ProjectSpec) -> dict[str, Any]:
-    """One identity for generation, narration selection and read-only readiness."""
+    """One identity for generation, narration selection and read-only readiness.
+
+    The pinned packs are part of it, since an industry's terms and policy
+    change what a seed generates; a project with none keeps the identity it
+    had before packs existed.
+    """
     return {"company": spec.company, "seed": spec.seed,
             "lobs": [lob.model_dump(mode="json") for lob in spec.lobs],
             "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes),
-            **({"structure": spec.structure.model_dump(mode="json")} if spec.structure is not None else {})}
+            **({"structure": spec.structure.model_dump(mode="json")} if spec.structure is not None else {}),
+            **({"packs": list(spec.packs)} if spec.packs else {})}
 
 
 def changes(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
@@ -42,54 +51,43 @@ def changes(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
     return [{"path": path or "/", "before": before, "after": after}]
 
 
-def preset(engine: str = "retail", name: str = "Northstar Retail") -> ProjectSpec:
-    """A disclosed starting example. Its operational scope is explicit."""
+def preset(engine: str = "retail", name: str | None = None) -> ProjectSpec:
+    """A disclosed starting example. Its operational scope is explicit.
+
+    *engine* names an example: a shipped operational example (``retail``,
+    ``banking``; ``studio.operational`` in the policy pack), a visible
+    industry pack with an ``operational`` block or an ``example`` company, the
+    connected retail pilot, or any industry the process catalogue knows. The
+    company is *name*, else the example's own (``studio.example.company_name``
+    when it names none). An example from a non-default industry pack carries
+    that pack, pinned, in ``packs``.
+    """
+    from . import operational
+
     if engine == "retail-connected":
         from .retail_pilot import pilot_project
-        return pilot_project(name)
-    from ..synthesis import IncidentRule, banking, retail, with_parameters
-    from ..synthesis.connectors import operational_profile
+        return pilot_project(name or operational.company_name())
+    chosen, pack = operational.example(engine)
+    if chosen is not None:
+        return operational.project(chosen, name or operational.company_name(pack), pack)
+    from ..industry import project
+    from ..process_bindings.compiler import resource
 
-    if engine not in {"retail", "banking"}:
-        from ..industry import project
-        from ..process_bindings.compiler import resource
-
-        if engine in resource("defaults.json")["DEFAULT_ORGS"]:
-            # Any industry the process catalogue knows starts from its derived
-            # programme: every line of business with a supported process line, every
-            # line of theirs as a use case with the line's own count, and the
-            # company's limitations acknowledged rather than hidden.
-            return project(engine, name)
-        raise ValueError(
-            "the runnable examples are retail and banking, and any industry the process"
-            " catalogue knows starts from its derived programme (`worldloom industry list`);"
-            " other engines use the interview"
-        )
-    document = {"engine": engine, "identity": {"company_name": name}, "geo": "australia"}
-    resolution = company.resolve(company.from_document(document))
-    structure = default_company(engine, name=name)
-    from ..process_bindings import BusinessUnit
-    assert resolution.pack is not None
-    operating = tuple(BusinessUnit(name=u.name, archetype="channel" if u.kind == "online" else "product_line")
-                      for u in resolution.pack.units)
-    support = tuple(b.model_copy(update={"countries": ()}) for b in structure.bus
-                    if b.archetype in {"shared_service_centre", "group_function"})
-    structure = structure.model_copy(update={"countries": ("AU",), "bus": (*operating, *support)})
-    program = (with_parameters(retail(stores=3, products=6, ticks=24), {"initial_stock": 8, "target_stock": 15})
-               if engine == "retail" else banking(borrowers=24, ticks=16))
-    rule = (IncidentRule(table="inventory", signal="lost", title="Stock availability") if engine == "retail"
-            else IncidentRule(table="loan", signal="arrears", title="Payment arrears"))
-    title = "Investigate stock availability" if engine == "retail" else "Review payment arrears"
-    profile = operational_profile(engine)
-    profile = profile.model_copy(update={"coverage": profile.coverage.model_copy(update={"failures": ("none", "partial_write")})})
-    # Keep generated examples separate from accepted customer interview answers.
-    # These limitations are still shown before the operator chooses to build.
-    return ProjectSpec(company=document, structure=structure,
-                       acknowledged_unmet=tuple(resolution.unmet),
-                       use_cases=(UseCase(id="operations-review", title=title,
-                           objective=profile.additional_workflows[0].purpose,
-                           owner=structure.bus[0].name, count=24, scenario=profile,
-                           simulation=program, incident_rule=rule),))
+    industry = pack.body.industry if pack is not None and pack.body.industry else engine
+    if industry in resource("defaults.json")["DEFAULT_ORGS"]:
+        # Any industry the process catalogue knows starts from its derived
+        # programme: every line of business with a supported process line, every
+        # line of theirs as a use case with the line's own count, and the
+        # company's limitations acknowledged rather than hidden.
+        spec = project(industry, name or operational.company_name(pack))
+        if pack is not None and not pack.is_default:
+            spec = ProjectSpec.model_validate({**spec.model_dump(mode="json"), "packs": [pack.pinned]})
+        return spec
+    raise ValueError(
+        "the runnable examples are " + ", ".join(sorted(packkit.policy("studio.operational"))) + ", any industry pack "
+        "with an operational example, and any industry the process catalogue knows (`worldloom industry list`); "
+        "other engines use the interview"
+    )
 
 
 def construction_refusal(findings: Any) -> str:
@@ -112,10 +110,124 @@ def construction_refusal(findings: Any) -> str:
     return "; ".join(lines) or "construction refused"
 
 
+_Method = TypeVar("_Method", bound=Callable[..., Any])
+
+
+def _under_project_packs(method: _Method) -> _Method:
+    """Run a project method with that revision's packs in force.
+
+    Every method so wrapped takes the project, then the revision (or
+    ``None`` for the current one), as its first two arguments; an interview,
+    a readiness report and a build all read the same industry's words.
+    """
+    @wraps(method)
+    def run(self: Studio, project: str, *args: Any, **kwargs: Any) -> Any:
+        revision = kwargs.get("revision", args[0] if args else None)
+        with self.in_force(self.store.get(project, revision)["spec"]):
+            return method(self, project, *args, **kwargs)
+    return run  # type: ignore[return-value]
+
+
+class PackRefused(ValueError):
+    """An upload or proposal the pack lint refused, with every finding."""
+
+    def __init__(self, subject: str, findings: list[str]) -> None:
+        self.findings = findings
+        super().__init__(f"{subject} rejected: " + "; ".join(findings))
+
+
 class Studio:
     def __init__(self, root: str | Path) -> None:
         self.store = ProjectStore(root)
         self.root = self.store.root
+
+    @property
+    def pack_root(self) -> Path:
+        """The workspace's own packs: searched before the user's and the shipped ones."""
+        return self.store.pack_root
+
+    @contextmanager
+    def in_force(self, spec: ProjectSpec | Mapping[str, Any] | None = None) -> Iterator[None]:
+        """The workspace's pack root, and *spec*'s pinned packs, for the enclosed work."""
+        refs = spec.packs if isinstance(spec, ProjectSpec) else tuple((spec or {}).get("packs", ()))
+        with packkit.use(*refs, roots=(self.pack_root,)):
+            yield
+
+    def packs(self, kind: str | None = None) -> list[dict[str, Any]]:
+        """Every pack visible to this workspace; its own are ``origin: workspace``."""
+        from ..packkit import sources
+
+        with self.in_force():
+            located = sources.discover(kind or None, roots=(self.pack_root,))
+        return [{**sources.as_data(item), "origin": "workspace" if item.origin == "root" else item.origin,
+                 "location": None if item.origin == "builtin" else str(item.location)} for item in located]
+
+    def pack(self, kind: str, name: str) -> dict[str, Any]:
+        """One pack as resolved for this workspace: merged body, digest, chain, findings."""
+        with self.in_force():
+            shown = packkit.show(f"{kind}:{name}", roots=(self.pack_root,))
+        resolved = packkit.resolve(f"{kind}:{name}", roots=(self.pack_root,))
+        return {**shown, "pinned": resolved.pinned, "origin": "workspace" if shown["origin"] == "root" else shown["origin"]}
+
+    def install_pack(self, envelope: Mapping[str, Any], *, replace: bool = False) -> dict[str, Any]:
+        """Upload a pack into the workspace root, refusing with every lint finding."""
+        try:
+            parsed = packkit.read_envelope(dict(envelope))
+        except ValueError as error:
+            raise PackRefused("pack upload", [str(error)]) from None
+        with self.in_force():
+            _, findings = packkit.check(parsed, roots=(self.pack_root,))
+            if findings:
+                raise PackRefused(f"pack {parsed.ref()}", findings)
+            location, resolved = packkit.install(parsed, root=self.pack_root, replace=replace)
+        return {"installed": resolved.ref, "pinned": resolved.pinned, "digest": resolved.digest,
+                "chain": list(resolved.chain), "location": str(location)}
+
+    def pack_request(self, kind: str, message: str, *, name: str = "", draft: dict[str, Any] | None = None,
+                     findings: tuple[str, ...] = ()) -> dict[str, Any]:
+        """The bounded request a harness answers to author one pack for this workspace."""
+        with self.in_force():
+            return packkit.request(kind, message, name=name, draft=draft, findings=findings, roots=(self.pack_root,))
+
+    def accept_pack(self, request: dict[str, Any], reply: dict[str, Any], *, replace: bool = False) -> dict[str, Any]:
+        """Judge a harness's reply; an accepted pack is stored in the workspace root."""
+        with self.in_force():
+            verdict = packkit.accept(request, reply, roots=(self.pack_root,))
+            result: dict[str, Any] = {"status": verdict.status, "findings": list(verdict.findings),
+                                      "questions": list(verdict.questions), "message": verdict.message,
+                                      "proposal": verdict.envelope.dump() if verdict.envelope else None}
+            if verdict.status == "accepted":
+                assert verdict.envelope is not None
+                location, resolved = packkit.install(verdict.envelope, root=self.pack_root, replace=replace)
+                result.update(installed=resolved.ref, pinned=resolved.pinned, location=str(location))
+        return result
+
+    def author_pack(self, kind: str, message: str, harness_command: str, *, name: str = "",
+                    timeout: float = 600, replace: bool = False) -> dict[str, Any]:
+        """Interview *harness_command* until it proposes a pack the lint accepts; store it here."""
+        from ..packkit.authoring import run_exec_exchange
+
+        with self.in_force():
+            authored = packkit.author(kind, message, run_exec_exchange(harness_command, timeout=timeout), name=name,
+                                      max_rounds=int(packkit.policy("pack.interview.max_rounds")),
+                                      root=self.pack_root, replace=replace)
+            verdict = authored.verdict
+            pinned = (packkit.resolve(verdict.envelope.ref(), roots=(self.pack_root,)).pinned
+                      if authored.location is not None and verdict.envelope is not None else None)
+        return {"status": verdict.status, "kind": kind, "rounds": authored.rounds, "questions": list(verdict.questions),
+                "findings": list(verdict.findings), "message": verdict.message, "pinned": pinned,
+                "location": str(authored.location) if authored.location else None}
+
+    def choose_packs(self, project: str, revision: str, refs: tuple[str, ...], *, reason: str) -> dict[str, Any]:
+        """A reviewed revision putting *refs* (one per kind) in force for the company, pinned."""
+        current = self.store.get(project)
+        if current["revision"] != revision:
+            raise StudioConflict("company changed; reload before choosing its packs")
+        kinds = {ref.split(":", 1)[0] for ref in refs}
+        kept = [ref for ref in current["spec"].get("packs", []) if ref.split(":", 1)[0] not in kinds]
+        chosen = [ref for ref in refs if ref.split(":", 1)[1].split("@", 1)[0] != "default"]
+        spec = ProjectSpec.model_validate({**current["spec"], "packs": sorted([*kept, *chosen])})
+        return self.store.revise(project, revision, spec, reason=reason)
 
     def path(self, *keys: str) -> Path:
         if any(not re.fullmatch(r"[a-zA-Z0-9_.-]+", key) or key in {".", ".."} for key in keys):
@@ -129,10 +241,16 @@ class Studio:
         from .. import domains, locales
         from ..enterprise_dag import shape_catalogue
         from ..enterprise_specs import builtin_registry
+        from .operational import catalogue as examples
 
         cat = load_catalogue()
         registry = builtin_registry()
-        return {"industries": sorted(cat["industry_overlays"]),
+        with self.in_force():
+            listed = examples()
+            operational = sorted(packkit.policy("studio.operational"))
+        return {"examples": listed, "operational_engines": operational,
+                "pack_kinds": [{"kind": k.name, "default": k.default, "about": k.about} for k in packkit.kinds()],
+                "industries": sorted(cat["industry_overlays"]),
                 "countries": sorted(cat["regional_variants"]),
                 "engines": domains.names(),
                 "locales": sorted(locales.LOCALES),
@@ -141,6 +259,7 @@ class Studio:
                 "dag_shapes": sorted(shape_catalogue()),
                 "project_schema": ProjectSpec.model_json_schema()}
 
+    @_under_project_packs
     def describe(self, project: str, revision: str | None = None, *, harness_configured: bool = False) -> dict[str, Any]:
         from .construction import compile_project
         from .foundry import progress
@@ -182,11 +301,13 @@ class Studio:
                 "changes": changes(previous["spec"] if previous else {}, current["spec"]),
                 "jobs": jobs, "interviews": self.interviews(project)}
 
+    @_under_project_packs
     def workflow(self, project: str, revision: str | None = None, *, harness_configured: bool = False) -> WorkflowReport:
         """Inspect readiness without generating files or invoking a target."""
         from .workflow import report
         return report(self, project, revision, harness_configured=harness_configured)
 
+    @_under_project_packs
     def creation(self, project: str, revision: str | None = None) -> dict[str, Any]:
         """Inspect available sizing mechanisms without generating a second world."""
         from .data_creation import inspect_simulations
@@ -195,6 +316,7 @@ class Studio:
         return {"project": project, "revision": current["revision"],
                 "simulations": [item.model_dump(mode="json") for item in inspect_simulations(spec)]}
 
+    @_under_project_packs
     def prepare_data(self, project: str, revision: str, request: DataCreationRequest | dict[str, Any]) -> dict[str, Any]:
         """Propose bounded generation inputs; the caller must review and revise."""
         from .data_creation import DataCreationRequest, propose
@@ -205,6 +327,7 @@ class Studio:
         proposal = propose(ProjectSpec.model_validate(current["spec"]), parsed)
         return {"project": project, "revision": revision, **proposal.model_dump(mode="json")}
 
+    @_under_project_packs
     def select_narration(self, project: str, revision: str, job_id: str) -> dict[str, Any]:
         """Authenticate the selected prose before committing its company revision."""
         from .native import source_world
@@ -215,6 +338,7 @@ class Studio:
         source_world(self, spec, project)
         return self.store.revise(project, revision, spec, reason="Selected accepted company narration")
 
+    @_under_project_packs
     def prepare_native(self, project: str, revision: str, request: NativeSuiteRequest | dict[str, Any]) -> dict[str, Any]:
         """Return a qualified proposal. Applying it remains an explicit revision."""
         from .native import source_world
@@ -230,6 +354,7 @@ class Studio:
         proposal = propose(world, spec, request)
         return {"revision": revision, **proposal}
 
+    @_under_project_packs
     def advance(self, project: str, revision: str, *, harness_command: str | None = None, timeout: float = 600) -> dict[str, Any]:
         """Run at most one ready stage; never accept proposals or loop on a gate."""
         from .worker import recover, run_job
@@ -274,6 +399,7 @@ class Studio:
         return [{**dict(row), "request": json.loads(row["request"]),
                  "reply": json.loads(row["reply"]) if row["reply"] else None} for row in rows]
 
+    @_under_project_packs
     def interview_request(self, project: str, revision: str, message: str, *,
                           job_id: str | None = None, harness_identity: str = "") -> dict[str, Any]:
         if not message.strip() or len(message) > 8000:
@@ -289,23 +415,8 @@ class Studio:
                    "programme": self._programme_headline(current["spec"]),
                    "conversation": [{"user": t["request"]["message"], "assistant": t["reply"]["message"]}
                                     for t in turns[-8:] if t["reply"]],
-                   "instructions": [
-                       "Interview the operator about this ONE company. Ask at most five focused questions.",
-                       "Clarify industry, geography, business units, LOB roles, processes, systems, record volumes, task outcomes and changes over time.",
-                       "A company headcount is not a connector record volume. A catalogue process is an authored prior, not a simulated business mechanism.",
-                       "Return the complete proposed project only when there is enough information. Preserve existing values unless the operator requests a change.",
-                       "Keep unanswered details as questions; do not acknowledge unsupported claims on the operator's behalf.",
-                       "Reuse registered company, LOB, process, scenario and synthesis contracts. A new label does not implement a workflow.",
-                       "When the operator names an industry, derive its lines of business, processes, requests and counts from the process catalogue (`worldloom industry programme INDUSTRY --describe`; the `programme` field below carries the headline numbers) rather than inventing a LOB list or writing a round number as a use case count. A use case's count is the process line's situations; a system no connector emulates is named as unemulated, never replaced.",
-                       "To change the company itself, edit `structure` (its name, industry, operating model, countries, business units with their archetypes, and the landscape naming the product per system class), set `divisions` and `use_cases` to empty lists, keep `lobs` to keep the families seated now or empty it to seat every supported family, and set `derive` to true. The Studio then derives the divisions, LOBs, use cases and acknowledged limitations from the process catalogue for that company before recording the revision. Do not write those by hand when the company changes.",
-                       "For a Foundry run each use case needs an explicit construction EvalSpec. Its connector selectors must constrain the declared business unit, LOB and activity. Do not claim unsupported business evidence.",
-                       "For native file tasks, declare native_corpus plans referencing accepted company ArtifactIR sections and native_tasks linked to a use_case_id. Specify read/analyze/update/create outcomes, citations, calculations and preserved content. Long documents need enough distinct grounded sections; padding is not evidence.",
-                       "Native difficulty uses native_calibration: declare the actual target cohort, pass-rate band, independent support and finite total budgets. Optional noise_variants expose grounded extra files within the same evidence component; the training choice is sealed before one holdout. Never claim prose mutation or independent support from shared files or facts.",
-                       "Declare calibration cohort, noise variants and finite trial budgets. Query counts do not establish independent case support or observed difficulty.",
-                       "Evaluation is not retrieval. Every use case is graded on three axes by `worldloom evalrun`: the plan (which connector DAG the request should produce), the trajectory (order, budget, designed failures honoured, no unsafe retries) and the outcomes (records created, updated and deleted as a state diff; the artifact and answer, grounded). State for each use case which axes it exercises and which write operations (create, update, delete) its outcomes contain. A use case whose outcomes contain no write grades only reads.",
-                       "Some requests should be under-specified on purpose: an agent is also graded on whether it asks before acting when the request is ambiguous, a parameter is missing or a delete needs the user's word. Say for each use case whether its requests are complete or deliberately leave something open, and what the user would reply.",
-                       "Return one JSON object matching response_schema. Proposals are reviewed before becoming a revision.",
-                   ], "response_schema": InterviewReply.model_json_schema()}
+                   "instructions": packkit.texts("studio.interview.rule."),
+                   "response_schema": InterviewReply.model_json_schema()}
         with self.store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             if job_id:
@@ -473,6 +584,7 @@ class Studio:
         staging.rename(location)
         return world, location
 
+    @_under_project_packs
     def native_sources(self, project: str, revision: str | None = None, *, offset: int = 0, limit: int = 256,
                        search: str = "", group_by: str = "section") -> dict[str, Any]:
         """Expose accepted source identifiers so interviews need not invent them."""
@@ -610,6 +722,20 @@ class Studio:
                 "expected_evidence_ids": list(fixture.expected_evidence_ids)}
 
     def execute(self, job_id: str, *, harness_command: str | None = None, timeout: float = 600) -> dict[str, Any]:
+        """Run one job under its revision's packs; a pack-authoring job belongs to the workspace."""
+        job = self.store.job(job_id)
+        options = RunOptions.model_validate(job["options"])
+        if options.harness_identity and options.harness_identity != digest(harness_command):
+            raise ValueError("run belongs to a different harness configuration; issue a new request")
+        if options.operation == "pack_author":
+            if not harness_command:
+                raise ValueError("authoring a pack needs a configured coding harness")
+            return self.author_pack(options.pack_kind, options.message, harness_command, name=options.pack_name,
+                                    timeout=timeout)
+        with self.in_force(self.store.get(job["project"], job["revision"])["spec"]):
+            return self._execute(job_id, harness_command=harness_command, timeout=timeout)
+
+    def _execute(self, job_id: str, *, harness_command: str | None = None, timeout: float = 600) -> dict[str, Any]:
         job = self.store.job(job_id)
         current = self.store.get(job["project"], job["revision"])
         spec = ProjectSpec.model_validate(current["spec"])
@@ -729,4 +855,4 @@ class Studio:
         return {"dataset": destination.name, "snapshot": location.name, "report": run.report.model_dump(mode="json")}
 
 
-__all__ = ["Studio", "preset", "changes", "construction_refusal"]
+__all__ = ["PackRefused", "Studio", "preset", "changes", "construction_refusal"]

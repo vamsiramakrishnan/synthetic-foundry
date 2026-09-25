@@ -1499,6 +1499,96 @@ worldloom studio next <PROJECT>
 | --- | --- |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
+### `worldloom studio pack`
+
+Upload, generate and choose the packs a workspace's companies use.
+
+### `worldloom studio pack author`
+
+Interview a harness until it proposes a pack the lint accepts, then store it in the workspace.
+
+```
+worldloom studio pack author <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--harness-command` | Adapter: JSON request on stdin, JSON reply on stdout; no shell. |
+| `--message` | What the operator wants. |
+| `--name` | The pack's name, when the operator has chosen one. |
+| `--timeout` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack install`
+
+Upload a pack into the workspace: lint it, refuse with every finding, or store it.
+
+```
+worldloom studio pack install <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--replace` | Overwrite the workspace's pack of the same name. |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack interview`
+
+Author a workspace pack with your coding harness through files.
+
+### `worldloom studio pack interview accept`
+
+Judge a reply: accepted (stored in the workspace), refused with findings, or questions.
+
+| Option | Purpose |
+| --- | --- |
+| `--from` | The harness's reply. |
+| `--replace` |  |
+| `--request` | The request file the harness answered. |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack interview request`
+
+Write the bounded request a harness answers with one pack proposal for this workspace.
+
+```
+worldloom studio pack interview request <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--draft` | A previous proposal to revise. |
+| `--findings` | The refusal to answer (`studio pack interview accept` output). |
+| `--message` | What the operator wants. |
+| `--name` |  |
+| `--out`, `-o` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack list`
+
+Every pack a workspace's companies can use; the workspace's own shadow the rest.
+
+```
+worldloom studio pack list <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack use`
+
+Record a revision building the company under these packs, pinned to their current content.
+
+```
+worldloom studio pack use <PROJECT> <REF>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--reason` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
 ### `worldloom studio prepare-native`
 
 Print a reference-qualified native proposal for review; do not apply it.

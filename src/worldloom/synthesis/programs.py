@@ -7,6 +7,8 @@ balance, interest, missed payments, and arrears. Both use integer units.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from .models import (
     Column,
     Constraint,
@@ -128,3 +130,27 @@ def banking(*, borrowers: int = 64, ticks: int = 12) -> Program:
                   )),
         ),
     )
+
+
+#: The mechanisms an operational example may name, by key. The mechanisms are
+#: code, because each is a declared business process with conservation laws;
+#: which one an industry's example runs, and at what size, is data (an
+#: ``operational`` block in an industry pack, or ``studio.operational`` in the
+#: policy pack), so no caller branches on an industry to choose one.
+BUILDERS: dict[str, Callable[..., Program]] = {"retail": retail, "banking": banking}
+
+
+def build(key: str, sizing: dict[str, int]) -> Program:
+    """The mechanism *key* at *sizing*; an unknown key or dimension is refused by name."""
+    import inspect
+
+    from .models import SynthesisError
+
+    builder = BUILDERS.get(key)
+    if builder is None:
+        raise SynthesisError("unknown_program", f"{key!r}; choose one of {', '.join(sorted(BUILDERS))}")
+    accepted = set(inspect.signature(builder).parameters)
+    unknown = sorted(set(sizing) - accepted)
+    if unknown:
+        raise SynthesisError("unknown_dimension", f"{key} is sized by {', '.join(sorted(accepted))}, not {', '.join(unknown)}")
+    return builder(**sizing)

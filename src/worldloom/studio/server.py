@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .models import InterviewReply, ProjectSpec, RunOptions
-from .service import Studio, preset
+from .service import PackRefused, Studio, preset
 from .store import StudioConflict
 from .worker import recover
 
@@ -168,7 +168,17 @@ class StudioHandler(BaseHTTPRequestHandler):
                                 "harness_configured": bool(self.server.harness_command)})
                 return
             if method == "GET" and parts == ["api", "preset"]:
-                self.send(200, preset(query.get("engine", ["retail"])[0], query.get("name", ["Northstar Retail"])[0]).model_dump(mode="json"))
+                # Examples come from the workspace's packs too, so resolve in its root.
+                with studio.in_force():
+                    example = preset(query.get("engine", ["retail"])[0], query.get("name", [None])[0] or None)
+                self.send(200, example.model_dump(mode="json"))
+                return
+            if method == "GET" and parts == ["api", "packs"]:
+                self.send(200, {"packs": studio.packs(query.get("kind", [""])[0] or None),
+                                "jobs": studio.store.jobs("")})
+                return
+            if method == "GET" and len(parts) == 4 and parts[:2] == ["api", "packs"]:
+                self.send(200, studio.pack(parts[2], parts[3]))
                 return
             if method == "GET" and len(parts) == 3 and parts[:2] == ["api", "jobs"]:
                 job = studio.store.job(parts[2])
@@ -252,6 +262,26 @@ class StudioHandler(BaseHTTPRequestHandler):
                 if parts == ["api", "projects"]:
                     self.send(201, studio.store.create(ProjectSpec.model_validate(body)))
                     return
+                if parts == ["api", "packs"]:
+                    # An upload: the body is the pack envelope itself.
+                    self.send(201, studio.install_pack(body))
+                    return
+                if parts == ["api", "packs", "author"]:
+                    # The configured harness authors the pack; a browser names
+                    # what it wants, never the command that runs.
+                    if not self.server.harness_command:
+                        raise ValueError("start Studio with a coding harness command to generate a pack, or upload one")
+                    from ..providers import digest
+                    options = RunOptions.model_validate({
+                        "operation": "pack_author", "pack_kind": str(body.get("kind", "")),
+                        "pack_name": str(body.get("name", "")), "message": str(body.get("message", "")),
+                        "harness_identity": digest(self.server.harness_command)})
+                    result = studio.store.enqueue_workspace(options)
+                    if result["status"] in {"failed", "interrupted"}:
+                        result = studio.store.retry(result["id"])
+                    self.send(200, result)
+                    self.server.pump()
+                    return
                 if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "retry":
                     self.send(200, studio.store.retry(parts[2]))
                     self.server.pump()
@@ -266,6 +296,9 @@ class StudioHandler(BaseHTTPRequestHandler):
                         result = studio.accept_interview(project, InterviewReply.model_validate(body))
                     elif action == "interview-apply":
                         result = studio.apply_interview(project, body["request_id"])
+                    elif action == "packs":
+                        result = studio.choose_packs(project, body["revision"], tuple(body["packs"]),
+                                                     reason=body.get("reason") or "Chose the company's packs")
                     elif action == "select-narration":
                         result = studio.select_narration(project, body["revision"], body["job_id"])
                     elif action == "prepare-data":
@@ -299,6 +332,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                     self.server.pump()
                     return
             self.send(404, {"error": "Route not found"})
+        except PackRefused as error:
+            self.send(400, {"error": str(error)[:4000], "findings": error.findings})
         except StudioConflict as error:
             self.send(409, {"error": str(error)})
         except KeyError as error:
