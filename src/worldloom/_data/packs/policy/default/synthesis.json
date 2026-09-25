@@ -1,0 +1,27 @@
+{
+  "values": {
+    "synthesis.operational.workflows": {
+      "banking": {
+        "audience": "servicing_operations",
+        "name": "loan_arrears_review",
+        "process": "loan_servicing",
+        "purpose": "loan servicing, payment and arrears review",
+        "sources": [
+          {"connector": "salesforce", "entities": ["case"]},
+          {"connector": "email", "entities": ["thread"]}
+        ]
+      },
+      "retail": {
+        "audience": "retail_operations",
+        "name": "inventory_exception_review",
+        "process": "retail_replenishment",
+        "purpose": "store-product stock availability and replenishment exception review",
+        "sources": [
+          {"connector": "jira", "entities": ["issue"]},
+          {"connector": "servicenow", "entities": ["incident"]},
+          {"connector": "email", "entities": ["thread"]}
+        ]
+      }
+    }
+  }
+}

@@ -49,8 +49,38 @@ class ProjectStore:
         finally:
             db.close()
 
+    @property
+    def pack_root(self) -> Path:
+        return self.root / "packs"
+
+    def pinned(self, spec: ProjectSpec) -> ProjectSpec:
+        """*spec* with every pack reference pinned to what it resolves to in this workspace.
+
+        A revision names the exact pack content it was reviewed under, so it
+        replays exactly or is refused; a reference no root holds, or one whose
+        pin no longer matches, is refused with its findings before anything
+        is recorded.
+        """
+        if not spec.packs:
+            return spec
+        from .. import packkit
+
+        pinned: list[str] = []
+        findings: list[str] = []
+        for ref in spec.packs:
+            try:
+                resolved = packkit.resolve(ref, roots=(self.pack_root,))
+            except (KeyError, ValueError) as error:
+                findings.append(f"packs: {ref}: {str(error).strip(chr(39) + chr(34))}")
+                continue
+            findings.extend(f"packs: {ref}: {finding}" for finding in packkit.lint(resolved, roots=(self.pack_root,)))
+            pinned.append(resolved.pinned)
+        if findings:
+            raise ValueError("company packs rejected: " + "; ".join(findings))
+        return ProjectSpec.model_validate({**spec.model_dump(mode="json"), "packs": pinned})
+
     def create(self, spec: ProjectSpec) -> dict[str, Any]:
-        spec = ProjectSpec.model_validate(spec.model_dump(mode="json"))
+        spec = self.pinned(ProjectSpec.model_validate(spec.model_dump(mode="json")))
         payload = spec.model_dump(mode="json")
         key = digest(["company-project/v1", payload])
         revision = digest([key, None, payload])
@@ -81,7 +111,7 @@ class ProjectStore:
         return [self.get(key) for key in keys]
 
     def revise(self, project: str, expected: str, spec: ProjectSpec, *, reason: str) -> dict[str, Any]:
-        spec = ProjectSpec.model_validate(spec.model_dump(mode="json"))
+        spec = self.pinned(ProjectSpec.model_validate(spec.model_dump(mode="json")))
         if not reason.strip() or len(reason) > 1000:
             raise ValueError("give a change reason of 1 to 1000 characters")
         current = self.get(project)
@@ -116,6 +146,14 @@ class ProjectStore:
         with self.connection() as db:
             db.execute("INSERT OR IGNORE INTO jobs VALUES (?, ?, ?, ?, 'queued', NULL, NULL)",
                        (key, project, revision, canonical(payload)))
+        return self.job(key)
+
+    def enqueue_workspace(self, options: RunOptions) -> dict[str, Any]:
+        """A job that belongs to the workspace, not to a company revision (authoring a pack)."""
+        payload = options.model_dump(mode="json")
+        key = digest(["workspace-job/v1", payload])
+        with self.connection() as db:
+            db.execute("INSERT OR IGNORE INTO jobs VALUES (?, '', '', ?, 'queued', NULL, NULL)", (key, canonical(payload)))
         return self.job(key)
 
     def job(self, key: str) -> dict[str, Any]:

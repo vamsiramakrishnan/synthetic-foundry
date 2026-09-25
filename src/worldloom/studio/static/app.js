@@ -1,6 +1,6 @@
 /* Worldloom Studio: every displayed run and count comes from the local service. */
 "use strict";
-const state = {projects: [], catalogue: {}, company: null, page: "overview", harness: false, evals: [], offset: 0, filter: "", history: [], pending: false, nativeProposal: null, agent: {job: null, rows: [], offset: 0, total: 0, verdict: ""}};
+const state = {projects: [], catalogue: {}, company: null, page: "overview", harness: false, evals: [], offset: 0, filter: "", history: [], pending: false, nativeProposal: null, agent: {job: null, rows: [], offset: 0, total: 0, verdict: ""}, packs: {packs: [], jobs: []}};
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const copy = (v) => structuredClone(v);
@@ -23,12 +23,13 @@ const icons = {
   changes:'<path d="M3 11a9 9 0 1 1 3 8M3 5v6h6M12 7v6l4 2"/>'
 };
 icons.creation='<path d="M12 3v18M3 12h18M5 5h3M16 5h3M5 19h3M16 19h3"/>';
-const navItems = [["overview","Overview"],["creation","Create data & evals"],["company","Company & processes"],["interview","Interview"],["usecases","Use cases"],["foundry","Foundry run"],["native","Documents & files"],["evals","Evaluations"],["changes","Changes & runs"]];
+icons.packs='<path d="M12 3 3 7.5 12 12l9-4.5ZM3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5"/>';
+const navItems = [["overview","Overview"],["creation","Create data & evals"],["company","Company & processes"],["interview","Interview"],["usecases","Use cases"],["foundry","Foundry run"],["native","Documents & files"],["evals","Evaluations"],["packs","Industry packs"],["changes","Changes & runs"]];
 function notify(message) { $("#notice").textContent = message; setTimeout(()=> {$("#notice").textContent="";}, 7000); }
 async function api(path, body) {
   const response = await fetch(path, {method:body===undefined?"GET":"POST", headers:body===undefined?{}:{"Content-Type":"application/json","X-Worldloom-Studio":"1"}, body:body===undefined?undefined:JSON.stringify(body)});
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+  if (!response.ok) { const error=new Error(result.error || `Request failed (${response.status})`);error.findings=result.findings||[];throw error; }
   return result;
 }
 function route(action="") { return `/api/projects/${state.company.id}${action?"/"+action:""}`; }
@@ -60,14 +61,37 @@ function download(name, value) { const url=URL.createObjectURL(new Blob([pretty(
 async function revise(spec, reason) { await api(route("revise"), {revision:state.company.revision,spec,reason});await refresh();render();notify("Company revision saved. Earlier runs retain their original evidence."); }
 function onboarding() {
   return `<main class="onboarding" id="main"><div class="wordmark">worldloom <span>STUDIO</span></div><h1>Start with one company.</h1><p class="intro">Describe its business. Map the work. Build the evidence and evaluations in one coherent world.</p><div class="two-col"><section class="panel"><h2>Create a company workspace</h2><p class="muted small">You can refine the profile with your coding harness.</p><form id="create-form">${field("Company name","name","","text")}
-    <div class="form-grid"><div class="field"><label for="f-engine">Generation engine</label><select id="f-engine" name="engine">${state.catalogue.engines.map(v=>option(v,label(v),"retail")).join("")}</select></div><div class="field"><label for="f-geo">Geography</label><select id="f-geo" name="geo">${state.catalogue.locales.map(v=>option(v,label(v),"united_kingdom")).join("")}</select></div></div>${field("Seed","seed",8128,"number","Recorded once. Eval batches reuse the same company.")}<button class="primary" type="submit">Create company</button></form></section>
-    <aside class="example"><div class="eyebrow">Try the complete workflow</div><h2>Explore connected retail</h2><p class="small">One retailer, three connected processes: inventory exceptions, supplier replenishment and invoice reconciliation.</p><ol class="small"><li>Inspect the company and process requirements.</li><li>Construct linked evidence and measure agent outcomes.</li><li>Explore the selected company dataset.</li></ol><div class="actions">${button("Load connected retail pilot","connected-example","primary")}${button("Load smaller retail example","example","quiet")}</div><p class="help">An authored starting example. No customer data.</p></aside></div></main>`;
+    <div class="form-grid"><div class="field"><label for="f-engine">Generation engine</label><select id="f-engine" name="engine">${state.catalogue.engines.map(v=>option(v,label(v),(state.catalogue.examples||[])[0]?.engine)).join("")}</select></div><div class="field"><label for="f-geo">Geography</label><select id="f-geo" name="geo">${state.catalogue.locales.map(v=>option(v,label(v),"united_kingdom")).join("")}</select></div></div>${field("Seed","seed",8128,"number","Recorded once. Eval batches reuse the same company.")}<button class="primary" type="submit">Create company</button></form></section>
+    ${examplesPanel()}</div></main>`;
+}
+function examplesPanel() {
+  const examples=state.catalogue.examples||[],featured=examples.find(e=>e.featured),rest=examples.filter(e=>!e.featured);
+  const load=(e,cls)=>button(esc(e.button||`Load ${e.company_name}${e.engine?` (${label(e.key)})`:""}`),"example",cls,`data-key="${esc(e.key)}"`);
+  return `<aside class="example"><div class="eyebrow">Try the complete workflow</div>${featured?`<h2>${esc(featured.title)}</h2><p class="small">${esc(featured.description)}</p>`:""}<ol class="small"><li>Inspect the company and process requirements.</li><li>Construct linked evidence and measure agent outcomes.</li><li>Explore the selected company dataset.</li></ol><div class="actions">${featured?load(featured,"primary"):""}</div>${rest.length?`<h3>Other examples</h3><ul class="findings">${rest.map(e=>`<li><div class="spaced"><span><strong>${esc(e.title)}</strong> ${badge(e.origin==="builtin"?"shipped":e.origin)}</span>${load(e,"quiet")}</div>${e.description?`<p class="small muted">${esc(e.description)}</p>`:""}</li>`).join("")}</ul>`:""}<p class="help">Authored starting examples. No customer data. ${button("Upload or generate an industry pack","go-packs","quiet")}</p></aside>`;
+}
+async function loadPacks() { state.packs=await api("/api/packs"); }
+function packJobs() {
+  const jobs=state.packs.jobs||[];
+  if(!jobs.length)return '<p class="muted small">No pack has been generated in this workspace yet.</p>';
+  return `<ul class="findings">${jobs.map(j=>{const r=j.result||{};return `<li><div class="spaced"><span><strong>${esc(label(j.options.pack_kind))}</strong> · ${esc(j.options.message.slice(0,120))}</span>${badge(r.status||j.status,statusColor(r.status==="refused"?"failed":r.status||j.status))}</div>${r.pinned?`<p class="small">Stored as <code>${esc(r.pinned)}</code></p>`:""}${(r.questions||[]).length?`<p class="small">The harness asks:</p><ul class="small">${r.questions.map(q=>`<li>${esc(q)}</li>`).join("")}</ul><p class="help">Answer them in a new request's message.</p>`:""}${(r.findings||[]).length?`<details><summary>Refused with ${r.findings.length} finding(s)</summary><ul class="small">${r.findings.map(f=>`<li>${esc(f)}</li>`).join("")}</ul></details>`:""}${j.error?`<p class="small">${esc(j.error)}</p>`:""}${["failed","interrupted"].includes(j.status)?button("Retry","retry-pack","quiet",`data-id="${esc(j.id)}"`):""}</li>`;}).join("")}</ul>`;
+}
+function packsPage() {
+  const packs=state.packs.packs||[],kinds=[...new Set(packs.map(p=>p.kind))].sort();
+  const chosen=state.company?.spec.packs||[],industries=packs.filter(p=>p.kind==="industry");
+  const current=chosen.find(r=>r.startsWith("industry:"))||"";
+  const choose=state.company?`<section class="panel"><h2>This company's industry</h2><p class="small muted">The industry pack decides the words, prompts and defaults the company is interviewed, built and evaluated under. Choosing one records a reviewed revision pinned to the pack's current content.</p><form id="pack-choose-form"><div class="field"><label for="pack-industry">Industry pack</label><select id="pack-industry" name="ref">${industries.map(p=>option(p.ref,`${p.title||p.name} (${p.origin})`,current.split("@")[0]||"industry:default")).join("")}</select></div>${field("Reason for change","reason","Chose the company's industry pack")}<button type="submit" class="primary">Save revision</button></form>${chosen.length?`<p class="small">In force: ${chosen.map(r=>`<code>${esc(r)}</code>`).join(" ")}</p>`:""}</section>`:"";
+  return head("Industry packs","Upload a pack, or have your coding harness generate one. Each is linted before it is stored in this workspace.",button("Refresh","refresh-packs","quiet"))+
+    `<div class="two-col"><div class="stack">${choose}<section class="panel"><h2>Upload a pack</h2><p class="small muted">A pack envelope JSON file (<code>worldloom.pack/v1</code>). A refused upload lists every finding.</p><input type="file" id="pack-file" accept="application/json,.json"></section><section class="panel"><h2>Generate with harness</h2><form id="pack-author-form"><div class="form-grid"><div class="field"><label for="pack-kind">Kind</label><select id="pack-kind" name="kind">${(state.catalogue.pack_kinds||[]).map(k=>option(k.kind,label(k.kind),"industry")).join("")}</select></div>${field("Pack name (optional)","name","")}</div><div class="field"><label for="pack-message">What should it say?</label><textarea id="pack-message" name="message" rows="4" required placeholder="A regional building society: branches, members, mortgage arrears…"></textarea></div><button type="submit" class="primary" ${state.harness?"":"disabled"}>Generate with harness</button>${state.harness?"":'<p class="help">Start Studio with <code>--harness</code> to generate packs, or use <code>worldloom studio pack interview</code>.</p>'}</form>${packJobs()}</section></div>
+    <section class="panel"><h2>Visible packs</h2>${kinds.map(kind=>`<h3>${esc(label(kind))}</h3><ul class="findings">${packs.filter(p=>p.kind===kind).map(p=>`<li><div class="spaced"><span><strong>${esc(p.title||p.name)}</strong> <code>${esc(p.ref)}</code></span>${badge(p.origin,p.origin==="workspace"?"blue":"")}</div>${p.description?`<p class="small muted">${esc(p.description)}</p>`:""}${button("Inspect","inspect-pack","quiet",`data-ref="${esc(p.ref)}"`)}</li>`).join("")}</ul>`).join("")||'<p class="muted small">No packs are visible.</p>'}</section></div>`;
+}
+function refusal(title, error) {
+  modal(title,`<p>${esc(error.message)}</p>${error.findings?.length?`<ul class="findings">${error.findings.map(f=>`<li>${esc(f)}</li>`).join("")}</ul>`:""}`);
 }
 function render() {
-  if (!state.company) { $("#app").innerHTML=onboarding();return; }
+  if (!state.company) { $("#app").innerHTML=state.page==="packs"?`<main class="onboarding" id="main">${button("Back","go-overview","quiet")}${packsPage()}</main>`:onboarding();return; }
   const p=state.company;
   const page=navItems.find(([key])=>key===state.page)?.[1];
-  $("#app").innerHTML=`<div class="shell"><aside class="sidebar"><div class="wordmark">worldloom <span>STUDIO</span></div><div class="company-select"><label class="sr-only" for="company-switch">Company workspace</label><select id="company-switch">${state.projects.map(c=>option(c.id,companyName(c),p.id)).join("")}</select></div><nav class="nav" aria-label="Company workspace">${navItems.map(([key,title])=>`<button type="button" data-page="${key}" class="${state.page===key?"active":""}" ${state.page===key?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${icons[key]}</svg>${title}</button>`).join("")}</nav><div class="sidebar-bottom">One company per dataset.<br>Every run keeps its revision.${button("+ New company","new-company")}</div></aside><div class="main-shell"><header class="topbar"><div class="breadcrumb">Company workspace &nbsp;/&nbsp; <strong>${esc(page)}</strong></div><div class="actions">${badge(`Revision ${p.ordinal}`)}${button(state.harness?"Harness configured":"Connect harness","harness","quiet")}</div></header><main id="main" class="workspace">${({creation:creationPage,overview:overview,company:companyPage,interview:interviewPage,usecases:usecasesPage,evals:evalsPage,foundry:foundryPage,native:nativePage,changes:changesPage}[state.page])()}</main></div></div>`;
+  $("#app").innerHTML=`<div class="shell"><aside class="sidebar"><div class="wordmark">worldloom <span>STUDIO</span></div><div class="company-select"><label class="sr-only" for="company-switch">Company workspace</label><select id="company-switch">${state.projects.map(c=>option(c.id,companyName(c),p.id)).join("")}</select></div><nav class="nav" aria-label="Company workspace">${navItems.map(([key,title])=>`<button type="button" data-page="${key}" class="${state.page===key?"active":""}" ${state.page===key?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${icons[key]}</svg>${title}</button>`).join("")}</nav><div class="sidebar-bottom">One company per dataset.<br>Every run keeps its revision.${button("+ New company","new-company")}</div></aside><div class="main-shell"><header class="topbar"><div class="breadcrumb">Company workspace &nbsp;/&nbsp; <strong>${esc(page)}</strong></div><div class="actions">${badge(`Revision ${p.ordinal}`)}${button(state.harness?"Harness configured":"Connect harness","harness","quiet")}</div></header><main id="main" class="workspace">${({creation:creationPage,overview:overview,company:companyPage,interview:interviewPage,usecases:usecasesPage,evals:evalsPage,foundry:foundryPage,native:nativePage,packs:packsPage,changes:changesPage}[state.page])()}</main></div></div>`;
 }
 function journey() {
   const p=state.company,r=report();
@@ -233,7 +257,7 @@ function jsonEditor(title, value, kind) {
 async function caseEditor(id) {
   const s=state.company.spec,existing=s.use_cases.find(c=>c.id===id);
   const units=s.structure?.bus||[];
-  const patterns=[...["retail","banking"].includes(s.company.engine)?[["operational","Operational "+label(s.company.engine)+" review"]]:[],...state.catalogue.workflows.map(w=>[w.name,label(w.name)])];
+  const patterns=[...(state.catalogue.operational_engines||[]).includes(s.company.engine)?[["operational","Operational "+label(s.company.engine)+" review"]]:[],...state.catalogue.workflows.map(w=>[w.name,label(w.name)])];
   modal(existing?"Edit use case":"Add a use case",`<form id="case-form" data-id="${esc(id||"")}"><div class="form-grid">${field("Title","title",existing?.title||"")}${field("Stable use case ID","id",existing?.id||"","text","Lowercase letters, numbers and hyphens.")}</div><div class="field"><label for="case-objective">Business outcome</label><textarea id="case-objective" name="objective" rows="3" required>${esc(existing?.objective||"")}</textarea></div><div class="form-grid"><div class="field"><label for="case-owner">Owning business unit</label><select name="owner" id="case-owner">${option("","Company-wide",existing?.owner||"")}${units.map(b=>option(b.name,b.name,existing?.owner)).join("")}</select></div>${field("Requested evaluations","count",existing?.count||12,"number")}<div class="field"><label for="case-pattern">Executable workflow</label><select id="case-pattern" name="pattern">${existing?option("keep","Keep current contract","keep"):option("draft","Define in interview","draft")}${patterns.map(([key,title])=>option(key,title,"")).join("")}</select></div><div class="field"><label for="case-lob">Line of business</label><select id="case-lob" name="lob">${option("","None",existing?.lob||"")}${s.lobs.map(l=>option(l.name,l.title,existing?.lob)).join("")}</select></div></div>${field("Process activity IDs","activities",existing?.activities.join(", ")||"","text","Optional comma-separated IDs from this owner's process catalogue.")}<p class="help">Operational examples declare their own volumes. Inspect the contract to tune tables, periods, connector requirements and expected outcomes.</p><hr><div class="actions end">${existing?button("Remove use case","remove-case","danger",`data-id="${esc(existing.id)}"`):""}<button type="submit" class="primary">Save use case</button></div></form>`);
 }
 async function loadEvals() { const data=await api(route("evals")+`?offset=${state.offset}`);state.evals=data.rows;render(); }
@@ -241,7 +265,10 @@ async function run(operation, message="", extra={}) { const job=await api(route(
 async function loadAgentResults(job) { const a=state.agent;const data=await api(route("agent-results")+`?job=${encodeURIComponent(job)}&offset=${a.offset}&limit=25${a.verdict?`&verdict=${encodeURIComponent(a.verdict)}`:""}`);state.agent={...a,job,rows:data.rows||[],total:data.total||0};render(); }
 async function action(name, target) {
   if(await creationAction(name,target))return;
+  if(name==="go-packs"||name==="refresh-packs"){state.page="packs";await loadPacks();render();return;}
   if(name.startsWith("go-")){state.page=name.slice(3);render();return;}
+  if(name==="inspect-pack"){const [kind,pack]=target.dataset.ref.split(":");const shown=await api(`/api/packs/${encodeURIComponent(kind)}/${encodeURIComponent(pack)}`);modal(`Pack ${shown.ref}`,`<p class="small muted">${esc(shown.origin)} · layers on ${esc(shown.chain.join(" → "))}</p><p class="small">Pinned as <code>${esc(shown.pinned)}</code></p>${shown.findings.length?`<ul class="findings">${shown.findings.map(f=>`<li>${esc(f)}</li>`).join("")}</ul>`:""}<pre>${esc(pretty(shown.body))}</pre>`);return;}
+  if(name==="retry-pack"){await api(`/api/jobs/${encodeURIComponent(target.dataset.id)}/retry`,{});await loadPacks();render();return;}
   if(name==="workflow"){
     const a=JSON.parse(target.dataset.workflow);
     if(a.kind==="navigate"){state.page=a.page;render();}
@@ -268,7 +295,7 @@ async function action(name, target) {
   }
   if(name==="close"){$("#editor").close();return;}
   if(name==="new-company"){state.company=null;render();return;}
-  if(name==="example"||name==="connected-example"){const spec=await api(name==="connected-example"?"/api/preset?engine=retail-connected":"/api/preset");const p=await api("/api/projects",spec);state.projects.push(p);await selectCompany(p.id);return;}
+  if(name==="example"){const spec=await api("/api/preset?engine="+encodeURIComponent(target.dataset.key));const p=await api("/api/projects",spec);state.projects.push(p);await selectCompany(p.id);return;}
   if(name==="harness"){modal("Connect your coding harness",`<p>Use your installed, signed-in Codex or Claude Code CLI. Studio sends bounded requests and validates the returned proposals.</p><pre>worldloom studio serve --harness codex
 worldloom studio serve --harness claude
 
@@ -293,7 +320,7 @@ worldloom studio serve --harness codex --allow-native-writes</pre><p class="smal
   if(name==="select-narration"){await api(route("select-narration"),{revision:state.company.revision,job_id:target.dataset.id});await refresh();render();return;}
   if(name==="edit-divisions"){jsonEditor("Revenue divisions",state.company.division_contract,"divisions");return;}
   if(name==="edit-project"){jsonEditor("Company contract",state.company.spec,"project");return;}
-  if(name==="edit-structure"){let structure=state.company.spec.structure;if(!structure){const sample=await api("/api/preset?engine=retail&name="+encodeURIComponent(companyName(state.company)));structure=sample.structure;}jsonEditor("Operating structure",structure,"structure");return;}
+  if(name==="edit-structure"){let structure=state.company.spec.structure;if(!structure){const engines=state.catalogue.operational_engines||[],engine=engines.includes(state.company.spec.company.engine)?state.company.spec.company.engine:engines[0];const sample=await api("/api/preset?engine="+encodeURIComponent(engine)+"&name="+encodeURIComponent(companyName(state.company)));structure=sample.structure;}jsonEditor("Operating structure",structure,"structure");return;}
   if(name==="edit-lobs"){jsonEditor("Lines of business",state.company.spec.lobs,"lobs");return;}
   if(name==="add-case"||name==="edit-case"){await caseEditor(target.dataset.id);return;}
   if(name==="inspect-case"){jsonEditor("Use case contract",state.company.spec.use_cases.find(c=>c.id===target.dataset.id),"case:"+target.dataset.id);return;}
@@ -313,7 +340,7 @@ worldloom studio serve --harness codex --allow-native-writes</pre><p class="smal
   if(name==="apply-proposal"){await api(route("interview-apply"),{request_id:target.dataset.id});$("#editor").close();await refresh();render();notify("Interview proposal applied as a new revision.");}
 }
 document.addEventListener("click", async event=>{
-  const nav=event.target.closest("[data-page]");if(nav){state.page=nav.dataset.page;state.filter="";render();return;}
+  const nav=event.target.closest("[data-page]");if(nav){state.page=nav.dataset.page;state.filter="";if(state.page==="packs"){try{await loadPacks();}catch(error){notify(error.message);}}render();return;}
   const target=event.target.closest("[data-action]");if(!target||target.disabled)return;
   target.disabled=true;try{await action(target.dataset.action,target);}catch(error){notify(error.message);}finally{target.disabled=false;}
 });
@@ -359,6 +386,12 @@ document.addEventListener("submit", async event=>{
       if(!calibration.cohort)throw new Error("Enter the target-agent cohort name.");
       if(calibration.target_low>=calibration.target_high)throw new Error("The minimum pass rate must be below the maximum pass rate.");
       spec.calibration=calibration;await revise(spec,values.reason);$("#editor").close();
+    } else if(form.id==="pack-author-form"){
+      const job=await api("/api/packs/author",{kind:values.kind,name:values.name.trim(),message:values.message});
+      await loadPacks();render();notify(`Generating a ${label(job.options.pack_kind)} pack with your harness. Its verdict appears below.`);
+    } else if(form.id==="pack-choose-form"){
+      await api(route("packs"),{revision:state.company.revision,packs:[values.ref],reason:values.reason});
+      await refresh();await loadPacks();render();notify("Industry pack recorded as a new revision, pinned to its current content.");
     } else if(form.id==="case-form"){
       const spec=copy(state.company.spec),old=spec.use_cases.find(c=>c.id===form.dataset.id);
       let c=old?copy(old):{};
@@ -369,13 +402,19 @@ document.addEventListener("submit", async event=>{
       if(old)spec.use_cases=spec.use_cases.map(v=>v.id===old.id?c:v);else spec.use_cases.push(c);
       await revise(spec,`${old?"Updated":"Added"} use case: ${values.title}`);$("#editor").close();
     }
-  }catch(error){notify(error.message);}finally{if(submit)submit.disabled=false;}
+  }catch(error){if(error.findings?.length)refusal("Refused",error);else notify(error.message);}finally{if(submit)submit.disabled=false;}
 });
 document.addEventListener("change",async event=>{
   try{
     if(await creationChange(event.target))return;
     if(event.target.id==="company-switch")await selectCompany(event.target.value);
     if(event.target.id==="agent-verdict"&&state.agent.job){state.agent.verdict=event.target.value;state.agent.offset=0;await loadAgentResults(state.agent.job);}
+    if(event.target.id==="pack-file"){
+      const file=event.target.files[0];if(!file)return;if(file.size>4_000_000)throw new Error("Pack exceeds 4 MB");
+      try{const result=await api("/api/packs",JSON.parse(await file.text()));await loadPacks();render();notify(`Stored ${result.installed} in this workspace.`);}
+      catch(error){event.target.value="";refusal("Pack upload refused",error);}
+      return;
+    }
     if(event.target.id==="response-file"){
       const file=event.target.files[0];if(!file)return;if(file.size>4_000_000)throw new Error("Response exceeds 4 MB");
       await api(route("interview-accept"),JSON.parse(await file.text()));await refresh();render();notify("Response validated. Review any proposed changes before applying them.");
@@ -391,6 +430,9 @@ document.addEventListener("keydown",async event=>{
   }
 });
 async function poll() {
+  if(state.page==="packs"&&!document.hidden&&!state.pending&&(state.packs.jobs||[]).some(j=>["queued","running"].includes(j.status))){
+    state.pending=true;try{await loadPacks();if(!$("#editor").open&&!document.activeElement?.matches("input,textarea,select"))render();}catch(error){notify(error.message);}finally{state.pending=false;}
+  }
   if(!state.company||document.hidden||state.pending)return;
   const jobs=state.company.jobs.filter(j=>["queued","running"].includes(j.status));if(!jobs.length)return;
   state.pending=true;

@@ -1,0 +1,52 @@
+{
+  "values": {
+    "studio.example.company_name": "Northstar Retail",
+    "studio.operational": {
+      "banking": {
+        "countries": ["AU"],
+        "engine": "banking",
+        "failures": ["none", "partial_write"],
+        "geo": "australia",
+        "incident": {"signal": "arrears", "table": "loan", "title": "Payment arrears"},
+        "program": "banking",
+        "sizing": {"borrowers": 24, "ticks": 16},
+        "use_case": {"count": 24, "id": "operations-review", "title": "Review payment arrears"},
+        "workflow": "banking"
+      },
+      "retail": {
+        "countries": ["AU"],
+        "engine": "retail",
+        "failures": ["none", "partial_write"],
+        "geo": "australia",
+        "incident": {"signal": "lost", "table": "inventory", "title": "Stock availability"},
+        "parameters": {"initial_stock": 8, "target_stock": 15},
+        "program": "retail",
+        "sizing": {"products": 6, "stores": 3, "ticks": 24},
+        "use_case": {"count": 24, "id": "operations-review", "title": "Investigate stock availability"},
+        "workflow": "retail"
+      }
+    },
+    "studio.pilot.retail.activities": {
+      "inventory_exception": "f2r.02",
+      "invoice_reconciliation": "p2p.09",
+      "supplier_replenishment": "p2p.04"
+    },
+    "studio.pilot.retail.count": 12,
+    "studio.pilot.retail.max_batches": 12,
+    "studio.pilot.retail.max_cases": 48,
+    "studio.pilot.retail.max_per_case": 6,
+    "studio.pilot.retail.planning_budget": 512,
+    "studio.pilot.retail.pool_size": 24,
+    "studio.pilot.retail.start": "2026-03-01",
+    "studio.project.max_batches": 16,
+    "studio.project.max_per_case": 3,
+    "studio.project.max_per_request": 12,
+    "studio.project.max_per_task": 24,
+    "studio.project.minimum_tasks": 2,
+    "studio.project.planning_budget": 1024,
+    "studio.project.pool_size": 24,
+    "studio.project.seed": 8128,
+    "studio.project.split_by": "case",
+    "studio.project.split_weights": {"test": 10, "train": 80, "validation": 10}
+  }
+}

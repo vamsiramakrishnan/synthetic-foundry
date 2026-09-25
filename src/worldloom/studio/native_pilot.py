@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .. import packkit
 from ..narrative import references
 from ..native_artifacts import inspect_artifact
 from ..native_corpus import NativeContent, NativeCorpusPlan, render_native_corpus
@@ -27,15 +28,17 @@ if TYPE_CHECKING:
     from ..world import World
 
 
-def pilot_base(*, name: str = "Northstar Retail", seed: int = 8128, periods: int = 3) -> ProjectSpec:
+def pilot_base(*, name: str | None = None, seed: int | None = None, periods: int = 3) -> ProjectSpec:
+    from .operational import company_name
     from .service import preset
 
     if not 1 <= periods <= 24:
         raise ValueError("native retail pilot requires between one and twenty-four monthly episodes")
-    base = preset("retail", name)
+    seed = packkit.policy("studio.project.seed") if seed is None else seed
+    base = preset("retail", name or company_name())
     episodes = tuple(f"{2026 + index // 12:04d}-{index % 12 + 1:02d}" for index in range(periods))
-    case = UseCase(id="native-close-review", title="Review retail close evidence",
-                   objective="Read close evidence, reconcile revenue against budget, update the existing pack and create a briefing.")
+    case = UseCase(id="native-close-review", title=packkit.text("studio.native_pilot.use_case.title"),
+                   objective=packkit.text("studio.native_pilot.use_case.objective"))
     return ProjectSpec.model_validate({**base.model_dump(mode="json"), "seed": seed,
         "episodes": episodes, "use_cases": [case.model_dump(mode="json")]})
 
@@ -64,12 +67,12 @@ def pilot_project(world: World, base: ProjectSpec, *, units: int = 24) -> Projec
     if len(selected) < units:
         raise ValueError(f"need {units} distinct accepted sections; have {len(selected)}; generate and narrate more monthly episodes")
     contents = tuple(selected[:units])
-    doc = NativeCorpusPlan(artifact_id="ART-RETAIL-CLOSE-DOC", format="docx", title="Retail close evidence archive",
+    doc = NativeCorpusPlan(artifact_id="ART-RETAIL-CLOSE-DOC", format="docx", title=packkit.text("studio.native_pilot.title.document"),
                           minimum_units=units, contents=contents)
-    deck = NativeCorpusPlan(artifact_id="ART-RETAIL-CLOSE-DECK", format="pptx", title="Retail close committee evidence",
+    deck = NativeCorpusPlan(artifact_id="ART-RETAIL-CLOSE-DECK", format="pptx", title=packkit.text("studio.native_pilot.title.deck"),
         minimum_units=units, contents=tuple(item.model_copy(update={"placement": "notes"})
             if index == units - 1 or len(bodies[index]) > 2400 else item for index, item in enumerate(contents)))
-    book = NativeCorpusPlan(artifact_id="ART-RETAIL-CLOSE-BOOK", format="xlsx", title="Retail close reconciliation workbook",
+    book = NativeCorpusPlan(artifact_id="ART-RETAIL-CLOSE-BOOK", format="xlsx", title=packkit.text("studio.native_pilot.title.workbook"),
                            minimum_units=units, contents=contents)
     rendered = {plan.artifact_id: render_native_corpus(world, plan) for plan in (doc, deck, book)}
     inputs = {plan.format: NativeInput(artifact_id=plan.artifact_id, format=plan.format,
@@ -90,30 +93,34 @@ def pilot_project(world: World, base: ProjectSpec, *, units: int = 24) -> Projec
     formula = "=" + "-".join("Facts!" + ref.locator.rsplit(":", 1)[1] for ref in refs)
     case_id = base.use_cases[0].id
     assert actual.value is not None
-    calculation_prompt = (f"For retail revenue subject {actual.subject} in {actual.period}, compute actual minus budget "
-        f"in {actual.value.unit}. Actual is at {refs[0].locator}; budget is at {refs[1].locator}. Cite both cells.")
+    calculation_prompt = packkit.text("studio.native_pilot.task.variance", subject=actual.subject, period=actual.period,
+                                      unit=actual.value.unit, actual=refs[0].locator, budget=refs[1].locator)
+    # The label and heading asked for are the ones graded: one key each.
+    variance_label = packkit.text("studio.native_pilot.variance_label")
+    review_heading = packkit.text("studio.native_pilot.review_heading")
     evidence_text = next(unit.text for unit in inspect_artifact(rendered[doc.artifact_id].payload, "docx").units if unit.locator == doc_ref.locator)
     tasks = (
         NativeTask(id="retail-read-late-document", operation="read", use_case_id=case_id,
-            prompt=f"Retrieve the complete evidence paragraph at {doc_ref.locator} in the retail close archive and cite it exactly.",
+            prompt=packkit.text("studio.native_pilot.task.read_document", locator=doc_ref.locator),
             inputs=(inputs["docx"],), assertions=(NativeAssertion(id="late-evidence", target=doc_ref),)),
         NativeTask(id="retail-read-speaker-notes", operation="read", use_case_id=case_id,
-            prompt=f"Retrieve the complete speaker notes at {notes_ref.locator} from the retail close committee deck and cite them exactly.",
+            prompt=packkit.text("studio.native_pilot.task.read_notes", locator=notes_ref.locator),
             inputs=(inputs["pptx"],), assertions=(NativeAssertion(id="committee-notes", target=notes_ref),)),
         NativeTask(id="retail-revenue-variance", operation="analyze", use_case_id=case_id,
             prompt=calculation_prompt, inputs=(inputs["xlsx"],), assertions=(NativeAssertion(id="revenue-variance",
                 calculation=NativeCalculation(operation="difference", operands=refs)),)),
         NativeTask(id="retail-update-workbook", operation="update", use_case_id=case_id,
-            prompt=f"Using revenue actual at {refs[0].locator} and budget at {refs[1].locator}, replace the first Evidence row with a reviewed calculation: set Evidence!A2 to Revenue variance and Evidence!B2 to the formula {formula}. Preserve every other cell, formula and property; return the source checksum.",
+            prompt=packkit.text("studio.native_pilot.task.update_workbook", actual=refs[0].locator, budget=refs[1].locator,
+                                label=variance_label, formula=formula),
             inputs=(inputs["xlsx"],), output=NativeOutput(artifact_id="ART-RETAIL-UPDATED-BOOK", format="xlsx", source_artifact_id=book.artifact_id,
                 assertions=(NativeAssertion(id="variance-formula", target=NativeCitation(artifact_id="ART-RETAIL-UPDATED-BOOK", locator="sheet:Evidence/cell:B2"), expected=formula, expected_type="formula"),
-                    NativeAssertion(id="variance-label", target=NativeCitation(artifact_id="ART-RETAIL-UPDATED-BOOK", locator="sheet:Evidence/cell:A2"), expected="Revenue variance"),))),
+                    NativeAssertion(id="variance-label", target=NativeCitation(artifact_id="ART-RETAIL-UPDATED-BOOK", locator="sheet:Evidence/cell:A2"), expected=variance_label),))),
         NativeTask(id="retail-update-document", operation="update", use_case_id=case_id,
-            prompt="Change only the first paragraph heading to 'Retail close review evidence' in an updated copy of the archive. Preserve every other paragraph, table and property; return the source checksum.",
+            prompt=packkit.text("studio.native_pilot.task.update_document", heading=review_heading),
             inputs=(inputs["docx"],), output=NativeOutput(artifact_id="ART-RETAIL-UPDATED-DOC", format="docx", source_artifact_id=doc.artifact_id,
-                assertions=(NativeAssertion(id="review-heading", target=NativeCitation(artifact_id="ART-RETAIL-UPDATED-DOC", locator="paragraph:1"), expected="Retail close review evidence"),))),
+                assertions=(NativeAssertion(id="review-heading", target=NativeCitation(artifact_id="ART-RETAIL-UPDATED-DOC", locator="paragraph:1"), expected=review_heading),))),
         NativeTask(id="retail-create-briefing", operation="create", use_case_id=case_id,
-            prompt=f"Create a new one-slide PowerPoint evidence excerpt. Copy the complete paragraph at {doc_ref.locator} in the archive verbatim into the first text shape on slide one. Put no title shape before it.",
+            prompt=packkit.text("studio.native_pilot.task.create_briefing", locator=doc_ref.locator),
             inputs=(inputs["docx"],), output=NativeOutput(artifact_id="ART-RETAIL-BRIEFING", format="pptx",
                 assertions=(NativeAssertion(id="briefing-evidence", target=NativeCitation(artifact_id="ART-RETAIL-BRIEFING", locator="slide:1/shape:1/text"), expected=evidence_text),))),
     )

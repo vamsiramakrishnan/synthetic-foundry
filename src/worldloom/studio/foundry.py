@@ -12,6 +12,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from .. import packkit
 from ..enterprise_io import load_exported_corpus
 from ..eval_candidates import validate_candidate
 from ..eval_metrics import CalibrationObservation
@@ -65,7 +66,7 @@ def _review(world: World, location: Path, critical: set[str], *, command: str | 
 
     def read(request: reader_checks.ReaderRequest) -> reader_checks.ReaderResponse:
         payload = {"schema": "worldloom.blind-reader/v1", "request": request.model_dump(mode="json"),
-                   "instructions": "Recover claims only from the supplied text, with exact quotes. Return one ReaderResponse.",
+                   "instructions": packkit.text("studio.foundry.reader.instructions"),
                    "response_schema": reader_checks.ReaderResponse.model_json_schema()}
         return reader_checks.ReaderResponse.model_validate(exchange(payload).document)
 

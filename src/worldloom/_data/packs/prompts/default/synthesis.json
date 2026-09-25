@@ -1,0 +1,6 @@
+{
+  "texts": {
+    "synthesis.operational.company_description": "Declared {vertical} operational simulation.",
+    "synthesis.operational.prompt_template": "Prepare {purpose} for {company}. Use {sources}. Join case_id and use the attached observation histories. {action_instruction} {output_label} in {destination}, then {verification_instruction}.{failure_instruction}"
+  }
+}

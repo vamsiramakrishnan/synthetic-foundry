@@ -59,6 +59,12 @@ class IndustryPack(CascadeModel):
     example: IndustryExample | None = None
     company: str | None = None
     """A ``company:`` pack reference the example builds from, when one is shipped."""
+    operational: dict[str, Any] | None = None
+    """The runnable example a console starts from for this industry: its
+    simulation program and sizing, the incident rule that opens a case, and
+    the use case's title and workflow. Validated by
+    ``studio.operational.OperationalExample``; ``None`` leaves the industry to
+    its derived programme or the interview."""
 
     @field_validator("aliases")
     @classmethod
@@ -186,6 +192,10 @@ def lint_industry(body: IndustryPack, context: LintContext) -> list[Finding]:
         if body.industry not in load_catalogue()["industry_overlays"] and body.engine is None:
             findings.append(f"industry: {body.industry!r} has no process-catalogue overlay and names no engine, so nothing "
                             "can build it; set `engine` to the engine it rides")
+    if body.operational is not None:
+        from ..studio.operational import lint_operational
+
+        findings.extend(lint_operational(body.operational, where="operational"))
     return findings
 
 
