@@ -180,3 +180,102 @@ def test_the_cli_lists_lints_installs_and_puts_a_pack_in_force(tmp_path: Path) -
     assert shown.exit_code == 0 and json.loads(shown.output)["body"]["terms"]["site"] == "branch"
     missing = runner.invoke(app, ["--pack", "industry:nowhere", "pack", "kinds"])
     assert missing.exit_code == 2
+
+
+# -- review findings: each pinned so it cannot come back ----------------------------------------
+
+
+def test_a_customised_default_is_recorded_linted_and_layers_on_the_shipped_one(tmp_path: Path) -> None:
+    """A `prompts:default` in the user's root changed every build with nothing in the recipe."""
+    home = tmp_path / "home" / "packs"
+    shipped = packkit.text("pack.interview.role", kind="x")
+    _pack(home, "prompts", "default", {"texts": {"pack.interview.role": "Custom {kind}."}})
+    packkit.refresh()
+    assert packkit.text("pack.interview.role", kind="x") == "Custom x."
+    # It states only what it changes: every other shipped key is still there.
+    assert packkit.text("pack.interview.rule.01") == packkit.shipped("prompts").body.texts["pack.interview.rule.01"]
+    record = packkit.recorded()
+    assert set(record) == {"prompts"} and record["prompts"]["ref"] == "prompts:default"
+    assert packkit.customised_defaults() == {"prompts": record["prompts"]["digest"]}
+    (home / "prompts" / "default.json").unlink()
+    packkit.refresh()
+    assert packkit.text("pack.interview.role", kind="x") == shipped and packkit.recorded() == {}
+    with packkit.use_recorded(record):
+        assert packkit.text("pack.interview.role", kind="x") == "Custom x."
+    _pack(home, "prompts", "default", {"texts": {"pack.interview.role": "{region}", "nope": "x"}})
+    packkit.refresh()
+    findings = packkit.lint(packkit.resolve("prompts:default"))
+    assert any("introduces {region}" in f for f in findings) and any("nope: no such prompt key" in f for f in findings)
+
+
+def test_an_upload_may_extend_the_shipped_pack_it_shadows(tmp_path: Path) -> None:
+    """The documented customisation was refused as a cycle on every upload path."""
+    upload = {"schema": "worldloom.pack/v1", "kind": "industry", "name": "banking", "extends": ["industry:banking"],
+              "body": {"terms": {"site": "office"}}}
+    location, resolved = packkit.install(upload, root=tmp_path)
+    assert location == tmp_path / "industry" / "banking.json"
+    assert resolved.body.terms["site"] == "office" and "bank" in resolved.body.aliases
+    again, _ = packkit.install({**upload, "body": {"terms": {"site": "bureau"}}}, root=tmp_path, replace=True)
+    assert packkit.resolve("industry:banking", roots=[tmp_path]).body.terms["site"] == "bureau"
+    assert again == location
+
+
+def test_an_override_a_caller_formats_must_parse_as_a_format_string(tmp_path: Path) -> None:
+    _pack(tmp_path, "industry", "fmt", {"prompts": {
+        "enterprise.workflow.prompt": 'Prepare the {period} pack (see {"k": 1}) for {Company}.',
+        "synthesis.operational.prompt_template": "For {company} {",
+        "industry.use_case.prompt": "For {company}, {region}."}, "terms": {"site": "{branch}"}})
+    findings = packkit.lint(packkit.resolve("industry:fmt", roots=[tmp_path]), roots=[tmp_path])
+    # str.format reads `{"k": 1}` as a field and a lone brace as an error: both refused.
+    assert any("enterprise.workflow.prompt: introduces" in f and '{"k"}' in f and "{Company}" in f for f in findings)
+    assert any("synthesis.operational.prompt_template: its caller formats it" in f for f in findings)
+    assert any("industry.use_case.prompt: introduces {region}" in f for f in findings)
+    assert any("terms.site" in f and "without braces" in f for f in findings)
+
+
+def test_policy_limits_stay_positive_and_an_industry_cannot_lift_serving_bounds(tmp_path: Path) -> None:
+    _pack(tmp_path, "policy", "zero", {"values": {"pack.interview.max_rounds": 0}})
+    assert any("must be positive" in f for f in packkit.lint(packkit.resolve("policy:zero", roots=[tmp_path]), roots=[tmp_path]))
+    _pack(tmp_path, "industry", "loose", {"policy": {"connectors.serving.max_request_bytes": 10**12}})
+    assert any("cannot change a serving limit" in f
+               for f in packkit.lint(packkit.resolve("industry:loose", roots=[tmp_path]), roots=[tmp_path]))
+
+
+def test_an_upload_that_a_directory_pack_would_shadow_is_refused(tmp_path: Path) -> None:
+    directory = tmp_path / "industry" / "acme"
+    directory.mkdir(parents=True)
+    (directory / "pack.json").write_text(json.dumps({"schema": "worldloom.pack/v1", "kind": "industry", "name": "acme",
+                                                     "body": {"terms": {"site": "dir-version"}}}))
+    with pytest.raises(ValueError, match="directory pack"):
+        packkit.install({"schema": "worldloom.pack/v1", "kind": "industry", "name": "acme",
+                         "body": {"terms": {"site": "file-version"}}}, root=tmp_path)
+
+
+def test_directory_fragments_merge_by_the_kinds_keys(tmp_path: Path) -> None:
+    from worldloom.packkit.sources import _read
+
+    directory = tmp_path / "company" / "acme"
+    directory.mkdir(parents=True)
+    (directory / "pack.json").write_text(json.dumps({"schema": "worldloom.pack/v1", "kind": "company", "name": "acme"}))
+    (directory / "a.json").write_text(json.dumps({"units": [{"key": "food", "name": "Food"}]}))
+    (directory / "b.json").write_text(json.dumps({"units": [{"key": "fuel", "name": "Fuel"}]}))
+    assert [unit["key"] for unit in _read(directory).body["units"]] == ["food", "fuel"]
+
+
+def test_a_broken_user_industry_pack_does_not_stop_recognition(tmp_path: Path) -> None:
+    from worldloom import industry
+
+    broken = tmp_path / "home" / "packs" / "industry" / "broken.json"
+    broken.parent.mkdir(parents=True)
+    broken.write_text("{not json")
+    _pack(tmp_path / "home" / "packs", "industry", "cyclic", {}, extends=["industry:cyclic2"])
+    packkit.refresh()
+    assert industry.industry_of("a regional bank") == "banking"
+
+
+def test_every_shipped_pack_but_the_default_layers_on_the_default() -> None:
+    for located in packkit.discover():
+        pack = packkit.resolve(located.envelope.ref())
+        default = packkit.kind(pack.kind).default
+        if default and pack.name != default:
+            assert pack.chain[0] == f"{pack.kind}:{default}", pack.ref

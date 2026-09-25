@@ -56,6 +56,13 @@ order. A pack that extends its own name reaches the pack it shadows. That is how
 a user adjusts a shipped industry: write `industry/banking.json` with
 `"extends": ["industry:banking"]` and change one term.
 
+A pack named after its kind's default (`prompts/default.json` in the user's
+root) customises every build under that root. It layers on the shipped default
+it shadows, so it states only what it changes. It is linted against the shipped
+default, recorded in each recipe it affects, and counted in a Studio snapshot's
+identity. A Studio workspace does not accept one: a project changes through the
+packs it chooses by name.
+
 A connector pack is stricter about shadowing, because a shipped connector's
 definition is part of every corpus that uses it. A connector pack with a new name
 (a `zendesk` definition) is visible from any root, and the emulator, the served
@@ -100,7 +107,13 @@ Overrides are linted:
 - a policy value of the wrong type is refused.
 
 `text` fills only the placeholders it is given and interprets nothing else, so a
-prompt may contain JSON or a `{{fact:ID}}` example without escaping.
+prompt may contain JSON or a `{{fact:ID}}` example without escaping. A few keys,
+such as a workflow's `prompt_template`, are passed by their callers to
+`str.format`. `prompts:default` lists these under `formatted`, and an override
+of one must parse as a format string: a literal brace is written `{{` or `}}`.
+Term values may not contain braces. Numeric policy stays positive where the
+shipped value is positive. An industry pack cannot change a serving limit
+(`connectors.serving.*`); that belongs to a policy pack the operator chooses.
 
 ## Uploading and authoring
 

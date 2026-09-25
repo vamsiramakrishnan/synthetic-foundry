@@ -84,7 +84,14 @@ class ResolvedPack:
 
     @property
     def is_default(self) -> bool:
-        return self.name == kind(self.kind).default
+        """The shipped default, and only that one.
+
+        A pack named ``default`` in a user or project root is a customisation
+        like any other: it changes output, so it is recorded, linted against
+        the shipped default and keyed by its digest. Judging by name alone let
+        one change every build on a machine with nothing in the recipe to say so.
+        """
+        return self.name == kind(self.kind).default and self.origin == "builtin"
 
 
 def _validate(pack_kind: PackKind, data: Mapping[str, Any]) -> BaseModel:
@@ -100,7 +107,11 @@ def _chain(envelope: PackEnvelope, located: Located | None, roots: Sequence[str 
         raise ValueError(f"pack {envelope.ref()} extends more than {MAX_DEPTH} levels deep")
     pack_kind = kind(envelope.kind)
     parents = list(envelope.extends)
-    if pack_kind.default and envelope.name != pack_kind.default and not parents:
+    shipped_default = (located is not None and located.origin == "builtin"
+                       and envelope.name == pack_kind.default)
+    if pack_kind.default and not parents and not shipped_default:
+        # Every pack layers on the default; a default outside the shipped root
+        # layers on the one it shadows, so it states only what it changes.
         parents = [f"{envelope.kind}:{pack_kind.default}"]
     body: dict[str, Any] = {}
     chain: tuple[str, ...] = ()
@@ -109,9 +120,13 @@ def _chain(envelope: PackEnvelope, located: Located | None, roots: Sequence[str 
         if ref.path is not None:
             raise ValueError(f"pack {envelope.ref()} extends a file ({parent}); extend a kind:name so it replays")
         key = f"{ref.kind}:{ref.name}"
-        # A pack extending its own name reaches the one it shadows.
-        below = located.rank if (located is not None and key == envelope.ref()) else -1
-        if key in seen and below < 0:
+        below = -1
+        if key == envelope.ref():
+            # A pack extending its own name reaches the one it shadows: below
+            # where it is stored, or, for a pack not stored yet (an upload, a
+            # proposal, a file), the highest one of that name.
+            below = located.rank if located is not None else -1
+        elif key in seen:
             raise ValueError(f"pack {envelope.ref()} extends {key}, which extends it back")
         found = find(str(ref.kind), str(ref.name), roots=roots, below=below)
         if found is None:
@@ -191,16 +206,42 @@ def lint(resolved: ResolvedPack, *, roots: Sequence[str | Path] = ()) -> list[st
     if pack_kind.lint is None:
         return []
     default = None
-    if pack_kind.default and resolved.name != pack_kind.default:
-        default = resolve(f"{resolved.kind}:{pack_kind.default}", roots=roots).body
+    if pack_kind.default:
+        if resolved.name != pack_kind.default:
+            default = resolve(f"{resolved.kind}:{pack_kind.default}", roots=roots).body
+        elif not resolved.is_default:
+            # A customised default is checked against the shipped one it shadows.
+            default = shipped(resolved.kind).body
     context = LintContext(kind=resolved.kind, name=resolved.name, default=default,
                           resolve=lambda ref: resolve(ref, roots=roots).body)
     return list(pack_kind.lint(resolved.body, context))
 
 
+def shipped(kind_name: str) -> ResolvedPack:
+    """The kind's default exactly as shipped, whatever shadows it."""
+    from .sources import search_path
+
+    pack_kind = kind(kind_name)
+    if pack_kind.default is None:
+        raise KeyError(f"pack kind {kind_name!r} ships no default")
+    path = search_path(())
+    found = find(kind_name, pack_kind.default, below=len(path) - 2)
+    if found is None or found.origin != "builtin":
+        raise KeyError(f"no shipped {kind_name}:{pack_kind.default}")
+    return resolve_envelope(found.envelope, located=found)
+
+
 def refresh() -> None:
-    """Forget cached resolutions (after an upload, or a test writing packs)."""
+    """Forget cached resolutions and defaults (after an upload, or a test writing packs).
+
+    A process that installs a pack refreshes itself; one that merely reads
+    packs another process changed on disk sees the change on its next
+    uncached resolution, and a default it already resolved on restart.
+    """
+    from .active import forget_defaults
+
     _CACHE.clear()
+    forget_defaults()
 
 
-__all__ = ["MAX_DEPTH", "ResolvedPack", "lint", "merge", "refresh", "resolve", "resolve_envelope"]
+__all__ = ["MAX_DEPTH", "ResolvedPack", "lint", "merge", "refresh", "resolve", "resolve_envelope", "shipped"]

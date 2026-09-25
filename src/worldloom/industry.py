@@ -178,10 +178,15 @@ def aliases() -> dict[str, str]:
     where two claim one phrase the pack a user or a project root put in front
     of the shipped ones has the last word, and within one root the later name.
     """
-    visible = sorted(packkit.discover("industry"), key=lambda found: (-found.rank, found.envelope.name))
+    visible = sorted(packkit.discover("industry", strict=False), key=lambda found: (-found.rank, found.envelope.name))
     words: dict[str, str] = {}
     for found in visible:
-        body: packkit.IndustryPack = packkit.resolve(found.envelope.ref()).body
+        try:
+            body: packkit.IndustryPack = packkit.resolve(found.envelope.ref()).body
+        except (KeyError, ValueError):
+            # One malformed pack in a user's root must not stop every company
+            # from resolving; `worldloom pack list`/`show` names what is wrong.
+            continue
         if body.industry:
             words.update(dict.fromkeys(body.aliases, body.industry))
     return words

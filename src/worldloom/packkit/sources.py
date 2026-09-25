@@ -74,15 +74,17 @@ def _read(location: Path) -> PackEnvelope:
     if location.is_dir():
         envelope = read_envelope(location / "pack.json")
         body = dict(envelope.body)
+        from .kinds import kind
         from .resolve import merge
 
+        keys = kind(envelope.kind).merge_keys
         for fragment in sorted(location.glob("*.json")):
             if fragment.name == "pack.json":
                 continue
             data = json.loads(fragment.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 raise ValueError(f"{fragment}: a body fragment is a JSON object")
-            body = merge(body, data)
+            body = merge(body, data, keys=keys)
         return envelope.model_copy(update={"body": body})
     return read_envelope(location)
 
@@ -112,8 +114,13 @@ def find(kind: str, name: str, *, roots: Sequence[str | Path] = (), below: int =
     return None
 
 
-def discover(kind: str | None = None, *, roots: Sequence[str | Path] = ()) -> list[Located]:
-    """Every visible pack (shadowed ones omitted), by kind then name."""
+def discover(kind: str | None = None, *, roots: Sequence[str | Path] = (), strict: bool = True) -> list[Located]:
+    """Every visible pack (shadowed ones omitted), by kind then name.
+
+    ``strict=False`` skips a file that is not a readable pack instead of
+    raising, for callers that consult every pack on a machine (alias lookup)
+    and must not fail because one user file is broken.
+    """
     from .kinds import kinds
 
     wanted = [kind] if kind else [k.name for k in kinds()]
@@ -122,7 +129,13 @@ def discover(kind: str | None = None, *, roots: Sequence[str | Path] = ()) -> li
         for key in wanted:
             for name, location in _candidates(root, key):
                 if (key, name) not in seen:
-                    seen[(key, name)] = Located(_read(location), origin, location, rank)
+                    try:
+                        envelope = _read(location)
+                    except (OSError, ValueError):
+                        if strict:
+                            raise
+                        continue
+                    seen[(key, name)] = Located(envelope, origin, location, rank)
     return [seen[key] for key in sorted(seen)]
 
 

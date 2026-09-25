@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from .active import (
     active,
+    customised_defaults,
     industry,
     policy,
     recorded,
@@ -42,15 +43,23 @@ from .authoring import (
 from .envelope import SCHEMA, PackEnvelope, PackRef, parse_ref, read_envelope
 from .kinds import LintContext, PackKind, kind, kinds, register_kind
 from .models import IndustryExample, IndustryPack, PolicyPack, PromptsPack
-from .resolve import ResolvedPack, lint, merge, refresh, resolve, resolve_envelope
+from .resolve import (
+    ResolvedPack,
+    lint,
+    merge,
+    refresh,
+    resolve,
+    resolve_envelope,
+    shipped,
+)
 from .sources import discover, find, search_path, user_root
 from .terms import fill_terms, plural
 
 __all__ = [
     "SCHEMA", "IndustryExample", "IndustryPack", "InterviewReply", "LintContext", "PackEnvelope", "PackKind",
     "PackRef", "PolicyPack", "PromptsPack", "Proposal", "ResolvedPack", "Verdict", "accept", "active", "author",
-    "check", "discover", "fill_terms", "find", "industry", "install", "kind", "kinds", "lint", "merge", "parse_ref",
+    "check", "customised_defaults", "discover", "fill_terms", "find", "industry", "install", "kind", "kinds", "lint", "merge", "parse_ref",
     "plural", "policy", "read_envelope", "recorded", "refresh", "register_kind", "request", "resolve",
-    "resolve_envelope", "search_path", "show", "template", "term", "terms", "text", "texts", "use", "use_recorded",
+    "resolve_envelope", "search_path", "shipped", "show", "template", "term", "terms", "text", "texts", "use", "use_recorded",
     "user_root",
 ]

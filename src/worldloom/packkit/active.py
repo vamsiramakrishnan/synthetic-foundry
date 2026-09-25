@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from ..providers import digest
-from .kinds import kind
+from .kinds import kind, kinds
 from .models import PLACEHOLDER, IndustryPack, PolicyPack, PromptsPack
 from .resolve import ResolvedPack, resolve
 from .sources import CONTEXT_ROOTS as _ROOTS
@@ -86,6 +86,33 @@ def active(kind_name: str) -> ResolvedPack | None:
 
 def forget_defaults() -> None:
     _DEFAULTS.clear()
+
+
+def customised_defaults() -> dict[str, str]:
+    """Each kind whose default in force is not the shipped one, to that default's digest.
+
+    A user's ``~/.worldloom/packs/prompts/default.json`` (or a root's)
+    changes what every build under it produces without anyone naming it, so
+    whatever keys work by identity (a Studio snapshot, a recipe) has to count
+    it. Empty on a machine that only has the shipped defaults.
+    """
+    out: dict[str, str] = {}
+    for pack_kind in kinds():
+        if pack_kind.default is None:
+            continue
+        pack = active_default(pack_kind.name)
+        if pack is not None and not pack.is_default:
+            out[pack_kind.name] = pack.digest
+    return out
+
+
+def active_default(kind_name: str) -> ResolvedPack | None:
+    """The kind's default as the search path resolves it, ignoring what ``use`` put in force."""
+    token = _ACTIVE.set({})
+    try:
+        return active(kind_name)
+    finally:
+        _ACTIVE.reset(token)
 
 
 def industry() -> IndustryPack:
@@ -166,8 +193,16 @@ def recorded() -> dict[str, dict[str, Any]]:
     Empty for a default build, so a recipe written before packs existed and
     one written by a build that names no pack are the same recipe.
     """
+    in_force: dict[str, ResolvedPack] = dict(_ACTIVE.get() or {})
+    for pack_kind in kinds():
+        # A customised default is in force without anyone naming it; it is
+        # recorded like a named pack so the corpus replays where it is absent.
+        if pack_kind.default is not None and pack_kind.name not in in_force:
+            pack = active(pack_kind.name)
+            if pack is not None:
+                in_force[pack_kind.name] = pack
     out: dict[str, dict[str, Any]] = {}
-    for kind_name, pack in sorted((_ACTIVE.get() or {}).items()):
+    for kind_name, pack in sorted(in_force.items()):
         if pack.is_default:
             continue
         out[kind_name] = {"ref": pack.ref, "digest": pack.digest, "chain": list(pack.chain), "body": pack.data}
@@ -195,5 +230,5 @@ def use_recorded(record: Mapping[str, Mapping[str, Any]] | None) -> Iterator[Non
         yield
 
 
-__all__ = ["active", "forget_defaults", "industry", "policy", "recorded", "roots", "term", "template", "terms",
+__all__ = ["active", "active_default", "customised_defaults", "forget_defaults", "industry", "policy", "recorded", "roots", "term", "template", "terms",
            "text", "texts", "use", "use_recorded"]

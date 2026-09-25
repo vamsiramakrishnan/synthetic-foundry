@@ -335,3 +335,31 @@ def test_a_cross_origin_upload_is_refused(server) -> None:
     with pytest.raises(HTTPError) as refusal:
         urlopen(request, timeout=10)
     assert refusal.value.code == 403
+
+
+def test_a_workspace_takes_no_default_named_pack(studio: Studio) -> None:
+    """A workspace `policy:default` changed every project with no revision saying so."""
+    bad = {"schema": "worldloom.pack/v1", "kind": "policy", "name": "default",
+           "body": {"values": {"studio.project.pool_size": 7}}}
+    with pytest.raises((PackRefused, ValueError), match="default"):
+        studio.install_pack(bad)
+
+
+def test_an_industry_packs_own_policy_reaches_its_preset(studio: Studio) -> None:
+    studio.install_pack(envelope("bank3", policy={"studio.project.minimum_tasks": 5, "studio.project.pool_size": 7}))
+    with studio.in_force():
+        spec = preset("bank3")
+    assert (spec.minimum_tasks, spec.pool_size) == (5, 7)
+    assert spec.packs and spec.packs[0].startswith("industry:bank3@")
+
+
+def test_a_customised_default_on_the_machine_is_part_of_snapshot_identity(tmp_path: Path) -> None:
+    spec = preset("retail")
+    before = snapshot_intent(spec)
+    home = tmp_path / "home" / "packs" / "prompts"
+    home.mkdir(parents=True)
+    (home / "default.json").write_text(json.dumps({"schema": "worldloom.pack/v1", "kind": "prompts", "name": "default",
+                                                   "body": {"texts": {"pack.interview.role": "Custom {kind}."}}}))
+    packkit.refresh()
+    after = snapshot_intent(spec)
+    assert "defaults" not in before and set(after["defaults"]) == {"prompts"}

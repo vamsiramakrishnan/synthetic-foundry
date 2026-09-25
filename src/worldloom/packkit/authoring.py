@@ -29,33 +29,53 @@ from .active import text as _text
 from .envelope import PackEnvelope, read_envelope
 from .kinds import kind
 from .resolve import ResolvedPack, lint, refresh, resolve, resolve_envelope
-from .sources import discover, find, user_root, write
+from .sources import Located, discover, find, user_root, write
 
 INTERVIEW_SCHEMA = "worldloom.pack-interview/v1"
 MAX_QUESTIONS = 5
 
 
-def check(envelope: PackEnvelope, *, roots: Sequence[str | Path] = ()) -> tuple[ResolvedPack | None, list[Finding]]:
-    """Resolve and lint without storing: the resolved pack and every finding."""
+def check(envelope: PackEnvelope, *, roots: Sequence[str | Path] = (),
+          into: Path | None = None) -> tuple[ResolvedPack | None, list[Finding]]:
+    """Resolve and lint without storing: the resolved pack and every finding.
+
+    *into* is the root the pack will be stored in, when it is the first of
+    *roots*: the pack is resolved as if already there, so one extending its
+    own name (``industry:banking`` over the shipped ``industry:banking``)
+    reaches the pack it will shadow rather than a stale copy of itself.
+    """
+    located = None
+    if into is not None:
+        located = Located(envelope, "root", into / envelope.kind / f"{envelope.name}.json", 0)
     try:
-        resolved = resolve_envelope(envelope, roots=roots)
+        resolved = resolve_envelope(envelope, roots=roots, located=located)
     except (KeyError, ValueError) as error:
         return None, [str(error).strip("'\"")]
     return resolved, lint(resolved, roots=roots)
 
 
 def install(source: str | Path | dict[str, Any] | PackEnvelope, *, root: str | Path | None = None,
-            roots: Sequence[str | Path] = (), replace: bool = False) -> tuple[Path, ResolvedPack]:
+            roots: Sequence[str | Path] = (), replace: bool = False,
+            allow_default: bool = True) -> tuple[Path, ResolvedPack]:
     """Upload: check, refuse with findings, else write to *root* (the user's pack root by default).
 
     A pack already stored under the same ``kind:name`` in *root* is refused
     unless *replace*; one shadowing a shipped or another root's pack is
-    allowed, since shadowing is how a pack is customised.
+    allowed, since shadowing is how a pack is customised. A pack named its
+    kind's default customises every build under the root, so a caller whose
+    root must only change what is chosen by name (a Studio workspace) passes
+    ``allow_default=False``.
     """
     envelope = source if isinstance(source, PackEnvelope) else read_envelope(source)
     target_root = Path(root) if root is not None else user_root()
+    if not allow_default and envelope.name == kind(envelope.kind).default:
+        raise ValueError(f"pack {envelope.ref()}: this root does not take a {envelope.kind} default, which would change "
+                         "every build under it; give the pack its own name and choose it")
+    if (target_root / envelope.kind / envelope.name).is_dir():
+        raise ValueError(f"pack {envelope.ref()} is stored in {target_root} as a directory pack, which would still "
+                         "shadow an uploaded file; replace the directory instead")
     search = (target_root, *roots)
-    resolved, findings = check(envelope, roots=search)
+    resolved, findings = check(envelope, roots=search, into=target_root)
     if findings or resolved is None:
         refuse(f"pack {envelope.ref()}", findings)
     existing = target_root / envelope.kind / f"{envelope.name}.json"
@@ -156,7 +176,8 @@ def accept(request_payload: dict[str, Any], reply: dict[str, Any] | InterviewRep
         envelope = PackEnvelope(kind=request_payload["kind"], **parsed.proposal.model_dump())
     except ValueError as error:
         return Verdict("refused", findings=(str(error),))
-    resolved, findings = check(envelope, roots=roots)
+    first = Path(roots[0]) if roots else None
+    resolved, findings = check(envelope, roots=roots, into=first)
     if findings or resolved is None:
         return Verdict("refused", envelope=envelope, findings=tuple(findings), message=parsed.message)
     return Verdict("accepted", envelope=envelope, resolved=resolved, message=parsed.message,
@@ -177,7 +198,7 @@ class Authored:
 
 def author(kind_name: str, message: str, exchange: Exchange, *, name: str = "", max_rounds: int = 4,
            root: str | Path | None = None, roots: Sequence[str | Path] = (), replace: bool = False,
-           draft: dict[str, Any] | None = None) -> Authored:
+           draft: dict[str, Any] | None = None, allow_default: bool = True) -> Authored:
     """Interview a harness until it proposes a pack the lint accepts, then store it.
 
     Stops early on questions: the operator answers them, not this loop, and a
@@ -203,7 +224,8 @@ def author(kind_name: str, message: str, exchange: Exchange, *, name: str = "", 
         conversation.append({"assistant": verdict.message, "system": "refused: " + "; ".join(findings[:6])})
     if result.verdict.status == "accepted" and root is not None:
         assert result.verdict.envelope is not None
-        result.location, _ = install(result.verdict.envelope, root=root, roots=roots, replace=replace)
+        result.location, _ = install(result.verdict.envelope, root=root, roots=roots, replace=replace,
+                                     allow_default=allow_default)
     return result
 
 

@@ -38,7 +38,12 @@ def snapshot_intent(spec: ProjectSpec) -> dict[str, Any]:
             "lobs": [lob.model_dump(mode="json") for lob in spec.lobs],
             "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes),
             **({"structure": spec.structure.model_dump(mode="json")} if spec.structure is not None else {}),
-            **({"packs": list(spec.packs)} if spec.packs else {})}
+            **({"packs": list(spec.packs)} if spec.packs else {}),
+            # A customised default on this machine (a user's prompts or policy
+            # default) changes what the snapshot holds without the project
+            # naming it; the shipped defaults add nothing, so the identity of
+            # every project on an ordinary machine is unchanged.
+            **({"defaults": customised} if (customised := packkit.customised_defaults()) else {})}
 
 
 def changes(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
@@ -68,21 +73,24 @@ def preset(engine: str = "retail", name: str | None = None) -> ProjectSpec:
         from .retail_pilot import pilot_project
         return pilot_project(name or operational.company_name())
     chosen, pack = operational.example(engine)
-    if chosen is not None:
-        return operational.project(chosen, name or operational.company_name(pack), pack)
-    from ..industry import project
-    from ..process_bindings.compiler import resource
+    # The example is built under the pack it came from, so the pack's own
+    # sizing and prompts reach the project that pins it.
+    with packkit.use(pack if pack is not None and not pack.is_default else None):
+        if chosen is not None:
+            return operational.project(chosen, name or operational.company_name(pack), pack)
+        from ..industry import project
+        from ..process_bindings.compiler import resource
 
-    industry = pack.body.industry if pack is not None and pack.body.industry else engine
-    if industry in resource("defaults.json")["DEFAULT_ORGS"]:
-        # Any industry the process catalogue knows starts from its derived
-        # programme: every line of business with a supported process line, every
-        # line of theirs as a use case with the line's own count, and the
-        # company's limitations acknowledged rather than hidden.
-        spec = project(industry, name or operational.company_name(pack))
-        if pack is not None and not pack.is_default:
-            spec = ProjectSpec.model_validate({**spec.model_dump(mode="json"), "packs": [pack.pinned]})
-        return spec
+        industry = pack.body.industry if pack is not None and pack.body.industry else engine
+        if industry in resource("defaults.json")["DEFAULT_ORGS"]:
+            # Any industry the process catalogue knows starts from its derived
+            # programme: every line of business with a supported process line, every
+            # line of theirs as a use case with the line's own count, and the
+            # company's limitations acknowledged rather than hidden.
+            spec = project(industry, name or operational.company_name(pack))
+            if pack is not None and not pack.is_default:
+                spec = ProjectSpec.model_validate({**spec.model_dump(mode="json"), "packs": [pack.pinned]})
+            return spec
     raise ValueError(
         "the runnable examples are " + ", ".join(sorted(packkit.policy("studio.operational"))) + " and any industry "
         "pack with an operational example, and any industry the process catalogue knows starts from its derived "
@@ -179,7 +187,7 @@ class Studio:
             _, findings = packkit.check(parsed, roots=(self.pack_root,))
             if findings:
                 raise PackRefused(f"pack {parsed.ref()}", findings)
-            location, resolved = packkit.install(parsed, root=self.pack_root, replace=replace)
+            location, resolved = packkit.install(parsed, root=self.pack_root, replace=replace, allow_default=False)
         return {"installed": resolved.ref, "pinned": resolved.pinned, "digest": resolved.digest,
                 "chain": list(resolved.chain), "location": str(location)}
 
@@ -198,7 +206,8 @@ class Studio:
                                       "proposal": verdict.envelope.dump() if verdict.envelope else None}
             if verdict.status == "accepted":
                 assert verdict.envelope is not None
-                location, resolved = packkit.install(verdict.envelope, root=self.pack_root, replace=replace)
+                location, resolved = packkit.install(verdict.envelope, root=self.pack_root, replace=replace,
+                                                    allow_default=False)
                 result.update(installed=resolved.ref, pinned=resolved.pinned, location=str(location))
         return result
 
@@ -210,7 +219,7 @@ class Studio:
         with self.in_force():
             authored = packkit.author(kind, message, run_exec_exchange(harness_command, timeout=timeout), name=name,
                                       max_rounds=int(packkit.policy("pack.interview.max_rounds")),
-                                      root=self.pack_root, replace=replace)
+                                      root=self.pack_root, replace=replace, allow_default=False)
             verdict = authored.verdict
             pinned = (packkit.resolve(verdict.envelope.ref(), roots=(self.pack_root,)).pinned
                       if authored.location is not None and verdict.envelope is not None else None)

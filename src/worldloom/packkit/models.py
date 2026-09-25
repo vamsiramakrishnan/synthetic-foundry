@@ -24,6 +24,10 @@ TERM_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
 
 Scalar = str | int | float | bool
 
+#: Policy an industry pack may not override: security bounds on what an agent
+#: may send or receive, which belong to whoever operates the service.
+LOCKED_POLICY_PREFIXES: tuple[str, ...] = ("connectors.serving.",)
+
 
 class IndustryExample(CascadeModel):
     """The example company a console or a preset starts from for this industry."""
@@ -76,6 +80,11 @@ class PromptsPack(CascadeModel):
     """Every prompt, instruction and templated sentence, by dotted key."""
 
     texts: dict[str, str] = Field(default_factory=dict)
+    formatted: dict[str, bool] = Field(default_factory=dict)
+    """Keys whose caller runs the text through ``str.format`` (a workflow's
+    ``prompt_template``), so an override is held to Python's format grammar:
+    a stray brace or a new field would raise inside a build, long after the
+    pack was accepted. A mapping rather than a list so fragments merge."""
 
 
 class PolicyPack(CascadeModel):
@@ -86,6 +95,21 @@ class PolicyPack(CascadeModel):
 
 def placeholders(template: str) -> set[str]:
     return set(PLACEHOLDER.findall(template))
+
+
+def format_fields(template: str) -> set[str]:
+    """The fields ``str.format`` would look up in *template*; raises ``ValueError`` on a malformed one."""
+    import string
+
+    fields: set[str] = set()
+    for _, field, _, _ in string.Formatter().parse(template):
+        if field is None:
+            continue
+        root = re.split(r"[.\[]", field, maxsplit=1)[0]
+        if not root or root.isdigit():
+            raise ValueError(f"{{{field}}} is positional; name the field")
+        fields.add(root)
+    return fields
 
 
 def term_tokens(template: str) -> set[str]:
@@ -133,6 +157,18 @@ def lint_prompts(body: PromptsPack, context: LintContext, *, where: str = "texts
                 close = sorted(k for k in default.texts if k.split(".")[0] == key.split(".")[0])[:5]
                 findings.append(f"{where}.{key}: no such prompt key" + (f"; this family has {', '.join(close)}" if close else ""))
                 continue
+            if default.formatted.get(key):
+                try:
+                    unknown = format_fields(text) - format_fields(default.texts[key])
+                except ValueError as error:
+                    findings.append(f"{where}.{key}: its caller formats it with str.format, which refuses it ({error}); "
+                                    "write a literal brace as {{{{ or }}}}")
+                    continue
+                if unknown:
+                    findings.append(f"{where}.{key}: introduces {', '.join('{' + f + '}' for f in sorted(unknown))}; "
+                                    f"its caller fills only {', '.join('{' + f + '}' for f in sorted(format_fields(default.texts[key])))}")
+                findings.extend(_term_findings(f"{where}.{key}", text, known_terms))
+                continue
             extra = placeholders(text) - placeholders(default.texts[key])
             if extra:
                 findings.append(f"{where}.{key}: introduces {', '.join('{' + p + '}' for p in sorted(extra))}; "
@@ -158,8 +194,10 @@ def lint_policy(body: PolicyPack, context: LintContext, *, where: str = "values"
             findings.append(f"{where}.{key}: {value!r} is not the type of the shipped value {shipped!r}")
         elif isinstance(shipped, int) and not isinstance(shipped, bool) and isinstance(value, float) and not value.is_integer():
             findings.append(f"{where}.{key}: {value!r} must be a whole number like the shipped {shipped!r}")
-        elif isinstance(shipped, (int, float)) and not isinstance(shipped, bool) and isinstance(value, (int, float)) and value < 0 <= shipped:
-            findings.append(f"{where}.{key}: {value!r} is negative; the shipped value is {shipped!r}")
+        elif isinstance(shipped, (int, float)) and not isinstance(shipped, bool) and isinstance(value, (int, float)) and (
+                (value < 0 <= shipped) or (value <= 0 < shipped)):
+            findings.append(f"{where}.{key}: {value!r} must be positive like the shipped {shipped!r}; a limit of zero "
+                            "or less disables what it bounds")
         elif isinstance(shipped, (list, dict, str)) and type(shipped) is not type(value):
             findings.append(f"{where}.{key}: {value!r} is not the type of the shipped value {shipped!r}")
     return findings
@@ -171,13 +209,17 @@ def lint_industry(body: IndustryPack, context: LintContext) -> list[Finding]:
         if not TERM_KEY.match(key):
             findings.append(f"terms.{key}: a term key is lower-case letters, digits and '_' (write `site`, not `Site`); "
                             "capitalised and plural uses are derived")
-        if not value.strip() or "\n" in value or len(value) > 60:
-            findings.append(f"terms.{key}: {value!r} must be a short single-line word or phrase")
+        if not value.strip() or "\n" in value or len(value) > 60 or "{" in value or "}" in value:
+            findings.append(f"terms.{key}: {value!r} must be a short single-line word or phrase, without braces")
     if context.resolve is not None:
         prompts_default = context.resolve("prompts:default")
         findings += lint_prompts(PromptsPack(texts=body.prompts),
                                  LintContext(kind="prompts", name="industry", default=prompts_default,
                                              resolve=context.resolve), where="prompts", terms=body.terms)
+        # Security bounds are the operator's, set in a policy pack they choose;
+        # an industry's words must not be able to lift them.
+        findings += [f"policy.{key}: an industry pack cannot change a serving limit; set it in a policy pack"
+                     for key in sorted(body.policy) if key.startswith(LOCKED_POLICY_PREFIXES)]
         policy_default = context.resolve("policy:default")
         findings += lint_policy(PolicyPack(values=body.policy),
                                 LintContext(kind="policy", name="industry", default=policy_default), where="policy")

@@ -241,7 +241,9 @@ class ConnectorEmulator:
             raise ConnectorError(400, kind, kind) from error
         try:
             message = template.format(**fmt)
-        except KeyError:
+        except (KeyError, IndexError, ValueError, AttributeError):
+            # An uploaded connector's error text is data: one that does not
+            # format is shown as written rather than escaping the emulator.
             message = template
         return ConnectorError(code, message, kind)
 
