@@ -46,9 +46,9 @@ def _alias_matches(connector: str, requested: str, actual: str) -> bool:
     # Memoised per triple: materialisation asks this once per requirement and
     # record, and a corpus of ten thousand records must not parse the
     # definition ten thousand times.
-    from .connector_definition import REFERENCE_CONNECTORS, load_connector_definition
+    from .connector_definition import is_reference_connector, load_connector_definition
 
-    if connector not in REFERENCE_CONNECTORS:
+    if not is_reference_connector(connector):
         return False
     try:
         return load_connector_definition(connector).entity_matches(requested, actual)

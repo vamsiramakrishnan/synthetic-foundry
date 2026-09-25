@@ -1,0 +1,4 @@
+{
+  "about": "The order the reference connector list names the shipped definitions in: the order they were added. Every other *.json here is one connector; one this list does not name follows these, alphabetically.",
+  "order": ["jira", "servicenow", "salesforce", "confluence", "sharepoint", "drive", "outlook", "email", "onedrive", "teams", "slack", "teamwork_graph", "rovo", "sor"]
+}

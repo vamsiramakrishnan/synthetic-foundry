@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, StrictBool, StrictInt, model_validator
 
+from .. import packkit
 from ..archive import Archive, Axis
 from ..corpus import write_json
 from ..eval_candidates import GeneratedCandidate
@@ -375,7 +376,8 @@ def calibrate_noise(
             from ..narrative.reader_checks import plan as reader_plan
             from ..narrative.reader_checks import replay, verified_review
             expected_plan = reader_plan(candidate.world, reader_id=plan.reader_id, instances=transformed.instances,
-                                        share=float(plan.reader_config.get("share", 0.1)), reader_config=plan.reader_config)
+                                        share=float(plan.reader_config.get("share", packkit.policy("evals.calibration.reader_share"))),
+                                        reader_config=plan.reader_config)
             if old:
                 from ..narrative.reader_checks import ReaderReview
                 present = {entry.key for entry in candidate.world.ledger}

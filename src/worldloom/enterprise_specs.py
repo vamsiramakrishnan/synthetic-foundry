@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from enum import StrEnum
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from pydantic import Field, model_validator
 
+from . import packkit
 from .cascade import Brief, CascadeModel, Finding, load, refuse
-from .connector_definition import ConnectorFieldDefinition
+from .connector_definition import (
+    ConnectorDefinition,
+    ConnectorFieldDefinition,
+    builtin_connector_definitions,
+    reference_connectors,
+)
 
 
 class Operation(StrEnum):
@@ -272,7 +279,51 @@ BUILTIN_CONNECTORS = (
 )
 
 
-def _workflow(name: str, purpose: str, sources: tuple[SourceRole, ...], destinations: tuple[DestinationRole, ...], actions: tuple[ContentAction, ...]) -> WorkflowSpec:
+#: A definition operation that is the same act as a spec `Operation`. A
+#: definition's `post` and `upload` make a record, so they read as `create`.
+_DEFINITION_OPERATIONS = {**{item.value: item for item in Operation}, "post": Operation.CREATE, "upload": Operation.CREATE}
+
+
+def connector_spec_from_definition(definition: ConnectorDefinition) -> ConnectorSpec:
+    """The spec a connector pack gets when no hand-written `ConnectorSpec` names it.
+
+    Every entity the definition declares, keyed by the definition's identity
+    field, reading as `search`/`list`/`read` and writing through each
+    operation its entity maps to a tool; `patch` and `upsert`, which no
+    definition carries, stay off, the rule the six hand-mirrored specs in
+    `BUILTIN_CONNECTORS` follow. The builtin tuple is not derived through this:
+    its display names, stable ids and operation order predate the definitions
+    and are pinned by every planned query row, and they differ from what the
+    definitions say (``Jira`` is ``Jira Cloud``, Jira's entity is ``issue``,
+    not the definition's issue types).
+    """
+
+    entities = []
+    for name, entity in definition.entities.items():
+        writes = {_DEFINITION_OPERATIONS[op] for op in entity.ops if op in _DEFINITION_OPERATIONS} - set(READ)
+        writes -= {Operation.PATCH, Operation.UPSERT}
+        entities.append(_entity(name, definition.id.field, READ + tuple(item for item in Operation if item in writes)))
+    return ConnectorSpec(name=definition.connector, display_name=definition.vendor_product, entities=tuple(entities),
+                         content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT))
+
+
+def _connectors() -> tuple[ConnectorSpec, ...]:
+    """`BUILTIN_CONNECTORS`, then a derived spec for every connector pack in view.
+
+    Without a pack in view this is `BUILTIN_CONNECTORS` itself, so a default
+    registry is unchanged. A pack named like a builtin connector keeps the
+    builtin spec: the spec is the planner's vocabulary, and a shadowing pack
+    changes what is served, not which workflows can be planned.
+    """
+    known = {spec.name for spec in BUILTIN_CONNECTORS}
+    extra = tuple(name for name in reference_connectors() if name not in known)
+    if not extra:
+        return BUILTIN_CONNECTORS
+    definitions = builtin_connector_definitions(extra)
+    return (*BUILTIN_CONNECTORS, *(connector_spec_from_definition(definitions[name]) for name in extra))
+
+
+def _workflow(name: str, purpose: str, sources: tuple[SourceRole, ...], destinations: tuple[DestinationRole, ...], actions: tuple[ContentAction, ...], prompt_template: str) -> WorkflowSpec:
     return WorkflowSpec(
         name=name,
         purpose=purpose,
@@ -285,21 +336,31 @@ def _workflow(name: str, purpose: str, sources: tuple[SourceRole, ...], destinat
         destinations=destinations,
         content_actions=actions,
         audiences=("executive", "manager", "analyst", "operations", "customer"),
-        prompt_template=(
-            "Prepare the {period} {purpose} for {company}'s {audience} audience. "
-            "Use {sources}. {action_instruction} {output_label} in {destination}. "
-            "Reconcile records by stable identifiers, preserve source links and manually entered content, "
-            "then {verification_instruction}.{failure_instruction}"
-        ),
+        prompt_template=prompt_template,
     )
 
 
-BUILTIN_WORKFLOWS = (
-    _workflow("incident_review", "incident review", (SourceRole(connector="servicenow", entities=("incident", "change_request")), SourceRole(connector="jira", entities=("issue",)), SourceRole(connector="email", entities=("thread",))), (DestinationRole(connector="confluence", entities=("page",), operations=MUTATE, formats=("html", "markdown")), DestinationRole(connector="sharepoint", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="email", entities=("message",), operations=(Operation.DRAFT, Operation.REPLY), formats=("html",))), (ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.RECONCILE, ContentAction.GENERATE)),
-    _workflow("customer_health", "customer health review", (SourceRole(connector="salesforce", entities=("account", "opportunity", "case")), SourceRole(connector="email", entities=("thread",)), SourceRole(connector="drive", entities=("file",))), (DestinationRole(connector="salesforce", entities=("account", "opportunity", "case"), operations=(Operation.UPDATE, Operation.PATCH, Operation.UPSERT)), DestinationRole(connector="drive", entities=("file",), operations=MUTATE, formats=("xlsx", "pptx", "pdf")), DestinationRole(connector="email", entities=("message",), operations=(Operation.DRAFT, Operation.REPLY), formats=("html",))), (ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE, ContentAction.GENERATE)),
-    _workflow("change_assurance", "change assurance pack", (SourceRole(connector="servicenow", entities=("change_request", "incident")), SourceRole(connector="jira", entities=("issue",)), SourceRole(connector="confluence", entities=("page",))), (DestinationRole(connector="sharepoint", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="confluence", entities=("page",), operations=MUTATE, formats=("html", "markdown"))), (ContentAction.EXTRACT, ContentAction.RECONCILE, ContentAction.GENERATE, ContentAction.RENDER)),
-    _workflow("executive_digest", "executive operating digest", tuple(SourceRole(connector=name, entities=(("thread",) if name == "email" else ("file",) if name in {"drive", "sharepoint"} else ("page",) if name == "confluence" else ("issue",) if name == "jira" else ("incident",) if name == "servicenow" else ("opportunity",))) for name in ("jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email")), (DestinationRole(connector="drive", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="sharepoint", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="email", entities=("message",), operations=(Operation.DRAFT, Operation.SEND), formats=("html",))), (ContentAction.SUMMARIZE, ContentAction.COMPARE, ContentAction.GENERATE, ContentAction.RENDER)),
-)
+def _builtin_workflows() -> tuple[WorkflowSpec, ...]:
+    """The builtin workflows, their prompt template read from the prompts pack in force.
+
+    Read per registry rather than once at import, so an industry pack that
+    rewords `enterprise.workflow.prompt` reaches the queries planned under it.
+    """
+    return _workflows_for(packkit.template("enterprise.workflow.prompt"))
+
+
+@lru_cache(maxsize=8)
+def _workflows_for(prompt_template: str) -> tuple[WorkflowSpec, ...]:
+    return (
+        _workflow("incident_review", "incident review", (SourceRole(connector="servicenow", entities=("incident", "change_request")), SourceRole(connector="jira", entities=("issue",)), SourceRole(connector="email", entities=("thread",))), (DestinationRole(connector="confluence", entities=("page",), operations=MUTATE, formats=("html", "markdown")), DestinationRole(connector="sharepoint", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="email", entities=("message",), operations=(Operation.DRAFT, Operation.REPLY), formats=("html",))), (ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.RECONCILE, ContentAction.GENERATE), prompt_template),
+        _workflow("customer_health", "customer health review", (SourceRole(connector="salesforce", entities=("account", "opportunity", "case")), SourceRole(connector="email", entities=("thread",)), SourceRole(connector="drive", entities=("file",))), (DestinationRole(connector="salesforce", entities=("account", "opportunity", "case"), operations=(Operation.UPDATE, Operation.PATCH, Operation.UPSERT)), DestinationRole(connector="drive", entities=("file",), operations=MUTATE, formats=("xlsx", "pptx", "pdf")), DestinationRole(connector="email", entities=("message",), operations=(Operation.DRAFT, Operation.REPLY), formats=("html",))), (ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE, ContentAction.GENERATE), prompt_template),
+        _workflow("change_assurance", "change assurance pack", (SourceRole(connector="servicenow", entities=("change_request", "incident")), SourceRole(connector="jira", entities=("issue",)), SourceRole(connector="confluence", entities=("page",))), (DestinationRole(connector="sharepoint", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="confluence", entities=("page",), operations=MUTATE, formats=("html", "markdown"))), (ContentAction.EXTRACT, ContentAction.RECONCILE, ContentAction.GENERATE, ContentAction.RENDER), prompt_template),
+        _workflow("executive_digest", "executive operating digest", tuple(SourceRole(connector=name, entities=(("thread",) if name == "email" else ("file",) if name in {"drive", "sharepoint"} else ("page",) if name == "confluence" else ("issue",) if name == "jira" else ("incident",) if name == "servicenow" else ("opportunity",))) for name in ("jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email")), (DestinationRole(connector="drive", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="sharepoint", entities=("file",), operations=MUTATE, formats=("docx", "xlsx", "pptx", "pdf")), DestinationRole(connector="email", entities=("message",), operations=(Operation.DRAFT, Operation.SEND), formats=("html",))), (ContentAction.SUMMARIZE, ContentAction.COMPARE, ContentAction.GENERATE, ContentAction.RENDER), prompt_template),
+    )
+
+
+BUILTIN_WORKFLOWS = _builtin_workflows()
+"""The builtin workflows under the shipped prompts; `builtin_registry` reads the packs in force."""
 
 
 BUILTIN_PROCESSES = (
@@ -310,7 +371,7 @@ BUILTIN_PROCESSES = (
 
 
 def builtin_registry() -> SpecRegistry:
-    return SpecRegistry(BUILTIN_CONNECTORS, BUILTIN_WORKFLOWS, BUILTIN_PROCESSES)
+    return SpecRegistry(_connectors(), _builtin_workflows(), BUILTIN_PROCESSES)
 
 
 def canonical_action(value: str, *, content: bool = False) -> str:
@@ -347,8 +408,8 @@ def load_enterprise_spec(
 
 def builtin_spec() -> EnterpriseEvalSpec:
     return EnterpriseEvalSpec(
-        connectors=BUILTIN_CONNECTORS,
-        workflows=BUILTIN_WORKFLOWS,
+        connectors=_connectors(),
+        workflows=_builtin_workflows(),
         processes=BUILTIN_PROCESSES,
     )
 

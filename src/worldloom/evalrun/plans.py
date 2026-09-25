@@ -46,6 +46,7 @@ from typing import Any, Protocol
 
 from pydantic import model_validator
 
+from .. import packkit
 from ..connectors.serving import ConnectorEvaluationService
 from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
 from ..models import Model
@@ -65,13 +66,9 @@ from .safety import OperationSafety
 PLAN_SCHEMA = "worldloom.evalrun-plan/v1"
 PLANS_SCHEMA = "worldloom.evalrun-plans/v1"
 
-PLAN_INSTRUCTIONS: tuple[str, ...] = (
-    "You are the planner under test. Read `query`; using only the tools in `tools`, state the DAG of tool calls you would make. Nothing is executed.",
-    "Reply with exactly one JSON object on stdout: {\"plan\": {\"nodes\": [{\"id\": \"<your id>\", \"tool\": \"<connector.tool>\", \"depends_on\": [\"<id>\", ...], \"entity\": \"<entity>\"}]}}. `depends_on` names the nodes whose results this call needs; a call with no dependencies is a root.",
-    "A search is one node even when it will page; a fetch of every record a search returned is one node depending on the search; a write is one node per record you intend to create, update or delete; a readback after a write is its own node depending on the write.",
-    "Plan for what the request asks, not for failures you cannot foresee. When the request makes a write depend on what a read returns, plan both branches.",
-    "Only tools listed in `tools` exist. `annotations.destructiveHint` marks a call that cannot be undone: plan a read of the record before it.",
-)
+def plan_instructions() -> list[str]:
+    """What a planner is told, from the prompts in force (``evalrun.plan.rule.*``)."""
+    return packkit.texts("evalrun.plan.rule.")
 
 
 class PlannedNode(Model):
@@ -283,7 +280,7 @@ def plan_request(case: EvalCase, catalog: Iterable[Mapping[str, Any]], *, princi
     """What the planner may know: the request and the tools, nothing about the expected DAG."""
 
     return {"schema": PLAN_SCHEMA, "case_id": case.id, "query": case.query, "persona": case.persona,
-            "principal": principal, "tools": [dict(tool) for tool in catalog], "instructions": list(PLAN_INSTRUCTIONS)}
+            "principal": principal, "tools": [dict(tool) for tool in catalog], "instructions": plan_instructions()}
 
 
 def _catalogs(service: ConnectorEvaluationService, cases: Iterable[EvalCase], principal: str) -> dict[str, list[dict[str, Any]]]:
@@ -306,7 +303,7 @@ def plan_requests_document(service: ConnectorEvaluationService, cases: Iterable[
     catalogs = _catalogs(service, listed, principal)
     entries = [{"case_id": case.id, "query": case.query, "persona": case.persona, "principal": principal,
                 "tools": catalogs[case.id]} for case in listed]
-    return {"schema": REQUESTS_SCHEMA, "for": "plan", "instructions": list(PLAN_INSTRUCTIONS), "cases": entries,
+    return {"schema": REQUESTS_SCHEMA, "for": "plan", "instructions": plan_instructions(), "cases": entries,
             "response_schema": {
                 "schema": PLANS_SCHEMA,
                 "cases": {"<case_id>": {"nodes": [{"id": "<id>", "tool": "<connector.tool>", "depends_on": ["<id>"], "entity": "<entity>"}]}},
@@ -346,7 +343,6 @@ def plan_cases(service: ConnectorEvaluationService, cases: Iterable[EvalCase], p
 
 
 __all__ = [
-    "PLAN_INSTRUCTIONS",
     "PLAN_SCHEMA",
     "PLANS_SCHEMA",
     "ExecPlanner",
@@ -359,6 +355,7 @@ __all__ = [
     "load_plans",
     "parse_plan",
     "plan_cases",
+    "plan_instructions",
     "plan_request",
     "plan_requests_document",
     "reference_plan",

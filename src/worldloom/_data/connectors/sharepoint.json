@@ -549,5 +549,23 @@
     "list": "list",
     "status": "fields/Status",
     "owner": "fields/Owner"
+  },
+  "record_projection": {
+    "fields": {
+      "item_id": "{key|first:16|upper}",
+      "name": "{title}",
+      "parent": "/{function|slug}/{stream}",
+      "content": "{body}",
+      "created_at": "{stamp}",
+      "modified_at": "{stamp}"
+    },
+    "entities": {
+      "list_item": {
+        "fields": {
+          "Title": "{title}",
+          "Status": "{status}"
+        }
+      }
+    }
   }
 }

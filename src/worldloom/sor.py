@@ -31,11 +31,13 @@ from collections.abc import Sequence
 from functools import lru_cache
 from typing import Any
 
+from . import packkit
 from .connector_data import (
     ConnectorProjectionRegistry,
     ConnectorRecord,
     builtin_projections,
 )
+from .connector_projection import ConnectorRecordProjection
 from .ids import content_key
 from .models import CanonicalFact, Model
 from .process_bindings import CompiledCatalogue, load_catalogue
@@ -520,6 +522,7 @@ def product_records(
     from . import industry
 
     products = (table if table is not None else industry.emulated_systems())["products"]
+    projections: dict[str, ConnectorRecordProjection] = {}
     out: list[ConnectorRecord] = []
     for record in rows:
         mapped = products.get(str(record.fields.get("product", "")))
@@ -530,8 +533,10 @@ def product_records(
             continue
         connector = str(mapped["connector"])
         key = content_key("sor-product", record.id, connector, entity)
+        if connector not in projections:
+            projections[connector] = _projection(connector)
         fields = {**record.fields, "sor_record_id": record.id,
-                  **_native_fields(connector, entity, record, key)}
+                  **_native_fields(connector, entity, record, key, projections[connector])}
         out.append(ConnectorRecord(
             id=f"CONN-{connector.upper()}-{key[:12].upper()}",
             connector=connector,
@@ -544,43 +549,37 @@ def product_records(
     return out
 
 
-def _native_fields(connector: str, entity: str, record: ConnectorRecord, key: str) -> dict[str, Any]:
-    """The fields *connector*'s own objects carry, read off one `sor` record."""
+def _projection(connector: str) -> ConnectorRecordProjection:
+    """How *connector* shows a catalogue record: its definition's `record_projection`.
+
+    A definition that declares none is shown file-shaped, the way SharePoint
+    declares it, which is what every connector other than the five with
+    objects of their own always got.
+    """
+    from .connector_definition import load_connector_definition
+
+    declared = load_connector_definition(connector).record_projection
+    if declared is None:
+        declared = load_connector_definition("sharepoint").record_projection
+    assert declared is not None, "the sharepoint definition declares the file-shaped record projection"
+    return declared
+
+
+def _native_fields(connector: str, entity: str, record: ConnectorRecord, key: str,
+                   projection: ConnectorRecordProjection | None = None) -> dict[str, Any]:
+    """The fields *connector*'s own objects carry, read off one `sor` record.
+
+    The field shapes are the connector definition's `record_projection`
+    (`connector_projection`); this supplies the context a template reads: the
+    record's fields, its title and external id, the content key, the body
+    sentence and the period's timestamp.
+    """
     f = record.fields
-    period, owner, status = str(f["period"]), str(f["owner_bu"]), str(f["status"])
-    body = (f"{record.title}. Control: {f['control']}."
-            + (f" Exception: {f['exception']}." if f["exception"] else ""))
-    stamp = _stamp(period)
-    if connector == "servicenow":
-        return {"sys_id": key[:32], "number": record.external_id, "short_description": record.title,
-                "description": body, "state": status, "caller_id": owner, "assignment_group": owner,
-                "opened_at": stamp, **({"type": "normal"} if entity == "change_request" else {})}
-    if connector == "salesforce":
-        native: dict[str, Any] = {"Id": key[:18].upper(), "Name": record.title, "Description": body,
-                                  "OwnerId": owner, "CreatedDate": stamp}
-        if entity == "opportunity":
-            native.update(StageName=status, CloseDate=period + "-28")
-        elif entity == "case":
-            native.update(Subject=record.title, Status=status)
-        elif entity == "contact":
-            native.update(LastName=owner)
-        return native
-    if connector == "jira":
-        project = str(f["stream"]).upper()[:10]
-        return {"key": f"{project}-{int(key[:8], 16) % 100000}", "summary": record.title, "description": body,
-                "status": status, "assignee": owner, "project": project,
-                "labels": [f["stream"], f["function"], period]}
-    if connector == "confluence":
-        return {"page_id": str(int(key[:10], 16) % 10**8), "space": str(f["stream"]).upper()[:10],
-                "text": body, "created_at": stamp, "modified_at": stamp}
-    if connector == "email":
-        return {"thread_id": f"<{key}@{_slug(str(f['company_id']))}.example>", "subject": record.title,
-                "body": body, "sent_at": stamp, "state": "sent",
-                "from": _address(owner, str(f["company_id"])), "to": [_address(f"{f['function']} team", str(f["company_id"]))]}
-    # SharePoint documents and lists, and any other file-shaped emulator.
-    return {"item_id": key[:16].upper(), "name": record.title, "parent": f"/{_slug(str(f['function']))}/{f['stream']}",
-            "content": body, "created_at": stamp, "modified_at": stamp,
-            **({"fields": {"Title": record.title, "Status": status}} if entity == "list_item" else {})}
+    body = (packkit.text("connectors.record.body", title=record.title, control=f["control"])
+            + (packkit.text("connectors.record.exception", exception=f["exception"]) if f["exception"] else ""))
+    context = {**f, "title": record.title, "external_id": record.external_id, "key": key, "body": body,
+               "stamp": _stamp(str(f["period"]))}
+    return (projection or _projection(connector)).project(entity, context)
 
 
 def product_records_for_world(world: Any, connector: str) -> list[ConnectorRecord]:

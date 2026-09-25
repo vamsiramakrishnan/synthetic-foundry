@@ -494,7 +494,7 @@ worldloom evalrun run <CORPUS>
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
-| `--max-turns` | Turns the --exec child may take per case. |
+| `--max-turns` | Turns the --exec child may take per case (default: policy `evalrun.max_turns`, 64). |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
 | `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |
