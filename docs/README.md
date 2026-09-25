@@ -22,6 +22,7 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
 | Use Worldloom from Python | [Python SDK](sdk.md) | [Episode grammar](episode-grammar.md) |
 | Drive Worldloom with a coding agent | [Agent skills](skills.md) | [AGENTS.md](../AGENTS.md) |
+| Speak an industry's language, or change a prompt, default or connector without code | [Packs](packs.md) | [Studio](studio.md) |
 | Add a company-specific vocabulary | [Lore](lore.md) | [Generation model](generation-model.md) |
 | Add an artifact type | [Artifact compiler](artifact-compiler.md) | [Episode grammar](episode-grammar.md) |
 | Add a process or vertical | [Episode grammar](episode-grammar.md) | [Build order](build-order.md) and [Actor simulation](actor-simulation.md) |

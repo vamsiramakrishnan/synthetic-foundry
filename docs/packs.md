@@ -1,0 +1,144 @@
+# Packs: every layer as data
+
+A **pack** is one JSON document that supplies one layer of the product: how an
+industry talks, the prompts a harness reads, the numeric defaults a run follows,
+a company, a connector, a line of business, a document type or a presentation
+profile. Every kind of pack is found, layered, checked, uploaded and authored by
+the same mechanism, `worldloom.packkit`. A new kind is a registration and a
+default file; it needs no new loader.
+
+```bash
+worldloom pack kinds                          # what can be a pack, and what each controls
+worldloom pack list industry                  # every visible industry pack and where it comes from
+worldloom pack show industry:banking          # the resolved pack: merged body, digest, chain, findings
+worldloom pack lint hospital.json             # resolve and lint without storing
+worldloom pack install hospital.json          # upload: lint, refuse with findings, or store by name
+worldloom pack author industry --name hospital \
+  --message "An acute hospital network" --harness-command 'python adapter.py'
+worldloom --pack industry:hospital build --seed 8128 --out ./corpus
+```
+
+## The envelope
+
+```json
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "hospital",
+  "title": "Acute hospital network",
+  "extends": ["industry:healthcare"],
+  "body": {"terms": {"site": "hospital", "customer": "patient"}}
+}
+```
+
+A pack states only what differs. Its body is merged onto its `extends` chain,
+and a pack with no `extends` layers on its kind's default (`industry:default`,
+`prompts:default`, `policy:default`). Mappings merge deeply. Lists replace,
+unless the kind names a key to merge them by (a company's `units` merge by
+`key`). `null` removes a key. The merged body is validated against the kind's
+model. The digest covers the kind, the name and that merged body, so
+`industry:hospital@<digest>` names exactly one resolved pack. A pinned reference
+refuses a pack whose content has changed.
+
+## Where packs are found
+
+Packs are searched in this order. A higher entry shadows the same `kind:name`
+lower down:
+
+1. roots the caller names: `--pack-root`, a Studio workspace's `packs/`;
+2. each directory in `WORLDLOOM_PACK_PATH`;
+3. the user's directory, `$WORLDLOOM_HOME/packs` (by default `~/.worldloom/packs`);
+4. the packs shipped in `worldloom/_data/packs`.
+
+Every root has the same layout: `<kind>/<name>.json`, or a directory
+`<kind>/<name>/` holding `pack.json` plus body fragments merged in file-name
+order. A pack that extends its own name reaches the pack it shadows. That is how
+a user adjusts a shipped industry: write `industry/banking.json` with
+`"extends": ["industry:banking"]` and change one term.
+
+## Industry packs: colloquialising the product
+
+An industry pack holds:
+
+- the industry's words (`terms`);
+- the phrases that recognise the industry in a company description (`aliases`);
+- the engine it rides;
+- an example company;
+- the prompt and policy keys it overrides.
+
+Every template in the product reaches a word through `{{term:site}}`. The case
+and the plural are derived: `{{term:Site}}` gives `Branch`, `{{term:sites}}`
+gives `branches`, and `{{term:SITES}}` gives `BRANCHES`. A pack still states an
+irregular plural as a term of its own.
+
+The default industry pack holds the words the product used before packs existed.
+A build that puts no industry pack in force is therefore byte-identical to one
+made before this mechanism.
+
+## Prompts and policy
+
+Every prompt, instruction and templated sentence is a key in `prompts:default`.
+Every default that a build, compile or evaluation follows is a key in
+`policy:default`. Code reads them with `packkit.text(key, **values)` and
+`packkit.policy(key)`. An industry pack's own `prompts` and `policy` override
+them for that industry only.
+
+Overrides are linted:
+
+- an unknown key is refused, with the nearby keys named;
+- a prompt that introduces a `{placeholder}` its caller does not fill is refused;
+- a `{{term:x}}` that names no term is refused;
+- a policy value of the wrong type is refused.
+
+`text` fills only the placeholders it is given and interprets nothing else, so a
+prompt may contain JSON or a `{{fact:ID}}` example without escaping.
+
+## Uploading and authoring
+
+A pack reaches a root in one of two ways, and both run the same checks.
+
+**Upload.** `worldloom pack install FILE [--into ROOT]`, or `POST /api/packs` in
+Studio. The pack is resolved (so `extends` must name packs that exist), linted
+by its kind, and then either refused with every finding or stored as
+`<root>/<kind>/<name>.json`.
+
+**Harness interview.** `worldloom pack author KIND --message ... --harness-command ...`
+runs the refusal cycle:
+
+1. Worldloom sends a bounded request. It carries the kind's model as a JSON
+   Schema, the shipped default as an example, the visible packs of that kind,
+   the operator's message, the current draft and the last refusal's findings.
+2. The harness replies with questions or a proposal.
+3. A proposal that fails the lint comes back with its findings, until it passes
+   or the round budget (`policy: pack.interview.max_rounds`) runs out.
+4. Questions stop the loop, because the operator answers them, not the harness.
+
+`worldloom pack interview request` and `worldloom pack interview accept` do the
+same exchange through files, for a harness you drive yourself. Only the accepted
+envelope is stored. The conversation never is.
+
+## Replay
+
+A pack that changes what a seed generates must replay without its file.
+`packkit.recorded()` returns the reference, digest, chain and merged body of every
+non-default pack in force, and a recipe stores it. `packkit.use_recorded(...)`
+puts those packs back in force from the stored bodies, and refuses a body that
+no longer matches its digest. A default build records nothing, so its recipe is
+unchanged.
+
+## Kinds
+
+| Kind | Body | Lint | Default |
+| --- | --- | --- | --- |
+| `industry` | `IndustryPack`: terms, aliases, engine, example, prompt and policy overrides | term keys, placeholders, known prompt and policy keys, engine | `industry:default` |
+| `prompts` | `texts: {key: template}` | known keys, placeholders kept, known terms | `prompts:default` |
+| `policy` | `values: {key: value}` | known keys, shipped types | `policy:default` |
+| `company` | `packs.Pack` | `packs.lint` | — |
+| `connector` | `ConnectorDefinition` | stored name matches the definition | — |
+| `lob` | `lob.Lob` | `lob.lint_lob` | — |
+| `doctype` | `doctypes.DocumentType` | `doctypes.lint` | — |
+| `presentation` | `presentation.PresentationSeed` | `presentation.review` | — |
+
+To register a kind, call `packkit.register_kind(PackKind(name=..., model=...,
+lint=..., about=...))`. If the kind has a default, ship it as
+`_data/packs/<kind>/default/`.

@@ -85,6 +85,9 @@ DOCUMENTS = (
     # skill does.
     "docs/operational-synthesis.md",
     ".claude/skills/worldloom-synthesis/SKILL.md",
+    # The pack kernel: every layer as data, uploaded or interviewed.
+    "docs/packs.md",
+    ".claude/skills/worldloom-packs/SKILL.md",
     # The eval-first, artifact-realism and process-catalogue waves, gated the
     # day they were folded into the harness contract rather than the day they
     # landed: the two harness-docs failures that were red on main for a week
@@ -150,6 +153,9 @@ UNDOCUMENTED_BY_DESIGN = {
     "evals export",
 }
 
+#: Options the top-level app accepts before any command, each taking a value.
+_GLOBAL_OPTIONS = {"--pack", "--pack-root"}
+
 _FENCE = re.compile(r"```(?:bash|sh|console)?\n(.*?)```", re.DOTALL)
 _MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
@@ -175,7 +181,12 @@ def _invocations(text: str) -> list[list[str]]:
             line = line.split("#", 1)[0].strip()
             if not line.startswith("worldloom "):
                 continue
-            found.append(line.split()[1:])
+            tokens = line.split()[1:]
+            # The app's own options (`--pack`, `--pack-root`) come before the
+            # command and take a value; they are the callback's, not the command's.
+            while len(tokens) > 1 and tokens[0] in _GLOBAL_OPTIONS:
+                tokens = tokens[2:]
+            found.append(tokens)
     return found
 
 
