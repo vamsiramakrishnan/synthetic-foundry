@@ -133,11 +133,11 @@ unchanged.
 | `industry` | `IndustryPack`: terms, aliases, engine, example, prompt and policy overrides | term keys, placeholders, known prompt and policy keys, engine | `industry:default` |
 | `prompts` | `texts: {key: template}` | known keys, placeholders kept, known terms | `prompts:default` |
 | `policy` | `values: {key: value}` | known keys, shipped types | `policy:default` |
-| `company` | `packs.Pack` | `packs.lint` | — |
-| `connector` | `ConnectorDefinition` | stored name matches the definition | — |
-| `lob` | `lob.Lob` | `lob.lint_lob` | — |
-| `doctype` | `doctypes.DocumentType` | `doctypes.lint` | — |
-| `presentation` | `presentation.PresentationSeed` | `presentation.review` | — |
+| `company` | `packs.Pack` | `packs.lint` | none |
+| `connector` | `ConnectorDefinition` | stored name matches the definition | none |
+| `lob` | `lob.Lob` | `lob.lint_lob` | none |
+| `doctype` | `doctypes.DocumentType` | `doctypes.lint` | none |
+| `presentation` | `presentation.PresentationSeed` | `presentation.review` | none |
 
 To register a kind, call `packkit.register_kind(PackKind(name=..., model=...,
 lint=..., about=...))`. If the kind has a default, ship it as
