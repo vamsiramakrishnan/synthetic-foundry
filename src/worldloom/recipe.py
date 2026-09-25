@@ -32,7 +32,8 @@ That works only if the corpus knows how to rebuild itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -64,6 +65,16 @@ LORE_CLAIMS_KEY = "lore_claims"
 # actually used after explicit overrides. Keeping both avoids attributing an
 # operator's chosen range to an estimator that never proposed it.
 PRIOR_RECEIPTS_KEY = "prior_receipts"
+
+#: Where a corpus records the packs (``worldloom.packkit``) that were in force
+#: when it was built: an industry's words, prompts overridden, a policy. Beside
+#: the locale and for its reasons: they decide what the documents say, and
+#: nothing in the world model records them. Recorded **by value** (the merged
+#: body and its digest, never only a name), ``presentation_of``'s argument: a
+#: corpus built under a pack must rebuild from its own record after the pack
+#: file is gone or edited. Absent on a build that named no pack, which is what
+#: keeps every default recipe byte-identical to one written before packs.
+PACKS_KEY = "packs"
 
 
 class RecipeError(Exception):
@@ -242,8 +253,47 @@ def build_recipe(
         # bytes where they were.
         **({} if inspired_by is None else {INSPIRED_BY_KEY: inspired_by}),
         **({} if not unmet else {UNMET_KEY: sorted(unmet)}),
+        # Same conditional rule: read from the packs in force rather than
+        # passed in, because a pack reaches a build as a context around it
+        # (`packkit.use`), not as a spec field, and every build path writes its
+        # recipe here.
+        **_packs_payload(),
         "steps": [],
     }
+
+
+def _packs_payload() -> dict[str, Any]:
+    from . import packkit
+
+    held = packkit.recorded()
+    return {PACKS_KEY: held} if held else {}
+
+
+@contextmanager
+def packs_in_force(recipe: Mapping[str, Any] | None) -> Iterator[None]:
+    """Put the packs *recipe* recorded back in force, from the record alone.
+
+    The seam every path that generates or renders from an existing world goes
+    through (``rebuild``, ``World.run``/``compile``/``narrate``/``render``,
+    ``build --replay``), so a corpus built under an industry pack speaks that
+    industry's words on every later pass without anyone naming the pack again,
+    and without the pack file. A recipe with no ``packs`` key is a no-op.
+    A record that does not load is refused, never dropped: a rebuild that
+    quietly fell back to the default words would be a different corpus
+    reporting success.
+    """
+    from . import packkit
+
+    record = (recipe or {}).get(PACKS_KEY)
+    if not record:
+        yield
+        return
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(packkit.use_recorded(record))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RecipeError(f"this corpus's recorded packs do not load: {exc}") from exc
+        yield
 
 
 def _policies_payload(level: str) -> str:
@@ -970,6 +1020,23 @@ def rebuild(
 ) -> World:
     """Rebuild the world this recipe describes, from scratch.
 
+    Under the packs the recipe recorded (``packs_in_force``), for the whole
+    rebuild: the world spec, every step and the recipe the rebuilt world
+    writes, which therefore records the same packs and compares equal.
+    """
+    with packs_in_force(recipe):
+        return _rebuild(recipe, actors=actors, actor_ledger=actor_ledger, ledger=ledger)
+
+
+def _rebuild(
+    recipe: dict[str, Any],
+    *,
+    actors: Any = None,
+    actor_ledger: tuple = (),
+    ledger: tuple = (),
+) -> World:
+    """``rebuild``'s body, with the recorded packs already in force.
+
     ``ledger`` is the corpus's generation ledger, needed only by a recipe that
     records a ``Compose`` step: the composition a model authored lives in the
     ledger, not the recipe, so rebuilding one without its ledger is refused
@@ -1299,9 +1366,9 @@ register_step(PROCESS_STRUCTURE_STEP, ("structure",), ApplyProcessStructure)
 
 
 __all__ = [
-    "INSPIRED_BY_KEY", "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "PROCESS_STRUCTURE_EVENT",
+    "INSPIRED_BY_KEY", "LOCALE_KEY", "PACKS_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "PROCESS_STRUCTURE_EVENT",
     "PROCESS_STRUCTURE_KEY", "PROCESS_STRUCTURE_STEP", "RecipeError", "STEPS", "UNMET_KEY",
-    "apply_process_structure", "build_recipe", "has_actor_step", "locale_of", "presentation_of",
+    "apply_process_structure", "build_recipe", "has_actor_step", "locale_of", "packs_in_force", "presentation_of",
     "process_structure_of", "rebuild", "register_step", "with_asked_for", "with_locale",
     "with_presentation", "with_prior_receipts", "with_process_structure", "with_step",
 ]

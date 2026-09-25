@@ -593,8 +593,16 @@ class World:
             world = world.run(MonthEndClose(period="2026-03"))
 
         Immutable: the world this is called on is unchanged.
+
+        Under the packs this world's recipe recorded, as are ``compile``,
+        ``narrate`` and ``render``: a world built under an industry pack keeps
+        speaking its words on every later pass, including a corpus loaded
+        from disk long after the pack file is gone (``recipe.packs_in_force``).
         """
-        return scenario.run(self)
+        from .recipe import packs_in_force
+
+        with packs_in_force(self._recipe):
+            return scenario.run(self)
 
     def replace_facts(self, amended: Mapping[str, CanonicalFact]) -> World:
         """A copy of this world with facts substituted by id, in place.
@@ -754,14 +762,16 @@ class World:
         """
         from . import documents
         from .ids import Minter
+        from .recipe import packs_in_force
 
         if not self._artifact_intents:
             raise ValueError("nothing to compile — run a scenario first to plan artifacts")
 
         minter = self._minter or Minter()
-        irs = tuple(
-            documents.compile_intent(self, intent, minter) for intent in self._artifact_intents
-        )
+        with packs_in_force(self._recipe):
+            irs = tuple(
+                documents.compile_intent(self, intent, minter) for intent in self._artifact_intents
+            )
         return replace(self, _artifact_irs=irs, _artifacts=self._manifest_for(irs))
 
     def narrate(
@@ -791,6 +801,21 @@ class World:
         ``on_accepted``, the per-section acceptance seam a long-running caller
         can use to persist paid work incrementally.
         """
+        from .recipe import packs_in_force
+
+        with packs_in_force(self._recipe):
+            return self._narrate(provider, ledger=ledger, retries=retries,
+                                 concurrency=concurrency, on_accepted=on_accepted)
+
+    def _narrate(
+        self,
+        provider: Any,
+        *,
+        ledger: tuple[GenerationLedgerEntry, ...] | None,
+        retries: int,
+        concurrency: int,
+        on_accepted: Callable[[GenerationLedgerEntry], None] | None,
+    ) -> World:
         from .narrative import compiler
 
         available = self._ledger if ledger is None else ledger
@@ -848,6 +873,12 @@ class World:
         Compiles first if needed, and leaves existing IR alone — so narrating and
         then rendering keeps the prose rather than discarding it.
         """
+        from .recipe import packs_in_force
+
+        with packs_in_force(self._recipe):
+            return self._render(*formats)
+
+    def _render(self, *formats: str) -> World:
         from . import render as render_module
 
         if not formats:
