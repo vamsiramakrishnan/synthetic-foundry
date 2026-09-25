@@ -134,12 +134,12 @@ from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
-from . import archetypes, domains, locales, profiles, roles
+from . import archetypes, domains, locales, packkit, profiles, roles
 from . import facets as facets_module
 from .parameters import DEFAULTS, Span, overrides_from
 
 __all__ = [
-    "Conflict", "CompanySpec", "FUNCTIONS", "Identity", "Resolution",
+    "Conflict", "CompanySpec", "FUNCTIONS", "default_functions", "Identity", "Resolution",
     "describe", "from_document", "pack_of", "productivity_envelope", "publish",
     "resolve", "template",
 ]
@@ -154,6 +154,16 @@ __all__ = [
 #: need it and the second one is this module. A copy in each would drift, and a
 #: drifting default means the same specification resolves to a different
 #: organisation depending on which door it came through.
+#:
+#: The list itself is the policy ``company.functions``, so an industry pack in
+#: force names its own departments (a ministry has no Merchandising);
+#: ``default_functions`` reads it when a table is synthesised. ``FUNCTIONS`` is
+#: the shipped list, read once, for callers that import the name.
+def default_functions() -> tuple[str, ...]:
+    """The departments a synthesised organisation draws from, as the packs in force name them."""
+    return tuple(packkit.policy("company.functions"))
+
+
 FUNCTIONS: tuple[str, ...] = (
     "Executive", "Finance", "Technology", "Operations", "Merchandising",
     "ServiceOperations", "Risk", "Supply Chain", "Digital", "People",
@@ -1137,7 +1147,7 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
             base = archetypes.get(spec.archetype)
         except KeyError as exc:
             found.append(Conflict("archetype", "unknown_archetype", str(exc)))
-            return engine or "retail", None, spec.archetype, found, unmet
+            return engine or archetypes.fallback_engine(), None, spec.archetype, found, unmet
     elif spec.industry:
         recognised = archetypes.matched(spec.industry)
         base = recognised if recognised is not None else archetypes.inspired_by(spec.industry)
@@ -1155,7 +1165,7 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
             return engine, None, "", found, unmet
         base = archetypes.get(registered.default_archetype)
     else:
-        base = archetypes.get("omnichannel_retailer")
+        base = archetypes.fallback()
 
     key = base.key
     if spec.vocabulary:
@@ -1185,7 +1195,7 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
             f"engine {engine!r} does not own archetype {base.key!r} —"
             f" {owner.name!r} does",
         ))
-    return (engine or (owner.name if owner else "retail")), base, key, found, unmet
+    return (engine or (owner.name if owner else archetypes.fallback_engine())), base, key, found, unmet
 
 
 def _policy_level(spec: CompanySpec, found: list[Conflict]) -> str | None:
@@ -1222,7 +1232,7 @@ def _functions_of(engine: str, levels: int) -> list[str]:
     for _, _, function, _ in rows:
         if function not in seen:
             seen.append(function)
-    return seen or list(FUNCTIONS[:levels + 2])
+    return seen or list(default_functions()[:levels + 2])
 
 
 def _organisation_of(
@@ -1268,10 +1278,10 @@ def _organisation_of(
         levels = int(spec.organisation.get("levels", 3))
         # The engine's own functions before the generic ladder, because the
         # engine already knows what it calls them: an insurer runs Actuarial
-        # and Claims, and `FUNCTIONS` would put a Head of Merchandising in its
+        # and Claims, and `default_functions()` would put a Head of Merchandising in its
         # org chart on the strength of a list written for retail. Taken in
         # first-appearance order off the shipped table — deterministic, and the
-        # order an author reading that table would expect. `FUNCTIONS` remains
+        # order an author reading that table would expect. `default_functions()` remains
         # the answer for an engine that ships none.
         functions = spec.organisation.get("functions") or _functions_of(engine, levels)
         try:

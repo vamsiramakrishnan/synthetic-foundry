@@ -234,9 +234,17 @@ builds ("a federated telecom in India") is reported as exactly that, with
 `worldloom industry programme telecom` named as what does exist, and an
 unrecognised business is reported as a miss. `industry.industry_of` is the
 lookup: the overlay keys, the crosswalk codes (`NAICS 517`), each overlay's
-sector framework (`TM Forum eTOM`) and a declared word table
-(`INDUSTRY_WORDS`), matched at word boundaries with the longest phrase
-winning.
+sector framework (`TM Forum eTOM`) and the `aliases` every visible industry
+pack declares (`_data/packs/industry/<industry>.json`, one per catalogue
+industry; `industry.aliases`), matched at word boundaries with the longest
+phrase winning. An uploaded industry pack (`worldloom pack install`) is
+recognised by its own aliases, and one in front of the shipped packs has the
+last word on a phrase they share. The same pack's `terms` are the words the
+programme's sentences use while it is in force (`{{term:record}}` in a
+request brief, `{{term:company}}` in a use case's company description), and
+those sentences and the programme's numbers (`industry.count_ceiling`,
+`sor.records_per_period`, ...) are the `industry` fragments of the default
+prompts and policy packs.
 
 ## The locale a company is built in
 

@@ -49,6 +49,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from . import packkit
+
 #: The suffixes of the roles minted per business unit. Spelled *with* the
 #: leading underscore, deliberately: ``domains.Domain.unit_role_suffixes``
 #: publishes exactly these strings (``("_md",)`` for banking and insurance,
@@ -307,13 +309,16 @@ def review(
 # Shape to table
 # ---------------------------------------------------------------------------
 
-#: Seniority words by distance from the root, and the last one repeats. Titles
-#: a synthesiser invents are placeholders — a model authoring an organisation
-#: should replace them with what the business actually calls these people, and
-#: `review` deliberately does not enforce any naming convention because
-#: "Regional Operations Manager" and "Area Lead" are both real and the
-#: difference between them is exactly the texture a corpus is for.
-_LADDER: tuple[str, ...] = ("Chief", "Director of", "Head of", "Manager,", "Lead,", "")
+#: Seniority titles by distance from the root, and the last one repeats: the
+#: prompts pack's `roles.title.depth.<n>` (``Chief {function}``, ``Director of
+#: {function}``, … and, deepest, the key made readable), so an industry pack
+#: in force can title a ministry's ladder its own way. Titles a synthesiser
+#: invents are placeholders — a model authoring an organisation should replace
+#: them with what the business actually calls these people, and `review`
+#: deliberately does not enforce any naming convention because "Regional
+#: Operations Manager" and "Area Lead" are both real and the difference
+#: between them is exactly the texture a corpus is for.
+_LADDER_KEY = "roles.title.depth."
 
 
 def from_shape(
@@ -583,9 +588,9 @@ def from_shape(
 
 
 def _title(key: str, function: str, depth: int) -> str:
-    word = _LADDER[min(depth, len(_LADDER) - 1)]
+    rungs = len(packkit.texts(_LADDER_KEY))
     readable = key.replace("_", " ").title()
-    return f"{word} {function}".strip() if word else readable
+    return packkit.text(f"{_LADDER_KEY}{min(depth, rungs - 1)}", function=function, readable=readable).strip()
 
 
 def measure(table: Sequence[Role]) -> dict[str, int]:

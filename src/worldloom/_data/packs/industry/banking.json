@@ -1,0 +1,32 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "banking",
+  "version": "1",
+  "title": "Banking",
+  "description": "How the product speaks for the process catalogue's banking industry: the phrases that name it in a company description, its colloquial words (site is branch, customer is client) and an example company.",
+  "body": {
+    "industry": "banking",
+    "engine": "banking",
+    "aliases": [
+      "bank",
+      "lender",
+      "credit union",
+      "deposit-taking institution"
+    ],
+    "terms": {
+      "site": "branch",
+      "customer": "client"
+    },
+    "example": {
+      "company_name": "Harbourline Bank",
+      "geo": "singapore",
+      "countries": [
+        "SG",
+        "IN",
+        "HK"
+      ],
+      "description": "A federated bank in Singapore, India and Hong Kong."
+    }
+  }
+}

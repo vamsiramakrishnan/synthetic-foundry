@@ -1,0 +1,31 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "manufacturing",
+  "version": "1",
+  "title": "Manufacturing",
+  "description": "How the product speaks for the process catalogue's manufacturing industry: the phrases that name it in a company description, its colloquial words (site is plant) and an example company.",
+  "body": {
+    "industry": "manufacturing",
+    "engine": "retail",
+    "aliases": [
+      "manufacturer",
+      "factory",
+      "machine-tool",
+      "plant"
+    ],
+    "terms": {
+      "site": "plant"
+    },
+    "example": {
+      "company_name": "Formosa Precision",
+      "geo": "taiwan",
+      "countries": [
+        "TW",
+        "CN",
+        "MY"
+      ],
+      "description": "A decentralised machine-tool manufacturer in Taiwan, China and Malaysia."
+    }
+  }
+}

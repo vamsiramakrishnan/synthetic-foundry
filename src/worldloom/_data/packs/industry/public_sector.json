@@ -1,0 +1,31 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "public_sector",
+  "version": "1",
+  "title": "Public sector",
+  "description": "How the product speaks for the process catalogue's public_sector industry: the phrases that name it in a company description, its colloquial words (customer is citizen, site is office, company is agency) and an example company.",
+  "body": {
+    "industry": "public_sector",
+    "engine": "retail",
+    "aliases": [
+      "government",
+      "ministry",
+      "statutory board",
+      "agency"
+    ],
+    "terms": {
+      "customer": "citizen",
+      "site": "office",
+      "company": "agency"
+    },
+    "example": {
+      "company_name": "Civic Services Board",
+      "geo": "singapore",
+      "countries": [
+        "SG"
+      ],
+      "description": "A centralised statutory board in Singapore."
+    }
+  }
+}

@@ -28,9 +28,11 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from . import packkit
 from .connector_data import (
     ConnectorProjectionRegistry,
     ConnectorRecord,
@@ -43,32 +45,53 @@ from .process_bindings.models import ActivityBinding
 
 CONNECTOR = "sor"
 
-#: Record kinds that carry an amount. A catalogue kind absent here has none.
-MONEY_KINDS: frozenset[str] = frozenset({
-    "SalesOrder", "Order", "BillingDoc", "Invoice", "ARInvoice", "Bill", "PurchaseRequisition", "Requisition",
-    "PurchaseOrder", "GoodsReceipt", "Receipt", "InvoiceReceipt", "VendorBill", "JournalEntry", "AROpenItem",
-    "APOpenItem", "IncomingPayment", "CustomerPayment", "PaymentRun", "Dunning", "CashPosition", "PayRun",
-    "Loan", "Claim", "Exposure", "Policy", "Quote", "Opportunity", "Deal", "Contract", "FreightOrder", "Shipment",
-})
+# The numbers below are policy (`_data/packs/policy/default/industry.json`),
+# read when records are derived rather than at import, so an industry pack in
+# force governs them. The old module constants of the same names still read
+# (`__getattr__` at the foot of this module) and answer the policy in force.
 
-#: One record in this many, per binding and kind, is the one that tripped the
-#: binding's exception. A declared share rather than a draw: the record is
-#: chosen by its key, so it is the same record every time.
-EXCEPTION_EVERY = 4
 
-#: How many periods of records a projection holds when the caller names none:
-#: the world's period and the five before it, two quarters of work.
-DEFAULT_PERIODS = 6
+def money_kinds() -> frozenset[str]:
+    """Record kinds that carry an amount (`sor.money_kinds`). A kind absent here has none."""
+    return frozenset(packkit.policy("sor.money_kinds"))
 
-#: The period a programme's records end at when no world names one. A
-#: declared anchor, so a programme derived without a world and a dataset built
-#: from one agree on the records they cite.
-ANCHOR_PERIOD = "2026-06"
 
-#: Records per binding, record kind and period. Three, so a list answer (the
-#: exceptions among March's purchase orders, the open items to chase) is a
-#: subset of a set rather than a yes or no about one record.
-RECORDS_PER_PERIOD = 3
+def exception_every() -> int:
+    """One record in this many, per binding and kind, is the one that tripped the binding's exception.
+
+    A declared share rather than a draw (`sor.exception_every`): the record is
+    chosen by its key, so it is the same record every time.
+    """
+    return int(packkit.policy("sor.exception_every"))
+
+
+def default_periods() -> int:
+    """How many periods of records a projection holds when the caller names none.
+
+    The world's period and the five before it, two quarters of work
+    (`sor.default_periods`).
+    """
+    return int(packkit.policy("sor.default_periods"))
+
+
+def anchor_period() -> str:
+    """The period a programme's records end at when no world names one (`sor.anchor_period`).
+
+    A declared anchor, so a programme derived without a world and a dataset
+    built from one agree on the records they cite.
+    """
+    return str(packkit.policy("sor.anchor_period"))
+
+
+def records_per_period() -> int:
+    """Records per binding, record kind and period (`sor.records_per_period`).
+
+    Three, so a list answer (the exceptions among March's purchase orders, the
+    open items to chase) is a subset of a set rather than a yes or no about
+    one record.
+    """
+    return int(packkit.policy("sor.records_per_period"))
+
 
 _PLACEHOLDER = re.compile(r"\{(\d+)d\}|\{(\d+)\}")
 
@@ -143,6 +166,8 @@ def records(
     for fact in facts:
         facts_by_binding.setdefault(fact.subject, []).append(fact.id)
     states_of: dict[str, tuple[str, ...]] = {}
+    shape = _Shape(every=exception_every(), money=money_kinds())
+    per_period = records_per_period()
     out: list[ConnectorRecord] = []
     for row in compiled.rows:
         if not row.sor_objects:
@@ -151,20 +176,29 @@ def records(
             states = states_of.setdefault(kind, _workflow_states(kind))
             model = models.get((row.sor_product, kind), {})
             for period in periods:
-                for ordinal in range(RECORDS_PER_PERIOD):
-                    out.append(_record(row, kind, period, ordinal, company_id, model, states, currencies, facts_by_binding))
+                for ordinal in range(per_period):
+                    out.append(_record(row, kind, period, ordinal, company_id, model, states, currencies,
+                                       facts_by_binding, shape))
     return out
+
+
+@dataclass(frozen=True)
+class _Shape:
+    """The policy one derivation reads once: which record trips, which carries money."""
+
+    every: int
+    money: frozenset[str]
 
 
 def _record(
     row: ActivityBinding, kind: str, period: str, ordinal: int, company_id: str, model: dict[str, Any],
-    states: tuple[str, ...], currencies: dict[str, str], facts_by_binding: dict[str, list[str]],
+    states: tuple[str, ...], currencies: dict[str, str], facts_by_binding: dict[str, list[str]], shape: _Shape,
 ) -> ConnectorRecord:
     key = content_key(CONNECTOR, company_id, row.id, kind, period, ordinal)
     ident = _ident(model.get("id"), kind, key)
     draw = int(key[16:24], 16)
     status = states[draw % len(states)]
-    tripped = bool(row.exception.strip()) and draw % EXCEPTION_EVERY == 0
+    tripped = bool(row.exception.strip()) and draw % shape.every == 0
     fields: dict[str, Any] = {
         "ident": ident,
         "object": kind,
@@ -191,7 +225,7 @@ def _record(
         "binding_id": row.id,
         "terminal": status == states[-1],
     }
-    if kind in MONEY_KINDS:
+    if kind in shape.money:
         fields["amount"] = round(100.0 * (1 + int(key[24:30], 16) % 9000), 2)
         fields["currency"] = currencies.get(row.country, "")
     title = f"{kind} {ident}: {row.activity} ({row.owner_bu}, {period})"
@@ -210,7 +244,7 @@ def projections(
     compiled: CompiledCatalogue,
     world: Any,
     *,
-    periods: int = DEFAULT_PERIODS,
+    periods: int | None = None,
     facts: Sequence[CanonicalFact] = (),
     catalogue: dict[str, Any] | None = None,
 ) -> ConnectorProjectionRegistry:
@@ -218,10 +252,12 @@ def projections(
 
     The seam a dataset build plugs into (`FrozenCompanyBuilder(projections=...)`):
     the world's own connectors project as they did, and every product the
-    catalogue names is answered by the `sor` connector beside them.
+    catalogue names is answered by the `sor` connector beside them. *periods*
+    defaults to `default_periods()`.
     """
-    period = str(getattr(world, "period", None) or ANCHOR_PERIOD)
-    rows = records(compiled, company_id=compiled.company, periods=periods_ending(period, periods), facts=facts, catalogue=catalogue)
+    period = str(getattr(world, "period", None) or anchor_period())
+    count = periods if periods is not None else default_periods()
+    rows = records(compiled, company_id=compiled.company, periods=periods_ending(period, count), facts=facts, catalogue=catalogue)
     return builtin_projections().extended(CONNECTOR, rows)
 
 
@@ -245,20 +281,27 @@ def _company_of(world: Any) -> _Company | None:
     payload = recipe.get(PROCESS_STRUCTURE_KEY)
     if not payload:
         return None
-    period = str(getattr(world, "period", None) or ANCHOR_PERIOD)
-    return _compiled_company(json.dumps(payload, sort_keys=True), period)
+    period = str(getattr(world, "period", None) or anchor_period())
+    return _compiled_company(json.dumps(payload, sort_keys=True), period, _in_force())
+
+
+def _in_force() -> tuple[str, ...]:
+    """The digests of the packs a derivation reads: its policy, its sentences, its words."""
+    return tuple(pack.digest if pack is not None else "" for pack in
+                 (packkit.active("policy"), packkit.active("prompts"), packkit.active("industry")))
 
 
 @lru_cache(maxsize=8)
-def _compiled_company(payload: str, period: str) -> _Company:
-    # Cached on the company's own JSON: every connector projection of one
-    # world reads the same derivation, and the derivation is a pure function
-    # of the payload and the period.
+def _compiled_company(payload: str, period: str, packs: tuple[str, ...]) -> _Company:
+    # Cached on the company's own JSON and the packs in force: every connector
+    # projection of one world reads the same derivation, and the derivation is
+    # a pure function of the payload, the period and those packs. *packs* is
+    # only a key; the packs themselves are read from the context.
     from . import industry
     from .process_bindings import CompanySpec, compile_company
 
     compiled = compile_company(CompanySpec.model_validate(json.loads(payload)))
-    return _Company(compiled, periods_ending(period, DEFAULT_PERIODS), industry.facts(compiled))
+    return _Company(compiled, periods_ending(period, default_periods()), industry.facts(compiled))
 
 
 class ProductUse(Model):
@@ -334,8 +377,8 @@ def records_for_world(world: Any) -> list[ConnectorRecord]:
     """The records of the process company a world was built for, or none.
 
     Reads the company from the world's recipe (`recipe.process_structure_of`),
-    compiles it, and derives the records for `DEFAULT_PERIODS` ending at the
-    world's period (or `ANCHOR_PERIOD`), linked to the programme's facts. A
+    compiles it, and derives the records for `default_periods()` ending at the
+    world's period (or `anchor_period()`), linked to the programme's facts. A
     world built without a process company projects nothing, so every corpus
     built before this existed is unchanged.
     """
@@ -367,13 +410,16 @@ def by_binding(rows: Sequence[ConnectorRecord]) -> dict[str, dict[str, list[Conn
 # Channel evidence: where a binding's records are talked about
 # ---------------------------------------------------------------------------
 
-#: The day of the month a channel record is dated, so it sits inside the
-#: period it reports on whatever the world's clock says.
-CHANNEL_DAY = 15
+def channel_day() -> int:
+    """The day of the month a channel record is dated (`sor.channel_day`).
+
+    So it sits inside the period it reports on whatever the world's clock says.
+    """
+    return int(packkit.policy("sor.channel_day"))
 
 
 def _stamp(period: str) -> str:
-    return f"{period}-{CHANNEL_DAY:02d}T09:00:00+00:00"
+    return f"{period}-{channel_day():02d}T09:00:00+00:00"
 
 
 def _slug(text: str) -> str:
@@ -385,21 +431,23 @@ def _address(name: str, company_id: str) -> str:
 
 
 def _channel_text(row: ActivityBinding, period: str, cited: Sequence[ConnectorRecord]) -> str:
+    """The thread, issue or page body: the prompts pack's `sor.channel.*`, one line each."""
     lines = [
-        f"{row.activity} in {row.stream_name}, {row.owner_bu}, {row.country}, period {period}.",
-        f"Control: {row.control}.",
+        packkit.text("sor.channel.head", activity=row.activity, stream=row.stream_name, owner=row.owner_bu,
+                     country=row.country, period=period),
+        packkit.text("sor.channel.control", control=row.control),
     ]
     if cited:
         names = ", ".join(f"{r.fields['object']} {r.external_id} ({r.fields['status']})" for r in cited)
-        lines.append(f"Records in {row.sor_product}: {names}.")
+        lines.append(packkit.text("sor.channel.records", product=row.sor_product, names=names))
         tripped = [r for r in cited if r.fields["exception"]]
         if tripped:
             names = ", ".join(f"{r.fields['object']} {r.external_id}" for r in tripped)
-            lines.append(f"Exception {tripped[0].fields['exception']}: {names}.")
+            lines.append(packkit.text("sor.channel.exception", exception=tripped[0].fields["exception"], names=names))
         else:
-            lines.append("No record tripped the exception this period.")
+            lines.append(packkit.text("sor.channel.clean"))
     else:
-        lines.append(f"No system of record holds a record for this step ({row.sor_class}).")
+        lines.append(packkit.text("sor.channel.none", sor_class=row.sor_class))
     return "\n".join(lines)
 
 
@@ -638,10 +686,25 @@ def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -
             tuple(r.id for r in ordered))
 
 
+#: Module attributes that were constants before the policy pack held them,
+#: answered from the policy in force when read, so code written against the
+#: constant keeps working and an industry pack still governs it.
+_POLICY_ALIASES = {
+    "ANCHOR_PERIOD": anchor_period, "CHANNEL_DAY": channel_day, "DEFAULT_PERIODS": default_periods,
+    "EXCEPTION_EVERY": exception_every, "MONEY_KINDS": money_kinds, "RECORDS_PER_PERIOD": records_per_period,
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _POLICY_ALIASES:
+        return _POLICY_ALIASES[name]()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
-    "ANCHOR_PERIOD", "CHANNEL_DAY", "CONNECTOR", "DEFAULT_PERIODS", "EXCEPTION_EVERY", "MONEY_KINDS",
-    "ProductUse", "RECORDS_PER_PERIOD", "answer", "by_binding", "channel_records", "channel_records_for_world",
-    "entity_name",
+    "CONNECTOR", "ProductUse", "anchor_period", "answer", "by_binding", "channel_day", "channel_records",
+    "channel_records_for_world", "default_periods", "entity_name", "exception_every", "money_kinds",
+    "records_per_period",
     "facts_for_world", "periods_ending", "product_records", "product_records_for_world", "products_for_world",
     "projections", "records", "records_for_world",
 ]
