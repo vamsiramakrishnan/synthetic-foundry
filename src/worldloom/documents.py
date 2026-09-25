@@ -20,7 +20,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import TYPE_CHECKING, Any, Protocol
 
 from . import columns as columns_module
@@ -2069,10 +2069,23 @@ def spoken_heading(heading: str, key: str | None = None) -> str:
     rides are decided on them (see ``outline``), so a colloquialised heading
     cannot change what a section is for.
     """
+    prompt = f"documents.outline.heading.{key or section_key(heading)}"
+    if key is None and _shipped_headings().get(prompt) != heading:
+        # A heading that only *slugs* like a shipped one ("ROOT CAUSE", a
+        # pack's own document type) is the author's wording, not the engine's,
+        # and is spoken exactly as written.
+        return heading
     try:
-        return packkit.text(f"documents.outline.heading.{key or section_key(heading)}")
+        return packkit.text(prompt)
     except KeyError:
         return heading
+
+
+@cache
+def _shipped_headings() -> dict[str, str]:
+    """The shipped outline headings by prompt key; the shipped pack does not change in a process."""
+    texts = packkit.shipped("prompts").body.texts
+    return {k: v for k, v in texts.items() if k.startswith("documents.outline.heading.")}
 
 
 def _repeated_over_units(

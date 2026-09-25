@@ -135,3 +135,13 @@ def test_the_reserved_lint_reads_the_key_and_the_displayed_words(tmp_path: Path)
     _pack(tmp_path, {"documents.outline.heading.divisional_summary": "Branch results"})
     with packkit.use("industry:spoken", roots=[tmp_path]):
         assert _doctype_findings("Branch results"), "collides with the words shown"
+
+
+def test_an_authors_own_heading_is_spoken_as_written() -> None:
+    """Only the engine's shipped wording is replaced by its prompt; a heading that
+    merely slugs like one (a pack document type's "ROOT CAUSE") keeps its case."""
+    from worldloom.documents import spoken_heading
+
+    assert spoken_heading("ROOT CAUSE") == "ROOT CAUSE"
+    assert spoken_heading("Root cause") == "Root cause"
+    assert spoken_heading("Something bespoke") == "Something bespoke"
