@@ -11,6 +11,54 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Every layer is a pack: found by name, layered, uploaded or authored by a harness
+
+- `worldloom.packkit` is one mechanism for every layer the product used to hold
+  as literals. A pack is a JSON envelope of a registered kind: `industry`,
+  `prompts`, `policy`, `company`, `connector`, `lob`, `doctype` or
+  `presentation`. Packs are searched in this order: `--pack-root`,
+  `WORLDLOOM_PACK_PATH`, `~/.worldloom/packs`, then the shipped
+  `_data/packs`. A pack layers through `extends` onto its kind's default,
+  resolves to a content-addressed body (`kind:name@digest`), and is put in
+  force with the global `--pack` flag or `packkit.use`. Code reads packs
+  through `packkit.text`, `policy` and `term`.
+- `worldloom pack kinds|list|show|lint|install|author` and
+  `pack interview request|accept`. Upload and harness authoring run one lint
+  and refuse with every finding. The interview reuses the exec seam and the
+  cascade protocol: questions go back to the operator, and a refused proposal
+  goes back to the harness with its findings.
+- Industry packs colloquialise the product. Every template reaches a word
+  through `{{term:site}}` (case and plural are derived), so a corpus built
+  under `--pack industry:banking` says "Branch Performance" where the default
+  says "Store Performance". Twelve industries ship, one per
+  process-catalogue overlay, with their aliases, engine, terms and example
+  company. `industry_of` recognises a company by the aliases of every visible
+  industry pack, so an uploaded industry is recognised by its own phrases.
+- About 200 prompts and templated sentences and 49 policy defaults moved from
+  code into the default prompts and policy packs. They cover Studio interview
+  and harness roles, industry requests and briefs, system-of-record channel
+  text, enterprise query instructions, evalrun turn and plan instructions,
+  finance workbook headings and ticket texts, serving limits, and programme and
+  record policy. The defaults hold the exact literals they replace.
+- Connector packs are served: an uploaded connector definition (a `zendesk`)
+  reaches the emulator, the served surface and the enterprise specs.
+  Per-connector record shapes are a declarative `record_projection` in each
+  definition, where they used to be an `if connector ==` chain. Identity keys
+  are defined once.
+- Studio can upload a pack, generate one with the configured harness (a
+  background job whose command the browser cannot supply), and choose a pack
+  for a company. `ProjectSpec.packs` pins each reference at revision time, so
+  a revision replays exactly or is refused. Presets and operational examples
+  are data, and a shipped industry pack does not reshape a shipped preset.
+- Support and revenue business-unit archetypes are defined once (there were
+  three copies). The SDK reads the function ladder in force.
+- **Generation:** none for a default build. A build with a non-default pack in
+  force records the pack's reference, digest and merged body under the
+  recipe's `packs` key. `build --replay` reinstates the pack from that record
+  without the pack file, and refuses a body that no longer matches its digest.
+  The only recognition change is that "deposit-taking institution" now
+  resolves to banking.
+
 ### A catalogue company runs from interview to graded evals at scale
 
 - `worldloom industry project banking` → `studio init` → `studio advance`
