@@ -114,6 +114,7 @@ evals_app.add_typer(dataset_app, name="dataset")
 # Keep operational generation in its own command module, not this monolith.
 from .evalrun.cli import app as evalrun_app
 from .gemini_enterprise.cli import app as gemini_enterprise_app
+from .packkit_cli import install_commands as _install_pack_commands
 from .seams_cli import seams_command
 from .studio_cli import studio_app
 from .synthesis_cli import app as synthesis_app
@@ -121,6 +122,7 @@ from .synthesis_cli import app as synthesis_app
 app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
 app.add_typer(studio_app, name="studio")
+_install_pack_commands(pack_app)
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 app.add_typer(evalrun_app, name="evalrun")
 
@@ -626,7 +628,17 @@ err = Console(stderr=True)
 
 
 @app.callback()
-def _install_domains() -> None:
+def _install_domains(
+    ctx: typer.Context,
+    pack: list[str] | None = typer.Option(
+        None, "--pack",
+        help="Put a pack in force for this command (kind:name, kind:name@digest or a file; repeatable, "
+             "one per kind). `worldloom pack list` shows what is visible.",
+    ),
+    pack_root: list[Path] | None = typer.Option(
+        None, "--pack-root", help="A pack root searched before the user's and the shipped ones (repeatable).",
+    ),
+) -> None:
     # No docstring on purpose: typer would surface one as the app's help text,
     # and the app help is pinned in `typer.Typer(help=...)` above.
     #
@@ -643,6 +655,15 @@ def _install_domains() -> None:
     from . import _install
 
     _install()
+    if pack or pack_root:
+        # One context for the whole command: everything underneath reads the
+        # same packs through `packkit.text`, `policy` and `term`.
+        from . import packkit
+
+        try:
+            ctx.with_resource(packkit.use(*(pack or ()), roots=pack_root or ()))
+        except (KeyError, ValueError) as error:
+            _refuse("pack_rejected", str(error).strip("'\""))
 
 #: Every refusal code this CLI can emit, mapped to its one-line meaning. A
 #: registry rather than bare strings at the call sites so the codes are
@@ -654,6 +675,7 @@ def _install_domains() -> None:
 #: conflict rules like `unknown_facet` and `no_overlap`), the same name is
 #: reused here rather than inventing a synonym.
 _REFUSALS: dict[str, str] = {
+    "pack_rejected": "a pack could not be resolved, failed its lint, or was refused on upload; data.findings names each rule",
     "synthesis_failed": "the operational synthesis contract was refused; data.finding names the rule",
     "access_profile_failed": "the corpus's documents could not be re-gated under the asked-for access profile",
     "actor_episode_failed": "the actor episode could not run to completion",

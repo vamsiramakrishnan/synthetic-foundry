@@ -1,0 +1,9 @@
+{
+  "body": {},
+  "description": "Every prompt, instruction and templated sentence, by dotted key. Fragments are grouped by the module that reads them.",
+  "kind": "prompts",
+  "name": "default",
+  "schema": "worldloom.pack/v1",
+  "title": "Shipped prompts",
+  "version": "1"
+}

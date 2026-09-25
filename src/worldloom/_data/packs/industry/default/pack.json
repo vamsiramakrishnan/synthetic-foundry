@@ -1,0 +1,9 @@
+{
+  "body": {},
+  "description": "The words the product used before industry packs existed. Every other industry pack layers on this one and states only what it says differently.",
+  "kind": "industry",
+  "name": "default",
+  "schema": "worldloom.pack/v1",
+  "title": "Default industry language",
+  "version": "1"
+}

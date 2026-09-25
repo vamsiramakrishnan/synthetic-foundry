@@ -1,0 +1,9 @@
+{
+  "body": {},
+  "description": "The defaults a build, compile or evaluation runs under, by dotted key. Fragments are grouped by the module that reads them.",
+  "kind": "policy",
+  "name": "default",
+  "schema": "worldloom.pack/v1",
+  "title": "Shipped policy",
+  "version": "1"
+}

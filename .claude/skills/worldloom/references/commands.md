@@ -938,6 +938,25 @@ worldloom narrate requests <CORPUS>
 
 Author and check industry packs: a world's shape and lore as data.
 
+### `worldloom pack author`
+
+Interview a harness until it proposes a pack the lint accepts, then store it.
+
+```
+worldloom pack author <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--harness-command` | Adapter: JSON request on stdin, JSON reply on stdout. |
+| `--into` | Pack root to store the accepted pack in (default: the user's). |
+| `--message` | What the operator wants. |
+| `--name` |  |
+| `--replace` |  |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+| `--rounds` | Refusal rounds before giving up. |
+| `--timeout` |  |
+
 ### `worldloom pack check`
 
 Validate a pack against the schema and lint its lore against the engine.
@@ -981,6 +1000,58 @@ worldloom pack facets <NAME>
 | --- | --- |
 | `--json` | Emit the registry as data. |
 
+### `worldloom pack install`
+
+Upload a pack: lint it, refuse with every finding, or store it where it is found by name.
+
+```
+worldloom pack install <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--into` | Pack root to store it in (default: the user's). |
+| `--replace` | Overwrite a pack of the same name in that root. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack interview`
+
+Author a pack with your coding harness through files.
+
+### `worldloom pack interview accept`
+
+Judge a reply: accepted (optionally stored), refused with findings, or questions for the operator.
+
+| Option | Purpose |
+| --- | --- |
+| `--install` | Store an accepted pack (in --into, else the user's root). |
+| `--into` | Store an accepted pack in this root. |
+| `--replace` |  |
+| `--reply` | The harness's reply. |
+| `--request` | The request file the harness answered. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack interview request`
+
+Write the bounded request a harness answers with one pack proposal.
+
+```
+worldloom pack interview request <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--draft` | A previous proposal to revise. |
+| `--findings` | The refusal to answer (from `interview accept`). |
+| `--message` | What the operator wants. |
+| `--name` | The pack's name, when the operator has chosen one. |
+| `--out`, `-o` |  |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack kinds`
+
+The kinds of pack the product accepts, and what each controls.
+
 ### `worldloom pack landscapes`
 
 The technology-estate vocabularies `--estate` grows a landscape out of.
@@ -992,6 +1063,30 @@ worldloom pack landscapes <NAME>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the pools as data. |
+
+### `worldloom pack lint`
+
+Resolve and lint a pack file without storing it; exits 2 on findings.
+
+```
+worldloom pack lint <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack list`
+
+Every visible pack (a pack in a higher root shadows the same name below it).
+
+```
+worldloom pack list <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
 
 ### `worldloom pack locales`
 
@@ -1032,6 +1127,18 @@ The trading years a pack may choose by name.
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit as data. |
+
+### `worldloom pack show`
+
+The resolved pack: merged body, digest, the chain it layers on, and its findings.
+
+```
+worldloom pack show <REF>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
 
 ### `worldloom pack spec`
 
