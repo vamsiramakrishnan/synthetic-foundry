@@ -56,6 +56,15 @@ order. A pack that extends its own name reaches the pack it shadows. That is how
 a user adjusts a shipped industry: write `industry/banking.json` with
 `"extends": ["industry:banking"]` and change one term.
 
+A connector pack is stricter about shadowing, because a shipped connector's
+definition is part of every corpus that uses it. A connector pack with a new name
+(a `zendesk` definition) is visible from any root, and the emulator, the served
+surface and the enterprise specs all use it. A connector pack named like a
+shipped connector replaces that connector only in two cases: when it is put in
+force explicitly (`--pack connector:jira`), or when it lies in a root the run
+names (`--pack-root`, or a Studio workspace). A copy in `~/.worldloom/packs` or
+`WORLDLOOM_PACK_PATH` is ignored.
+
 ## Industry packs: colloquialising the product
 
 An industry pack holds:
