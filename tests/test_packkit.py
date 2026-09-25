@@ -129,7 +129,7 @@ def test_recorded_packs_replay_without_their_files(tmp_path: Path) -> None:
 def test_install_refuses_with_every_finding_and_stores_by_name(tmp_path: Path) -> None:
     bad = {"schema": "worldloom.pack/v1", "kind": "industry", "name": "shop",
            "body": {"terms": {"Site": "shop", "store": ""}}}
-    with pytest.raises(ValueError, match="terms.Site") as refused:
+    with pytest.raises(ValueError, match=r"terms\.Site") as refused:
         packkit.install(bad, root=tmp_path)
     assert "terms.store" in str(refused.value)
     good = {**bad, "body": {"terms": {"site": "shop"}}}
