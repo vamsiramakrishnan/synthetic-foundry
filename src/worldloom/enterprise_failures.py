@@ -33,12 +33,25 @@ def build_query_emulator(
     targets are checked eagerly: a foreign fid is a broken fixture, never an
     injection silently skipped by the emulator.
     """
-    materialized = [deepcopy(dict(record)) for record in records]
-    by_id = {
-        str(record["fid"]): record
-        for record in materialized
+    # Only this connector's records, as the emulator keeps; it copies each one
+    # itself, so a record is copied here only when an override mutates it.
+    # Copying every connector's records per query dominated qualification.
+    materialized = [record for record in records
+                    if str(record.get("server") or definition.connector) == definition.connector]
+    positions = {
+        str(record["fid"]): index
+        for index, record in enumerate(materialized)
         if record.get("fid") and record.get("server", definition.connector) == definition.connector
     }
+    owned: set[str] = set()
+
+    def own(record_id: str) -> dict[str, Any]:
+        index = positions[record_id]
+        if record_id not in owned:
+            materialized[index] = deepcopy(dict(materialized[index]))
+            owned.add(record_id)
+        return materialized[index]  # type: ignore[return-value]
+
     nodes = tuple(node for node in mutation_nodes if node.get("server", node.get("connector")) == definition.connector)
     faults: dict[str, tuple[str, ...]] = {}
     permissions = {fid: dict(value) for fid, value in (acl or {}).items()}
@@ -51,7 +64,7 @@ def build_query_emulator(
         override = raw if isinstance(raw, StateOverride) else StateOverride.model_validate(raw)
         if override.connector != definition.connector:
             continue
-        target = by_id.get(override.record_id) if override.record_id is not None else None
+        target = own(override.record_id) if override.record_id in positions else None
         if override.record_id is not None and target is None:
             raise ValueError(f"override {override.kind} targets absent {definition.connector} record {override.record_id}")
         if override.kind in _SOURCE_KINDS and target is None:

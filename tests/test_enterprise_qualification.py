@@ -420,3 +420,15 @@ def test_coverage_labels_cannot_disagree_with_executable_requirements(harness, d
     assert result.report.eligible_query_ids == (query.id,)
     assert {refusal.code for refusal in result.report.refusals} == {"dimension_contract_mismatch"}
     assert not result.report.eligible_coverage.complete
+
+
+def test_a_proof_keeps_what_the_run_wrote_not_every_unchanged_record(harness) -> None:
+    """A proof used to hold the whole post-run state of every connector the
+    row touched, ~40 MB a query on a catalogue company."""
+    result = harness.qualify(pool_size=4)
+    total = len(result.corpus.connector_data.records)
+    for proof in result.proofs:
+        written = {fid for span in proof.spans for fid in span["writes"]}
+        assert set(proof.post_state) | set(proof.deleted) == written
+        assert len(proof.post_state) < total
+    assert any(proof.post_state for proof in result.proofs)

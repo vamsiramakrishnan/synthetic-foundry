@@ -400,3 +400,19 @@ def test_expected_failure_does_not_excuse_another_error_at_the_same_node() -> No
     denied = next(span for span in result.spans if span.error)
     broken = (*result.spans, replace(denied, id="additional", error={"kind": "timeout", "code": 504}))
     assert "unexpected_error:write" in grade_trace(broken, row, post_state=result.post_state)["fails"]
+
+
+def test_a_query_emulator_holds_only_its_connector_and_never_mutates_its_inputs() -> None:
+    """Every emulator used to deep-copy every connector's records per query,
+    which dominated qualification on a large company."""
+    from copy import deepcopy
+
+    corpus = corpus_for(query("stale_source"))
+    fixture = corpus.fixtures[0]
+    records = runtime_records(corpus.connector_data.records)
+    before = deepcopy(records)
+    emulator = build_query_emulator(load_connector_definition("servicenow"), records,
+        overrides=fixture.overrides, mutation_nodes=corpus.queries[0].expected_dag, query_id=fixture.query_id)
+    assert records == before
+    assert {record["server"] for record in emulator.records.values()} == {"servicenow"}
+    assert len(emulator.records) == sum(r.connector == "servicenow" for r in corpus.connector_data.records)

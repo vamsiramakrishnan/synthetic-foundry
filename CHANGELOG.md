@@ -11,6 +11,54 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### A catalogue company runs from interview to graded evals at scale
+
+- `worldloom industry project banking` → `studio init` → `studio advance`
+  failed at compile on every shipped industry: about a third of the derived
+  use cases read ServiceNow, Salesforce, SharePoint lists or Confluence, and
+  their system-of-record records were only ever projected onto `sor`, so
+  construction refused them (`scoped process evidence needs 1 records;
+  observed 0`, repeated 24 times). `sor.product_records` now restates each
+  such record on the emulator the line reads, under the same binding scope,
+  with that connector's own fields and `sor_record_id`. The `sor` record set,
+  and every answer read off it, is unchanged. **Generation:** a catalogue
+  company's `servicenow`, `salesforce`, `sharepoint`, `confluence`, `jira`
+  and `email` projections gain these records; worlds without a process
+  company project exactly as before.
+- `industry.project` sizes `max_batches` from its own use cases and counts
+  (`industry.batch_budget`). The fixed budget of 12 left 52 of banking's 64
+  use cases unattempted, and nothing said so. The workflow report names a
+  `batch_budget_short` finding for any project whose budget cannot meet its
+  counts.
+- A qualification proof keeps the records the run wrote (`post_state`) and
+  the ones it deleted (`deleted`), not the whole post-run state of every
+  connector it touched. On the banking company a proof was about 40 MB, or
+  about 130 GB for the programme; a batch's proofs are now about 200 KB.
+- The query emulator filters to its own connector before copying, and copies
+  only records an override changes. Before this, each connector's emulator
+  deep-copied every connector's records for every query. Requirement checks
+  project and flatten a connector once per world. The served surface forks one
+  base emulator per connector, and a tool call opens a transaction that
+  copies only containers. Every emulator write already replaced its record
+  rather than changing it in place. On the banking company a compile batch
+  fell from 2.5 to 6 minutes to 20 to 100 seconds, and reference-grading 58
+  cases fell from 414 s to 154 s, with identical grades.
+- A failed run is the named blocker. The workflow report carries a
+  `run_failed` finding, and its `next_action` is that run with its `job_id`.
+  Before this, the report pointed at "Connect a writing harness", and
+  repeating `studio run` replayed the recorded refusal without retrying.
+  `advance` and `run` now resume a failed, interrupted or paused run from its
+  checkpoints, and mark a run left `running` by a killed process as
+  interrupted.
+- `studio advance --max-steps N` walks the stage DAG (build, compile, evalrun,
+  and the harness stages when a harness is given) and stops at the first
+  proposal, configuration gap or refusal. It lists the runs it executed as
+  `steps`.
+- A construction refusal names each cause once, with its count and the use
+  cases and requirements it holds for. A compile of a constructed company with
+  a base-only narration selected says so, where it used to report the
+  narration as belonging to another snapshot.
+
 ### The planner grounds every row in the world it plans for
 
 - The documented loop starts with `worldloom enterprise-evals build <world>

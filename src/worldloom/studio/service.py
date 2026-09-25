@@ -92,6 +92,26 @@ def preset(engine: str = "retail", name: str = "Northstar Retail") -> ProjectSpe
                            simulation=program, incident_rule=rule),))
 
 
+def construction_refusal(findings: Any) -> str:
+    """One line per distinct refusal, naming the use cases and requirements it holds for.
+
+    A company with sixty use cases repeats the same refusal per requirement;
+    the operator needs the cause once and where it applies, not the cause
+    sixty times with nothing to say which case to fix.
+    """
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for finding in findings:
+        if not getattr(finding, "hard", True):
+            continue
+        where = finding.use_case_id + (f"/{finding.requirement_id.split(':', 1)[-1]}" if finding.requirement_id else "")
+        grouped.setdefault((finding.code, finding.detail), []).append(where or "company")
+    lines = []
+    for (code, detail), where in grouped.items():
+        shown = ", ".join(where[:6]) + (f" and {len(where) - 6} more" if len(where) > 6 else "")
+        lines.append(f"{code} ({len(where)}): {detail} [{shown}]")
+    return "; ".join(lines) or "construction refused"
+
+
 class Studio:
     def __init__(self, root: str | Path) -> None:
         self.store = ProjectStore(root)
@@ -212,18 +232,26 @@ class Studio:
 
     def advance(self, project: str, revision: str, *, harness_command: str | None = None, timeout: float = 600) -> dict[str, Any]:
         """Run at most one ready stage; never accept proposals or loop on a gate."""
-        from .worker import run_job
+        from .worker import recover, run_job
         current = self.store.get(project)
         if current["revision"] != revision:
             raise StudioConflict("company changed; reload before advancing")
+        # A run left `running` by a killed process holds no writer lock; mark
+        # it interrupted so the report offers to resume it instead of waiting.
+        recover(self)
         workflow = self.workflow(project, revision, harness_configured=bool(harness_command))
         action = workflow.next_action
         if action is None or action.kind != "run":
             return {"advanced": False, "workflow": workflow.model_dump(mode="json")}
-        needs_harness = action.operation in {"narrate", "native", "foundry"} or action.options.get("evalrun_agent") == "harness"
-        options = RunOptions.model_validate({"operation": action.operation, **action.options,
-                                             "harness_identity": digest(harness_command) if needs_harness else ""})
-        job = self.store.enqueue(project, revision, options)
+        if action.job_id:
+            # A paused, failed or interrupted run resumes from its own
+            # checkpoints rather than starting a duplicate.
+            job = self.store.retry(action.job_id)
+        else:
+            needs_harness = action.operation in {"narrate", "native", "foundry"} or action.options.get("evalrun_agent") == "harness"
+            options = RunOptions.model_validate({"operation": action.operation, **action.options,
+                                                 "harness_identity": digest(harness_command) if needs_harness else ""})
+            job = self.store.enqueue(project, revision, options)
         advanced = run_job(self, job["id"], harness_command=harness_command, timeout=timeout)
         return {"advanced": advanced, "job": self.store.job(job["id"]),
                 "workflow": self.workflow(project, revision, harness_configured=bool(harness_command)).model_dump(mode="json")}
@@ -648,9 +676,16 @@ class Studio:
             staging.rename(target)
             return {"snapshot": location.name, "narrated": job_id, "rounds": len(result.rounds)}
         evidence_path = location / "world"
+        constructed_from_contracts = spec.retail_process is not None or any(c.construction is not None for c in spec.use_cases)
         query_transforms = {}
         generation_contracts = {}
-        if spec.retail_process is not None or any(c.construction is not None for c in spec.use_cases):
+        if spec.narration_job and constructed_from_contracts:
+            # The constructed company is not the one the base-only narration saw;
+            # comparing their snapshots used to read as a stale selection.
+            raise ValueError("this company is constructed from its use-case contracts, and the selected narration covers "
+                             "only the base company; clear the narration selection to compile the constructed evidence, "
+                             "or run Foundry, which narrates the constructed evidence itself")
+        if constructed_from_contracts:
             from functools import partial
 
             from .checkpoints import save_world
@@ -658,10 +693,10 @@ class Studio:
 
             requirements = compile_project(spec)
             if not requirements.accepted:
-                raise ValueError("; ".join(f.detail for f in requirements.findings))
+                raise ValueError(construction_refusal(requirements.findings))
             constructed, _ = construct_company(self, spec, requirements)
             if not constructed.report.accepted:
-                raise ValueError("; ".join(f.detail for f in constructed.report.findings))
+                raise ValueError(construction_refusal(constructed.report.findings))
             world = constructed.world
             if world.artifact_intents and not world.artifact_irs:
                 world = world.compile()
@@ -694,4 +729,4 @@ class Studio:
         return {"dataset": destination.name, "snapshot": location.name, "report": run.report.model_dump(mode="json")}
 
 
-__all__ = ["Studio", "preset", "changes"]
+__all__ = ["Studio", "preset", "changes", "construction_refusal"]

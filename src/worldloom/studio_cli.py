@@ -121,17 +121,20 @@ def run_command(
     from .cli import _refuse
     from .providers import digest
     from .studio import RunOptions, Studio
-    from .studio.worker import run_job
+    from .studio.worker import recover, run_job
 
     try:
         studio = Studio(workspace)
         revision = studio.store.get(project)["revision"]
+        recover(studio)
         options = RunOptions.model_validate({"operation": operation, "batch_limit": batch_limit,
                                              "harness_identity": digest(harness_command) if operation in {"narrate", "foundry", "native"} else ""})
         if options.operation == "interview":
             raise ValueError("use studio interview request for interviews")
         job = studio.store.enqueue(project, revision, options)
-        if job["status"] == "paused":
+        if job["status"] in {"failed", "interrupted", "paused"}:
+            # The same revision and options name the same run: repeating the
+            # command resumes it from its checkpoints once the cause is fixed.
             job = studio.store.retry(job["id"])
         run_job(studio, job["id"], harness_command=harness_command)
         result = studio.store.job(job["id"])
@@ -212,17 +215,33 @@ def advance_command(
     project: str, workspace: Workspace = Path("./worldloom-workspace"),
     harness_command: Annotated[str | None, typer.Option("--harness-command")] = None,
     timeout: Annotated[float, typer.Option(min=1, max=3600)] = 600,
+    max_steps: Annotated[int, typer.Option("--max-steps", min=1, max=64,
+        help="Run up to this many ready stages in order (build, compile, evalrun, ...), stopping at the first "
+             "proposal, configuration gap or refusal. The default runs one.")] = 1,
 ) -> None:
-    """Execute one ready stage; stop at a proposal, configuration gap or refusal."""
+    """Execute ready stages in order; stop at a proposal, configuration gap or refusal.
+
+    Each stage is the same run `studio run` executes, with its checkpoints;
+    `--max-steps` walks the company's stage DAG without a human between
+    stages, and never applies a proposal or changes the company.
+    """
     from .cli import _refuse
     from .studio import Studio
+    steps: list[dict[str, object]] = []
     try:
         studio = Studio(workspace)
-        result = studio.advance(project, studio.store.get(project)["revision"],
-                                harness_command=harness_command, timeout=timeout)
+        revision = studio.store.get(project)["revision"]
+        for _ in range(max_steps):
+            result = studio.advance(project, revision, harness_command=harness_command, timeout=timeout)
+            job = result.get("job") or {}
+            if result["advanced"]:
+                steps.append({"job": job.get("id"), "operation": (job.get("options") or {}).get("operation"),
+                              "status": job.get("status")})
+            if not result["advanced"] or job.get("status") != "complete" or (job.get("result") or {}).get("status") == "blocked":
+                break
     except (OSError, ValueError, KeyError) as error:
         _refuse("studio_rejected", str(error))
-    typer.echo(json.dumps(result, sort_keys=True))
+    typer.echo(json.dumps({**result, "steps": steps}, sort_keys=True))
     job = result.get("job") or {}
     if job.get("status") == "failed" or (job.get("result") or {}).get("status") == "blocked":
         _refuse("studio_rejected", job.get("error") or "run has unmet gates; inspect the workflow findings", exit_code=3)

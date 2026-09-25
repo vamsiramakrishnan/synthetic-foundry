@@ -1894,6 +1894,7 @@ def project(
         if line.lob in chosen and line.supported
     ]
     cases = derived.use_cases(lines_selected=lines_selected)
+    pool_size = 24
     return ProjectSpec(
         company=document,
         seed=seed,
@@ -1902,11 +1903,25 @@ def project(
         lobs=selected,
         use_cases=cases,
         acknowledged_unmet=tuple(resolution.unmet),
-        pool_size=24,
+        pool_size=pool_size,
         planning_budget=512,
-        max_batches=12,
+        max_batches=batch_budget(cases, pool_size),
         max_per_case=6,
     )
+
+
+def batch_budget(cases: Sequence[Any], pool_size: int) -> int:
+    """Dataset batches enough for every use case's count, and one more each.
+
+    A batch serves one use case and admits at most `pool_size` queries, so a
+    fixed budget smaller than the number of use cases leaves most of a
+    catalogue programme unattempted. The budget is the batches each count
+    needs at a full pool, plus one per use case for the pools a case cap or
+    a refusal thins; a compile stops as soon as every count is met, so an
+    unspent batch costs nothing.
+    """
+    needed = sum(-(-max(1, int(case.count)) // pool_size) for case in cases)
+    return max(1, min(10_000, needed + len(cases)))
 
 
 def rederive(spec: ProjectSpec, *, lobs: Sequence[str] | None = None) -> ProjectSpec:
@@ -1935,6 +1950,9 @@ def rederive(spec: ProjectSpec, *, lobs: Sequence[str] | None = None) -> Project
         "lobs": derived.lobs,
         "use_cases": derived.use_cases,
         "acknowledged_unmet": derived.acknowledged_unmet,
+        # A company with more lines needs more batches; one with fewer keeps
+        # the budget it had, as every other budget is kept.
+        "max_batches": max(spec.max_batches, derived.max_batches),
     })
 
 

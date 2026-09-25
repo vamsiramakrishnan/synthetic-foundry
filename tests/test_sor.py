@@ -251,8 +251,20 @@ def test_a_world_built_for_a_process_company_projects_its_records_and_evidence(t
     assert served == sor.records_for_world(world) and served
     assert all(r.fields["company_id"] == spec.structure.name for r in served)  # type: ignore[union-attr]
     threads = [r for r in registry.project("email", world) if r.entity == "thread"]
-    assert threads and threads == sor.channel_records_for_world(world, "email")
+    assert threads and threads == [*sor.channel_records_for_world(world, "email"),
+                                   *sor.product_records_for_world(world, "email")]
     assert registry.project("servicenow", world) == registry.project("servicenow", world)
+    # A product an emulator of its own stands in for is read there, restating
+    # its `sor` record under the same binding scope.
+    restated = [r for c in ("servicenow", "salesforce", "sharepoint", "confluence", "jira", "email")
+                for r in sor.product_records_for_world(world, c)]
+    by_id = {r.id: r for r in served}
+    assert restated and all(r in registry.project(r.connector, world) for r in restated[:5])
+    for record in restated:
+        original = by_id[record.fields["sor_record_id"]]
+        assert {k: record.fields[k] for k in ("lob", "stream", "business_unit", "activity_id", "period")} == {
+            k: original.fields[k] for k in ("lob", "stream", "business_unit", "activity_id", "period")}
+        assert record.external_id == original.external_id and record.fact_ids == original.fact_ids
     # The key rides a rebuild, so a replayed corpus projects the same records.
     replayed = rebuild(world.recipe)
     assert replayed.recipe[PROCESS_STRUCTURE_KEY] == world.recipe[PROCESS_STRUCTURE_KEY]

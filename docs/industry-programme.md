@@ -102,6 +102,15 @@ no emulator (chat, a workflow approval, a portal filing) is still reported as
 unemulated, and the file is versioned in its name because changing which
 connector stands in for a system changes every programme derived from it.
 
+A product with an emulator of its own is read there. Its records are derived
+once on `sor`, and `sor.product_records` restates each on the emulator the
+line reads (a ServiceNow incident on `servicenow.incident`, a Salesforce case
+on `salesforce.case`, a SharePoint list on `sharepoint.list_item`) under the
+same binding scope, with that connector's own fields and `sor_record_id`
+naming the record it restates. Before this, a line whose system was ServiceNow
+or Salesforce demanded records no projection held, and construction refused
+about a third of every shipped industry's use cases.
+
 ## Requests read their answers off the records
 
 A programme derives the company's records in every system its bindings name
@@ -184,7 +193,8 @@ bindings. The process company is recorded on the snapshot world's recipe
 (`process_structure`) and declared as one event dated where the company's
 facts begin, and the programme's facts join the world's ledger about those
 units, sourced on those systems. From the recipe the
-builtin projections derive the company's records on `sor` and its channel
+builtin projections derive the company's records on `sor` (restated on the
+emulator of each product that has one) and its channel
 evidence on the emulated channels from the world alone: one email thread,
 Jira issue, SharePoint file or Confluence page per bound activity, declared
 channel and period, scoped to the line's LOB, stream and owning unit, and

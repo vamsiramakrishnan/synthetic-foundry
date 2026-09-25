@@ -103,6 +103,22 @@ def _connector_records(world: World, connector: str) -> list[ConnectorRecord]:
     return records
 
 
+def _flat_connector_records(world: World, connector: str) -> list[dict[str, Any]]:
+    """*connector*'s projection of *world*, flattened for predicates, once per world.
+
+    A world is immutable, so its projection is too; a company with hundreds
+    of hard requirements used to project and serialise every record of the
+    connector again for each one. Held in the world's own read cache
+    (`World._collections`), which a derived world starts empty.
+    """
+    key = f"eval_candidates.connector:{connector}"
+    cached = world._collections.get(key)
+    if cached is None:
+        cached = [_predicate_record(record) for record in _connector_records(world, connector)]
+        world._collections[key] = cached
+    return cached
+
+
 def _selector_predicate(selector: Mapping[str, str | int | bool]) -> Predicate:
     """Compile the legacy declarative selector to the shared predicate language."""
 
@@ -114,11 +130,12 @@ def _check_records(
     records: Iterable[Any],
     *,
     id_field: str = "id",
+    flattened: bool = False,
 ) -> RequirementCheck:
     predicate = _selector_predicate(requirement.selector)
     matches: list[str] = []
     for item in records:
-        record = _predicate_record(item)
+        record = item if flattened else _predicate_record(item)
         if evaluate(predicate, record):
             identifier = record.get(id_field) or record.get("external_id") or "evidence"
             matches.append(str(identifier))
@@ -232,7 +249,7 @@ def check_requirement(
                 detail="connector requirement needs selector.connector",
             )
         try:
-            records = _connector_records(world, connector)
+            records = _flat_connector_records(world, connector)
         except ValueError as error:
             return RequirementCheck(
                 requirement_id=requirement.id,
@@ -244,7 +261,7 @@ def check_requirement(
         selector = dict(requirement.selector)
         selector.pop("connector", None)
         narrowed = requirement.model_copy(update={"selector": selector})
-        return _check_records(narrowed, records)
+        return _check_records(narrowed, records, flattened=True)
     raise AssertionError(f"unhandled requirement kind {requirement.kind}")
 
 

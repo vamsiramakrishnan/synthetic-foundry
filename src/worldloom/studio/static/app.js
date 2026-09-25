@@ -245,6 +245,7 @@ async function action(name, target) {
   if(name==="workflow"){
     const a=JSON.parse(target.dataset.workflow);
     if(a.kind==="navigate"){state.page=a.page;render();}
+    else if(a.kind==="run"&&a.job_id){await api(`/api/jobs/${encodeURIComponent(a.job_id)}/retry`,{});await refresh();render();notify("Run queued to resume from its recorded checkpoints.");}
     else if(a.kind==="run")await run(a.operation,"",a.options||{});
     else if(a.kind==="prepare_native")await sourceSuiteEditor();
     else if(a.kind==="select_narration"){await api(route("select-narration"),{revision:state.company.revision,job_id:a.job_id});await refresh();render();}

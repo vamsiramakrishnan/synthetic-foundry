@@ -732,16 +732,20 @@ def generate_sor(world: World) -> list[ConnectorRecord]:
 
 
 def _with_process_evidence(connector: str, base: Projection) -> Projection:
-    """*base* followed by the process company's channel evidence on *connector*.
+    """*base* followed by the process company's evidence on *connector*.
 
-    Nothing follows for a world built without a process company, so every
-    corpus built before this existed projects byte for byte as it did.
+    The channel evidence the company's bindings land in, then the records of
+    every product *connector* emulates (`sor.product_records`), so a line
+    whose system is ServiceNow finds its records in ServiceNow. Nothing
+    follows for a world built without a process company, so every corpus
+    built before this existed projects byte for byte as it did.
     """
 
     def project(world: World) -> list[ConnectorRecord]:
-        from .sor import channel_records_for_world
+        from .sor import channel_records_for_world, product_records_for_world
 
-        return [*base(world), *channel_records_for_world(world, connector)]
+        return [*base(world), *channel_records_for_world(world, connector),
+                *product_records_for_world(world, connector)]
 
     return project
 
@@ -844,7 +848,7 @@ def builtin_projections() -> ConnectorProjectionRegistry:
     return ConnectorProjectionRegistry(
         {
             "jira": _with_process_evidence("jira", generate_jira),
-            "servicenow": generate_servicenow,
+            "servicenow": _with_process_evidence("servicenow", generate_servicenow),
             "email": _with_process_evidence("email", generate_email),
             "confluence": _with_process_evidence(
                 "confluence", lambda value: generate_artifact_projection(value, "confluence")
@@ -853,7 +857,7 @@ def builtin_projections() -> ConnectorProjectionRegistry:
                 "sharepoint", lambda value: generate_artifact_projection(value, "sharepoint")
             ),
             "drive": lambda value: generate_artifact_projection(value, "drive"),
-            "salesforce": generate_salesforce,
+            "salesforce": _with_process_evidence("salesforce", generate_salesforce),
             "sor": generate_sor,
         }
     )

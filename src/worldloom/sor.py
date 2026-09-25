@@ -234,6 +234,7 @@ class _Company:
         self.facts = facts
         self.records = records(compiled, company_id=compiled.company, periods=periods, facts=facts)
         self.channel_records = channel_records(compiled, self.records, periods=periods, company_id=compiled.company)
+        self.product_records = product_records(self.records)
 
 
 def _company_of(world: Any) -> _Company | None:
@@ -495,6 +496,101 @@ def channel_records(
     return out
 
 
+# ---------------------------------------------------------------------------
+# Product records on their own emulator
+# ---------------------------------------------------------------------------
+
+
+def product_records(
+    rows: Sequence[ConnectorRecord],
+    *,
+    table: dict[str, Any] | None = None,
+) -> list[ConnectorRecord]:
+    """The records of every product an emulator of its own stands in for, on that emulator.
+
+    A line whose system is ServiceNow reads `servicenow.incident`, and the
+    emulator table (`industry.emulated_systems`) says so; the record itself is
+    derived once, on `sor`. This restates it where the line reads it: the
+    same binding scope (LOB, stream, unit, activity, period), the product's
+    own entity, and the fields that connector's objects carry, with
+    `sor_record_id` naming the record it restates. Products `sor` stands in
+    for, and record kinds the emulator maps to no entity, yield nothing, so
+    the `sor` record set and every answer read off it are unchanged.
+    """
+    from . import industry
+
+    products = (table if table is not None else industry.emulated_systems())["products"]
+    out: list[ConnectorRecord] = []
+    for record in rows:
+        mapped = products.get(str(record.fields.get("product", "")))
+        if not mapped or mapped["connector"] == CONNECTOR:
+            continue
+        entity = mapped["objects"].get(str(record.fields["object"]))
+        if not entity:
+            continue
+        connector = str(mapped["connector"])
+        key = content_key("sor-product", record.id, connector, entity)
+        fields = {**record.fields, "sor_record_id": record.id,
+                  **_native_fields(connector, entity, record, key)}
+        out.append(ConnectorRecord(
+            id=f"CONN-{connector.upper()}-{key[:12].upper()}",
+            connector=connector,
+            entity=entity,
+            external_id=str(record.external_id),
+            title=record.title,
+            fields=fields,
+            fact_ids=list(record.fact_ids),
+        ))
+    return out
+
+
+def _native_fields(connector: str, entity: str, record: ConnectorRecord, key: str) -> dict[str, Any]:
+    """The fields *connector*'s own objects carry, read off one `sor` record."""
+    f = record.fields
+    period, owner, status = str(f["period"]), str(f["owner_bu"]), str(f["status"])
+    body = (f"{record.title}. Control: {f['control']}."
+            + (f" Exception: {f['exception']}." if f["exception"] else ""))
+    stamp = _stamp(period)
+    if connector == "servicenow":
+        return {"sys_id": key[:32], "number": record.external_id, "short_description": record.title,
+                "description": body, "state": status, "caller_id": owner, "assignment_group": owner,
+                "opened_at": stamp, **({"type": "normal"} if entity == "change_request" else {})}
+    if connector == "salesforce":
+        native: dict[str, Any] = {"Id": key[:18].upper(), "Name": record.title, "Description": body,
+                                  "OwnerId": owner, "CreatedDate": stamp}
+        if entity == "opportunity":
+            native.update(StageName=status, CloseDate=period + "-28")
+        elif entity == "case":
+            native.update(Subject=record.title, Status=status)
+        elif entity == "contact":
+            native.update(LastName=owner)
+        return native
+    if connector == "jira":
+        project = str(f["stream"]).upper()[:10]
+        return {"key": f"{project}-{int(key[:8], 16) % 100000}", "summary": record.title, "description": body,
+                "status": status, "assignee": owner, "project": project,
+                "labels": [f["stream"], f["function"], period]}
+    if connector == "confluence":
+        return {"page_id": str(int(key[:10], 16) % 10**8), "space": str(f["stream"]).upper()[:10],
+                "text": body, "created_at": stamp, "modified_at": stamp}
+    if connector == "email":
+        return {"thread_id": f"<{key}@{_slug(str(f['company_id']))}.example>", "subject": record.title,
+                "body": body, "sent_at": stamp, "state": "sent",
+                "from": _address(owner, str(f["company_id"])), "to": [_address(f"{f['function']} team", str(f["company_id"]))]}
+    # SharePoint documents and lists, and any other file-shaped emulator.
+    return {"item_id": key[:16].upper(), "name": record.title, "parent": f"/{_slug(str(f['function']))}/{f['stream']}",
+            "content": body, "created_at": stamp, "modified_at": stamp,
+            **({"fields": {"Title": record.title, "Status": status}} if entity == "list_item" else {})}
+
+
+def product_records_for_world(world: Any, connector: str) -> list[ConnectorRecord]:
+    """The process company's product records on *connector*; empty without a process company."""
+    company = _company_of(world)
+    if company is None:
+        return []
+    return [record for record in company.product_records if record.connector == connector]
+
+
 def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -> tuple[str, tuple[str, ...]]:
     """The expected answer to a record-set intent over one binding's records in one period.
 
@@ -546,5 +642,6 @@ __all__ = [
     "ANCHOR_PERIOD", "CHANNEL_DAY", "CONNECTOR", "DEFAULT_PERIODS", "EXCEPTION_EVERY", "MONEY_KINDS",
     "ProductUse", "RECORDS_PER_PERIOD", "answer", "by_binding", "channel_records", "channel_records_for_world",
     "entity_name",
-    "facts_for_world", "periods_ending", "products_for_world", "projections", "records", "records_for_world",
+    "facts_for_world", "periods_ending", "product_records", "product_records_for_world", "products_for_world",
+    "projections", "records", "records_for_world",
 ]

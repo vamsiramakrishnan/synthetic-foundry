@@ -99,7 +99,14 @@ class QualificationProof(Model):
     grade: dict[str, Any]
     spans: tuple[dict[str, Any], ...]
     behaviors: tuple[str, ...]
+    #: The records the run wrote, as they stood after it: every record a span
+    #: created or updated. Not the whole post-run state, which repeats every
+    #: unchanged connector record per query and grows a proof to tens of
+    #: megabytes on a catalogue company; the unchanged records are the
+    #: batch's connector data, which the proof's digest already names.
     post_state: dict[str, dict[str, Any]]
+    #: Records a span wrote that no longer exist after the run.
+    deleted: tuple[str, ...] = ()
     native_artifacts: tuple[ArtifactByteWitness, ...] = ()
 
 
@@ -394,13 +401,15 @@ def qualify_queries(
                             code="assertions_failed", detail=json.dumps(dict(result.grade), sort_keys=True)))
             continue
         eligible.append(query)
+        written = sorted({str(fid) for span in result.spans for fid in span.writes})
         rows_by_id[query.id] = row
         cases_by_id[query.id] = _observed_cases(fixture, batch.connector_data)
         proofs_by_id[query.id] = QualificationProof(
             query_id=query.id, query_digest=digest(query), fixture_digest=digest(fixture),
             connector_data_digest=data_digest, row_digest=digest(row), grade=dict(result.grade),
             spans=tuple(asdict(span) for span in result.spans), behaviors=result.behaviors,
-            post_state={key: dict(value) for key, value in result.post_state.items()},
+            post_state={fid: dict(result.post_state[fid]) for fid in written if fid in result.post_state},
+            deleted=tuple(fid for fid in written if fid not in result.post_state),
             native_artifacts=native_artifacts,
         )
 

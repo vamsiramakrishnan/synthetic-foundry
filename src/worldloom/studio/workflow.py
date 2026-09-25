@@ -61,7 +61,16 @@ def report(studio: Studio, project: str, revision: str | None = None, *, harness
     findings = [{"code": "company_unmet", "message": value} for value in unresolved]
     if missing:
         findings.append({"code": "contracts_missing", "message": "Define native tasks or connector workflows for: " + ", ".join(missing)})
+    connector_cases = [c for c in spec.use_cases if c.scenario is not None]
+    # A batch serves one use case with at most `pool_size` queries, so a
+    # budget below this cannot meet the declared counts however it runs.
+    floor = sum(-(-max(1, c.count) // spec.pool_size) for c in connector_cases)
+    if connector_cases and floor > spec.max_batches:
+        findings.append({"code": "batch_budget_short", "message":
+            f"{len(connector_cases)} use cases asking {sum(c.count for c in connector_cases)} queries need at least "
+            f"{floor} batches of {spec.pool_size}; max_batches is {spec.max_batches}, so the compile cannot meet every count."})
     stages: list[WorkflowStage] = []
+    failed: list[WorkflowAction] = []
 
     def navigate(page: str, label: str) -> WorkflowAction:
         return WorkflowAction(kind="navigate", page=page, label=label)
@@ -78,8 +87,20 @@ def report(studio: Studio, project: str, revision: str | None = None, *, harness
                     and all(j["options"].get(key) == value for key, value in wanted.items())), None) if operation else None
         if job and job["status"] in {"queued", "running"}:
             status, detail, action = "running", "A worker owns this stage; inspect its run before starting more work.", navigate("changes", "Inspect active run")
-        elif job and job["status"] in {"failed", "interrupted", "paused"}:
-            status, detail, action = "blocked", job["error"] or "Resume the existing run from its checkpoint.", navigate("changes", "Inspect and resume run")
+        elif job and job["status"] == "paused" and operation != "prepare_native":
+            # A batch limit paused committed work; resuming it is the next step.
+            status, detail = "ready", "Paused at its batch limit; resume from the committed checkpoints."
+            action = WorkflowAction(kind="run", operation=action.operation if action else None, options=wanted, job_id=job["id"], label="Resume run")
+        elif job and job["status"] in {"failed", "interrupted"}:
+            # The run that failed is the blocker, so it is named here and
+            # ranked ahead of every other blocked stage: retrying it resumes
+            # from its checkpoints once the cause is fixed.
+            error = job["error"] or "Worker stopped; resume from the committed checkpoints."
+            status, detail = "blocked", error
+            action = (navigate("changes", "Inspect failed proposal") if operation == "prepare_native" else
+                      WorkflowAction(kind="run", operation=action.operation if action else None, options=wanted, job_id=job["id"], label="Retry failed run"))
+            failed.append(action)
+            findings.append({"code": "run_failed", "message": f"{operation} run {job['id']} {job['status']}: {error}"})
         elif operation == "prepare_native" and job and job["status"] == "complete":
             status, detail, action = "ready", "A native suite proposal is ready for explicit review; its contracts have not been applied.", navigate("changes", "Review native proposal")
         stages.append(WorkflowStage(id=key, title=title, status=status, detail=detail, action=action))
@@ -159,6 +180,10 @@ def report(studio: Studio, project: str, revision: str | None = None, *, harness
     # Prefer executable progress. Reviewing a proposal or changing a company is
     # always an explicit operator step, never an automatic retry loop.
     next_action = next((s.action for s in stages if s.status == "ready" and s.action), None)
+    if next_action is None:
+        next_action = next((s.action for s in stages if s.status == "running" and s.action), None)
+    if next_action is None and failed:
+        next_action = failed[0]
     if next_action is None:
         next_action = next((s.action for s in stages if s.status == "blocked" and s.action), None)
     return WorkflowReport(revision=current["revision"], stages=tuple(stages), next_action=next_action,

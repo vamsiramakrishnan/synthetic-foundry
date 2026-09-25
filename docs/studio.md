@@ -212,6 +212,29 @@ It does not apply an interview response or a proposed native suite. Those
 change the evaluation contract and remain separate, reviewable revisions.
 A missing harness or unmet prerequisite remains visible in the report.
 
+`advance --max-steps N` walks the stage DAG (build, compile, evalrun, and the
+harness stages when `--harness-command` is given) without a human between
+stages, and stops at the first proposal, configuration gap or refusal. Its
+output adds `steps`, one entry per run it executed:
+
+```bash
+worldloom studio advance PROJECT_ID --max-steps 8 --workspace ./worldloom-workspace
+```
+
+A failed run is the named blocker. The report carries a `run_failed` finding
+with the run's error, and its `next_action` is that run with its `job_id`, ranked
+ahead of any other blocked stage. Once the cause is fixed, `advance` (or
+repeating the same `studio run`) resumes that run from its committed
+checkpoints instead of starting a duplicate. A run left `running` by a killed
+process holds no writer lock; `advance` and `run` mark it interrupted and
+resume it. A construction refusal names each cause once, with the use cases and
+requirements it holds for.
+
+Before compiling, the report also names a `batch_budget_short` finding when
+`max_batches` cannot reach the declared counts: a batch serves one use case with
+at most `pool_size` queries. A project derived with `worldloom industry project`
+sizes `max_batches` from its own use cases and counts.
+
 For native evaluations, first build the company's episodes, narrate the source
 evidence and select the accepted narration. Then request tasks from that
 source catalogue:

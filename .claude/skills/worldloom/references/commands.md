@@ -1303,7 +1303,7 @@ Interview, build and evaluate one persistent company.
 
 ### `worldloom studio advance`
 
-Execute one ready stage; stop at a proposal, configuration gap or refusal.
+Execute ready stages in order; stop at a proposal, configuration gap or refusal.
 
 ```
 worldloom studio advance <PROJECT>
@@ -1312,6 +1312,7 @@ worldloom studio advance <PROJECT>
 | Option | Purpose |
 | --- | --- |
 | `--harness-command` |  |
+| `--max-steps` | Run up to this many ready stages in order (build, compile, evalrun, ...), stopping at the first proposal, configuration gap or refusal. The default runs one. |
 | `--timeout` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
