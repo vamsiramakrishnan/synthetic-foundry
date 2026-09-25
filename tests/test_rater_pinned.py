@@ -111,8 +111,6 @@ def test_no_shipped_industry_pack_rewords_the_judge() -> None:
         assert not [key for key in body.prompts if key.startswith("rater.")], located.envelope.name
 
 
-@pytest.mark.xfail(strict=True, reason="needs packkit's lint_industry to refuse `rater.` prompt keys, "
-                                       "as LOCKED_POLICY_PREFIXES refuses serving policy (lead-owned)")
 def test_an_industry_pack_that_rewords_the_judge_is_refused(tmp_path: Path) -> None:
     _pack(tmp_path, "industry", "judgy", {"prompts": {"rater.judge.trailer": "Give a score."}})
     findings = packkit.lint(packkit.resolve("industry:judgy", roots=[tmp_path]))
