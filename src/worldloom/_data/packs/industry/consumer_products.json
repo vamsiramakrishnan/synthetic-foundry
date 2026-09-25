@@ -1,0 +1,32 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "consumer_products",
+  "version": "1",
+  "title": "Consumer products",
+  "description": "How the product speaks for the process catalogue's consumer_products industry: the phrases that name it in a company description, its colloquial words (site is plant, customer is trade customer) and an example company.",
+  "body": {
+    "industry": "consumer_products",
+    "engine": "retail",
+    "aliases": [
+      "consumer goods",
+      "fmcg",
+      "packaged goods"
+    ],
+    "terms": {
+      "site": "plant",
+      "customer": "trade customer"
+    },
+    "example": {
+      "company_name": "Nusantara Brands",
+      "geo": "indonesia",
+      "countries": [
+        "ID",
+        "TH",
+        "VN",
+        "MY"
+      ],
+      "description": "A federated packaged-goods maker in Indonesia, Thailand, Vietnam and Malaysia."
+    }
+  }
+}

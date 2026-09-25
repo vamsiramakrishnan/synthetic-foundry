@@ -14,6 +14,16 @@ BindingStatus = Literal["bound", "objects_unspecified", "unknown_class", "unknow
 StreamKind = Literal["universal", "industry_specific"]
 Archetype = Literal["product_line", "geography", "customer_segment", "channel", "shared_service_centre", "legal_entity", "group_function"]
 
+#: Which unit archetypes trade and which support: the one table the compiler
+#: (a ``BU`` owner is a revenue unit), ownership (support units are made real
+#: without revenue) and ``industry`` (divisions, the revenue function) read.
+#: Here rather than as a flag on the catalogue's ``bu_archetypes`` because the
+#: catalogue's fingerprint is every compilation's digest, so a flag there would
+#: move every compiled output; the test that the two sets partition the
+#: catalogue's list keeps them from drifting apart.
+REVENUE_ARCHETYPES: frozenset[str] = frozenset({"product_line", "geography", "customer_segment", "channel", "legal_entity"})
+SUPPORT_ARCHETYPES: frozenset[str] = frozenset({"shared_service_centre", "group_function"})
+
 
 class BusinessUnit(Model):
     name: str = Field(min_length=1)

@@ -1,0 +1,31 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "life_sciences",
+  "version": "1",
+  "title": "Life sciences",
+  "description": "How the product speaks for the process catalogue's life_sciences industry: the phrases that name it in a company description, its colloquial words (site is facility) and an example company.",
+  "body": {
+    "industry": "life_sciences",
+    "engine": "retail",
+    "aliases": [
+      "pharma",
+      "pharmaceutical",
+      "biotech",
+      "medical devices"
+    ],
+    "terms": {
+      "site": "facility"
+    },
+    "example": {
+      "company_name": "Meridian Therapeutics",
+      "geo": "singapore",
+      "countries": [
+        "SG",
+        "JP",
+        "AU"
+      ],
+      "description": "A federated pharmaceutical company in Singapore, Japan and Australia."
+    }
+  }
+}

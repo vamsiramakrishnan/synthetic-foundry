@@ -1,0 +1,30 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "retail",
+  "version": "1",
+  "title": "Retail",
+  "description": "How the product speaks for the process catalogue's retail industry: the phrases that name it in a company description, its colloquial words (site is store) and an example company.",
+  "body": {
+    "industry": "retail",
+    "engine": "retail",
+    "aliases": [
+      "retailer",
+      "supermarket",
+      "grocery",
+      "grocer"
+    ],
+    "terms": {
+      "site": "store"
+    },
+    "example": {
+      "company_name": "Kestrel Retail Group",
+      "geo": "australia",
+      "countries": [
+        "AU",
+        "NZ"
+      ],
+      "description": "A centralised omnichannel retailer in Australia and New Zealand."
+    }
+  }
+}

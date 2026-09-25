@@ -1,0 +1,31 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "healthcare",
+  "version": "1",
+  "title": "Healthcare",
+  "description": "How the product speaks for the process catalogue's healthcare industry: the phrases that name it in a company description, its colloquial words (customer is patient, site is hospital, company is provider) and an example company.",
+  "body": {
+    "industry": "healthcare",
+    "engine": "retail",
+    "aliases": [
+      "hospital",
+      "health system",
+      "clinic",
+      "provider network"
+    ],
+    "terms": {
+      "customer": "patient",
+      "site": "hospital",
+      "company": "provider"
+    },
+    "example": {
+      "company_name": "Kallang Health",
+      "geo": "singapore",
+      "countries": [
+        "SG"
+      ],
+      "description": "A centralised hospital group in Singapore."
+    }
+  }
+}

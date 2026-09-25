@@ -768,7 +768,7 @@ def test_industry_words_come_from_the_catalogue_and_the_declared_table() -> None
     )
     assert words["naics 517"] == "telecom" and words["tm forum etom"] == "telecom"
     assert all(key in INDUSTRIES for key in words.values())
-    assert set(industry.INDUSTRY_WORDS.items()) <= set(words.items())
+    assert set(industry.aliases().items()) <= set(words.items())
 
 
 def test_the_archetype_resolver_reports_a_match_or_a_miss() -> None:

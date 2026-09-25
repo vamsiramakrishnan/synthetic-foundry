@@ -1,0 +1,28 @@
+{
+  "values": {
+    "company.fallback_engine": "retail",
+    "company.functions": [
+      "Executive", "Finance", "Technology", "Operations", "Merchandising",
+      "ServiceOperations", "Risk", "Supply Chain", "Digital", "People"
+    ],
+    "industry.count_ceiling": 100000,
+    "industry.destination_channels": ["email"],
+    "industry.failures": ["none", "partial_write"],
+    "industry.named_activities": 3,
+    "industry.project.max_per_case": 6,
+    "industry.project.planning_budget": 512,
+    "industry.project.pool_size": 24,
+    "industry.record_lookup_slack": 2,
+    "sor.anchor_period": "2026-06",
+    "sor.channel_day": 15,
+    "sor.default_periods": 6,
+    "sor.exception_every": 4,
+    "sor.money_kinds": [
+      "SalesOrder", "Order", "BillingDoc", "Invoice", "ARInvoice", "Bill", "PurchaseRequisition", "Requisition",
+      "PurchaseOrder", "GoodsReceipt", "Receipt", "InvoiceReceipt", "VendorBill", "JournalEntry", "AROpenItem",
+      "APOpenItem", "IncomingPayment", "CustomerPayment", "PaymentRun", "Dunning", "CashPosition", "PayRun",
+      "Loan", "Claim", "Exposure", "Policy", "Quote", "Opportunity", "Deal", "Contract", "FreightOrder", "Shipment"
+    ],
+    "sor.records_per_period": 3
+  }
+}

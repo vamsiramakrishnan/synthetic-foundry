@@ -1,0 +1,30 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "insurance",
+  "version": "1",
+  "title": "Insurance",
+  "description": "How the product speaks for the process catalogue's insurance industry: the phrases that name it in a company description, its colloquial words (customer is policyholder, site is office) and an example company.",
+  "body": {
+    "industry": "insurance",
+    "engine": "insurance",
+    "aliases": [
+      "insurer",
+      "underwriter"
+    ],
+    "terms": {
+      "customer": "policyholder",
+      "site": "office"
+    },
+    "example": {
+      "company_name": "Southern Cross Mutual",
+      "geo": "australia",
+      "countries": [
+        "AU",
+        "NZ",
+        "SG"
+      ],
+      "description": "A centralised general insurer in Australia, New Zealand and Singapore."
+    }
+  }
+}

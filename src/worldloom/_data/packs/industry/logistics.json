@@ -1,0 +1,33 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "logistics",
+  "version": "1",
+  "title": "Logistics",
+  "description": "How the product speaks for the process catalogue's logistics industry: the phrases that name it in a company description, its colloquial words (customer is shipper, site is depot) and an example company.",
+  "body": {
+    "industry": "logistics",
+    "engine": "retail",
+    "aliases": [
+      "freight",
+      "forwarder",
+      "shipping",
+      "3pl"
+    ],
+    "terms": {
+      "customer": "shipper",
+      "site": "depot"
+    },
+    "example": {
+      "company_name": "Straits Freight",
+      "geo": "singapore",
+      "countries": [
+        "SG",
+        "HK",
+        "MY",
+        "ID"
+      ],
+      "description": "A decentralised freight forwarder in Singapore, Hong Kong, Malaysia and Indonesia."
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "telecom",
+  "version": "1",
+  "title": "Telecommunications",
+  "description": "How the product speaks for the process catalogue's telecom industry: the phrases that name it in a company description, its colloquial words (customer is subscriber) and an example company.",
+  "body": {
+    "industry": "telecom",
+    "engine": "retail",
+    "aliases": [
+      "telco",
+      "telecommunications",
+      "mobile operator",
+      "network operator"
+    ],
+    "terms": {
+      "customer": "subscriber"
+    },
+    "example": {
+      "company_name": "Ardent Telecom",
+      "geo": "india",
+      "countries": [
+        "IN"
+      ],
+      "description": "A federated mobile and fixed-line operator in India."
+    }
+  }
+}
