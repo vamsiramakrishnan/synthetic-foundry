@@ -399,12 +399,14 @@ def generate(
     # unit (the first insurer pack) otherwise leaves merch_lead managerless and
     # the org tree with two roots.
     merch_md = unit_role_key(_merch_unit(unit_ids), "_md")
-    # The rows that are the engine's own, remembered because the platform cost
-    # centre is decided below: by role key on those, whose titles a prompts
-    # pack may now rename, and by title on every other row (an authored table,
-    # a per-unit post), exactly as before, since their keys are not this
-    # module's to interpret.
-    engine_keys = frozenset(row[0] for row in _ROLE_SHAPE) if role_table is None else frozenset()
+    # The engine's own role keys, because the platform cost centre is decided
+    # below by role key on those rows, whatever table supplied them (the
+    # engine's, an engine-less industry's copy of it, an SDK line of
+    # business), since a prompts pack may rename their titles; by title on any
+    # other row (an authored key, a per-unit post), exactly as before, since
+    # those keys are not this module's to interpret. Every shipped table's
+    # titles agree with the key rule, so no default output moves.
+    engine_keys = frozenset(row[0] for row in _ROLE_SHAPE)
     role_table = [
         (role, title, function, merch_md if manager == "gm_md" else manager)
         for role, title, function, manager in (

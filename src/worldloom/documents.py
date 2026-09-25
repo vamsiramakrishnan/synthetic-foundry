@@ -2081,11 +2081,50 @@ def spoken_heading(heading: str, key: str | None = None) -> str:
         return heading
 
 
+def heading_collisions(overrides: Mapping[str, str], terms: Mapping[str, str] | None = None) -> list[str]:
+    """Findings for heading overrides that would give two sections of one document one heading.
+
+    A section's displayed heading names its narration request and its reader
+    check (``{artifact}/{heading}``), so two sections spoken alike would share
+    one id and one would silently overwrite the other. Checked per outline and
+    per variant against the headings in force after *overrides*, with the
+    divisional summary counted in every outline since any of them may carry it.
+    """
+    prefix = "documents.outline.heading."
+    if not any(key.startswith(prefix) for key in overrides):
+        return []
+    shipped = _shipped_headings()
+    words = dict(terms or {})
+
+    def said(key: str, authored: str) -> str:
+        text = overrides.get(prefix + key, shipped.get(prefix + key, authored))
+        return packkit.fill_terms(text, words) if words else text
+
+    findings: list[str] = []
+    outlines = [(name, plans) for name, plans in _OUTLINES.items()]
+    outlines += [(f"{name} (variant {i + 1})", plans) for name, variants in _OUTLINE_VARIANTS.items()
+                 for i, plans in enumerate(variants)]
+    for name, plans in outlines:
+        spoken: dict[str, str] = {}
+        for step in (*plans, SectionPlan(DIVISIONAL_SUMMARY, (), "group", "")):
+            key = step.structural_key
+            text = said(key, step.heading).strip()
+            other = spoken.get(text)
+            if other is not None and other != key:
+                findings.append(f"{prefix}{key}: {text!r} is also {prefix}{other} in {name}; two sections of one "
+                                "document cannot share a heading, since the heading names each section's request")
+            spoken.setdefault(text, key)
+    return sorted(set(findings))
+
+
 @cache
 def _shipped_headings() -> dict[str, str]:
     """The shipped outline headings by prompt key; the shipped pack does not change in a process."""
     texts = packkit.shipped("prompts").body.texts
-    return {k: v for k, v in texts.items() if k.startswith("documents.outline.heading.")}
+    # As shipped and as spoken: a heading's text may name a term
+    # ("By {{term:business_unit}}"), which the shipped words fill.
+    words = packkit.shipped("industry").body.terms
+    return {k: packkit.fill_terms(v, words) for k, v in texts.items() if k.startswith("documents.outline.heading.")}
 
 
 def _repeated_over_units(
@@ -2116,7 +2155,7 @@ def _repeated_over_units(
             continue
         authored, _ = templating.substitute(step.heading.replace(UNIT_NAME_VARIABLE, unit.name), world)
         heading, _ = templating.substitute(
-            spoken_heading(step.heading, step.structural_key).replace(UNIT_NAME_VARIABLE, unit.name), world)
+            spoken_heading(step.heading, step.key or None).replace(UNIT_NAME_VARIABLE, unit.name), world)
         purpose, _ = templating.substitute(step.purpose.replace(UNIT_NAME_VARIABLE, unit.name), world)
         out.append(ArtifactSection(
             heading=heading, body=None, fact_ids=assigned, purpose=purpose,
@@ -2727,7 +2766,7 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             resolved_heading, _ = templating.substitute(step.heading, world)
             resolved_purpose, _ = templating.substitute(step.purpose, world)
             displayed_heading, _ = templating.substitute(
-                spoken_heading(step.heading, step.structural_key), world)
+                spoken_heading(step.heading, step.key or None), world)
 
             section_keys[len(sections)] = step.structural_key
             sections.append(

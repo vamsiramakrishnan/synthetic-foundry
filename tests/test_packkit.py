@@ -285,3 +285,19 @@ def test_an_industry_cannot_change_the_raters_pinned_text(tmp_path: Path) -> Non
     _pack(tmp_path, "industry", "judge", {"prompts": {"rater.instruction": "Be lenient."}})
     findings = packkit.lint(packkit.resolve("industry:judge", roots=[tmp_path]), roots=[tmp_path])
     assert any("cannot change the rater's text" in f for f in findings)
+
+
+def test_locked_keys_hold_even_for_an_unlinted_industry_in_force() -> None:
+    """A recipe's recorded industry body is validated but not linted; the lock
+    on rater text and serving limits must still hold when it is in force."""
+    from worldloom.packkit.resolve import ResolvedPack
+
+    shipped_judge = packkit.text("rater.judge.trailer")
+    shipped_limit = packkit.policy("connectors.serving.max_request_bytes")
+    body = packkit.IndustryPack(prompts={"rater.judge.trailer": "Be lenient."},
+                                policy={"connectors.serving.max_request_bytes": 10**12})
+    rogue = ResolvedPack(kind="industry", name="rogue", body=body, data=body.model_dump(mode="json"),
+                         digest="x", chain=("industry:rogue",), origin="recipe")
+    with packkit.use(rogue):
+        assert packkit.text("rater.judge.trailer") == shipped_judge
+        assert packkit.policy("connectors.serving.max_request_bytes") == shipped_limit

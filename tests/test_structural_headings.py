@@ -145,3 +145,28 @@ def test_an_authors_own_heading_is_spoken_as_written() -> None:
     assert spoken_heading("ROOT CAUSE") == "ROOT CAUSE"
     assert spoken_heading("Root cause") == "Root cause"
     assert spoken_heading("Something bespoke") == "Something bespoke"
+
+
+def test_a_heading_override_that_collides_with_another_section_is_refused(tmp_path) -> None:
+    """Two sections spoken alike share one narration request id; one would be lost."""
+    import json
+
+    from worldloom import packkit
+
+    path = tmp_path / "industry" / "clash.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"schema": "worldloom.pack/v1", "kind": "industry", "name": "clash",
+                                "body": {"prompts": {"documents.outline.heading.drivers": "Position"}}}))
+    findings = packkit.lint(packkit.resolve("industry:clash", roots=[tmp_path]), roots=[tmp_path])
+    assert any("documents.outline.heading.drivers" in f and "cannot share a heading" in f for f in findings)
+    path.write_text(json.dumps({"schema": "worldloom.pack/v1", "kind": "industry", "name": "clash",
+                                "body": {"prompts": {"documents.outline.heading.drivers": "What moved"}}}))
+    packkit.refresh()
+    assert packkit.lint(packkit.resolve("industry:clash", roots=[tmp_path]), roots=[tmp_path]) == []
+
+
+def test_a_pack_doctypes_own_heading_is_displayed_as_written_in_a_document() -> None:
+    from worldloom.documents import SectionPlan, spoken_heading
+
+    plan = SectionPlan("ROOT CAUSE", (), "group", "")
+    assert spoken_heading(plan.heading, plan.key or None) == "ROOT CAUSE"

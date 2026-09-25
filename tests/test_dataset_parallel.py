@@ -102,6 +102,38 @@ def test_workers_run_under_the_packs_in_force(tmp_path: Path, serial: Path) -> N
     assert {json.loads((b / "source.json").read_text())["workers_policy"] for b in batches} == {3}
 
 
+class RootsEcho(FrozenCompanyBuilder):
+    """Records whether a pack visible only through the roots is visible to generation."""
+
+    def __call__(self, request):
+        from worldloom.connector_definition import reference_connectors
+
+        built = super().__call__(request)
+        return dataclasses.replace(built, metadata={**built.metadata, "sees_acme": "acme" in reference_connectors()})
+
+
+def test_workers_search_the_pack_roots_of_the_compile(tmp_path: Path, serial: Path) -> None:
+    """A pack visible but not in force (a workspace connector) reached only the
+    parent; with workers it vanished and the batches changed with the count."""
+    from worldloom.connector_definition import load_connector_definition
+
+    connectors = tmp_path / "packs" / "connector"
+    connectors.mkdir(parents=True)
+    body = load_connector_definition("jira").model_dump(mode="json", by_alias=True)
+    body["connector"] = "acme"
+    body.pop("catalog", None)
+    (connectors / "acme.json").write_text(json.dumps({"schema": "worldloom.pack/v1", "kind": "connector",
+                                                      "name": "acme", "body": body}))
+    world = World.load(serial / "company" / "world")
+    outs = {}
+    for workers in (1, 2):
+        with packkit.use(roots=[tmp_path / "packs"]):
+            compile_dataset(plan(), tmp_path / f"out{workers}", builder=RootsEcho(world, seed=8128), workers=workers)
+        outs[workers] = {json.loads((b / "source.json").read_text())["sees_acme"]
+                         for b in sorted((tmp_path / f"out{workers}" / "batches").iterdir())}
+    assert outs == {1: {True}, 2: {True}}
+
+
 def test_worker_count_resolves_argument_then_environment_then_policy(monkeypatch) -> None:
     monkeypatch.delenv("WORLDLOOM_DATASET_WORKERS", raising=False)
     assert dataset_workers() == 1

@@ -180,7 +180,17 @@ def lint_prompts(body: PromptsPack, context: LintContext, *, where: str = "texts
                 findings.append(f"{where}.{key}: introduces {', '.join('{' + p + '}' for p in sorted(extra))}; "
                                 f"its caller fills only {', '.join('{' + p + '}' for p in sorted(placeholders(default.texts[key]))) or 'nothing'}")
         findings.extend(_term_findings(f"{where}.{key}", text, known_terms))
+    findings.extend(_heading_findings(where, body.texts, terms))
     return findings
+
+
+def _heading_findings(where: str, texts: dict[str, str], terms: dict[str, str] | None) -> list[Finding]:
+    """Heading overrides that would give two sections of one document one heading (``documents``)."""
+    if not any(key.startswith("documents.outline.heading.") for key in texts):
+        return []
+    from ..documents import heading_collisions
+
+    return [f"{where}.{finding}" for finding in heading_collisions(texts, terms)]
 
 
 def lint_policy(body: PolicyPack, context: LintContext, *, where: str = "values") -> list[Finding]:

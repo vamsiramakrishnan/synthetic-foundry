@@ -30,7 +30,14 @@ from typing import Any
 
 from ..providers import digest
 from .kinds import kind, kinds
-from .models import PLACEHOLDER, IndustryPack, PolicyPack, PromptsPack
+from .models import (
+    LOCKED_POLICY_PREFIXES,
+    LOCKED_PROMPT_PREFIXES,
+    PLACEHOLDER,
+    IndustryPack,
+    PolicyPack,
+    PromptsPack,
+)
 from .resolve import ResolvedPack, resolve
 from .sources import CONTEXT_ROOTS as _ROOTS
 from .terms import fill_terms
@@ -141,7 +148,10 @@ def template(key: str) -> str:
     pack = active("prompts")
     assert pack is not None
     prompts: PromptsPack = pack.body
-    chosen = industry().prompts.get(key)
+    # A locked key is never taken from an industry, even one that reached
+    # force without a lint (a recipe's recorded body): the lock is a property
+    # of the key, not only of what upload accepts.
+    chosen = None if key.startswith(LOCKED_PROMPT_PREFIXES) else industry().prompts.get(key)
     if chosen is None:
         try:
             chosen = prompts.texts[key]
@@ -176,7 +186,7 @@ def texts(prefix: str) -> list[str]:
 def policy(key: str) -> Any:
     """The policy value *key* in force: the industry's override, else the policy pack's."""
     overrides = industry().policy
-    if key in overrides:
+    if key in overrides and not key.startswith(LOCKED_POLICY_PREFIXES):
         return overrides[key]
     pack = active("policy")
     assert pack is not None

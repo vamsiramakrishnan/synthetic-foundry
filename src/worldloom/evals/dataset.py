@@ -228,21 +228,23 @@ def _load_batch(root: Path, request: DatasetRequest, index: int) -> tuple[list[D
 
 #: The builder and packs a commit worker was started with. Set once per
 #: worker process by `_start_worker`; the compiling process never reads it.
-_WORKER: tuple[DatasetBuilder, dict[str, dict[str, Any]]] | None = None
+_WORKER: tuple[DatasetBuilder, dict[str, dict[str, Any]], tuple[str, ...]] | None = None
 
 
-def _start_worker(builder: bytes, packs: dict[str, dict[str, Any]]) -> None:
+def _start_worker(builder: bytes, packs: dict[str, dict[str, Any]], roots: tuple[str, ...] = ()) -> None:
     global _WORKER
-    _WORKER = (pickle.loads(builder), packs)
+    _WORKER = (pickle.loads(builder), packs, roots)
 
 
 def _commit_in_worker(root: Path, request: DatasetRequest, company_root: Path | None) -> None:
     # Context variables do not cross a process boundary: the packs in force
     # where the plan was compiled are reinstated from their recorded bodies,
-    # so a worker's generation reads the same prompts, terms and policy.
+    # and the pack roots searched there are searched here, so a pack that is
+    # visible without being in force (a workspace's uploaded connector) is
+    # visible to every worker and the output never depends on how many ran.
     assert _WORKER is not None, "commit worker was not started"
-    builder, packs = _WORKER
-    with packkit.use_recorded(packs):
+    builder, packs, roots = _WORKER
+    with packkit.use(roots=roots), packkit.use_recorded(packs):
         _commit_batch(root, request, builder, company_root=company_root)
 
 
@@ -303,10 +305,12 @@ def _committer(builder: DatasetBuilder, workers: int) -> Iterator[_Committers | 
         shipped = pickle.dumps(builder)
     except Exception as error:
         raise DatasetRefused(f"builder cannot cross a process boundary ({error}); compile with one worker") from error
+    from ..packkit.active import roots as pack_roots
+
     context, packs = multiprocessing.get_context("spawn"), packkit.recorded()
     with ExitStack() as stack:
         yield _Committers([stack.enter_context(ProcessPoolExecutor(
-            max_workers=1, mp_context=context, initializer=_start_worker, initargs=(shipped, packs)))
+            max_workers=1, mp_context=context, initializer=_start_worker, initargs=(shipped, packs, pack_roots())))
             for _ in range(workers)])
 
 
