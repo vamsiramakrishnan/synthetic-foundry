@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from . import archetypes, domains, landscape, profiles
-from .company import FUNCTIONS as _FUNCTIONS
+from .company import default_functions as _default_functions
 from .parameters import DEFAULT, Parameters, Span
 from .roles import from_shape, to_rows
 
@@ -555,7 +555,7 @@ class Blueprint:
         if self.shape is not None:
             shape = dict(self.shape)
             rows = list(to_rows(from_shape(
-                functions=shape.get("functions") or _FUNCTIONS[:shape["levels"] + 2],
+                functions=shape.get("functions") or _default_functions()[:shape["levels"] + 2],
                 headcount=shape["headcount"], span=shape["span"], levels=shape["levels"],
                 engine=self.domain_name,
             )))

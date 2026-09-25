@@ -769,7 +769,10 @@ def test_a_domain_registered_from_outside_is_describable_at_once() -> None:
 
 
 def test_the_function_ladder_has_exactly_one_definition_between_here_and_the_sdk() -> None:
-    assert sdk._FUNCTIONS is company.FUNCTIONS
+    # The SDK reads the ladder in force (the industry pack's, else the policy),
+    # which by default is the one `company.FUNCTIONS` names.
+    assert sdk._default_functions is company.default_functions
+    assert tuple(company.default_functions()) == company.FUNCTIONS
 
 
 def test_the_stated_workforce_is_allocated_across_the_units() -> None:
