@@ -1,0 +1,5 @@
+{
+  "texts": {
+    "studio.harness.closing.envelope": " Reply through the structured output: fill `request_id` and `message`, then `proposal` or `questions`, each as an object or a list as the schema says, never as JSON text inside a string."
+  }
+}

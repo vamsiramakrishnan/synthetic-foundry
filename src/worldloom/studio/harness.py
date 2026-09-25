@@ -101,6 +101,15 @@ _ROLES: dict[str, str] = {
     "worldloom.pack-interview/v1": "studio.harness.role.pack_interview",
 }
 
+#: The closing sentence for a structured seam whose reply is not one of
+#: several alternatives. The evalrun closing says "fill exactly one of its
+#: top-level fields", which a pack interview cannot obey: its reply is an
+#: envelope that always carries `request_id` and `message` beside the
+#: proposal or the questions.
+_CLOSINGS: dict[str, str] = {
+    "worldloom.pack-interview/v1": "studio.harness.closing.envelope",
+}
+
 #: Every role ends in this sentence, which `invoke` swaps for the write
 #: instruction when an operator has opted a native trial into workspace
 #: writes. A role that omits it would silently lose that opt-in.
@@ -164,7 +173,11 @@ def command_for(name: str, output: Path, *, native_output: Path | None = None, t
         raise ValueError("native output writes require codex or a custom JSON adapter")
     if name == "claude":
         if tools:
-            return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan"]
+            # No persisted session on this path either: a turn is one bounded
+            # task, and a run from inside a Claude Code session wrote the
+            # child's transcript under the caller's own session id.
+            return ["claude", "-p", "--output-format", "json", "--permission-mode", "plan",
+                    "--no-session-persistence"]
         # No built-in tools, no MCP servers from the operator's own settings
         # (a real run made "errant tool calls" through them), no persisted
         # session, and a structured reply in the seam's own shape, so the
@@ -172,6 +185,18 @@ def command_for(name: str, output: Path, *, native_output: Path | None = None, t
         return ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config",
                 "--no-session-persistence", *(["--json-schema", schema] if schema else [])]
     raise ValueError("choose codex or claude, or configure a custom JSON adapter")
+
+
+#: Variables naming the session that launched Worldloom. A harness run from
+#: inside a Claude Code session inherits them, and the child then answered as
+#: that session: its `session_id` was the caller's, and in plan mode it wrote
+#: its transcript into the caller's session file. The child is its own turn.
+_CALLER_SESSION = ("CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID")
+
+
+def child_environment() -> dict[str, str]:
+    """This process's environment without the caller's session identity; login and settings stay."""
+    return {key: value for key, value in os.environ.items() if key not in _CALLER_SESSION}
 
 
 def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
@@ -194,7 +219,8 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
         role = role.replace(_NO_WRITES, packkit.text("studio.harness.native_writes"))
     command_tools = payload.get("schema") not in _ROLES
     structured = None if command_tools else reply_schema(payload)
-    closing = packkit.text("studio.harness.closing.structured" if structured else "studio.harness.closing.object")
+    closing = packkit.text(_CLOSINGS.get(str(payload.get("schema")), "studio.harness.closing.structured")
+                           if structured else "studio.harness.closing.object")
     prompt = role + closing + "\n\n" + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False)
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"
@@ -206,7 +232,7 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
                 # in the repository loads its project instructions and skills
                 # and answered a turn "in the Worldloom project".
                 workdir = temp if (name == "claude" and not command_tools) else None
-                result = subprocess.run(command, input=asked, text=True, cwd=workdir,
+                result = subprocess.run(command, input=asked, text=True, cwd=workdir, env=child_environment(),
                                         capture_output=True, timeout=timeout, shell=False)
             except subprocess.TimeoutExpired as error:
                 raise ValueError("coding harness exceeded its configured timeout") from error
