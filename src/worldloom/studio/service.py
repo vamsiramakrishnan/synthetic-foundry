@@ -696,7 +696,7 @@ class Studio:
             world_digest=digest(_files(world)), max_batches=spec.max_batches,
             max_per_task=spec.max_per_task, max_per_case=spec.max_per_case,
             max_per_request=spec.max_per_request, minimum_tasks=spec.minimum_tasks,
-            split_by=spec.split_by, split_weights=spec.split_weights,
+            split_by=spec.split_by, split_weights=spec.split_weights, batch_wave=spec.batch_wave,
             lineage={c.id: {"project": project, "revision": revision, "use_case": c.id,
                              "business_unit": c.owner, "lob": c.lob, "activities": ",".join(c.activities)}
                      for c in spec.use_cases})

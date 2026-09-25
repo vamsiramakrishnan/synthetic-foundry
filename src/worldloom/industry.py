@@ -1958,7 +1958,28 @@ RECORD_LOOKUP_SHAPE = "record_lookup"
 #: `industry.record_lookup_slack`, read when the row is built.
 
 
-def evalrun_row(request: Request, records: Sequence[ConnectorRecord]) -> dict[str, Any]:
+@dataclass(frozen=True)
+class _RecordIndex:
+    """A record set indexed once for every request a programme asks of it.
+
+    Scanning the whole set per request made a large catalogue company's case
+    set quadratic (banking: requests x records). The index keeps each
+    population in record order, so every row reads exactly as a scan built it.
+    """
+
+    by_id: dict[str, ConnectorRecord]
+    populations: dict[tuple[Any, Any], list[ConnectorRecord]]
+
+    @classmethod
+    def of(cls, records: Sequence[ConnectorRecord]) -> _RecordIndex:
+        populations: dict[tuple[Any, Any], list[ConnectorRecord]] = {}
+        for record in records:
+            populations.setdefault((record.fields.get("binding_id"), record.fields.get("period")), []).append(record)
+        return cls({record.id: record for record in records}, populations)
+
+
+def evalrun_row(request: Request, records: Sequence[ConnectorRecord], *,
+                index: _RecordIndex | None = None) -> dict[str, Any]:
     """One record request as the row an `evalrun` case is read from.
 
     The plan is a search on the `sor` connector per record kind the binding
@@ -1972,13 +1993,14 @@ def evalrun_row(request: Request, records: Sequence[ConnectorRecord]) -> dict[st
     """
     if not request.expected_record_ids or request.period is None:
         raise ValueError(f"request {request.id} rests on the catalogue's declaration; it has no records to search")
-    by_id = {record.id: record for record in records}
-    cited = [by_id[record_id] for record_id in request.expected_record_ids if record_id in by_id]
+    # `index` is `records` indexed once (`evalrun_cases` passes it); a lone
+    # call indexes the set itself.
+    index = index if index is not None else _RecordIndex.of(records)
+    cited = [index.by_id[record_id] for record_id in request.expected_record_ids if record_id in index.by_id]
     if not cited:
         raise ValueError(f"request {request.id} cites records absent from the record set")
     binding_id = str(cited[0].fields["binding_id"])
-    population = [record for record in records
-                  if record.fields.get("binding_id") == binding_id and record.fields.get("period") == request.period]
+    population = index.populations.get((binding_id, request.period), [])
     nodes: list[dict[str, Any]] = []
     assertions: list[dict[str, Any]] = []
     for kind in sorted({str(record.fields["object"]) for record in population}):
@@ -2025,11 +2047,12 @@ def evalrun_cases(derived: Programme, *, requests_selected: Iterable[str] | None
     from .evalrun.contract import AnswerOutcome, case_from_row
 
     wanted = set(requests_selected) if requests_selected is not None else None
+    index = _RecordIndex.of(derived.records)
     out = []
     for request in derived.requests:
         if not request.expected_record_ids or (wanted is not None and request.id not in wanted):
             continue
-        row = evalrun_row(request, derived.records)
+        row = evalrun_row(request, derived.records, index=index)
         out.append(case_from_row(
             row, query=request.brief, persona=request.asker,
             dimensions={"lob": request.lob, "stream": request.stream, "intent": request.intent,
