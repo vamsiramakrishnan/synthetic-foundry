@@ -84,9 +84,9 @@ def preset(engine: str = "retail", name: str | None = None) -> ProjectSpec:
             spec = ProjectSpec.model_validate({**spec.model_dump(mode="json"), "packs": [pack.pinned]})
         return spec
     raise ValueError(
-        "the runnable examples are " + ", ".join(sorted(packkit.policy("studio.operational"))) + ", any industry pack "
-        "with an operational example, and any industry the process catalogue knows (`worldloom industry list`); "
-        "other engines use the interview"
+        "the runnable examples are " + ", ".join(sorted(packkit.policy("studio.operational"))) + " and any industry "
+        "pack with an operational example, and any industry the process catalogue knows starts from its derived "
+        "programme (`worldloom industry list`); other engines use the interview"
     )
 
 

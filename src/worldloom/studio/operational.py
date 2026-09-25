@@ -93,13 +93,22 @@ def lint_operational(data: Any, *, where: str = "operational") -> list[Finding]:
 
 
 def industry_pack(key: str) -> Any:
-    """The visible industry pack named *key*, or ``None``; a malformed key names none."""
+    """The industry pack a preset for *key* starts under, or ``None``.
+
+    Only a pack someone supplied (a workspace, user or named root) shapes a
+    preset. A shipped industry pack does not: the shipped presets start in the
+    default language exactly as they did before industry packs existed, and
+    an operator who wants the industry's words chooses its pack for the
+    project, which is a reviewed revision rather than a side effect of
+    clicking an example. A malformed key names no pack.
+    """
     from .. import packkit
 
     try:
-        return packkit.resolve(f"industry:{key}")
+        pack = packkit.resolve(f"industry:{key}")
     except (KeyError, ValueError):
         return None
+    return None if pack.origin == "builtin" else pack
 
 
 def example(key: str) -> tuple[OperationalExample | None, Any]:
@@ -196,12 +205,19 @@ def catalogue() -> list[dict[str, Any]]:
         body = pack.body
         if body.example is None and body.operational is None:
             continue
+        # A shipped pack does not shape a preset (`industry_pack`), so the
+        # entry shows what `preset` returns: a shipped example keeps its own
+        # entry, and the company is the shipped name.
+        shipped = located.origin == "builtin"
+        if shipped and pack.name in out:
+            continue
         found, _ = example(pack.name)
         out[pack.name] = {"key": pack.name, "engine": (found.engine if found else body.engine) or "",
-                          "company_name": company_name(pack), "industry": body.industry,
+                          "company_name": company_name(None if shipped else pack), "industry": body.industry,
                           "title": located.envelope.title or (found.use_case.title if found else pack.name),
                           "description": (body.example.description if body.example else "") or located.envelope.description,
-                          "origin": located.origin, "operational": found is not None, "pack": pack.pinned}
+                          "origin": located.origin, "operational": found is not None,
+                          **({} if shipped else {"pack": pack.pinned})}
     pilot = {"key": "retail-connected", "engine": "retail", "company_name": company_name(),
              "title": packkit.text("studio.console.pilot.title"),
              "description": packkit.text("studio.console.pilot.description"),
