@@ -42,7 +42,14 @@ from ..models import (
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
-from ..roles import UnitRole, parse_unit_role
+from ..roles import (
+    RoleShape,
+    TitledTable,
+    UnitRole,
+    parse_unit_role,
+    titled,
+    titled_unit_roles,
+)
 from . import hierarchy, names
 from .org_builder import (
     accountability_facts,
@@ -101,14 +108,14 @@ STRICT_ACCESS: dict[str, str] = {
 #: the CEO — not the CFO — the same independent-reporting-line shape banking's
 #: CRO carries, and for the same reason: the central estimate has to be able
 #: to disagree with the booked reserve without that reading as insubordination.
-_ROLES: tuple[tuple[str, str, str, str | None], ...] = (
-    ("ceo", "Group Chief Executive Officer", "Executive", None),
-    ("cfo", "Group Chief Financial Officer", "Finance", "ceo"),
-    ("chief_actuary", "Chief Actuary", "Actuarial", "ceo"),                 # independent of the CFO
-    ("financial_controller", "Group Financial Controller", "Finance", "cfo"),
-    ("reserving_actuary", "Reserving Actuary", "Actuarial", "chief_actuary"),
-    ("claims_director", "Claims Director", "Claims", "ceo"),
-    ("audit", "Chief Internal Auditor", "Audit", "ceo"),
+_ROLE_SHAPE: tuple[RoleShape, ...] = (
+    ("ceo", "Executive", None),
+    ("cfo", "Finance", "ceo"),
+    ("chief_actuary", "Actuarial", "ceo"),  # independent of the CFO
+    ("financial_controller", "Finance", "cfo"),
+    ("reserving_actuary", "Actuarial", "chief_actuary"),
+    ("claims_director", "Claims", "ceo"),
+    ("audit", "Audit", "ceo"),
 )
 
 _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, ...]], ...] = (
@@ -145,9 +152,23 @@ _ROLE_PERSONA = {
 #: The rows ``generate`` mints per business unit — MDs only, as in banking.
 #: Shares ``roles.UnitRole``/``unit_role_key`` with the siblings so the key
 #: format exists in exactly one place.
-_UNIT_ROLES: tuple[UnitRole, ...] = (
-    UnitRole("_md", "Managing Director, {unit}", "Executive", manager="ceo"),
+_UNIT_ROLE_SHAPE: tuple[UnitRole, ...] = (
+    UnitRole("_md", "", "Executive", manager="ceo"),
 )
+
+#: The engine whose prompts title the rows above: ``roles.title.insurance.<key>``
+#: and ``roles.title.insurance.per_unit.<suffix>``, whose shipped texts are the
+#: literals these tables held (``roles.titled``).
+_ENGINE = "insurance"
+
+#: The engine's tables titled by the packs in force, each time they are
+#: read (``roles.TitledTable``): what ``_ROLES`` and ``_UNIT_ROLES`` have
+#: always been called, so every reader keeps working and gets pack titles.
+_ROLES: TitledTable[tuple[str, str, str, str | None]] = TitledTable(
+    lambda: titled(_ENGINE, _ROLE_SHAPE))
+_UNIT_ROLES: TitledTable[UnitRole] = TitledTable(
+    lambda: titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE))
+
 
 #: The per-unit roles ``generate`` appends, by suffix — unit MDs only, as in
 #: banking. Named rather than left to the catch-all below for the same reason.
@@ -272,10 +293,12 @@ def generate(
     units = archetype.units
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
-    role_table = list(_ROLES if role_table is None else role_table)
-    unit_role_specs = _UNIT_ROLES if unit_roles is None else tuple(unit_roles)
+    role_table = list(titled(_ENGINE, _ROLE_SHAPE) if role_table is None else role_table)
+    unit_role_specs = (
+        titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE) if unit_roles is None else tuple(unit_roles)
+    )
     supplied_suffixes = {spec.suffix for spec in unit_role_specs}
-    missing = [spec.suffix for spec in _UNIT_ROLES if spec.suffix not in supplied_suffixes]
+    missing = [spec.suffix for spec in _UNIT_ROLE_SHAPE if spec.suffix not in supplied_suffixes]
     if missing:
         raise ValueError(
             f"unit_roles must mint the insurance engine's own per-unit posts —"
@@ -310,7 +333,7 @@ def generate(
         finance-side from actuarial-and-claims; personas come from the role
         table."""
         business_unit = None
-        parsed = parse_unit_role(role, tuple(spec.suffix for spec in _UNIT_ROLES))
+        parsed = parse_unit_role(role, tuple(spec.suffix for spec in _UNIT_ROLE_SHAPE))
         if parsed is not None:
             business_unit = unit_ids[parsed[0]]
         cost_centre = (

@@ -132,7 +132,15 @@ from .roles import parse_unit_role
 #: nobody notices is missing. ``_divisional_summary`` only fires for
 #: ``cfo_variance_memo`` today, but it is listed because the type it fires for
 #: is a table (``_TABULAR_NARRATIVE``) that a later change could widen.
-RESERVED_HEADINGS: frozenset[str] = frozenset({"Supporting facts", "Divisional summary"})
+#:
+#: These are the authored headings. The lint matches an authored section on its
+#: structural key (``RESERVED_KEYS``) and on the words the packs in force
+#: display, because a pack may say "Divisional summary" another way and the
+#: collision is between the words a request is keyed on.
+RESERVED_HEADINGS: frozenset[str] = frozenset({"Supporting facts", documents.DIVISIONAL_SUMMARY})
+
+#: ``RESERVED_HEADINGS`` as structural keys (``documents.section_key``).
+RESERVED_KEYS: frozenset[str] = frozenset(documents.section_key(h) for h in RESERVED_HEADINGS)
 
 #: The audiences *core* maps onto an access policy by name, in every world.
 #:
@@ -231,6 +239,11 @@ class SectionSpec(DocModel):
     division, or a pack knowing how many divisions a company has. Left off
     the wire when empty."""
 
+    key: str = ""
+    """The section's structural key (``documents.SectionPlan.key``). Empty, the
+    default, derives it from ``heading``; state one to keep what the section
+    *is* fixed while its heading is reworded. Left off the wire when empty."""
+
     def as_plan(self) -> SectionPlan:
         return SectionPlan(
             heading=self.heading,
@@ -239,14 +252,15 @@ class SectionSpec(DocModel):
             purpose=self.purpose,
             required=self.required,
             repeat=self.repeat,
+            key=self.key,
         )
 
     @model_serializer(mode="wrap")
     def _repeat_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         # A section is embedded in every pack-built corpus's recipe; an unset
-        # repeat or note stays off it so those recipes keep their exact bytes.
+        # repeat, note or key stays off it so those recipes keep their exact bytes.
         data: dict[str, Any] = handler(self)
-        for key in ("repeat", "note"):
+        for key in ("repeat", "note", "key"):
             if not getattr(self, key):
                 data.pop(key, None)
         return data
@@ -514,6 +528,7 @@ def describe(artifact_type: str) -> DocumentType:
                 purpose=plan.purpose,
                 required=plan.required,
                 repeat=plan.repeat,  # type: ignore[arg-type]
+                key=plan.key,
             )
             for plan in documents._OUTLINES.get(artifact_type, ())
         ],
@@ -946,6 +961,7 @@ def lint(
             )
 
         headings: dict[str, int] = {}
+        reserved_words = {documents.spoken_heading(h) for h in RESERVED_HEADINGS}
         for position, section in enumerate(spec.sections):
             at = f"{where}.sections[{position}] ({section.heading!r})"
 
@@ -1020,11 +1036,16 @@ def lint(
                 )
             headings[section.heading] = position
 
-            if section.heading in RESERVED_HEADINGS:
+            if (
+                (section.key or documents.section_key(section.heading)) in RESERVED_KEYS
+                or documents.spoken_heading(section.heading, section.key or None) in reserved_words
+            ):
                 findings.append(
                     f"{at}: `outline()` appends a section of its own under this"
                     " heading after yours, so the two collide on one request id."
-                    f" Reserved: {', '.join(sorted(RESERVED_HEADINGS))}"
+                    f" Reserved: {', '.join(sorted(RESERVED_HEADINGS | reserved_words))}"
+                    " (keys " + ", ".join(sorted(RESERVED_KEYS)) + "); give the"
+                    " section another heading."
                 )
 
             unknown = [

@@ -43,12 +43,17 @@ def _seated(world: World, role_key: str, title_matches: Callable[[str], bool], d
     A ticket assigned by job title stops finding its assignee the moment a pack
     or an industry calls the post something else ("Head of Product Data" at a
     bank), and falls back to the author without a word. The role key is the
-    stable name. The title match stays as the fallback for a world whose role
-    map is not carried (a corpus loaded from disk: ``World._roles`` is not
-    persisted), which is also every shipped retail world's first match, so the
-    default bundles are unchanged.
+    stable name, and ``World.role_holders`` answers it on a loaded corpus too,
+    by replaying the recipe the corpus carries (why the map is derived rather
+    than written down: see that method).
+
+    The title match is reachable only for a corpus with no replayable recipe:
+    the hand-authored fixtures (``examples/retail-close``) and anything
+    exported before recipes existed. It is kept for those alone; their titles
+    are the engine's shipped ones, the only titles there were, so it finds the
+    same person it always did.
     """
-    held = world._roles.get(role_key)
+    held = world.role_holders().get(role_key)
     if held is not None and world.people.get(held) is not None:
         return held
     return next((p.id for p in world.people if title_matches(p.title)), default)

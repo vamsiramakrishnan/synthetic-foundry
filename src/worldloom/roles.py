@@ -45,9 +45,9 @@ answer rather than a matter of taste. See its docstring.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar, overload
 
 from . import packkit
 
@@ -145,6 +145,93 @@ class UnitRole:
             self.function,
             manager,
         )
+
+
+#: An engine's role table without its titles: (role key, function, manager
+#: role key). What the engine's code depends on, and all an org generator
+#: declares in Python; the words a post is called by are data (``titled``).
+RoleShape = tuple[str, str, str | None]
+
+
+def title_key(engine: str, role: str) -> str:
+    """The prompts key an engine's own post *role* is titled by."""
+    return f"roles.title.{engine}.{role}"
+
+
+def unit_title_key(engine: str, suffix: str) -> str:
+    """The prompts key an engine's per-unit post *suffix* is titled by (``{unit}`` left in)."""
+    return f"roles.title.{engine}.per_unit.{suffix.lstrip('_')}"
+
+
+def titled(engine: str, shape: Sequence[RoleShape]) -> tuple[tuple[str, str, str, str | None], ...]:
+    """*shape* as the generators' role-table rows, titled by the prompts in force.
+
+    Titles live in the prompts pack (``roles.title.<engine>.<key>``) rather
+    than beside the keys, because a title is the one column nothing in the
+    engine reads: a bank calling its controller "Head of Finance" needs no
+    code, only words, and an industry pack or a prompts pack can say them.
+    The shipped texts are the literals this table used to hold, so a build
+    that names no pack mints the same people with the same titles.
+
+    Read when a build asks, not at import, so the packs in force for *that*
+    build decide. A company pack's authored table (``Pack.roles``) replaces
+    the whole table before this is consulted, so it wins exactly as it did.
+    """
+    return tuple(
+        (key, packkit.template(title_key(engine, key)), function, manager)
+        for key, function, manager in shape
+    )
+
+
+def titled_unit_roles(engine: str, specs: Sequence[UnitRole]) -> tuple[UnitRole, ...]:
+    """*specs* with each title read from the prompts in force, as ``titled`` does."""
+    from dataclasses import replace
+
+    return tuple(
+        replace(spec, title=packkit.template(unit_title_key(engine, spec.suffix)))
+        for spec in specs
+    )
+
+
+_Row = TypeVar("_Row")
+
+
+class TitledTable(Sequence[_Row]):
+    """An engine's role table as a sequence that titles itself when read.
+
+    What ``organisation._ROLES`` (and each sibling's ``_ROLES`` and
+    ``_UNIT_ROLES``) now is. Those names have been read as tuples from
+    ``roles``, ``retail``, ``sdk`` and the tests for as long as they existed;
+    they keep reading them, and every read titles the rows by the prompts in
+    force at that moment rather than by a literal fixed at import.
+    """
+
+    def __init__(self, rows: Callable[[], tuple[_Row, ...]]) -> None:
+        self._rows = rows
+
+    @overload
+    def __getitem__(self, index: int) -> _Row: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> tuple[_Row, ...]: ...
+
+    def __getitem__(self, index: int | slice) -> _Row | tuple[_Row, ...]:
+        return self._rows()[index]
+
+    def __len__(self) -> int:
+        return len(self._rows())
+
+    def __iter__(self) -> Iterator[_Row]:
+        return iter(self._rows())
+
+    def __eq__(self, other: object) -> bool:
+        mine = self._rows()
+        return mine == (tuple(other) if isinstance(other, TitledTable) else other)
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def __repr__(self) -> str:
+        return f"TitledTable({self._rows()!r})"
 
 #: The role keys each engine's own code looks up by name. Verified against a
 #: scan of this package — see the module docstring. Ordered as frozensets
@@ -777,7 +864,7 @@ def to_rows(table: Sequence[Role]) -> tuple[tuple[str, str, str, str | None], ..
 
 __all__ = [
     "ROOT", "RULES", "Rejection", "Role", "SPINE", "Shape", "UNIT_ROLES",
-    "UNIT_ROLE_SUFFIXES", "UnitRole", "check", "from_rows", "from_shape", "published",
-    "measure", "parse_unit_role", "request", "required", "review", "to_rows",
-    "unit_role_key",
+    "RoleShape", "TitledTable", "UNIT_ROLE_SUFFIXES", "UnitRole", "check", "from_rows", "from_shape", "published",
+    "measure", "parse_unit_role", "request", "required", "review", "title_key", "titled",
+    "titled_unit_roles", "to_rows", "unit_role_key", "unit_title_key",
 ]

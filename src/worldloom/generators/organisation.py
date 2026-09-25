@@ -41,7 +41,15 @@ from ..models import (
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
-from ..roles import UnitRole, parse_unit_role, unit_role_key
+from ..roles import (
+    RoleShape,
+    TitledTable,
+    UnitRole,
+    parse_unit_role,
+    titled,
+    titled_unit_roles,
+    unit_role_key,
+)
 from . import hierarchy, names
 from .org_builder import (
     accountability_facts,
@@ -116,24 +124,28 @@ class Organisation:
     ``milestones``; ``founding_facts[i].event_id == milestones[i].id``."""
 
 
-#: The people every retail-close episode needs, in reporting order. Titles are
+#: The people every retail-close episode needs, in reporting order. Keys are
 #: structural: a scenario asks for ``roles["controller"]``, never for a name.
-_ROLES: tuple[tuple[str, str, str, str | None], ...] = (
-    # (role key, title, function, manager role key)
-    ("ceo", "Group Chief Executive Officer", "Executive", None),
-    ("cfo", "Group Chief Financial Officer", "Finance", "ceo"),
-    ("cio", "Chief Information Officer", "Technology", "ceo"),
-    ("controller", "Group Financial Controller", "Finance", "cfo"),
-    ("reporting_manager", "Group Reporting Manager", "Finance", "controller"),
-    ("audit", "Internal Audit Manager", "Audit", "cfo"),
-    ("platform_lead", "Head of Data Platform", "Technology", "cio"),
-    ("platform_senior", "Senior Data Platform Engineer", "Technology", "platform_lead"),
-    ("platform_engineer", "Data Platform Engineer", "Technology", "platform_lead"),
-    ("svc_lead", "Head of Service Operations", "ServiceOperations", "cio"),
-    ("svc_desk", "Service Desk Analyst", "ServiceOperations", "svc_lead"),
-    ("svc_incident", "Major Incident Manager", "ServiceOperations", "svc_lead"),
-    ("merch_lead", "Head of Merchandising Systems", "Merchandising", "gm_md"),
-    ("merch_analyst", "Merchandising Systems Analyst", "Merchandising", "merch_lead"),
+#: Titles are words, not structure, so they are prompts
+#: (``roles.title.retail.<key>``, ``roles.titled``) and a pack renames a post
+#: without code; ``_ROLES`` (below, ``roles.TitledTable``) is this table titled by
+#: the packs in force.
+_ROLE_SHAPE: tuple[RoleShape, ...] = (
+    # (role key, function, manager role key)
+    ("ceo", "Executive", None),
+    ("cfo", "Finance", "ceo"),
+    ("cio", "Technology", "ceo"),
+    ("controller", "Finance", "cfo"),
+    ("reporting_manager", "Finance", "controller"),
+    ("audit", "Audit", "cfo"),
+    ("platform_lead", "Technology", "cio"),
+    ("platform_senior", "Technology", "platform_lead"),
+    ("platform_engineer", "Technology", "platform_lead"),
+    ("svc_lead", "ServiceOperations", "cio"),
+    ("svc_desk", "ServiceOperations", "svc_lead"),
+    ("svc_incident", "ServiceOperations", "svc_lead"),
+    ("merch_lead", "Merchandising", "gm_md"),
+    ("merch_analyst", "Merchandising", "merch_lead"),
 )
 
 _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, ...]], ...] = (
@@ -188,12 +200,31 @@ _ROLE_PERSONA = {
 #: `_buyer`, the POS system is owned by the first unit's `_md`, `planning`
 #: authors unit commentary as the `_bp` — so an authored replacement must keep
 #: them (checked in ``generate``, the same argument as ``roles.SPINE``) and is
-#: free to add rows around them.
-_UNIT_ROLES: tuple[UnitRole, ...] = (
-    UnitRole("_md", "Managing Director, {unit}", "Executive", manager="ceo"),
-    UnitRole("_bp", "Finance Business Partner, {unit}", "Finance", manager="controller"),
-    UnitRole("_buyer", "Head of Buying, {unit}", "Merchandising", manager_suffix="_md"),
+#: free to add rows around them. Untitled here for ``_ROLE_SHAPE``'s reason:
+#: each title is the prompt ``roles.title.retail.per_unit.<suffix>``, and
+#: ``_UNIT_ROLES`` is these rows titled by the packs in force.
+_UNIT_ROLE_SHAPE: tuple[UnitRole, ...] = (
+    UnitRole("_md", "", "Executive", manager="ceo"),
+    UnitRole("_bp", "", "Finance", manager="controller"),
+    UnitRole("_buyer", "", "Merchandising", manager_suffix="_md"),
 )
+
+#: The engine's posts charged to the data platform cost centre: the three
+#: whose shipped titles end "Engineer" or "Data Platform", which is how the
+#: rule was spelled while titles were literals. A key set now, so renaming a
+#: post through the prompts pack cannot move its cost.
+_PLATFORM_ROLES = frozenset({"platform_lead", "platform_senior", "platform_engineer"})
+
+#: The engine whose prompts title the rows above.
+_ENGINE = "retail"
+
+#: The engine's tables titled by the packs in force, each time they are
+#: read (``roles.TitledTable``): what ``_ROLES`` and ``_UNIT_ROLES`` have
+#: always been called, so every reader keeps working and gets pack titles.
+_ROLES: TitledTable[tuple[str, str, str, str | None]] = TitledTable(
+    lambda: titled(_ENGINE, _ROLE_SHAPE))
+_UNIT_ROLES: TitledTable[UnitRole] = TitledTable(
+    lambda: titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE))
 
 #: The per-unit roles ``generate`` appends (``_UNIT_ROLES``), by suffix.
 #: ``_buyer`` is named here now; it used to be reached through the catch-all
@@ -368,15 +399,24 @@ def generate(
     # unit (the first insurer pack) otherwise leaves merch_lead managerless and
     # the org tree with two roots.
     merch_md = unit_role_key(_merch_unit(unit_ids), "_md")
+    # The rows that are the engine's own, remembered because the platform cost
+    # centre is decided below: by role key on those, whose titles a prompts
+    # pack may now rename, and by title on every other row (an authored table,
+    # a per-unit post), exactly as before, since their keys are not this
+    # module's to interpret.
+    engine_keys = frozenset(row[0] for row in _ROLE_SHAPE) if role_table is None else frozenset()
     role_table = [
         (role, title, function, merch_md if manager == "gm_md" else manager)
-        for role, title, function, manager in (_ROLES if role_table is None else role_table)
+        for role, title, function, manager in (
+            titled(_ENGINE, _ROLE_SHAPE) if role_table is None else role_table)
     ]
-    unit_role_specs = _UNIT_ROLES if unit_roles is None else tuple(unit_roles)
-    # Membership only, so the set is safe; iteration stays over `_UNIT_ROLES`,
-    # whose order is fixed.
+    unit_role_specs = (
+        titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE) if unit_roles is None else tuple(unit_roles)
+    )
+    # Membership only, so the set is safe; iteration stays over the engine's
+    # own rows, whose order is fixed.
     supplied_suffixes = {spec.suffix for spec in unit_role_specs}
-    missing = [spec.suffix for spec in _UNIT_ROLES if spec.suffix not in supplied_suffixes]
+    missing = [spec.suffix for spec in _UNIT_ROLE_SHAPE if spec.suffix not in supplied_suffixes]
     if missing:
         raise ValueError(
             f"unit_roles must mint the retail engine's own per-unit posts —"
@@ -434,9 +474,13 @@ def generate(
             business_unit = unit_ids[parsed[0]]
         elif role.startswith("merch_"):
             business_unit = unit_ids[_merch_unit(unit_ids)]
+        platform = (
+            role in _PLATFORM_ROLES if role in engine_keys
+            else title.endswith(("Engineer", "Data Platform"))
+        )
         cost_centre = (
             finance_cc if function in ("Finance", "Audit")
-            else platform_cc if title.endswith(("Engineer", "Data Platform"))
+            else platform_cc if platform
             else None
         )
         return business_unit, cost_centre, (
