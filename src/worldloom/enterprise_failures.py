@@ -8,13 +8,14 @@ from typing import Any
 
 from .connector_definition import ConnectorDefinition
 from .connector_emulator import ConnectorEmulator
+from .connector_keys import STABLE_ID_FIELDS
 from .enterprise_corpus import StateOverride
 from .ids import content_key
 
 _SOURCE_KINDS = frozenset({"ambiguous_join", "missing_stable_id", "stale_source"})
 _WRITE_KINDS = frozenset({"permission_denied", "version_conflict", "partial_write"})
 _READ_OPS = frozenset({"get", "read", "search", "extract", "download", "readback", "cross_system"})
-_STABLE_FIELDS = ("stable_id", "key", "sys_id", "id", "page_id", "item_id", "file_id", "message_id", "thread_id")
+_STABLE_FIELDS = STABLE_ID_FIELDS
 
 
 def build_query_emulator(

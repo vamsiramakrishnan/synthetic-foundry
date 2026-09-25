@@ -12,32 +12,18 @@ import json
 import math
 from collections.abc import Mapping
 from datetime import date, datetime
+from functools import lru_cache
 from importlib.resources import files
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
+from .connector_projection import ConnectorRecordProjection
 from .models import Model
 from .predicates import Predicate, RelativeTime, evaluate
 
 CONNECTOR_DEFINITION_SCHEMA: Literal["worldloom.connector-definition/v1"] = (
     "worldloom.connector-definition/v1"
-)
-REFERENCE_CONNECTORS = (
-    "jira",
-    "servicenow",
-    "salesforce",
-    "confluence",
-    "sharepoint",
-    "drive",
-    "outlook",
-    "email",
-    "onedrive",
-    "teams",
-    "slack",
-    "teamwork_graph",
-    "rovo",
-    "sor",
 )
 
 ConnectorMaturity = Literal["ga", "beta", "eap", "product_surface"]
@@ -293,6 +279,12 @@ class ConnectorDefinition(Model):
     entity_aliases: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     tools: dict[str, ConnectorToolDefinition]
     aliases: dict[str, str] = Field(default_factory=dict)
+    record_projection: ConnectorRecordProjection | None = None
+    """How a catalogue record appears on this connector (``sor.product_records``).
+
+    A build-time concern, not part of the served contract: ``served_dict``
+    leaves it out, so an evaluation row carries the definition an agent is
+    served and nothing about how its records were derived."""
 
     @model_validator(mode="after")
     def _closed_contract(self) -> ConnectorDefinition:
@@ -449,9 +441,24 @@ class ConnectorDefinition(Model):
         )
 
     def wire_dict(self) -> dict[str, object]:
-        """Serialize using stable on-disk field names, not Python attribute names."""
+        """Serialize using stable on-disk field names, not Python attribute names.
 
-        return self.model_dump(mode="json", by_alias=True)
+        An absent ``record_projection`` is left out rather than written as
+        ``null``, so a definition that declares none serialises exactly as it
+        did before the field existed.
+        """
+
+        out = self.model_dump(mode="json", by_alias=True)
+        if out.get("record_projection") is None:
+            out.pop("record_projection", None)
+        return out
+
+    def served_dict(self) -> dict[str, object]:
+        """``wire_dict`` without the build-time ``record_projection``: what a row embeds."""
+
+        out = self.wire_dict()
+        out.pop("record_projection", None)
+        return out
 
 
 def parse_connector_definition(data: str | bytes) -> ConnectorDefinition:
@@ -461,19 +468,124 @@ def parse_connector_definition(data: str | bytes) -> ConnectorDefinition:
     return ConnectorDefinition.model_validate(json.loads(raw))
 
 
-def load_connector_definition(name: str) -> ConnectorDefinition:
-    """Load one built-in connector definition by semantic connector name."""
+#: Where the shipped definitions live, one ``<connector>.json`` each. A file
+#: whose name starts with ``_`` is metadata about the directory, not a
+#: connector.
+_SHIPPED = ("_data", "connectors")
 
-    resource = files("worldloom").joinpath("_data", "connectors", f"{name}.json")
-    if not resource.is_file():
-        raise ValueError(f"unknown built-in connector definition {name!r}")
+
+@lru_cache(maxsize=1)
+def _shipped_connectors() -> tuple[str, ...]:
+    """Every shipped definition, in reference order.
+
+    The directory listing is what exists; ``_order.json`` only says in which
+    order the reference list names them, because that order predates the
+    listing (it is the order connectors were added, and error messages and
+    ``connector_data`` iterate it). A definition the order file does not name
+    follows the named ones alphabetically, so adding a connector is adding one
+    file.
+    """
+
+    directory = files("worldloom").joinpath(*_SHIPPED)
+    listed = sorted(entry.name[:-5] for entry in directory.iterdir()
+                    if entry.name.endswith(".json") and not entry.name.startswith("_"))
+    order = json.loads(directory.joinpath("_order.json").read_text(encoding="utf-8"))["order"]
+    named = [name for name in order if name in listed]
+    return (*named, *(name for name in listed if name not in named))
+
+
+REFERENCE_CONNECTORS = _shipped_connectors()
+"""The shipped connectors, in reference order. Connector packs extend this
+list at run time (``reference_connectors``); the constant is the shipped set
+only, so importing it never reads a user's pack roots."""
+
+
+# ---------------------------------------------------------------------------
+# Connector packs
+# ---------------------------------------------------------------------------
+#
+# A connector pack (``connector:<name>``, body = a ConnectorDefinition) is found
+# on the pack search path like any other kind. Its name is the connector name.
+#
+# The shadowing rule: a pack whose name is NOT a shipped connector is visible
+# from every root (a caller's ``--pack-root``, ``WORLDLOOM_PACK_PATH``, the
+# user's ``~/.worldloom/packs``). A pack named like a shipped connector
+# replaces it only when it is explicitly in force (``packkit.use`` /
+# ``--pack connector:jira``) or sits in a root the caller named for this run
+# (``--pack-root``, a Studio workspace). A ``jira.json`` left in the user's home
+# or on the environment path is ignored, so a default build and every shipped
+# connector stay what they are unless the command that runs says otherwise.
+
+
+def _pack_definition(name: str) -> ConnectorDefinition | None:
+    from . import packkit
+
+    held = packkit.active("connector")
+    if held is not None and held.name == name:
+        body: ConnectorDefinition = held.body
+        return body
+    if name in REFERENCE_CONNECTORS:
+        if not any(origin == "root" for origin, _ in packkit.search_path()):
+            return None
+        located = packkit.find("connector", name)
+        if located is None or located.origin != "root":
+            return None
+    elif packkit.find("connector", name) is None:
+        return None
+    resolved: ConnectorDefinition = packkit.resolve(f"connector:{name}").body
+    return resolved
+
+
+def _shipped_definition(name: str) -> ConnectorDefinition:
+    resource = files("worldloom").joinpath(*_SHIPPED, f"{name}.json")
     return parse_connector_definition(resource.read_text(encoding="utf-8"))
 
 
+def reference_connectors() -> tuple[str, ...]:
+    """The shipped connectors in reference order, then every visible connector pack by name."""
+
+    from . import packkit
+
+    extra = {located.envelope.name for located in packkit.discover("connector")}
+    held = packkit.active("connector")
+    if held is not None:
+        extra.add(held.name)
+    return (*REFERENCE_CONNECTORS, *sorted(extra - set(REFERENCE_CONNECTORS)))
+
+
+def is_reference_connector(name: str) -> bool:
+    """Whether *name* is a shipped connector or a visible connector pack.
+
+    The shipped set answers without touching a pack root, which is the case on
+    every default path; only an unknown name looks further.
+    """
+
+    return name in REFERENCE_CONNECTORS or _pack_definition(name) is not None
+
+
+def load_connector_definition(name: str) -> ConnectorDefinition:
+    """Load one connector definition by semantic connector name.
+
+    A connector pack in force (or in a named root) comes first under the
+    shadowing rule above; otherwise the shipped definition; otherwise a
+    visible connector pack of that name.
+    """
+
+    pack = _pack_definition(name)
+    if pack is not None:
+        return pack
+    if name not in REFERENCE_CONNECTORS:
+        raise ValueError(f"unknown built-in connector definition {name!r}")
+    return _shipped_definition(name)
+
+
 def builtin_connector_definitions(
-    names: tuple[str, ...] = REFERENCE_CONNECTORS,
+    names: tuple[str, ...] | None = None,
 ) -> dict[str, ConnectorDefinition]:
-    definitions = {name: load_connector_definition(name) for name in names}
+    """Every reference connector's definition (shipped and packs), by name."""
+
+    chosen = reference_connectors() if names is None else names
+    definitions = {name: load_connector_definition(name) for name in chosen}
     return dict(sorted(definitions.items()))
 
 
@@ -489,10 +601,13 @@ __all__ = [
     "ConnectorIdempotency",
     "ConnectorMaturity",
     "ConnectorOperation",
+    "ConnectorRecordProjection",
     "ConnectorToolDefinition",
     "ConnectorValidationRule",
     "ConnectorWorkflow",
     "builtin_connector_definitions",
+    "is_reference_connector",
     "load_connector_definition",
     "parse_connector_definition",
+    "reference_connectors",
 ]

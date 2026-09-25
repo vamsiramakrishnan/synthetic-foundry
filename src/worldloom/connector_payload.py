@@ -14,6 +14,7 @@ from hashlib import md5, sha1
 from typing import Any
 
 from .connector_definition import ConnectorDefinition, ConnectorFieldDefinition
+from .connector_keys import PAYLOAD_IDENTITY_KEYS
 from .ids import content_key
 
 
@@ -478,8 +479,7 @@ def shape_payload(
         out = dict(out)
         out["fields"] = {key: value for key, value in nested.items() if key in requested}
         return out
-    identity = {"id", "Id", "sys_id", "key", "number", "attributes", "ts", "ari", "type"}
-    return {key: value for key, value in out.items() if key in requested or key in identity}
+    return {key: value for key, value in out.items() if key in requested or key in PAYLOAD_IDENTITY_KEYS}
 
 
 __all__ = ["manifest_value", "shape_payload"]

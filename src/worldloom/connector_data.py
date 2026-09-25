@@ -488,9 +488,9 @@ def file_formats(connector: str) -> tuple[str, ...]:
     type; this is the intersection of that list with what Worldloom renders.
     """
 
-    from .connector_definition import REFERENCE_CONNECTORS, load_connector_definition
+    from .connector_definition import is_reference_connector, load_connector_definition
 
-    if connector not in REFERENCE_CONNECTORS:
+    if not is_reference_connector(connector):
         return ()
     definition = load_connector_definition(connector)
     try:
@@ -794,9 +794,15 @@ def generate_witnesses(world: World, connector: str) -> list[ConnectorRecord]:
 
 
 def _defined_connectors() -> tuple[str, ...]:
-    from .connector_definition import REFERENCE_CONNECTORS
+    from .connector_definition import reference_connectors
 
-    return REFERENCE_CONNECTORS
+    return reference_connectors()
+
+
+def _is_defined(connector: str) -> bool:
+    from .connector_definition import is_reference_connector
+
+    return is_reference_connector(connector)
 
 
 class ConnectorProjectionRegistry:
@@ -816,7 +822,7 @@ class ConnectorProjectionRegistry:
         from .retail_replenishment import project_records as retail_records
 
         projection = self._projections.get(connector)
-        if projection is None and connector not in _defined_connectors():
+        if projection is None and not _is_defined(connector):
             raise ValueError(f"unknown connector projection {connector!r}")
         base = projection(world) if projection is not None else []
         return [*base, *generate_witnesses(world, connector), *retail_records(world, connector)]

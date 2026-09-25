@@ -15,6 +15,7 @@ from pydantic import (
     model_validator,
 )
 
+from . import packkit
 from .connector_definition import ConnectorFieldDefinition, load_connector_definition
 from .enterprise_grounding import groundable_inventory
 from .enterprise_specs import (
@@ -588,21 +589,34 @@ def _connector_label(registry: SpecRegistry, name: str, *, role: Literal["source
 #: a row, which carries strings, is compared without an enum round-trip.
 _RECORD_ADDRESSED = frozenset(member.value for member in RECORD_ADDRESSED)
 
-ACTION_INSTRUCTIONS: dict[str, str] = {
-    "create": "Create a new",
-    "update": "Update the existing",
-    "patch": "Change only the affected fields in the",
-    "upsert": "Create the record if it is missing, otherwise update the",
-    "delete": "Delete the",
-    "move": "Move the",
-    "comment": "Add a comment to the",
-    "attach": "Attach the result to the",
-    "link": "Link the related records on the",
-    "draft": "Draft a",
-    "send": "Send a",
-    "reply": "Reply in the existing thread with a",
-    "forward": "Forward the existing thread as a",
-}
+class _ActionInstructions(Mapping[str, str]):
+    """Each write operation's phrasing, read from the prompts pack in force.
+
+    The keys are the operations (an engine vocabulary, so they stay here);
+    the words are `enterprise.action.<operation>`, so an industry pack can
+    reword them and the default reads exactly as the literals it replaced.
+    """
+
+    _OPERATIONS = ("create", "update", "patch", "upsert", "delete", "move", "comment", "attach", "link", "draft",
+                   "send", "reply", "forward")
+
+    def __getitem__(self, operation: str) -> str:
+        if operation not in self._OPERATIONS:
+            raise KeyError(operation)
+        return packkit.template(f"enterprise.action.{operation}")
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._OPERATIONS)
+
+    def __len__(self) -> int:
+        return len(self._OPERATIONS)
+
+
+ACTION_INSTRUCTIONS: Mapping[str, str] = _ActionInstructions()
+
+#: Source formats that read as a file of that kind; ``record`` reads as the
+#: entity's own name, and a format with no phrasing is printed as written.
+_FORMAT_LABELS = frozenset({"xlsx", "pptx", "docx", "pdf", "csv", "html", "markdown"})
 
 
 def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str], registry: SpecRegistry) -> str:
@@ -613,30 +627,23 @@ def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str], regist
         row["source_set"].split("+"), entities, formats, strict=True
     ):
         display = _connector_label(registry, connector, role="source")
-        format_label = {
-            "xlsx": "Excel workbook",
-            "pptx": "presentation",
-            "docx": "Word document",
-            "pdf": "PDF",
-            "csv": "CSV export",
-            "html": "page",
-            "markdown": "page",
-            "record": entity.replace("_", " "),
-        }.get(input_format, input_format)
-        source_names.append(f"the relevant {display} {format_label}")
+        if input_format == "record":
+            format_label = entity.replace("_", " ")
+        elif input_format in _FORMAT_LABELS:
+            format_label = packkit.template(f"enterprise.format.{input_format}")
+        else:
+            format_label = input_format
+        source_names.append(packkit.text("enterprise.source", display=display, format_label=format_label))
     sources = source_names[0] if len(source_names) == 1 else ", ".join(source_names[:-1]) + f", and {source_names[-1]}"
     operation = row["operation"]
     action_instruction = ACTION_INSTRUCTIONS[operation]
-    failure_instruction = {
-        "none": "",
-        "ambiguous_join": " Put ambiguous matches in a review section; do not guess.",
-        "missing_stable_id": " Skip records without stable identifiers and report them.",
-        "permission_denied": " Report inaccessible sources and do not broaden access.",
-        "partial_write": " Report completed and incomplete write branches separately.",
-        "stale_source": " Prefer the authoritative current version and identify stale evidence.",
-        "version_conflict": " Do not overwrite a newer version; return the conflict for review.",
-    }[row["failure"]]
-    return workflow.prompt_template.format(period=world.period or "current-period", purpose=workflow.purpose, company=world.company.name, audience=row["audience"], sources=sources, action_instruction=action_instruction, output_label=row["output_format"].upper() if row["output_format"] != "record" else row["destination_entity"].replace("_", " "), destination=_connector_label(registry, row["destination"], role="destination"), verification_instruction="read the saved result back and verify the change" if row["verification"] == "readback" else "verify the result against the authoritative source", failure_instruction=failure_instruction)
+    # `none` adds nothing, so it has no text; every other kind is a sentence
+    # with its own leading space, appended to the prompt's last one.
+    failure = row["failure"]
+    failure_instruction = "" if failure == "none" else packkit.template(f"enterprise.failure.{failure}")
+    verification = packkit.template("enterprise.verification.readback" if row["verification"] == "readback"
+                                    else "enterprise.verification.authoritative")
+    return workflow.prompt_template.format(period=world.period or "current-period", purpose=workflow.purpose, company=world.company.name, audience=row["audience"], sources=sources, action_instruction=action_instruction, output_label=row["output_format"].upper() if row["output_format"] != "record" else row["destination_entity"].replace("_", " "), destination=_connector_label(registry, row["destination"], role="destination"), verification_instruction=verification, failure_instruction=failure_instruction)
 
 
 def _mutation_state(workflow: WorkflowSpec, row: Mapping[str, str]) -> tuple[str | None, str]:

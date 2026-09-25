@@ -14,9 +14,11 @@ from dataclasses import asdict, dataclass, field, replace
 from threading import RLock
 from typing import Any
 
+from .. import packkit
 from ..connector_data import ConnectorRecord
 from ..connector_definition import ConnectorDefinition, builtin_connector_definitions
 from ..connector_emulator import ConnectorEmulator, ConnectorError, ConnectorSpan
+from ..connector_keys import RECORDED_ALIAS_KEYS
 from ..connector_trace import grade_trace
 
 _READ_OPS = frozenset({"search", "get", "download"})
@@ -27,19 +29,25 @@ class ServingError(ValueError):
     """An actionable refusal at the serving boundary."""
 
 
+def _limit(name: str) -> int:
+    return int(packkit.policy(f"connectors.serving.{name}"))
+
+
 @dataclass(frozen=True)
 class ServingLimits:
-    max_runs: int = 32
-    max_runs_per_principal: int = 4
+    """What one serving process admits. Each default is the policy ``connectors.serving.<field>``."""
+
+    max_runs: int = field(default_factory=lambda: _limit("max_runs"))
+    max_runs_per_principal: int = field(default_factory=lambda: _limit("max_runs_per_principal"))
     # High enough for a mapped reorganisation of a thousand records (one
     # search page per hundred, a write and a readback per record); a
     # run that needs more is a retry storm, which the trajectory grade
     # names on its own.
-    max_calls_per_run: int = 4096
-    max_tools: int = 100
-    max_request_bytes: int = 65536
-    max_response_bytes: int = 1048576
-    max_records: int = 100000
+    max_calls_per_run: int = field(default_factory=lambda: _limit("max_calls_per_run"))
+    max_tools: int = field(default_factory=lambda: _limit("max_tools"))
+    max_request_bytes: int = field(default_factory=lambda: _limit("max_request_bytes"))
+    max_response_bytes: int = field(default_factory=lambda: _limit("max_response_bytes"))
+    max_records: int = field(default_factory=lambda: _limit("max_records"))
 
     def __post_init__(self) -> None:
         if any(value < 1 for value in asdict(self).values()):
@@ -739,7 +747,7 @@ def _recorded_aliases(outputs: Mapping[str, Sequence[Any]]) -> dict[str, str]:
         for entry in produced:
             if isinstance(entry, Mapping) and isinstance(entry.get("payload"), Mapping):
                 native = entry["payload"]
-                for key in ("id", "Id", "sys_id", "key", "number", "name", "title"):
+                for key in RECORDED_ALIAS_KEYS:
                     if native.get(key) is not None:
                         aliases.setdefault(str(native[key]), str(entry.get("id")))
     return aliases

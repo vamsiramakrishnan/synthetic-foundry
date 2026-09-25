@@ -282,7 +282,7 @@ def compile_row(
 
     custom_connectors = {source.connector for source in query.generation.source_requirements if source.field_definitions}
     return compile_failure_contract({
-        **({"connector_definitions": {name: available[name].wire_dict() for name in sorted(custom_connectors)}} if custom_connectors else {}),
+        **({"connector_definitions": {name: available[name].served_dict() for name in sorted(custom_connectors)}} if custom_connectors else {}),
         "id": query.id,
         "expected_dag": {"nodes": nodes, "edges": edges},
         "assertions": _assertions(query, fixture, nodes, edges, by_external),

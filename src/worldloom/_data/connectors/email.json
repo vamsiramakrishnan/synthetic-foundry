@@ -245,5 +245,18 @@
     }
   },
   "vendor_product": "Worldloom Email",
-  "version": "1"
+  "version": "1",
+  "record_projection": {
+    "fields": {
+      "thread_id": "<{key}@{company_id|slug}.example>",
+      "subject": "{title}",
+      "body": "{body}",
+      "sent_at": "{stamp}",
+      "state": "sent",
+      "from": "{owner_bu|address}",
+      "to": [
+        "{function|suffix: team|address}"
+      ]
+    }
+  }
 }

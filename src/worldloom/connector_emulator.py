@@ -19,16 +19,16 @@ from typing import Any
 
 from .connector_data import ConnectorRecord
 from .connector_definition import ConnectorDefinition, ConnectorToolDefinition
-from .connector_keys import freeze_key
+from .connector_keys import SHAPED_IDENTITY_KEYS, freeze_key
 from .connector_payload import shape_payload
 from .connector_query import parse_native
 from .ids import content_key
 from .predicates import FieldPredicate, Predicate, PredicateOp, evaluate
 
-#: The keys a product-shaped payload may carry its identity under. Mirrors the
-#: identity set ``connector_payload.shape_payload`` preserves under projection,
-#: minus the non-scalar ones (``attributes``, ``type``) that are not handles.
-_SHAPED_IDENTITY_KEYS = ("id", "Id", "sys_id", "key", "number", "ts", "ari")
+#: The keys a product-shaped payload may carry its identity under
+#: (``connector_keys``): the identity set ``shape_payload`` preserves under
+#: projection, minus the non-scalar ones that are not handles.
+_SHAPED_IDENTITY_KEYS = SHAPED_IDENTITY_KEYS
 
 
 class ConnectorError(RuntimeError):

@@ -22,8 +22,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from .connector_definition import (
-    REFERENCE_CONNECTORS,
     ConnectorDefinition,
+    is_reference_connector,
     load_connector_definition,
 )
 from .connector_emulator import ConnectorEmulator
@@ -107,7 +107,7 @@ def emulator_executor(
 
     def definition_for(connector: str) -> ConnectorDefinition:
         if connector not in loaded:
-            if connector not in REFERENCE_CONNECTORS:
+            if not is_reference_connector(connector):
                 raise ValueError(f"no connector definition for {connector!r}")
             loaded[connector] = load_connector_definition(connector)
         return loaded[connector]

@@ -1,0 +1,6 @@
+{
+  "texts": {
+    "connectors.record.body": "{title}. Control: {control}.",
+    "connectors.record.exception": " Exception: {exception}."
+  }
+}
