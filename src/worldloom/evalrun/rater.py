@@ -31,32 +31,35 @@ import re
 from collections.abc import Callable
 from typing import Protocol
 
+from .. import packkit
 from ..models import EvaluationType
 from .contract import EvalCase
 
+# The judge's words are data in the prompts pack (`_data/packs/prompts/default/
+# rater.json`, keys `rater.*`), and they are pinned to Gemini Enterprise Eval
+# Studio's exact wording: the trailer and the default instruction are verbatim
+# from its `eval.service.ts`, and the prompt reproduces its layout byte for byte,
+# the four-space indentation included, so a score produced here and one produced
+# there are answers to the same question. `tests/test_rater_pinned.py` pins the
+# shipped text, so an operator's prompts pack may reword it on purpose (and is
+# recorded doing so) but no edit changes it silently. An industry pack's words
+# have no business here: parity is the operator's decision, not an industry's.
+
 #: Eval Studio's trailer, verbatim from `eval.service.ts`. The instruction is
-#: expected to set up this sentence, not contradict it.
-JUDGE_TRAILER = "Provide only the score as a float between 0.0 and 1.0."
+#: expected to set up this sentence, not contradict it. The shipped text, not
+#: whatever pack is in force; `judge_prompt` reads the pack in force.
+JUDGE_TRAILER: str = packkit.shipped("prompts").body.texts["rater.judge.trailer"]
 
 #: Eval Studio's default instruction, verbatim, ellipsis included. Kept so a
 #: report can say a run used the product default rather than a shape rubric.
-DEFAULT_INSTRUCTION = (
-    "You are an expert evaluator. Compare the fetched response to the golden"
-    " response for the given query. Calculate a semantic similarity score"
-    " between 0.0 and 1.0..."
-)
+DEFAULT_INSTRUCTION: str = packkit.shipped("prompts").body.texts["rater.judge.default_instruction"]
 
 
 def judge_prompt(instruction: str, query: str, fetched: str, golden: str) -> str:
     """The exact prompt Eval Studio sends its auto-rater, including its literal indentation."""
 
-    return (
-        f"{instruction}\n\n"
-        f"    Query: {query}\n"
-        f"    Fetched Response: {fetched}\n"
-        f"    Golden Response: {golden}\n\n"
-        f"    {JUDGE_TRAILER}"
-    )
+    return packkit.text("rater.judge.prompt", instruction=instruction, query=query, fetched=fetched, golden=golden,
+                        trailer=packkit.text("rater.judge.trailer"))
 
 
 def rubric_for(shape: EvaluationType) -> str:
@@ -203,11 +206,7 @@ def exec_rater(command: str, *, timeout: float | None = None, shell: bool = Fals
                 "rubric": contract.rubric.value, "instruction": instruction,
                 "fetched": answer, "golden": contract.golden,
                 "prompt": judge_prompt(instruction, case.query, answer, contract.golden),
-                "instructions": [
-                    "Rate `fetched` against `golden` for `query` under `instruction`.",
-                    "Send `prompt` to your model verbatim, or judge it yourself.",
-                    "Reply with exactly one JSON object: {\"score\": <float 0..1>} or {\"text\": \"<the model's reply>\"}.",
-                ],
+                "instructions": packkit.texts("rater.exec.rule."),
             }
             try:
                 reply = run_exec(command, payload, timeout=DEFAULT_TIMEOUT if timeout is None else timeout, shell=shell)

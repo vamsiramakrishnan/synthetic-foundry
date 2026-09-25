@@ -385,5 +385,48 @@
   "aliases": {
     "driveitem_search": "search_items",
     "driveitem_get": "get_item"
+  },
+  "catalog": {
+    "display_name": "OneDrive",
+    "content_actions": [
+      "summarize",
+      "extract",
+      "classify",
+      "compare",
+      "reconcile",
+      "transform",
+      "generate",
+      "render",
+      "convert"
+    ],
+    "entities": {
+      "file": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "update",
+          "delete"
+        ],
+        "formats": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf"
+        ]
+      },
+      "folder": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "delete"
+        ]
+      }
+    }
   }
 }

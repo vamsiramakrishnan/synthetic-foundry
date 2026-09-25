@@ -27,8 +27,15 @@ PAYLOAD_IDENTITY_KEYS: frozenset[str] = frozenset((*SHAPED_IDENTITY_KEYS, "attri
 #: from, to map it back to the fid it answered for. Not the handle set above:
 #: it adds ``name`` and ``title`` (a file or page is addressed by them) and
 #: has never read ``ts`` or ``ari``, so a Slack or graph handle in a recorded
-#: result is not aliased. Kept as it is, because widening it changes which
-#: recorded ids a replay resolves.
+#: result is not aliased. Kept as it is, deliberately: the map is read only
+#: where ``emulator.by_ident`` no longer knows an id, which is after a delete
+#: (``_op_delete`` drops the record's idents). Adding ``ts``/``ari`` can turn
+#: a Slack message or thread, or a Rovo/Teamwork Graph object, read back or
+#: re-addressed by its handle after its deletion from an unattributed call
+#: into an attributed one, which changes the plan and trajectory grade of
+#: every recorded run that did so; and because the map is ``setdefault``, a
+#: ``ts`` equal to a later entry's ``name`` or ``title`` would take that key
+#: from it. Widening it is a grading change to version, not a gap to close.
 RECORDED_ALIAS_KEYS: tuple[str, ...] = ("id", "Id", "sys_id", "key", "number", "name", "title")
 
 #: The stable-identifier fields a ``missing_stable_id`` fixture strips from a

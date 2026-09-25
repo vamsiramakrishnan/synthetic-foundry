@@ -1,0 +1,10 @@
+{
+  "texts": {
+    "rater.exec.rule.01": "Rate `fetched` against `golden` for `query` under `instruction`.",
+    "rater.exec.rule.02": "Send `prompt` to your model verbatim, or judge it yourself.",
+    "rater.exec.rule.03": "Reply with exactly one JSON object: {\"score\": <float 0..1>} or {\"text\": \"<the model's reply>\"}.",
+    "rater.judge.default_instruction": "You are an expert evaluator. Compare the fetched response to the golden response for the given query. Calculate a semantic similarity score between 0.0 and 1.0...",
+    "rater.judge.prompt": "{instruction}\n\n    Query: {query}\n    Fetched Response: {fetched}\n    Golden Response: {golden}\n\n    {trailer}",
+    "rater.judge.trailer": "Provide only the score as a float between 0.0 and 1.0."
+  }
+}
