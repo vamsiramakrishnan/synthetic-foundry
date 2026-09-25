@@ -17,12 +17,10 @@ from typing import TYPE_CHECKING, Any
 
 from ..models import BusinessUnit, EnterpriseEvent
 from ..recipe import register_step, with_step
-from .models import CompanySpec
+from .models import SUPPORT_ARCHETYPES, CompanySpec
 
 if TYPE_CHECKING:
     from ..world import World
-
-_SUPPORT = frozenset({"shared_service_centre", "group_function"})
 
 
 def materialize_owners(world: World, structure: CompanySpec, *,
@@ -37,7 +35,7 @@ def materialize_owners(world: World, structure: CompanySpec, *,
     """
     if structure.name != world.company.name:
         raise ValueError("process ownership structure names a different company")
-    authored = {unit.name: unit for unit in structure.bus if unit.archetype in _SUPPORT}
+    authored = {unit.name: unit for unit in structure.bus if unit.archetype in SUPPORT_ARCHETYPES}
     if leader_roles is not None and set(leader_roles) - authored.keys():
         raise ValueError("support leadership names a group outside the declared structure")
     leaders = {name: (leader_roles or {}).get(name, "ceo") for name in sorted(authored)}

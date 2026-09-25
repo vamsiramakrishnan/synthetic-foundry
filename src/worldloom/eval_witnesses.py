@@ -45,9 +45,10 @@ from pathlib import Path
 from typing import Any
 
 from .connector_definition import (
-    REFERENCE_CONNECTORS,
     ConnectorDefinition,
+    is_reference_connector,
     load_connector_definition,
+    reference_connectors,
 )
 from .eval_tactics import TacticKind, TacticProposal
 from .ids import content_key
@@ -86,10 +87,10 @@ def witness_payload(event: EnterpriseEvent) -> dict[str, Any] | None:
 def _definition(connector: Any) -> ConnectorDefinition:
     if not isinstance(connector, str) or not connector:
         raise ConstructionRefused("a witness needs selector.connector")
-    if connector not in REFERENCE_CONNECTORS:
+    if not is_reference_connector(connector):
         raise ConstructionRefused(
             f"connector {connector!r} has no definition under worldloom/_data/connectors;"
-            f" known: {', '.join(REFERENCE_CONNECTORS)}"
+            f" known: {', '.join(reference_connectors())}"
         )
     return load_connector_definition(connector)
 

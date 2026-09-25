@@ -20,8 +20,10 @@ from ..connector_definition import (
     ConnectorValidationRule,
     ConnectorWorkflow,
     builtin_connector_definitions,
+    is_reference_connector,
     load_connector_definition,
     parse_connector_definition,
+    reference_connectors,
 )
 from ..connector_emulator import ConnectorEmulator, ConnectorError, ConnectorSpan
 from ..connector_eval_runtime import EvalRuntimeResult, run_eval_row
@@ -95,9 +97,11 @@ __all__ = [
     "compile_native",
     "executed_dag",
     "grade_trace",
+    "is_reference_connector",
     "load_connector_definition",
     "parse_connector_definition",
     "parse_native",
+    "reference_connectors",
     "run_eval_row",
     "seam_contract",
     "shape_assertions",

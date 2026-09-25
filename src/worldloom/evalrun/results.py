@@ -24,15 +24,23 @@ from pathlib import Path
 
 from pydantic import ConfigDict, Field
 
+from .. import packkit
 from ..corpus import write_json
 from ..models import Model
 from .contract import EvalCase
 from .grading import CaseScore
 from .runner import RUN_SCHEMA, CaseResult, Latency, RunReport, case_set_digest
 
-#: Eval Studio's delta bands, from `compare-evals.component.ts`: a change
-#: inside ±0.10 is stable, outside is an improvement or a regression.
-DELTA_BAND = 0.10
+
+def delta_band() -> float:
+    """The band inside which a change is stable: the policy ``evalrun.delta_band``.
+
+    Its shipped value is Eval Studio's, from `compare-evals.component.ts`: a
+    change inside ±0.10 is stable, outside is an improvement or a
+    regression. A pack may widen it; the default keeps the two tools' verdicts
+    the same.
+    """
+    return float(packkit.policy("evalrun.delta_band"))
 
 
 def _mean(values: Sequence[float]) -> float:
@@ -264,7 +272,9 @@ class Comparison(Model):
 
 
 def compare(baseline: RunReport, recent: RunReport) -> Comparison:
-    """Per-case deltas by case id, with Eval Studio's ±0.10 bands, plus what it lacks."""
+    """Per-case deltas by case id, within the `delta_band` (Eval Studio's ±0.10), plus what it lacks."""
+
+    band = delta_band()
 
     left = {row.case_id: row for row in baseline.results}
     right = {row.case_id: row for row in recent.results}
@@ -303,17 +313,17 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
             continue
         same_axes = set(a.score.observed) == set(b.score.observed)
         delta = round(b.score.score - a.score.score, 4) if same_axes else _mean(list(axes.values()))
-        if delta > DELTA_BAND:
+        if delta > band:
             verdict = "improvement"
             improvements.append(case_id)
-        elif delta < -DELTA_BAND:
+        elif delta < -band:
             verdict = "regression"
             regressions.append(case_id)
         else:
             verdict = "stable"
             stable += 1
         deltas.append(CaseDelta(case_id=case_id, baseline=a.score.score, recent=b.score.score, delta=delta,
-                                axes={axis: value for axis, value in axes.items() if abs(value) > DELTA_BAND},
+                                axes={axis: value for axis, value in axes.items() if abs(value) > band},
                                 verdict=verdict))
     graded_deltas = [item.delta for item in deltas if item.delta is not None]
     return Comparison(
@@ -470,7 +480,6 @@ def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str =
 
 
 __all__ = [
-    "DELTA_BAND",
     "STUDIO_COLUMNS",
     "AxisMeans",
     "CaseDelta",
@@ -479,6 +488,7 @@ __all__ = [
     "RunSummary",
     "append_result",
     "compare",
+    "delta_band",
     "import_served",
     "import_studio_results",
     "read_run",

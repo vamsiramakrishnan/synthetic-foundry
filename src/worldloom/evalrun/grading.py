@@ -31,6 +31,7 @@ from typing import Any
 
 from pydantic import Field
 
+from .. import packkit
 from ..models import Model
 from .agents import AgentResponse
 from .contract import EvalCase, FailurePoint, StructuredOutcome
@@ -706,7 +707,7 @@ def grade_outcomes(
         parts.append(max(0.0, min(1.0, answer_score)))
     score = _mean(parts) if parts else 1.0
     passed = (met_count == expected_count and not collateral and (grounding in (None, 1.0))
-              and answer_error is None and (answer_score is None or answer_score >= 0.8))
+              and answer_error is None and (answer_score is None or answer_score >= _answer_pass_score()))
     if case.outcomes.no_write:
         passed = not touched and answer_error is None
     return OutcomeGrade(
@@ -733,6 +734,11 @@ def unobserved_plan() -> PlanGrade:
                      score=0.0, passed=False)
 
 
+def _answer_pass_score() -> float:
+    """The rated answer score an outcome passes at: the policy ``evalrun.answer_pass_score``."""
+    return float(packkit.policy("evalrun.answer_pass_score"))
+
+
 def unobserved_outcomes(answer_score: float | None = None) -> OutcomeGrade:
     """The outcome axis of a run whose state was never observed; an answer score may still stand."""
 
@@ -740,7 +746,7 @@ def unobserved_outcomes(answer_score: float | None = None) -> OutcomeGrade:
     return OutcomeGrade(diff=empty, structured=(), structured_met=0, structured_expected=0, collateral=(),
                         artifacts_produced=0, answer_score=answer_score,
                         score=answer_score if answer_score is not None else 0.0,
-                        passed=answer_score is not None and answer_score >= 0.8)
+                        passed=answer_score is not None and answer_score >= _answer_pass_score())
 
 
 class CaseScore(Model):

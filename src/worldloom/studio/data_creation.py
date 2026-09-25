@@ -6,11 +6,13 @@ builds a World, or equates requested queries with independent evidence.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from typing import Annotated
 
 from pydantic import Field, StrictBool, model_validator
 
+from .. import packkit
 from ..models import Model
 from ..retail_replenishment import connected_program
 from ..sdk import _step
@@ -98,17 +100,25 @@ def _limits(target: str) -> Limits:
     return Limits(max_rows=100_000) if target == "retail_process" else Limits()
 
 
+#: The canonical mechanisms the sizing editor may resize, by program
+#: namespace: the builder, and the table whose entity count each sizing
+#: dimension is (``ticks`` is every program's own). One row per mechanism
+#: rather than a branch per industry; a mechanism is code, so this table is.
+_MECHANISMS: dict[str, tuple[Callable[..., Program], dict[str, str]]] = {
+    "retail_operations": (retail, {"stores": "store", "products": "product"}),
+    "retail_replenishment": (connected_program, {"stores": "store", "products": "product"}),
+    "loan_servicing": (banking, {"borrowers": "borrower"}),
+}
+
+
 def _canonical(program: Program) -> tuple[Program, dict[str, int]]:
     tables = {table.name: table for table in program.tables}
-    if program.namespace in {"retail_operations", "retail_replenishment"} and {"store", "product"} <= tables.keys():
-        dimensions = {"stores": tables["store"].count, "products": tables["product"].count, "ticks": program.ticks}
-        builder = connected_program if program.namespace == "retail_replenishment" else retail
-        canonical = builder(**dimensions)
-    elif program.namespace == "loan_servicing" and "borrower" in tables:
-        dimensions = {"borrowers": tables["borrower"].count, "ticks": program.ticks}
-        canonical = banking(**dimensions)
-    else:
+    mechanism = _MECHANISMS.get(program.namespace)
+    if mechanism is None or not set(mechanism[1].values()) <= tables.keys():
         raise ValueError("custom simulation is not supported by the sizing editor; preserve and edit its Program explicitly")
+    builder, counted = mechanism
+    dimensions = {**{dimension: tables[table].count for dimension, table in counted.items()}, "ticks": program.ticks}
+    canonical = builder(**dimensions)
     # Values are mutable inputs; expressions, bounds, mutability, constraints,
     # ordering and relation strides remain the exact authored mechanism.
     mutable = {parameter.name for parameter in canonical.parameters if parameter.mutable}
@@ -158,12 +168,7 @@ def _resize(program: Program, request: DataCreationRequest) -> Program:
     if requested.keys() - dimensions.keys():
         raise ValueError(f"unsupported dimensions for {program.namespace}: {sorted(requested.keys() - dimensions.keys())}")
     dimensions.update(requested)
-    if program.namespace == "retail_replenishment":
-        resized = connected_program(**dimensions)
-    elif program.namespace == "retail_operations":
-        resized = retail(**dimensions)
-    else:
-        resized = banking(**dimensions)
+    resized = _MECHANISMS[program.namespace][0](**dimensions)
     resized = with_parameters(resized, {parameter.name: parameter.value for parameter in program.parameters if parameter.mutable})
     assert request.simulation_target is not None
     compile_program(resized, limits=_limits(request.simulation_target))
@@ -223,16 +228,9 @@ def propose(spec: ProjectSpec, request: DataCreationRequest) -> DataCreationProp
     proposed = ProjectSpec.model_validate(document)
     queries = {case.id: case.count for case in sorted(proposed.use_cases, key=lambda case: case.id)
                if case.scenario is not None}
-    limitations: tuple[str, ...] = (
-        "This proposal has not generated company data, corpus files, or evaluations.",
-        "Table rows are planned from the actual Program; query counts are requests, not measured qualified queries or independent evidence components.",
-        "Requested query totals cover executable connector scenarios only; native task counts are determined by the native suite contract, not UseCase.count.",
-        "Simulation ticks do not extend the company's episode history or reconcile operational amounts to its macro financial close.",
-        "Only existing canonical retail, connected retail, and banking mechanisms can be resized; custom programs are preserved and require explicit Program editing.",
-        "History sizing replaces the declared monthly episode list; changed history requires new accepted narration and native corpus/task contracts.",
-    )
+    limitations: tuple[str, ...] = tuple(packkit.texts("studio.creation.limitation."))
     if proposed.retail_process is not None:
-        limitations += (f"Connected retail keeps its existing max_cases={proposed.retail_process.max_cases}; more planned rows do not guarantee more emitted business cases.",)
+        limitations += (packkit.text("studio.creation.connected_cases", max_cases=proposed.retail_process.max_cases),)
     return DataCreationProposal(spec=proposed, summary=DataCreationSummary(
         history=HistorySummary(before=spec.episodes, after=episodes, changed=changed),
         simulation=simulation, requested_queries=queries, requested_query_total=sum(queries.values()),

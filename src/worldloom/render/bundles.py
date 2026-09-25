@@ -17,8 +17,10 @@ Every bundle is JSONL plus a JSON header, so a consumer needs no library at all.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from .. import packkit
 from . import Rendered
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -33,6 +35,28 @@ def _jsonl(rows: list[dict[str, Any]]) -> bytes:
 
 def _json(payload: dict[str, Any]) -> bytes:
     return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _seated(world: World, role_key: str, title_matches: Callable[[str], bool], default: str) -> str:
+    """Who holds *role_key*, found by the role and not by what the post is called.
+
+    A ticket assigned by job title stops finding its assignee the moment a pack
+    or an industry calls the post something else ("Head of Product Data" at a
+    bank), and falls back to the author without a word. The role key is the
+    stable name, and ``World.role_holders`` answers it on a loaded corpus too,
+    by replaying the recipe the corpus carries (why the map is derived rather
+    than written down: see that method).
+
+    The title match is reachable only for a corpus with no replayable recipe:
+    the hand-authored fixtures (``examples/retail-close``) and anything
+    exported before recipes existed. It is kept for those alone; their titles
+    are the engine's shipped ones, the only titles there were, so it finds the
+    same person it always did.
+    """
+    held = world.role_holders().get(role_key)
+    if held is not None and world.people.get(held) is not None:
+        return held
+    return next((p.id for p in world.people if title_matches(p.title)), default)
 
 
 def _incident_facts(world: World) -> list:
@@ -90,7 +114,7 @@ def render_servicenow(world: World) -> list[Rendered]:
     incident = {
         "_note": _SYNTHETIC,
         "number": reference,
-        "short_description": f"{service_name} failed - month-end close at risk",
+        "short_description": packkit.text("render.servicenow.incident.summary", service=service_name),
         "priority": "2 - High",
         "state": "Resolved" if resolved else "In Progress",
         "category": "Data pipeline",
@@ -109,7 +133,7 @@ def render_servicenow(world: World) -> list[Rendered]:
     problem = {
         "_note": _SYNTHETIC,
         "number": f"PRB{reference[3:]}",
-        "short_description": "Product hierarchy mapping has no registered owner",
+        "short_description": packkit.text("render.servicenow.problem.summary"),
         "state": "Open",
         "related_incidents": [reference],
         "cause_notes": classification.text_value if classification else None,
@@ -159,12 +183,10 @@ def render_jira(world: World) -> list[Rendered]:
     raised = next((f for f in world.facts if f.kind == "ops.remediation"), None)
     at = raised.valid_from.isoformat() if raised else None
 
-    merch_lead = next(
-        (p.id for p in world.people if p.title.startswith("Head of Merchandising")), intent.author_id
-    )
-    engineer = next(
-        (p.id for p in world.people if p.title == "Data Platform Engineer"), intent.author_id
-    )
+    merch_lead = _seated(world, "merch_lead", lambda title: title.startswith("Head of Merchandising"),
+                         intent.author_id)
+    engineer = _seated(world, "platform_engineer", lambda title: title == "Data Platform Engineer",
+                       intent.author_id)
 
     project = {
         "_note": _SYNTHETIC,
@@ -177,7 +199,7 @@ def render_jira(world: World) -> list[Rendered]:
         {
             "key": "PLAT-1",
             "type": "Task",
-            "summary": "Automate validation of the product hierarchy mapping",
+            "summary": packkit.text("render.jira.detection.summary"),
             "status": "In Progress",
             "priority": "High",
             "reporter": intent.author_id,
@@ -186,15 +208,12 @@ def render_jira(world: World) -> list[Rendered]:
             "labels": ["data-quality", "month-end", "detection"],
             "addresses": "detection_gap",
             "worldloom_fact_ids": [f for f in (raised.id if raised else None, scope.id if scope else None) if f],
-            "acceptance_criteria": [
-                "Validation runs before the valuation job and reports unmapped record count",
-                "A non-zero count blocks the job and notifies the on-call engineer",
-            ],
+            "acceptance_criteria": packkit.texts("render.jira.detection.criterion."),
         },
         {
             "key": "PLAT-2",
             "type": "Task",
-            "summary": "Assign ownership of the hierarchy mapping and require a reviewer",
+            "summary": packkit.text("render.jira.control.summary"),
             "status": "Open",
             "priority": "Highest",
             "reporter": intent.author_id,
@@ -209,11 +228,7 @@ def render_jira(world: World) -> list[Rendered]:
                     scope.id if scope else None,
                 ) if f
             ],
-            "acceptance_criteria": [
-                "A named owner is registered for the mapping in the service catalogue",
-                "Changes require an approving reviewer from the owning team",
-                "The manual override is persisted to the master or reverted with a documented decision",
-            ],
+            "acceptance_criteria": packkit.texts("render.jira.control.criterion."),
         },
     ]
 
@@ -262,7 +277,7 @@ def render_confluence(world: World) -> list[Rendered]:
     space = {
         "_note": _SYNTHETIC,
         "key": "FIN",
-        "name": f"{world.company.name} — Finance and Operations",
+        "name": packkit.text("render.confluence.space", company=world.company.name),
         "worldloom_seed": world.seed,
     }
 
@@ -316,7 +331,7 @@ def render_confluence(world: World) -> list[Rendered]:
                 {
                     "page": intent.id,
                     "author": intent.author_id,
-                    "body": "Superseded by later findings. Left as written.",
+                    "body": packkit.text("render.confluence.stale_comment"),
                     "worldloom_label": "stale_by_construction",
                 }
             )

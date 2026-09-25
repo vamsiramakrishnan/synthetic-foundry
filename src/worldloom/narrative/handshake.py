@@ -97,7 +97,9 @@ RULES: tuple[str, ...] = (
     " check.",
     "Not every fact deserves a sentence. Weight them. A division that performed to"
     " plan warrants a clause; the one that did not warrants the paragraph.",
-    "A reference like {{{{fact:FACT-0001}}}} substitutes the fact's rendered value"
+    # A plain string, never `.format`ted: the doubled braces the template in
+    # `prompts.SECTION_PROSE` needs reached the writer here as four a side.
+    "A reference like {{fact:FACT-0001}} substitutes the fact's rendered value"
     " verbatim into your prose — the same number, formatted for the locale, that"
     " appears in the finished document's tables. Write your sentences around that"
     " substitution: a fact rendering as 'AUD 1,234 thousands' asks for different"

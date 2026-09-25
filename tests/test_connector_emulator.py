@@ -71,6 +71,28 @@ def test_forks_are_mutation_isolated_and_snapshot_is_deterministic() -> None:
     assert right.call("get_issue", id="PHX-100")["fields"]["priority"]["name"] == "High"
 
 
+def test_a_transaction_shares_records_yet_isolates_every_write() -> None:
+    """The serving layer forks one transaction per run and per call instead of
+    deep-copying every record; a write must still reach only its own copy."""
+    surface = ConnectorEmulator(load_connector_definition("jira"), _jira_records(3))
+    baseline = surface.snapshot()
+    run = surface.transaction(fresh=True)
+    other = surface.transaction(fresh=True)
+    run.call("update_issue", id="PHX-100", fields={"priority": "Highest"})
+    run.call("transition_issue", id="PHX-101", state="done")
+    run.call("add_comment", id="PHX-102", body="noted")
+    created = run.call("create_issue", entity="bug", name="New", fields={"project": "PHX", "summary": "New"})
+    assert surface.snapshot() == baseline and other.snapshot() == baseline
+    assert run.snapshot() != baseline and created["key"] in run.by_ident
+    assert created["key"] not in surface.by_ident and len(surface.records) == 3
+    # A call's trial copy commits by replacement and drops by being ignored.
+    trial = run.transaction()
+    trial.call("update_issue", id="PHX-100", fields={"priority": "Low"})
+    assert run.call("get_issue", id="PHX-100")["fields"]["priority"]["name"] == "Highest"
+    assert trial.trace[-1].tool == "jira.update_issue" and run.trace[-1].tool == "jira.get_issue"
+    assert other.trace == [] and surface.trace == []
+
+
 def test_workflow_transition_is_definition_driven() -> None:
     emulator = ConnectorEmulator(load_connector_definition("jira"), _jira_records(1))
 

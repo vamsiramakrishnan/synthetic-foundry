@@ -181,3 +181,92 @@ def test_partial_native_coverage_stays_actionable(tmp_path):
     project = studio.store.create(spec)
     stage = next(s for s in studio.workflow(project["id"]).stages if s.id == "native_contracts")
     assert stage.status != "complete" and "other" in stage.detail
+
+
+def _built(studio, spec):
+    """Mark the company snapshot built, as the build stage reads it."""
+    from worldloom.studio.service import snapshot_intent
+    location = studio.path("snapshots", digest(snapshot_intent(spec)))
+    location.mkdir(parents=True)
+    (location / "receipt.json").write_text("{}", encoding="utf-8")
+
+
+def test_a_failed_run_is_the_named_blocker_and_advance_resumes_it(tmp_path, monkeypatch):
+    """A failed compile used to leave the report pointing at an unrelated
+    stage with no finding, and repeating the command replayed the refusal."""
+    studio = Studio(tmp_path)
+    project = studio.store.create(preset())
+    _built(studio, preset())
+    failed = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="compile"))
+    studio.store.finish(failed["id"], error="ValueError: process_evidence_missing (24): cause [a, b]")
+    report = studio.workflow(project["id"])
+    stage = next(s for s in report.stages if s.id == "compile")
+    assert stage.status == "blocked" and "process_evidence_missing" in stage.detail
+    assert report.next_action is not None and report.next_action.job_id == failed["id"]
+    assert report.next_action.kind == "run" and report.next_action.operation == "compile"
+    assert any(f["code"] == "run_failed" and failed["id"] in f["message"] for f in report.findings)
+    calls = []
+    monkeypatch.setattr(studio, "execute", lambda job_id, **kwargs: calls.append(job_id) or {"report": {"complete": True}})
+    result = studio.advance(project["id"], project["revision"])
+    assert calls == [failed["id"]] and result["job"]["status"] == "complete"
+    assert len([j for j in studio.store.jobs(project["id"]) if j["options"]["operation"] == "compile"]) == 1
+
+
+def test_a_run_left_running_by_a_killed_process_is_recovered_by_advance(tmp_path, monkeypatch):
+    studio = Studio(tmp_path)
+    project = studio.store.create(preset())
+    _built(studio, preset())
+    job = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="compile"))
+    with studio.store.connection() as db:
+        db.execute("UPDATE jobs SET status='running' WHERE id=?", (job["id"],))
+    assert studio.workflow(project["id"]).next_action.label == "Inspect active run"
+    calls = []
+    monkeypatch.setattr(studio, "execute", lambda job_id, **kwargs: calls.append(job_id) or {"report": {"complete": True}})
+    studio.advance(project["id"], project["revision"])
+    assert calls == [job["id"]] and studio.store.job(job["id"])["status"] == "complete"
+
+
+def test_advance_walks_ready_stages_until_a_gate(tmp_path, monkeypatch):
+    import worldloom.studio.service as service
+
+    studio = Studio(tmp_path)
+    project = studio.store.create(preset())
+    ran = []
+
+    def execute(self, job_id, **kwargs):
+        operation = self.store.job(job_id)["options"]["operation"]
+        ran.append(operation)
+        if operation == "build":
+            _built(self, preset())
+        return {"build": {"snapshot": "s"}, "compile": {"report": {"complete": True, "accepted": 24}},
+                "evalrun": {"cases": 24, "summary": {"means": {}}}}[operation]
+
+    monkeypatch.setattr(service.Studio, "execute", execute)
+    result = CliRunner().invoke(app, ["studio", "advance", project["id"], "-w", str(tmp_path), "--max-steps", "8"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert ran == ["build", "compile", "evalrun"]
+    assert [step["operation"] for step in payload["steps"]] == ran
+    assert payload["advanced"] is False
+
+
+def test_a_budget_that_cannot_meet_the_counts_is_named_before_compiling(tmp_path):
+    studio = Studio(tmp_path)
+    spec = preset()
+    short = spec.model_copy(update={"max_batches": 1, "use_cases": (spec.use_cases[0].model_copy(update={"count": 100}),)})
+    project = studio.store.create(short)
+    assert any(f["code"] == "batch_budget_short" for f in studio.workflow(project["id"]).findings)
+    project = Studio(tmp_path / "ok").store.create(spec)
+    assert not any(f["code"] == "batch_budget_short" for f in Studio(tmp_path / "ok").workflow(project["id"]).findings)
+
+
+def test_a_construction_refusal_names_each_cause_once_with_where_it_holds():
+    from worldloom.studio.construction import ConstructionIssue
+    from worldloom.studio.service import construction_refusal
+
+    findings = [ConstructionIssue(use_case_id=f"case-{i}", requirement_id=f"case-{i}:source-a", code="process_evidence_missing",
+                                  detail="needs records") for i in range(9)]
+    findings.append(ConstructionIssue(use_case_id="x", code="soft", detail="ignored", hard=False))
+    text = construction_refusal(findings)
+    assert text.count("needs records") == 1 and "(9)" in text
+    assert "case-0/source-a" in text and "and 3 more" in text and "ignored" not in text

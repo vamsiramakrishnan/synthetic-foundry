@@ -38,12 +38,13 @@ pass decides that, once, in order.
 
 from __future__ import annotations
 
+import contextvars
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .. import sizing
+from .. import packkit, sizing
 from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
@@ -196,6 +197,34 @@ def outline_context(ir: ArtifactIR, section: ArtifactSection) -> list[str]:
     return lines
 
 
+def _industry_terminology(world: World) -> dict[str, str]:
+    """The industry pack's words, as writer guidance, when one is in force.
+
+    Empty under the default industry, and that is load-bearing rather than
+    tidy: the terminology participates in the request digest and so in every
+    narration ledger key, and a default build's keys must not move. Under a
+    pack every term whose word is not its own name is listed ("site", call it
+    "branch"), read from the merged body the recipe records, so a replay
+    without the pack file asks the same question.
+
+    Read under the world's own recorded packs as well as whatever a caller put
+    in force, because requests are built from more than ``World.narrate``
+    (``handshake.pending`` for `narrate requests` on a loaded corpus,
+    ``reader_checks``), and every path has to ask the same question.
+    """
+    from ..recipe import packs_in_force
+
+    with packs_in_force(world.recipe):
+        pack = packkit.active("industry")
+        if pack is None or pack.is_default:
+            return {}
+        return {
+            key.replace("_", " "): packkit.text("narrative.terminology.term", word=word)
+            for key, word in sorted(pack.body.terms.items())
+            if word != key.replace("_", " ")
+        }
+
+
 def _hierarchy(world: World, cited: list[CanonicalFact], names: dict[str, str]) -> dict[str, str]:
     """Where each subject sits, so prose can say "the largest division"."""
     units = {unit.id: unit.name for unit in world.business_units}
@@ -284,11 +313,17 @@ def _request_for(
         # World-level, not fact-scoped: a vocabulary note holds for every
         # section, and there are never more than a handful. Advisory vocabulary
         # still changes the writing contract, so it participates in its digest.
+        #
+        # The industry's words come first so a lore note on the same term, which
+        # is about this company rather than its industry, has the last word.
         terminology={
-            constraint.target: constraint.effect
-            for commitment in world.lore
-            for constraint in commitment.constrains
-            if constraint.kind.value == "terminology"
+            **_industry_terminology(world),
+            **{
+                constraint.target: constraint.effect
+                for commitment in world.lore
+                for constraint in commitment.constrains
+                if constraint.kind.value == "terminology"
+            },
         },
         # Briefs, not physics: what the writer is asked for, not what the world
         # contains. The presets were raised from 70/130/200 after rendered
@@ -571,7 +606,10 @@ def narrate(
         pool = ThreadPoolExecutor(max_workers=concurrency)
         try:
             for slot in live_jobs:
-                slot.future = pool.submit(_run, slot)
+                # Each job runs in a copy of this thread's context: the packs
+                # in force (`packkit.use`) are a context variable, and a pool
+                # thread would otherwise write under the default industry.
+                slot.future = pool.submit(contextvars.copy_context().run, _run, slot)
             for slot in live_jobs:
                 assert slot.future is not None
                 slot.result = slot.future.result()

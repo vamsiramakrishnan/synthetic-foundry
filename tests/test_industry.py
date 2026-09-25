@@ -768,7 +768,7 @@ def test_industry_words_come_from_the_catalogue_and_the_declared_table() -> None
     )
     assert words["naics 517"] == "telecom" and words["tm forum etom"] == "telecom"
     assert all(key in INDUSTRIES for key in words.values())
-    assert set(industry.INDUSTRY_WORDS.items()) <= set(words.items())
+    assert set(industry.aliases().items()) <= set(words.items())
 
 
 def test_the_archetype_resolver_reports_a_match_or_a_miss() -> None:
@@ -940,7 +940,9 @@ def test_a_project_meets_its_own_evidence_requirements_from_the_world(tmp_path: 
     from worldloom.studio.construction import restore_generator
     from worldloom.studio.service import Studio
 
-    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    # Audit reads ServiceNow and compliance reads Salesforce: their records
+    # are the catalogue's, restated on the emulator the line reads.
+    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing", "audit", "compliance"))
     # Only the units that sell are revenue divisions.
     assert [unit.key for unit in spec.divisions] == ["consumer_mobile", "enterprise"]
     assert abs(sum(unit.share for unit in spec.divisions) - 1.0) < 0.01

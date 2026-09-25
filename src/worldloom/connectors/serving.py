@@ -14,9 +14,11 @@ from dataclasses import asdict, dataclass, field, replace
 from threading import RLock
 from typing import Any
 
+from .. import packkit
 from ..connector_data import ConnectorRecord
 from ..connector_definition import ConnectorDefinition, builtin_connector_definitions
 from ..connector_emulator import ConnectorEmulator, ConnectorError, ConnectorSpan
+from ..connector_keys import RECORDED_ALIAS_KEYS
 from ..connector_trace import grade_trace
 
 _READ_OPS = frozenset({"search", "get", "download"})
@@ -27,19 +29,25 @@ class ServingError(ValueError):
     """An actionable refusal at the serving boundary."""
 
 
+def _limit(name: str) -> int:
+    return int(packkit.policy(f"connectors.serving.{name}"))
+
+
 @dataclass(frozen=True)
 class ServingLimits:
-    max_runs: int = 32
-    max_runs_per_principal: int = 4
+    """What one serving process admits. Each default is the policy ``connectors.serving.<field>``."""
+
+    max_runs: int = field(default_factory=lambda: _limit("max_runs"))
+    max_runs_per_principal: int = field(default_factory=lambda: _limit("max_runs_per_principal"))
     # High enough for a mapped reorganisation of a thousand records (one
     # search page per hundred, a write and a readback per record); a
     # run that needs more is a retry storm, which the trajectory grade
     # names on its own.
-    max_calls_per_run: int = 4096
-    max_tools: int = 100
-    max_request_bytes: int = 65536
-    max_response_bytes: int = 1048576
-    max_records: int = 100000
+    max_calls_per_run: int = field(default_factory=lambda: _limit("max_calls_per_run"))
+    max_tools: int = field(default_factory=lambda: _limit("max_tools"))
+    max_request_bytes: int = field(default_factory=lambda: _limit("max_request_bytes"))
+    max_response_bytes: int = field(default_factory=lambda: _limit("max_response_bytes"))
+    max_records: int = field(default_factory=lambda: _limit("max_records"))
 
     def __post_init__(self) -> None:
         if any(value < 1 for value in asdict(self).values()):
@@ -98,6 +106,8 @@ class ConnectorEvaluationService:
         if not self.rows or any(not key for key in self.rows) or len(self.rows) != len(materialized_rows):
             raise ServingError("evaluation rows must have unique, nonempty IDs")
         self.records = tuple(copy.deepcopy(record) for record in records)
+        self._bases: dict[str, ConnectorEmulator] = {}
+        self._runtime_records: tuple[dict[str, Any], ...] | None = None
         if len(self.records) > limits.max_records:
             raise ServingError("record_limit: select a smaller evaluation corpus")
         available = builtin_connector_definitions()
@@ -179,7 +189,7 @@ class ConnectorEvaluationService:
             emulators = {server: self._emulator(server, row, principal) for server in servers}
             self._ordinal += 1
             run_id = f"run-{self._ordinal}"
-            before = {fid: copy.deepcopy(dict(record)) for server in sorted(emulators)
+            before = {fid: dict(record) for server in sorted(emulators)
                       for fid, record in sorted(emulators[server].records.items())}
             self._runs[run_id] = _Run(principal, query_id, emulators, before=before)
             return {"run_id": run_id, "query_id": query_id, "query": row.get("query", ""),
@@ -190,13 +200,24 @@ class ConnectorEvaluationService:
             from ..enterprise_failures import build_query_emulator
             from ..enterprise_rows import runtime_records
 
-            emulator = build_query_emulator(self.definitions[server], runtime_records(self.records),
+            # Converted once: the query emulator neither keeps nor changes
+            # its input records, it copies the ones it holds.
+            if self._runtime_records is None:
+                self._runtime_records = tuple(runtime_records(self.records))
+            emulator = build_query_emulator(self.definitions[server], self._runtime_records,
                                         overrides=row["state_overrides"],
                                         mutation_nodes=row["expected_dag"]["nodes"],
                                         query_id=str(row["id"]))
             emulator.actor = principal
             return emulator
-        return ConnectorEmulator(self.definitions[server], self.records, actor=principal)
+        # One canonical emulator per connector, built once; each run starts
+        # from a fresh transaction over it rather than re-copying every record.
+        base = self._bases.get(server)
+        if base is None:
+            base = self._bases[server] = ConnectorEmulator(self.definitions[server], self.records)
+        emulator = base.transaction(fresh=True)
+        emulator.actor = principal
+        return emulator
 
     def _run(self, principal: str, run_id: str) -> _Run:
         run = self._runs.get(run_id)
@@ -449,7 +470,7 @@ class ConnectorEvaluationService:
                 node, consumed = self._node(run, name, supplied), self._consumed(run, supplied)
             # An oversized result must not commit a write the client never saw.
             # Copy the bounded emulator transaction; publish it only on success.
-            trial = copy.deepcopy(run.emulators[connector])
+            trial = run.emulators[connector].transaction()
             error: ConnectorError | None = None
             rollback = False
             result: Any = None
@@ -599,11 +620,14 @@ class ConnectorEvaluationService:
         Taken at `begin` and again after the agent finishes, the two snapshots
         are the outcome axis: created is in the second and not the first,
         deleted the reverse, updated is the same fid with different fields.
-        Copied, so a caller holding the pre-state cannot watch it change.
+        Each record is copied at its top level, so a caller holding the
+        pre-state cannot watch it change: the emulator replaces a record it
+        writes rather than changing it in place, so the nested values a copy
+        shares are never written. A caller must not write them either.
         """
         with self._lock:
             run = self._run(principal, run_id)
-            return {fid: copy.deepcopy(dict(record)) for server in sorted(run.emulators)
+            return {fid: dict(record) for server in sorted(run.emulators)
                     for fid, record in sorted(run.emulators[server].records.items())}
 
     def tool_catalog(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
@@ -676,7 +700,7 @@ class ConnectorEvaluationService:
             spans = tuple(run.spans)
             refusals = tuple(dict(item) for item in run.refusals)
             questions = tuple(dict(item) for item in run.questions)
-            after = {fid: copy.deepcopy(dict(record)) for server in sorted(run.emulators)
+            after = {fid: dict(record) for server in sorted(run.emulators)
                      for fid, record in sorted(run.emulators[server].records.items())}
             assertions = self.grade(principal, run_id)
             score = grade_run(case, spans, run.before, after, assertions, response,
@@ -723,7 +747,7 @@ def _recorded_aliases(outputs: Mapping[str, Sequence[Any]]) -> dict[str, str]:
         for entry in produced:
             if isinstance(entry, Mapping) and isinstance(entry.get("payload"), Mapping):
                 native = entry["payload"]
-                for key in ("id", "Id", "sys_id", "key", "number", "name", "title"):
+                for key in RECORDED_ALIAS_KEYS:
                     if native.get(key) is not None:
                         aliases.setdefault(str(native[key]), str(entry.get("id")))
     return aliases

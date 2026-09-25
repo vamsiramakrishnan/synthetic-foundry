@@ -494,7 +494,7 @@ worldloom evalrun run <CORPUS>
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
-| `--max-turns` | Turns the --exec child may take per case. |
+| `--max-turns` | Turns the --exec child may take per case (default: policy `evalrun.max_turns`, 64). |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
 | `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |
@@ -588,6 +588,7 @@ worldloom evals dataset compile <PLAN_PATH>
 | `--batch-limit` | Pause after this many total batches. |
 | `--out`, `-o` | Dataset run directory; reuse it to resume the same plan. |
 | `--replay` | Require committed batches; never call a generator or executor. |
+| `--workers` | Processes that commit a wave's batches; never changes the output. Default: WORLDLOOM_DATASET_WORKERS, then policy dataset.workers. |
 
 ### `worldloom evals dataset verify`
 
@@ -938,6 +939,25 @@ worldloom narrate requests <CORPUS>
 
 Author and check industry packs: a world's shape and lore as data.
 
+### `worldloom pack author`
+
+Interview a harness until it proposes a pack the lint accepts, then store it.
+
+```
+worldloom pack author <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--harness-command` | Adapter: JSON request on stdin, JSON reply on stdout. |
+| `--into` | Pack root to store the accepted pack in (default: the user's). |
+| `--message` | What the operator wants. |
+| `--name` |  |
+| `--replace` |  |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+| `--rounds` | Refusal rounds before giving up. |
+| `--timeout` |  |
+
 ### `worldloom pack check`
 
 Validate a pack against the schema and lint its lore against the engine.
@@ -981,6 +1001,58 @@ worldloom pack facets <NAME>
 | --- | --- |
 | `--json` | Emit the registry as data. |
 
+### `worldloom pack install`
+
+Upload a pack: lint it, refuse with every finding, or store it where it is found by name.
+
+```
+worldloom pack install <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--into` | Pack root to store it in (default: the user's). |
+| `--replace` | Overwrite a pack of the same name in that root. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack interview`
+
+Author a pack with your coding harness through files.
+
+### `worldloom pack interview accept`
+
+Judge a reply: accepted (optionally stored), refused with findings, or questions for the operator.
+
+| Option | Purpose |
+| --- | --- |
+| `--install` | Store an accepted pack (in --into, else the user's root). |
+| `--into` | Store an accepted pack in this root. |
+| `--replace` |  |
+| `--reply` | The harness's reply. |
+| `--request` | The request file the harness answered. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack interview request`
+
+Write the bounded request a harness answers with one pack proposal.
+
+```
+worldloom pack interview request <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--draft` | A previous proposal to revise. |
+| `--findings` | The refusal to answer (from `interview accept`). |
+| `--message` | What the operator wants. |
+| `--name` | The pack's name, when the operator has chosen one. |
+| `--out`, `-o` |  |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack kinds`
+
+The kinds of pack the product accepts, and what each controls.
+
 ### `worldloom pack landscapes`
 
 The technology-estate vocabularies `--estate` grows a landscape out of.
@@ -992,6 +1064,30 @@ worldloom pack landscapes <NAME>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the pools as data. |
+
+### `worldloom pack lint`
+
+Resolve and lint a pack file without storing it; exits 2 on findings.
+
+```
+worldloom pack lint <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
+### `worldloom pack list`
+
+Every visible pack (a pack in a higher root shadows the same name below it).
+
+```
+worldloom pack list <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
 
 ### `worldloom pack locales`
 
@@ -1032,6 +1128,18 @@ The trading years a pack may choose by name.
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit as data. |
+
+### `worldloom pack show`
+
+The resolved pack: merged body, digest, the chain it layers on, and its findings.
+
+```
+worldloom pack show <REF>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
 
 ### `worldloom pack spec`
 
@@ -1303,7 +1411,7 @@ Interview, build and evaluate one persistent company.
 
 ### `worldloom studio advance`
 
-Execute one ready stage; stop at a proposal, configuration gap or refusal.
+Execute ready stages in order; stop at a proposal, configuration gap or refusal.
 
 ```
 worldloom studio advance <PROJECT>
@@ -1312,6 +1420,7 @@ worldloom studio advance <PROJECT>
 | Option | Purpose |
 | --- | --- |
 | `--harness-command` |  |
+| `--max-steps` | Run up to this many ready stages in order (build, compile, evalrun, ...), stopping at the first proposal, configuration gap or refusal. The default runs one. |
 | `--timeout` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
@@ -1389,6 +1498,96 @@ worldloom studio next <PROJECT>
 
 | Option | Purpose |
 | --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack`
+
+Upload, generate and choose the packs a workspace's companies use.
+
+### `worldloom studio pack author`
+
+Interview a harness until it proposes a pack the lint accepts, then store it in the workspace.
+
+```
+worldloom studio pack author <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--harness-command` | Adapter: JSON request on stdin, JSON reply on stdout; no shell. |
+| `--message` | What the operator wants. |
+| `--name` | The pack's name, when the operator has chosen one. |
+| `--timeout` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack install`
+
+Upload a pack into the workspace: lint it, refuse with every finding, or store it.
+
+```
+worldloom studio pack install <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--replace` | Overwrite the workspace's pack of the same name. |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack interview`
+
+Author a workspace pack with your coding harness through files.
+
+### `worldloom studio pack interview accept`
+
+Judge a reply: accepted (stored in the workspace), refused with findings, or questions.
+
+| Option | Purpose |
+| --- | --- |
+| `--from` | The harness's reply. |
+| `--replace` |  |
+| `--request` | The request file the harness answered. |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack interview request`
+
+Write the bounded request a harness answers with one pack proposal for this workspace.
+
+```
+worldloom studio pack interview request <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--draft` | A previous proposal to revise. |
+| `--findings` | The refusal to answer (`studio pack interview accept` output). |
+| `--message` | What the operator wants. |
+| `--name` |  |
+| `--out`, `-o` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack list`
+
+Every pack a workspace's companies can use; the workspace's own shadow the rest.
+
+```
+worldloom studio pack list <KIND>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio pack use`
+
+Record a revision building the company under these packs, pinned to their current content.
+
+```
+worldloom studio pack use <PROJECT> <REF>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--reason` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
 ### `worldloom studio prepare-native`

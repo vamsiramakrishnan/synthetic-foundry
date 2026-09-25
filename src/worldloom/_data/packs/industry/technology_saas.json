@@ -1,0 +1,33 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "technology_saas",
+  "version": "1",
+  "title": "Technology and SaaS",
+  "description": "How the product speaks for the process catalogue's technology_saas industry: the phrases that name it in a company description, its colloquial words (customer is subscriber, site is office) and an example company.",
+  "body": {
+    "industry": "technology_saas",
+    "engine": "retail",
+    "aliases": [
+      "saas",
+      "software",
+      "technology company",
+      "tech company"
+    ],
+    "terms": {
+      "customer": "subscriber",
+      "site": "office"
+    },
+    "example": {
+      "company_name": "Lattice Cloud",
+      "geo": "singapore",
+      "countries": [
+        "SG",
+        "AU",
+        "IN",
+        "JP"
+      ],
+      "description": "A decentralised software-as-a-service company in Singapore, Australia, India and Japan."
+    }
+  }
+}

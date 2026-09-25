@@ -395,5 +395,51 @@
     "send_mail": "send_message",
     "create_reply": "reply_message",
     "forward": "forward_message"
+  },
+  "catalog": {
+    "display_name": "Outlook",
+    "content_actions": [
+      "summarize",
+      "extract",
+      "classify",
+      "generate"
+    ],
+    "entities": {
+      "message": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "draft",
+          "update",
+          "send",
+          "reply",
+          "forward",
+          "comment",
+          "delete"
+        ]
+      },
+      "mail_folder": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create"
+        ]
+      },
+      "attachment": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "delete"
+        ]
+      }
+    }
   }
 }

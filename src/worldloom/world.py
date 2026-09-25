@@ -401,6 +401,29 @@ class World:
         """How this world was made. Empty on a corpus written before recipes existed."""
         return dict(self._recipe)
 
+    def role_holders(self) -> dict[str, str]:
+        """Role key to the id holding it: ``{"controller": "PERSON-0004", ...}``.
+
+        The map a scenario reads (``_roles``) on a world built in this process.
+        A corpus loaded from disk has not written it down, and deliberately:
+        a ``roles`` key in ``world.json`` would change the bytes of every
+        corpus ever exported, and the map is not new information. It is a
+        function of the recipe, which the corpus does carry, so it is derived
+        from the recipe on first read (``_replayed_roles``) under the packs the
+        recipe recorded. That is the same map the building process held,
+        including every post a hire or departure moved, and it survives a pack
+        that renamed the titles, which the job-title search it replaced did
+        not.
+
+        Empty when there is no honest answer: a corpus with no recipe (the
+        hand-authored fixtures, anything exported before recipes), or one
+        whose recipe does not rebuild into these people. A caller then falls
+        back to whatever it did before; ``render.bundles._seated`` says what.
+        """
+        if self._roles:
+            return dict(self._roles)
+        return dict(self._collection("_role_holders", lambda: _replayed_roles(self)))
+
     def entity_names(self) -> dict[str, str]:
         """Every entity ID to the name a person would use for it.
 
@@ -593,8 +616,16 @@ class World:
             world = world.run(MonthEndClose(period="2026-03"))
 
         Immutable: the world this is called on is unchanged.
+
+        Under the packs this world's recipe recorded, as are ``compile``,
+        ``narrate`` and ``render``: a world built under an industry pack keeps
+        speaking its words on every later pass, including a corpus loaded
+        from disk long after the pack file is gone (``recipe.packs_in_force``).
         """
-        return scenario.run(self)
+        from .recipe import packs_in_force
+
+        with packs_in_force(self._recipe):
+            return scenario.run(self)
 
     def replace_facts(self, amended: Mapping[str, CanonicalFact]) -> World:
         """A copy of this world with facts substituted by id, in place.
@@ -754,14 +785,16 @@ class World:
         """
         from . import documents
         from .ids import Minter
+        from .recipe import packs_in_force
 
         if not self._artifact_intents:
             raise ValueError("nothing to compile — run a scenario first to plan artifacts")
 
         minter = self._minter or Minter()
-        irs = tuple(
-            documents.compile_intent(self, intent, minter) for intent in self._artifact_intents
-        )
+        with packs_in_force(self._recipe):
+            irs = tuple(
+                documents.compile_intent(self, intent, minter) for intent in self._artifact_intents
+            )
         return replace(self, _artifact_irs=irs, _artifacts=self._manifest_for(irs))
 
     def narrate(
@@ -791,6 +824,21 @@ class World:
         ``on_accepted``, the per-section acceptance seam a long-running caller
         can use to persist paid work incrementally.
         """
+        from .recipe import packs_in_force
+
+        with packs_in_force(self._recipe):
+            return self._narrate(provider, ledger=ledger, retries=retries,
+                                 concurrency=concurrency, on_accepted=on_accepted)
+
+    def _narrate(
+        self,
+        provider: Any,
+        *,
+        ledger: tuple[GenerationLedgerEntry, ...] | None,
+        retries: int,
+        concurrency: int,
+        on_accepted: Callable[[GenerationLedgerEntry], None] | None,
+    ) -> World:
         from .narrative import compiler
 
         available = self._ledger if ledger is None else ledger
@@ -848,6 +896,12 @@ class World:
         Compiles first if needed, and leaves existing IR alone — so narrating and
         then rendering keeps the prose rather than discarding it.
         """
+        from .recipe import packs_in_force
+
+        with packs_in_force(self._recipe):
+            return self._render(*formats)
+
+    def _render(self, *formats: str) -> World:
         from . import render as render_module
 
         if not formats:
@@ -1284,6 +1338,43 @@ def _masterdata_from(root: Path) -> Any:
     from .generators import masterdata as masterdata_module
 
     return masterdata_module.from_document(corpus.read_json(path))
+
+
+def _replayed_roles(world: World) -> dict[str, str]:
+    """*world*'s role map, rebuilt from its recipe, or ``{}`` when that is not honest.
+
+    The rebuild is ``worldloom verify``'s (``recipe.rebuild`` with the
+    corpus's own ledger, and an actor provider that cannot be reached, so a
+    recorded actor episode replays from the ledger or refuses). Its map is
+    trusted only if it describes *these* people: every person it names must
+    exist here under the same title. A corpus rebuilt under a different
+    generator release, or hand-edited, fails that and gets ``{}``, because a
+    map from a neighbouring world would assign a ticket to a stranger with
+    no error, the exact failure this replaces.
+    """
+    recipe = world._recipe
+    if not recipe or recipe.get("archetype") is None or recipe.get("seed") is None:
+        return {}
+    from . import recipe as recipe_module
+    from .actors.providers import ActorProviderError, UnreachableActorProvider
+
+    ledger = tuple(world._ledger)
+    acted = recipe_module.has_actor_step(recipe)
+    try:
+        rebuilt = recipe_module.rebuild(
+            recipe,
+            actors=UnreachableActorProvider() if acted else None,
+            actor_ledger=ledger if acted else (),
+            ledger=ledger,
+        )
+    except (recipe_module.RecipeError, ActorProviderError):
+        return {}
+    people = {person.id: person.title for person in world._people}
+    held = set(rebuilt._roles.values())
+    for person in rebuilt._people:
+        if person.id in held and people.get(person.id) != person.title:
+            return {}
+    return dict(rebuilt._roles)
 
 
 def _moment(moment: datetime | str) -> datetime:

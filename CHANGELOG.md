@@ -11,6 +11,145 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Scale, live harnesses, and the last literals
+
+- **Dataset compiles run in parallel waves.** `batch_wave` (in a plan or a
+  Studio project) commits up to K batches at a time on worker processes
+  (`--workers`, `WORLDLOOM_DATASET_WORKERS`, `policy: dataset.workers`). The
+  output depends on K, which the plan records, and never on how many workers
+  ran it or in what order they finished. A resumed wave gives the same bytes.
+  At K=1, the default, the plan and every output are unchanged. On a 62-use-case
+  telecom company an 8-batch compile took 141 s instead of 205 s on four
+  shared cores; the first batch of each use case, which builds its harness,
+  dominates.
+- **`industry.evalrun_cases` indexes records** by binding and period instead
+  of scanning all of them for every request: banking takes 2.0 s instead of
+  523 s, and retail 1.2 s instead of 95 s. The rows are identical.
+- **Every live-harness path was run against a signed-in coding-harness CLI and works.** That
+  covers pack authoring (including a refusal round), the Studio company
+  interview, narration (also under `--pack industry:banking`) and harness
+  evalrun in plan and run modes. The runbook is `docs/live-harness.md`. Three
+  bugs were fixed:
+  - Harness children inherited the caller's session id and persisted a
+    transcript under it. They now run with `--no-session-persistence` and
+    without the session variables.
+  - The pack interview got the evalrun closing sentence.
+  - The narration rules showed `{{fact:ID}}` with doubled braces.
+- **Connector definitions are the single source.** `CAPABILITIES` and
+  `BUILTIN_CONNECTORS` are derived from a `catalog` block in each definition,
+  which holds the display name, entity verbs, stable id and formats. An
+  uploaded connector declares its own; an inconsistent catalog is refused
+  when the definition loads.
+- **The rater's text is in the prompts pack**, pinned to Eval Studio's
+  wording by a test. An industry pack cannot override `rater.*`.
+- **A loaded corpus knows who holds each role.** `World.role_holders()`
+  rebuilds the map from the recipe, so ticket assignees survive a reload and
+  a pack that renames titles. Nothing is added to the exported files.
+- **Structural decisions read stable section keys, not displayed headings**
+  (`SectionPlan.key`, `doctypes.RESERVED_KEYS`). The shipped outline headings
+  (117 `documents.outline.heading.*` keys) and the per-engine role titles
+  (54 `roles.title.*` keys) are prompts that a pack can override. An author's
+  own heading is displayed exactly as written.
+- **Generation:** none for a default build (verified byte-identical, also
+  for the bank, insurer, procurement and grocery archetypes). A compile with
+  `batch_wave > 1` records it in its plan.
+
+### Every layer is a pack: found by name, layered, uploaded or authored by a harness
+
+- `worldloom.packkit` is one mechanism for every layer the product used to hold
+  as literals. A pack is a JSON envelope of a registered kind: `industry`,
+  `prompts`, `policy`, `company`, `connector`, `lob`, `doctype` or
+  `presentation`. Packs are searched in this order: `--pack-root`,
+  `WORLDLOOM_PACK_PATH`, `~/.worldloom/packs`, then the shipped
+  `_data/packs`. A pack layers through `extends` onto its kind's default,
+  resolves to a content-addressed body (`kind:name@digest`), and is put in
+  force with the global `--pack` flag or `packkit.use`. Code reads packs
+  through `packkit.text`, `policy` and `term`.
+- `worldloom pack kinds|list|show|lint|install|author` and
+  `pack interview request|accept`. Upload and harness authoring run one lint
+  and refuse with every finding. The interview reuses the exec seam and the
+  cascade protocol: questions go back to the operator, and a refused proposal
+  goes back to the harness with its findings.
+- Industry packs colloquialise the product. Every template reaches a word
+  through `{{term:site}}` (case and plural are derived), so a corpus built
+  under `--pack industry:banking` says "Branch Performance" where the default
+  says "Store Performance". Twelve industries ship, one per
+  process-catalogue overlay, with their aliases, engine, terms and example
+  company. `industry_of` recognises a company by the aliases of every visible
+  industry pack, so an uploaded industry is recognised by its own phrases.
+- About 200 prompts and templated sentences and 49 policy defaults moved from
+  code into the default prompts and policy packs. They cover Studio interview
+  and harness roles, industry requests and briefs, system-of-record channel
+  text, enterprise query instructions, evalrun turn and plan instructions,
+  finance workbook headings and ticket texts, serving limits, and programme and
+  record policy. The defaults hold the exact literals they replace.
+- Connector packs are served: an uploaded connector definition (a `zendesk`)
+  reaches the emulator, the served surface and the enterprise specs.
+  Per-connector record shapes are a declarative `record_projection` in each
+  definition, where they used to be an `if connector ==` chain. Identity keys
+  are defined once.
+- Studio can upload a pack, generate one with the configured harness (a
+  background job whose command the browser cannot supply), and choose a pack
+  for a company. `ProjectSpec.packs` pins each reference at revision time, so
+  a revision replays exactly or is refused. Presets and operational examples
+  are data, and a shipped industry pack does not reshape a shipped preset.
+- Support and revenue business-unit archetypes are defined once (there were
+  three copies). The SDK reads the function ladder in force.
+- **Generation:** none for a default build. A build with a non-default pack in
+  force records the pack's reference, digest and merged body under the
+  recipe's `packs` key. `build --replay` reinstates the pack from that record
+  without the pack file, and refuses a body that no longer matches its digest.
+  The only recognition change is that "deposit-taking institution" now
+  resolves to banking.
+
+### A catalogue company runs from interview to graded evals at scale
+
+- `worldloom industry project banking` → `studio init` → `studio advance`
+  failed at compile on every shipped industry: about a third of the derived
+  use cases read ServiceNow, Salesforce, SharePoint lists or Confluence, and
+  their system-of-record records were only ever projected onto `sor`, so
+  construction refused them (`scoped process evidence needs 1 records;
+  observed 0`, repeated 24 times). `sor.product_records` now restates each
+  such record on the emulator the line reads, under the same binding scope,
+  with that connector's own fields and `sor_record_id`. The `sor` record set,
+  and every answer read off it, is unchanged. **Generation:** a catalogue
+  company's `servicenow`, `salesforce`, `sharepoint`, `confluence`, `jira`
+  and `email` projections gain these records; worlds without a process
+  company project exactly as before.
+- `industry.project` sizes `max_batches` from its own use cases and counts
+  (`industry.batch_budget`). The fixed budget of 12 left 52 of banking's 64
+  use cases unattempted, and nothing said so. The workflow report names a
+  `batch_budget_short` finding for any project whose budget cannot meet its
+  counts.
+- A qualification proof keeps the records the run wrote (`post_state`) and
+  the ones it deleted (`deleted`), not the whole post-run state of every
+  connector it touched. On the banking company a proof was about 40 MB, or
+  about 130 GB for the programme; a batch's proofs are now about 200 KB.
+- The query emulator filters to its own connector before copying, and copies
+  only records an override changes. Before this, each connector's emulator
+  deep-copied every connector's records for every query. Requirement checks
+  project and flatten a connector once per world. The served surface forks one
+  base emulator per connector, and a tool call opens a transaction that
+  copies only containers. Every emulator write already replaced its record
+  rather than changing it in place. On the banking company a compile batch
+  fell from 2.5 to 6 minutes to 20 to 100 seconds, and reference-grading 58
+  cases fell from 414 s to 154 s, with identical grades.
+- A failed run is the named blocker. The workflow report carries a
+  `run_failed` finding, and its `next_action` is that run with its `job_id`.
+  Before this, the report pointed at "Connect a writing harness", and
+  repeating `studio run` replayed the recorded refusal without retrying.
+  `advance` and `run` now resume a failed, interrupted or paused run from its
+  checkpoints, and mark a run left `running` by a killed process as
+  interrupted.
+- `studio advance --max-steps N` walks the stage DAG (build, compile, evalrun,
+  and the harness stages when a harness is given) and stops at the first
+  proposal, configuration gap or refusal. It lists the runs it executed as
+  `steps`.
+- A construction refusal names each cause once, with its count and the use
+  cases and requirements it holds for. A compile of a constructed company with
+  a base-only narration selected says so, where it used to report the
+  narration as belonging to another snapshot.
+
 ### The planner grounds every row in the world it plans for
 
 - The documented loop starts with `worldloom enterprise-evals build <world>

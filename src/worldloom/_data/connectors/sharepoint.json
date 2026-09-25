@@ -549,5 +549,89 @@
     "list": "list",
     "status": "fields/Status",
     "owner": "fields/Owner"
+  },
+  "record_projection": {
+    "fields": {
+      "item_id": "{key|first:16|upper}",
+      "name": "{title}",
+      "parent": "/{function|slug}/{stream}",
+      "content": "{body}",
+      "created_at": "{stamp}",
+      "modified_at": "{stamp}"
+    },
+    "entities": {
+      "list_item": {
+        "fields": {
+          "Title": "{title}",
+          "Status": "{status}"
+        }
+      }
+    }
+  },
+  "catalog": {
+    "display_name": "SharePoint",
+    "content_actions": [
+      "summarize",
+      "extract",
+      "classify",
+      "compare",
+      "reconcile",
+      "transform",
+      "generate",
+      "render",
+      "convert"
+    ],
+    "entities": {
+      "file": {
+        "stable_id": "item_id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "update",
+          "patch",
+          "upsert",
+          "delete"
+        ],
+        "formats": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "html",
+          "markdown"
+        ],
+        "record_verbs": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "update",
+          "patch",
+          "upsert",
+          "delete"
+        ],
+        "content_verbs": [
+          "summarize",
+          "extract",
+          "generate",
+          "convert"
+        ]
+      },
+      "list_item": {
+        "stable_id": "item_id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "update",
+          "patch",
+          "upsert"
+        ]
+      }
+    }
   }
 }

@@ -212,7 +212,7 @@ def run_command(
     ),
     timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per turn before it is killed."),
     shell: bool = typer.Option(False, "--shell", help="Run the --exec command through the shell (the opt-in for pipelines)."),
-    max_turns: int = typer.Option(64, "--max-turns", min=1, help="Turns the --exec child may take per case."),
+    max_turns: int | None = typer.Option(None, "--max-turns", min=1, help="Turns the --exec child may take per case (default: policy `evalrun.max_turns`, 64)."),
     limit: int | None = typer.Option(None, "--limit", min=1),
     principal: str = typer.Option("agent", "--principal", help="The principal every run is begun under."),
     rater: str | None = typer.Option(None, "--rater", help="grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam)."),

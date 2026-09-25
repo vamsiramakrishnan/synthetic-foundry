@@ -10,6 +10,7 @@ from typing import Any
 
 from .. import pcf
 from ..ids import content_key
+from .models import REVENUE_ARCHETYPES as BU_ARCHETYPES
 from .models import (
     Activity,
     ActivityBinding,
@@ -26,7 +27,6 @@ from .models import (
 )
 
 COLS = ("id", "name", "pcf_id", "function", "sor_class", "type", "control", "exception", "tags")
-BU_ARCHETYPES = {"product_line", "geography", "customer_segment", "channel", "legal_entity"}
 SOURCE = "worldloom-process-catalogue-0.2"
 
 

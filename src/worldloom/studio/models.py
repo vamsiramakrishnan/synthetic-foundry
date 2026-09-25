@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from ..company import from_document, resolve
 from ..enterprise_specs import ScenarioProfile
@@ -22,6 +27,11 @@ from ..synthesis.models import Program
 from .calibration import CompanyCalibrationPlan
 from .native_calibration import NativeCalibrationPlan
 from .native_suite_contract import NativeSuiteRequest
+
+#: The kinds a project may put in force. These three are read through
+#: ``packkit.text``/``policy``/``term`` everywhere a company is built; a
+#: company, connector or LOB pack is authored into the project itself.
+PROJECT_PACK_KINDS: tuple[str, ...] = ("industry", "prompts", "policy")
 
 
 class UseCase(Model):
@@ -74,13 +84,47 @@ class ProjectSpec(Model):
     minimum_tasks: int = Field(default=2, ge=1, strict=True)
     split_by: Literal["task", "case"] = "case"
     split_weights: dict[str, int] = Field(default_factory=lambda: {"train": 80, "validation": 10, "test": 10})
+    #: Packs this company is built, interviewed and evaluated under, as pinned
+    #: references (``industry:healthcare@<digest>``). The store pins a bare
+    #: ``kind:name`` when it records a revision, so a revision replays exactly
+    #: or is refused, never silently rebuilt under a pack that moved. The
+    #: field defaults above stay literals because they are the JSON schema a
+    #: harness reads; ``studio.project.*`` in the policy pack holds the same
+    #: numbers for the presets that an industry pack may resize.
+    packs: tuple[str, ...] = ()
+    #: How many dataset batches one scheduling wave requests from the same
+    #: admission state (`DatasetPlan.batch_wave`). A wider wave lets the
+    #: compile commit batches on several processes (`WORLDLOOM_DATASET_WORKERS`)
+    #: and is part of what the dataset is; the process count is not.
+    batch_wave: int = Field(default=1, ge=1, le=64, strict=True)
+
+    @model_serializer(mode="wrap")
+    def _omit_no_packs(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # A project with no packs dumps exactly as before packs existed, so its
+        # project key, revision digests and snapshot identity are unchanged.
+        # A sequential wave is omitted for the same reason.
+        data: dict[str, Any] = handler(self)
+        if not self.packs:
+            data.pop("packs", None)
+        if self.batch_wave == 1:
+            data.pop("batch_wave", None)
+        return data
 
     @model_validator(mode="after")
     def _references(self) -> ProjectSpec:
         from datetime import date
 
+        from ..packkit import parse_ref
         from ..process_bindings import compile_company
 
+        pack_kinds: set[str] = set()
+        for ref in self.packs:
+            parsed = parse_ref(ref) if ":" in ref else None
+            if parsed is None or parsed.path is not None or parsed.kind not in PROJECT_PACK_KINDS:
+                raise ValueError(f"packs: {ref!r} must be a {', '.join(PROJECT_PACK_KINDS)} pack reference kind:name[@digest]")
+            if parsed.kind in pack_kinds:
+                raise ValueError(f"packs: two {parsed.kind} packs; a project is built under one of each kind")
+            pack_kinds.add(str(parsed.kind))
         spec = from_document(self.company)
         if spec.pack:
             raise ValueError("studio projects embed company identity; external pack paths are not portable")
@@ -172,7 +216,8 @@ class InterviewReply(Model):
 
 
 class RunOptions(Model):
-    operation: Literal["build", "compile", "interview", "narrate", "foundry", "native", "prepare_native", "evalrun"]
+    operation: Literal["build", "compile", "interview", "narrate", "foundry", "native", "prepare_native", "evalrun",
+                       "pack_author"]
     batch_limit: int | None = Field(default=None, ge=1, le=10_000, strict=True)
     message: str = Field(default="", max_length=8000)
     max_rounds: int = Field(default=2, ge=1, le=8, strict=True)
@@ -191,11 +236,31 @@ class RunOptions(Model):
     evalrun_split: str = Field(default="", max_length=40)
     evalrun_limit: int | None = Field(default=None, ge=1, le=100_000, strict=True)
     evalrun_max_turns: int = Field(default=32, ge=1, le=128, strict=True)
+    #: `pack_author` jobs: the kind and (optional) name of the pack the
+    #: configured harness is interviewed to author into the workspace's pack
+    #: root; `message` is what the operator asked for. A workspace job, not a
+    #: company's: it belongs to no project revision.
+    pack_kind: str = Field(default="", max_length=40)
+    pack_name: str = Field(default="", max_length=64)
+
+    @model_serializer(mode="wrap")
+    def _omit_pack_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Job keys are digests of these options; a run that authors no pack
+        # keeps the key it had before pack authoring existed.
+        data: dict[str, Any] = handler(self)
+        for key in ("pack_kind", "pack_name"):
+            if not data.get(key):
+                data.pop(key, None)
+        return data
 
     @model_validator(mode="after")
     def _native_request(self) -> RunOptions:
         if (self.operation == "prepare_native") != (self.native_suite is not None):
             raise ValueError("native_suite is required only for prepare_native jobs")
+        if (self.operation == "pack_author") != bool(self.pack_kind):
+            raise ValueError("pack_kind is required only for pack_author jobs")
+        if self.operation == "pack_author" and not (self.message.strip() and self.harness_identity):
+            raise ValueError("authoring a pack needs a message and a configured harness")
         if self.operation == "evalrun" and self.evalrun_agent == "harness" and not self.harness_identity:
             raise ValueError("evaluating a harness needs a configured harness; the reference agent needs none")
         return self

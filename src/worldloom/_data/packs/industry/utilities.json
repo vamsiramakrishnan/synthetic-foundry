@@ -1,0 +1,30 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "industry",
+  "name": "utilities",
+  "version": "1",
+  "title": "Utilities",
+  "description": "How the product speaks for the process catalogue's utilities industry: the phrases that name it in a company description, its colloquial words (customer is account holder, site is depot) and an example company.",
+  "body": {
+    "industry": "utilities",
+    "engine": "retail",
+    "aliases": [
+      "utility",
+      "electricity",
+      "energy retailer",
+      "gas network"
+    ],
+    "terms": {
+      "customer": "account holder",
+      "site": "depot"
+    },
+    "example": {
+      "company_name": "Brightwater Energy",
+      "geo": "australia",
+      "countries": [
+        "AU"
+      ],
+      "description": "A centralised electricity and gas utility in Australia."
+    }
+  }
+}

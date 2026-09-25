@@ -16,6 +16,7 @@ def compile_command(
     out: Annotated[Path, typer.Option("--out", "-o", help="Dataset run directory; reuse it to resume the same plan.")],
     batch_limit: Annotated[int | None, typer.Option("--batch-limit", min=1, help="Pause after this many total batches.")] = None,
     replay: Annotated[bool, typer.Option("--replay", help="Require committed batches; never call a generator or executor.")] = False,
+    workers: Annotated[int | None, typer.Option("--workers", min=1, help="Processes that commit a wave's batches; never changes the output. Default: WORLDLOOM_DATASET_WORKERS, then policy dataset.workers.")] = None,
 ) -> None:
     """Generate missing coverage, enforce admission, then export isolated splits."""
     from .cli import _refuse
@@ -24,7 +25,7 @@ def compile_command(
 
     try:
         plan = load_dataset_plan(_read(plan_path))
-        run = compile_dataset(plan, out, batch_limit=batch_limit, replay_only=replay)
+        run = compile_dataset(plan, out, batch_limit=batch_limit, replay_only=replay, workers=workers)
     except (OSError, ValueError) as error:
         _refuse("dataset_rejected", str(error))
     typer.echo(run.report.model_dump_json())

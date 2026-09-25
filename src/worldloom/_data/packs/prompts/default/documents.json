@@ -1,0 +1,32 @@
+{
+  "texts": {
+    "documents.divisional.chart": "Revenue against plan by {{term:division}}",
+    "documents.divisional.title": "By {{term:division}} · {period}",
+    "documents.outline.heading.by_business_unit": "By {{term:business_unit}}",
+    "documents.outline.heading.by_division": "By {{term:division}}",
+    "documents.workbook.category.axis": "{{term:Category}}",
+    "documents.workbook.category.chart": "Gross profit against budget by {{term:category}}",
+    "documents.workbook.category.chart_note": "Bars left of zero are {{term:categories}} behind plan.",
+    "documents.workbook.category.note": "{{term:Categories}} sum to their business unit; the unit totals sum to {{term:group}}. Margin varies by {{term:category}}, so the {{term:group}} rate moves with the mix as well as with performance.",
+    "documents.workbook.category.partial_total": "Total, categorised units",
+    "documents.workbook.category.title": "{{term:Category}} P&L",
+    "documents.workbook.distribution.cartons": "Cartons dispatched",
+    "documents.workbook.distribution.note": "The sites the {{term:Site}} Performance sheet leaves out, and the measures they own. A distribution centre holds stock and books no turnover, so it has no line on a {{term:site}} P&L and a volume and a cost of its own here. The network total is the sum of the {{term:divisions}} that have one, not of every {{term:division}}.",
+    "documents.workbook.distribution.title": "Distribution Network",
+    "documents.workbook.distribution.total": "Distribution network",
+    "documents.workbook.division_axis": "{{term:Division}}",
+    "documents.workbook.group": "{{term:Group}}",
+    "documents.workbook.pnl.margin_chart": "Gross margin against budget by {{term:division}}",
+    "documents.workbook.pnl.note": "{{term:Group}} is the sum of the business units above. Variances recompute from actual less budget.",
+    "documents.workbook.pnl.revenue_chart": "Revenue against budget by {{term:division}}",
+    "documents.workbook.pnl.title": "Business Unit P&L",
+    "documents.workbook.stores.note": "{{term:Sites}} decompose the same unit revenue the {{term:categories}} do, so both sheets reach the same unit total by different routes. Distribution centres hold stock and book no revenue, so they are not listed here.",
+    "documents.workbook.stores.partial_total": "Total, trading {{term:sites}}",
+    "documents.workbook.stores.title": "{{term:Site}} Performance",
+    "documents.workbook.title": "{company} — Month-End Model",
+    "documents.workbook.trend.chart": "Revenue by {{term:division}}, by month",
+    "documents.workbook.trend.gross_profit": "Gross Profit Trend",
+    "documents.workbook.trend.margin": "Margin Trend",
+    "documents.workbook.trend.revenue": "Revenue Trend"
+  }
+}

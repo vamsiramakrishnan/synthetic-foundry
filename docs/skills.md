@@ -111,6 +111,16 @@ build.
 
 Source: [`.claude/skills/worldloom-company/SKILL.md`](../.claude/skills/worldloom-company/SKILL.md)
 
+### `worldloom-packs`
+
+Supply any layer as data: an industry's colloquial terms and aliases, prompts,
+numeric policy, a company, a connector, a LOB, a document type or a
+presentation profile. Upload a pack or have a harness author one through the
+refusal cycle; a non-default pack replays from the recipe. Guide:
+[packs](packs.md).
+
+Source: [`.claude/skills/worldloom-packs/SKILL.md`](../.claude/skills/worldloom-packs/SKILL.md)
+
 ### `worldloom-probe`
 
 Derive world physics by descending organisation, reporting, roles, objectives,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 
@@ -121,17 +121,20 @@ def run_command(
     from .cli import _refuse
     from .providers import digest
     from .studio import RunOptions, Studio
-    from .studio.worker import run_job
+    from .studio.worker import recover, run_job
 
     try:
         studio = Studio(workspace)
         revision = studio.store.get(project)["revision"]
+        recover(studio)
         options = RunOptions.model_validate({"operation": operation, "batch_limit": batch_limit,
                                              "harness_identity": digest(harness_command) if operation in {"narrate", "foundry", "native"} else ""})
         if options.operation == "interview":
             raise ValueError("use studio interview request for interviews")
         job = studio.store.enqueue(project, revision, options)
-        if job["status"] == "paused":
+        if job["status"] in {"failed", "interrupted", "paused"}:
+            # The same revision and options name the same run: repeating the
+            # command resumes it from its checkpoints once the cause is fixed.
             job = studio.store.retry(job["id"])
         run_job(studio, job["id"], harness_command=harness_command)
         result = studio.store.job(job["id"])
@@ -212,17 +215,33 @@ def advance_command(
     project: str, workspace: Workspace = Path("./worldloom-workspace"),
     harness_command: Annotated[str | None, typer.Option("--harness-command")] = None,
     timeout: Annotated[float, typer.Option(min=1, max=3600)] = 600,
+    max_steps: Annotated[int, typer.Option("--max-steps", min=1, max=64,
+        help="Run up to this many ready stages in order (build, compile, evalrun, ...), stopping at the first "
+             "proposal, configuration gap or refusal. The default runs one.")] = 1,
 ) -> None:
-    """Execute one ready stage; stop at a proposal, configuration gap or refusal."""
+    """Execute ready stages in order; stop at a proposal, configuration gap or refusal.
+
+    Each stage is the same run `studio run` executes, with its checkpoints;
+    `--max-steps` walks the company's stage DAG without a human between
+    stages, and never applies a proposal or changes the company.
+    """
     from .cli import _refuse
     from .studio import Studio
+    steps: list[dict[str, object]] = []
     try:
         studio = Studio(workspace)
-        result = studio.advance(project, studio.store.get(project)["revision"],
-                                harness_command=harness_command, timeout=timeout)
+        revision = studio.store.get(project)["revision"]
+        for _ in range(max_steps):
+            result = studio.advance(project, revision, harness_command=harness_command, timeout=timeout)
+            job = result.get("job") or {}
+            if result["advanced"]:
+                steps.append({"job": job.get("id"), "operation": (job.get("options") or {}).get("operation"),
+                              "status": job.get("status")})
+            if not result["advanced"] or job.get("status") != "complete" or (job.get("result") or {}).get("status") == "blocked":
+                break
     except (OSError, ValueError, KeyError) as error:
         _refuse("studio_rejected", str(error))
-    typer.echo(json.dumps(result, sort_keys=True))
+    typer.echo(json.dumps({**result, "steps": steps}, sort_keys=True))
     job = result.get("job") or {}
     if job.get("status") == "failed" or (job.get("result") or {}).get("status") == "blocked":
         _refuse("studio_rejected", job.get("error") or "run has unmet gates; inspect the workflow findings", exit_code=3)
@@ -292,6 +311,139 @@ def accept_command(
     except (OSError, ValueError, KeyError) as error:
         _refuse("studio_rejected", str(error))
     typer.echo(json.dumps(result, sort_keys=True))
+
+
+pack_app = typer.Typer(no_args_is_help=True, help="Upload, generate and choose the packs a workspace's companies use.")
+studio_app.add_typer(pack_app, name="pack")
+pack_interview_app = typer.Typer(no_args_is_help=True, help="Author a workspace pack with your coding harness through files.")
+pack_app.add_typer(pack_interview_app, name="interview")
+
+
+def _pack_refused(error: Exception) -> NoReturn:
+    """A pack refusal as a CLI refusal, with every lint finding as data."""
+    from .cli import _refuse
+    from .studio.service import PackRefused
+
+    _refuse("pack_rejected", str(error).strip("'\""), findings=error.findings if isinstance(error, PackRefused) else [])
+
+
+@pack_app.command("list")
+def pack_list_command(
+    kind: Annotated[str | None, typer.Argument(help="Only this kind (`worldloom pack kinds`).")] = None,
+    workspace: Workspace = Path("./worldloom-workspace"),
+) -> None:
+    """Every pack a workspace's companies can use; the workspace's own shadow the rest."""
+    from .studio import Studio
+
+    try:
+        result = Studio(workspace).packs(kind)
+    except (OSError, ValueError, KeyError) as error:
+        _pack_refused(error)
+    typer.echo(json.dumps(result, sort_keys=True))
+
+
+@pack_app.command("install")
+def pack_install_command(
+    source: Annotated[Path, typer.Argument(help="A pack envelope file to upload into the workspace.")],
+    workspace: Workspace = Path("./worldloom-workspace"),
+    replace: Annotated[bool, typer.Option("--replace", help="Overwrite the workspace's pack of the same name.")] = False,
+) -> None:
+    """Upload a pack into the workspace: lint it, refuse with every finding, or store it."""
+    from .evals.dataset import _read
+    from .studio import Studio
+
+    try:
+        result = Studio(workspace).install_pack(_read(source), replace=replace)
+    except (OSError, ValueError, KeyError) as error:
+        _pack_refused(error)
+    typer.echo(json.dumps(result, sort_keys=True))
+
+
+@pack_app.command("author")
+def pack_author_command(
+    kind: Annotated[str, typer.Argument(help="The kind of pack to author (`worldloom pack kinds`).")],
+    message: Annotated[str, typer.Option("--message", help="What the operator wants.")],
+    harness_command: Annotated[str, typer.Option("--harness-command", help="Adapter: JSON request on stdin, JSON reply on stdout; no shell.")],
+    workspace: Workspace = Path("./worldloom-workspace"),
+    name: Annotated[str, typer.Option("--name", help="The pack's name, when the operator has chosen one.")] = "",
+    timeout: Annotated[float, typer.Option(min=1, max=3600)] = 600,
+) -> None:
+    """Interview a harness until it proposes a pack the lint accepts, then store it in the workspace."""
+    from .cli import _refuse
+    from .studio import Studio
+
+    try:
+        result = Studio(workspace).author_pack(kind, message, harness_command, name=name, timeout=timeout)
+    except (OSError, ValueError, KeyError) as error:
+        _pack_refused(error)
+    typer.echo(json.dumps(result, sort_keys=True))
+    if result["status"] == "refused":
+        _refuse("pack_rejected", "the harness did not propose a pack the lint accepts within the round budget",
+                findings=result["findings"], exit_code=3)
+
+
+@pack_app.command("use")
+def pack_use_command(
+    project: str,
+    ref: Annotated[list[str], typer.Argument(help="kind:name of each pack to put in force (`industry:default` clears the industry).")],
+    workspace: Workspace = Path("./worldloom-workspace"),
+    reason: Annotated[str, typer.Option("--reason")] = "Chose the company's packs",
+) -> None:
+    """Record a revision building the company under these packs, pinned to their current content."""
+    from .studio import Studio
+
+    try:
+        studio = Studio(workspace)
+        result = studio.choose_packs(project, studio.store.get(project)["revision"], tuple(ref), reason=reason)
+    except (OSError, ValueError, KeyError) as error:
+        _pack_refused(error)
+    typer.echo(json.dumps(result, sort_keys=True))
+
+
+@pack_interview_app.command("request")
+def pack_request_command(
+    kind: Annotated[str, typer.Argument(help="The kind of pack to author.")],
+    message: Annotated[str, typer.Option("--message", help="What the operator wants.")],
+    out: Annotated[Path, typer.Option("--out", "-o")],
+    workspace: Workspace = Path("./worldloom-workspace"),
+    name: Annotated[str, typer.Option("--name")] = "",
+    draft: Annotated[Path | None, typer.Option("--draft", help="A previous proposal to revise.")] = None,
+    findings: Annotated[Path | None, typer.Option("--findings", help="The refusal to answer (`studio pack interview accept` output).")] = None,
+) -> None:
+    """Write the bounded request a harness answers with one pack proposal for this workspace."""
+    from .corpus import write_json
+    from .evals.dataset import _read
+    from .studio import Studio
+
+    try:
+        request = Studio(workspace).pack_request(kind, message, name=name, draft=_read(draft) if draft else None,
+                                                 findings=tuple(_read(findings).get("findings", [])) if findings else ())
+        write_json(out, request)
+    except (OSError, ValueError, KeyError) as error:
+        _pack_refused(error)
+    typer.echo(str(out))
+
+
+@pack_interview_app.command("accept")
+def pack_accept_command(
+    request_file: Annotated[Path, typer.Option("--request", help="The request file the harness answered.")],
+    reply_file: Annotated[Path, typer.Option("--from", help="The harness's reply.")],
+    workspace: Workspace = Path("./worldloom-workspace"),
+    replace: Annotated[bool, typer.Option("--replace")] = False,
+) -> None:
+    """Judge a reply: accepted (stored in the workspace), refused with findings, or questions."""
+    from .cli import _refuse
+    from .evals.dataset import _read
+    from .studio import Studio
+
+    try:
+        result = Studio(workspace).accept_pack(_read(request_file), _read(reply_file), replace=replace)
+    except (OSError, ValueError, KeyError) as error:
+        _pack_refused(error)
+    typer.echo(json.dumps(result, sort_keys=True))
+    if result["status"] == "refused":
+        _refuse("pack_rejected", "the proposal was refused; answer its findings in the next request",
+                findings=result["findings"], exit_code=3)
 
 
 __all__ = ["studio_app"]

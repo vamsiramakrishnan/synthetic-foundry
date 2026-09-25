@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .. import packkit
 from ..narrative import references
 from ..native_artifacts import inspect_artifact
 from ..native_corpus import NativeContent, NativeCorpusPlan, render_native_corpus
@@ -106,7 +107,8 @@ def propose(world: World, spec: ProjectSpec, request: NativeSuiteRequest) -> dic
                 task_id = "suite-" + key + "-" + format + "-" + operation
                 args: dict[str, Any] = {"id": task_id, "use_case_id": case.id, "operation": operation, "inputs": (source,)}
                 if operation == "read":
-                    args.update(prompt=f"For {case.title}, retrieve the complete evidence at {ref.locator} in {artifact_id} and cite it exactly.",
+                    args.update(prompt=packkit.text("studio.native_suite.task.read", title=case.title, locator=ref.locator,
+                                                    artifact=artifact_id),
                         assertions=(NativeAssertion(id="evidence", target=ref),))
                 elif operation == "analyze":
                     if format != "xlsx":
@@ -129,18 +131,24 @@ def propose(world: World, spec: ProjectSpec, request: NativeSuiteRequest) -> dic
                         missing.append({"case": key, "operation": "analyze", "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"})
                         continue
                     operands = tuple(NativeCitation(artifact_id=artifact_id, locator=cells[f]) for f in eligible[0][:2])
-                    args.update(prompt=f"For {case.title}, compare the two {facts[eligible[0][0]].kind} values for {facts[eligible[0][0]].period}: subtract the value at {operands[1].locator} from the value at {operands[0].locator}. Cite both source cells.",
+                    args.update(prompt=packkit.text("studio.native_suite.task.analyze", title=case.title,
+                                                    kind=facts[eligible[0][0]].kind, period=facts[eligible[0][0]].period,
+                                                    first=operands[0].locator, second=operands[1].locator),
                         assertions=(NativeAssertion(id="difference", calculation=NativeCalculation(operation="difference", operands=operands)),))
                 else:
                     output_id = artifact_id + "-" + operation
                     if operation == "update":
                         locator = {"docx": "paragraph:1", "pptx": "slide:1/shape:1/text", "xlsx": "sheet:Evidence/cell:A2"}[format]
-                        expected = "Reviewed evidence"
-                        prompt = f"For {case.title}, change only the heading at {locator} in {artifact_id} to 'Reviewed evidence'. Preserve all other content and properties. Return an updated copy with its original source checksum."
+                        # One key for the heading asked for and the heading graded,
+                        # so a pack cannot make the prompt and the oracle disagree.
+                        expected = packkit.text("studio.native_suite.review_heading")
+                        prompt = packkit.text("studio.native_suite.task.update", title=case.title, locator=locator,
+                                              artifact=artifact_id, heading=expected)
                     else:
                         locator = {"docx": "paragraph:1", "pptx": "slide:1/shape:1/text", "xlsx": "sheet:Evidence/cell:A1"}[format]
                         expected = text
-                        prompt = f"For {case.title}, create a new {format} evidence excerpt. Copy the complete content at {ref.locator} from {artifact_id} verbatim into {locator} in the new file."
+                        prompt = packkit.text("studio.native_suite.task.create", title=case.title, format=format,
+                                              source=ref.locator, artifact=artifact_id, locator=locator)
                     args.update(prompt=prompt, output=NativeOutput(artifact_id=output_id, format=format,
                         source_artifact_id=artifact_id if operation == "update" else None,
                         assertions=(NativeAssertion(id="output", target=NativeCitation(artifact_id=output_id, locator=locator), expected=expected),)))

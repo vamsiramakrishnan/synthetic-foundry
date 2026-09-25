@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, model_validator
 
+from . import packkit
 from .connector_data import ConnectorVerb, ContentVerb
 from .ids import content_key
 from .models import Model
@@ -82,16 +83,6 @@ _ENTITY = {
     "email": "message",
 }
 
-_SOURCE_TEXT = {
-    "jira": "unresolved Jira issues",
-    "confluence": "the latest approved Confluence pages",
-    "sharepoint": "the current SharePoint records",
-    "drive": "the latest working files in Drive",
-    "servicenow": "linked ServiceNow incidents and changes",
-    "salesforce": "escalated Salesforce cases and open opportunities",
-    "email": "the programme email thread and its attachments",
-}
-
 _WORKFLOWS: dict[str, dict[str, Any]] = {
     "incident_review": {
         "persona": "service delivery lead",
@@ -156,21 +147,16 @@ def _evidence(world: World) -> tuple[list[str], list[str]]:
 def _request(
     world: World, spec: dict[str, Any], destination: str, update: bool
 ) -> str:
-    sources = [_SOURCE_TEXT[name] for name in spec["sources"]]
+    # Each source reads as `agent_evals.source.<connector>`; the request
+    # sentence and its verb are `agent_evals.request` and `agent_evals.verb.*`.
+    sources = [packkit.template(f"agent_evals.source.{name}") for name in spec["sources"]]
     source_clause = ", ".join(sources[:-1]) + f", and {sources[-1]}"
-    if destination == "email":
-        verb = "Reply with an updated" if update else "Draft an"
-    else:
-        verb = "Update the existing" if update else "Create a"
+    mode = "update" if update else "create"
+    verb = packkit.template(f"agent_evals.verb.email.{mode}" if destination == "email" else f"agent_evals.verb.{mode}")
     period = world.period or "current"
-    return (
-        f"Prepare the {period} {spec['artifact']} for {world.company.name}. "
-        f"Use {source_clause}. Reconcile records using the company, reporting "
-        f"period, and stable linked-record identifiers. {verb} {spec['artifact']} "
-        f"in {destination.title()}. Include {spec['requirements']}. Do not "
-        f"overwrite manually entered content. Put uncertain matches in a review "
-        f"section. Read the saved result back and report any branch that failed."
-    )
+    return packkit.text("agent_evals.request", period=period, artifact=spec["artifact"], company=world.company.name,
+                        sources=source_clause, verb=verb, destination=destination.title(),
+                        requirements=spec["requirements"])
 
 
 def compile_agent_evals(

@@ -43,10 +43,14 @@ class CompanyDatasetPlan(DatasetPlan):
 
     @model_serializer(mode="wrap")
     def _existing_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Overrides the collection plan's serializer by name; it omits the
+        # sequential wave for the same reason.
         data = handler(self)
         for name in ("generation_contracts", "split_assignments"):
             if not getattr(self, name):
                 data.pop(name, None)
+        if self.batch_wave == 1:
+            data.pop("batch_wave", None)
         return data
 
     @model_validator(mode="after")
@@ -91,6 +95,12 @@ class FrozenCompanyBuilder:
         project passes `sor.projections`, so every product its bindings name
         answers through the `sor` connector."""
         self._harnesses: dict[str, EnterpriseEvalHarness] = {}
+
+    def __getstate__(self) -> dict[str, Any]:
+        # A worker process receives the frozen company and its knobs, not the
+        # harnesses this process happened to warm: each is a pure function of
+        # the world and the source, so the worker rebuilds the same one.
+        return {**self.__dict__, "_harnesses": {}}
 
     def __call__(self, request: DatasetRequest) -> DatasetBuild:
         from ..synthesis import Simulator

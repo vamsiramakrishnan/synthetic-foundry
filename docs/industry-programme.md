@@ -102,6 +102,15 @@ no emulator (chat, a workflow approval, a portal filing) is still reported as
 unemulated, and the file is versioned in its name because changing which
 connector stands in for a system changes every programme derived from it.
 
+A product with an emulator of its own is read there. Its records are derived
+once on `sor`, and `sor.product_records` restates each on the emulator the
+line reads (a ServiceNow incident on `servicenow.incident`, a Salesforce case
+on `salesforce.case`, a SharePoint list on `sharepoint.list_item`) under the
+same binding scope, with that connector's own fields and `sor_record_id`
+naming the record it restates. Before this, a line whose system was ServiceNow
+or Salesforce demanded records no projection held, and construction refused
+about a third of every shipped industry's use cases.
+
 ## Requests read their answers off the records
 
 A programme derives the company's records in every system its bindings name
@@ -184,7 +193,8 @@ bindings. The process company is recorded on the snapshot world's recipe
 (`process_structure`) and declared as one event dated where the company's
 facts begin, and the programme's facts join the world's ledger about those
 units, sourced on those systems. From the recipe the
-builtin projections derive the company's records on `sor` and its channel
+builtin projections derive the company's records on `sor` (restated on the
+emulator of each product that has one) and its channel
 evidence on the emulated channels from the world alone: one email thread,
 Jira issue, SharePoint file or Confluence page per bound activity, declared
 channel and period, scoped to the line's LOB, stream and owning unit, and
@@ -224,9 +234,17 @@ builds ("a federated telecom in India") is reported as exactly that, with
 `worldloom industry programme telecom` named as what does exist, and an
 unrecognised business is reported as a miss. `industry.industry_of` is the
 lookup: the overlay keys, the crosswalk codes (`NAICS 517`), each overlay's
-sector framework (`TM Forum eTOM`) and a declared word table
-(`INDUSTRY_WORDS`), matched at word boundaries with the longest phrase
-winning.
+sector framework (`TM Forum eTOM`) and the `aliases` every visible industry
+pack declares (`_data/packs/industry/<industry>.json`, one per catalogue
+industry; `industry.aliases`), matched at word boundaries with the longest
+phrase winning. An uploaded industry pack (`worldloom pack install`) is
+recognised by its own aliases, and one in front of the shipped packs has the
+last word on a phrase they share. The same pack's `terms` are the words the
+programme's sentences use while it is in force (`{{term:record}}` in a
+request brief, `{{term:company}}` in a use case's company description), and
+those sentences and the programme's numbers (`industry.count_ceiling`,
+`sor.records_per_period`, ...) are the `industry` fragments of the default
+prompts and policy packs.
 
 ## The locale a company is built in
 

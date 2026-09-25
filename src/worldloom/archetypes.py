@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import packkit
 from .generators.hierarchy import CategorySpec, SiteFormat, UnitSpec
 
 
@@ -543,6 +544,12 @@ _REGISTRY: dict[str, Archetype] = {
 #: Deliberately a shape lookup rather than anything that reaches for data about the
 #: named company. "woolworths" means *this kind of business*, and the world that
 #: comes back is invented.
+#:
+#: Which *industry* a phrase names is the industry packs' `aliases`
+#: (`industry.industry_of`); this table answers a narrower question an engine
+#: owns, which of its shapes (a grocer or an omnichannel retailer, a mid-size
+#: ADI) and by which brand, including a shape no catalogue industry has
+#: (infrastructure services). It stays here beside the shapes it names.
 _INSPIRATION: dict[str, str] = {
     "woolworths": "australian_grocery",
     "woolies": "australian_grocery",
@@ -664,7 +671,30 @@ def inspired_by(description: str) -> Archetype:
     ``matched`` is the same lookup without the fallback.
     """
     found = matched(description)
-    return found if found is not None else get("omnichannel_retailer")
+    return found if found is not None else fallback()
+
+
+def fallback_engine() -> str:
+    """The engine a description nothing recognised builds with.
+
+    The active industry pack's `engine` when one is in force (a telecom pack
+    rides retail, a banking pack banking), else the policy
+    `company.fallback_engine`, which ships as retail: the engine every
+    unrecognised description built with before packs existed.
+    """
+    return packkit.industry().engine or str(packkit.policy("company.fallback_engine"))
+
+
+def fallback() -> Archetype:
+    """The shape an unrecognised description falls back to: `fallback_engine`'s default archetype."""
+    from . import domains
+
+    engine = fallback_engine()
+    registered = domains.by_name(engine)
+    if registered is None or not registered.default_archetype:
+        raise KeyError(f"the fallback engine {engine!r} is not a registered domain with a default archetype;"
+                       f" choose one of {', '.join(domains.names())}")
+    return get(registered.default_archetype)
 
 
 def available() -> list[str]:

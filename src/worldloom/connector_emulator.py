@@ -19,16 +19,16 @@ from typing import Any
 
 from .connector_data import ConnectorRecord
 from .connector_definition import ConnectorDefinition, ConnectorToolDefinition
-from .connector_keys import freeze_key
+from .connector_keys import SHAPED_IDENTITY_KEYS, freeze_key
 from .connector_payload import shape_payload
 from .connector_query import parse_native
 from .ids import content_key
 from .predicates import FieldPredicate, Predicate, PredicateOp, evaluate
 
-#: The keys a product-shaped payload may carry its identity under. Mirrors the
-#: identity set ``connector_payload.shape_payload`` preserves under projection,
-#: minus the non-scalar ones (``attributes``, ``type``) that are not handles.
-_SHAPED_IDENTITY_KEYS = ("id", "Id", "sys_id", "key", "number", "ts", "ari")
+#: The keys a product-shaped payload may carry its identity under
+#: (``connector_keys``): the identity set ``shape_payload`` preserves under
+#: projection, minus the non-scalar ones that are not handles.
+_SHAPED_IDENTITY_KEYS = SHAPED_IDENTITY_KEYS
 
 
 class ConnectorError(RuntimeError):
@@ -201,6 +201,30 @@ class ConnectorEmulator:
         child._recent_creates = {}
         return child
 
+    def transaction(self, *, fresh: bool = False) -> ConnectorEmulator:
+        """A copy one call may change, for the caller to commit or drop.
+
+        Every handler replaces a record rather than changing it in place (an
+        update deep-copies the record it patches), so the copy shares the
+        record dicts and copies only the containers a call changes: the
+        record map, the entity and identifier indexes, the idempotency keys
+        and the trace. Deep-copying the whole state for every tool call was
+        most of an evalrun on a company with tens of thousands of records.
+        `fresh` starts the copy with an empty trace and counters, as `fork`
+        does, for a new run over the same state.
+        """
+        child = copy.copy(self)
+        child.records = dict(self.records)
+        child.by_entity = defaultdict(list, {key: list(value) for key, value in self.by_entity.items()})
+        child.by_ident = dict(self.by_ident)
+        child._recent_creates = dict(self._recent_creates)
+        child.trace = [] if fresh else list(self.trace)
+        if fresh:
+            child._call_ordinal = 0
+            child._created = 0
+            child._recent_creates = {}
+        return child
+
     def snapshot(self) -> str:
         payload = json.dumps(
             self.records,
@@ -217,7 +241,9 @@ class ConnectorEmulator:
             raise ConnectorError(400, kind, kind) from error
         try:
             message = template.format(**fmt)
-        except KeyError:
+        except (KeyError, IndexError, ValueError, AttributeError):
+            # An uploaded connector's error text is data: one that does not
+            # format is shown as written rather than escaping the emulator.
             message = template
         return ConnectorError(code, message, kind)
 

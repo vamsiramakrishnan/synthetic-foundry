@@ -75,7 +75,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from pydantic import Field
 
-from . import factkinds, functions, sor
+from . import factkinds, functions, packkit, sor
 from .connector_data import ConnectorRecord
 from .evals.intents import Intent, intents
 from .ids import Minter
@@ -91,6 +91,7 @@ from .process_bindings import (
     situations_for,
 )
 from .process_bindings import stream_names as process_bindings_stream_names
+from .process_bindings.models import REVENUE_ARCHETYPES, SUPPORT_ARCHETYPES
 
 if TYPE_CHECKING:
     from .evals.coverage import CoverageReport
@@ -139,61 +140,6 @@ SEAT_BY_TYPE: dict[str, str] = {
 #: seats one chief executive however many LOBs declare the key.
 ROOT = RoleSpec(key="ceo", title="Chief Executive Officer", function="Executive")
 
-#: Words a description may use for an industry the catalogue knows, beyond the
-#: industry's own key. Declared, not guessed, and matched at word boundaries
-#: with the longest phrase winning, like `archetypes.inspired_by`. The
-#: catalogue's own vocabulary (overlay keys, crosswalk codes such as
-#: `NAICS 517`, sector frameworks such as `TM Forum eTOM`) joins this table in
-#: `industry_words`, so a new overlay is recognised without a new line here.
-INDUSTRY_WORDS: dict[str, str] = {
-    "bank": "banking",
-    "lender": "banking",
-    "credit union": "banking",
-    "insurer": "insurance",
-    "underwriter": "insurance",
-    "retailer": "retail",
-    "supermarket": "retail",
-    "grocery": "retail",
-    "grocer": "retail",
-    "consumer goods": "consumer_products",
-    "fmcg": "consumer_products",
-    "packaged goods": "consumer_products",
-    "telco": "telecom",
-    "telecommunications": "telecom",
-    "mobile operator": "telecom",
-    "network operator": "telecom",
-    "utility": "utilities",
-    "electricity": "utilities",
-    "energy retailer": "utilities",
-    "gas network": "utilities",
-    "pharma": "life_sciences",
-    "pharmaceutical": "life_sciences",
-    "biotech": "life_sciences",
-    "medical devices": "life_sciences",
-    "freight": "logistics",
-    "forwarder": "logistics",
-    "shipping": "logistics",
-    "3pl": "logistics",
-    "hospital": "healthcare",
-    "health system": "healthcare",
-    "clinic": "healthcare",
-    "provider network": "healthcare",
-    "manufacturer": "manufacturing",
-    "factory": "manufacturing",
-    "machine-tool": "manufacturing",
-    "plant": "manufacturing",
-    "government": "public_sector",
-    "ministry": "public_sector",
-    "statutory board": "public_sector",
-    "agency": "public_sector",
-    "saas": "technology_saas",
-    "software": "technology_saas",
-    "technology company": "technology_saas",
-    "tech company": "technology_saas",
-}
-
-_ABSTAIN_ANSWER = "Not present in the corpus."
-
 
 # ---------------------------------------------------------------------------
 # Data
@@ -220,12 +166,39 @@ def stream_names(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
     return process_bindings_stream_names(catalogue)
 
 
+def aliases() -> dict[str, str]:
+    """Every phrase a visible industry pack declares, lowercased, to its industry.
+
+    Words a description may use for an industry beyond the industry's own key
+    (`a regional bank`, `telco`), declared in each industry pack's `aliases`
+    (`_data/packs/industry/<industry>.json`) rather than in a table here, so an
+    uploaded pack is recognised by its own phrases the moment it is visible.
+    Declared, not guessed, and matched at word boundaries with the longest
+    phrase winning (`industry_of`). Packs are read lowest precedence first, so
+    where two claim one phrase the pack a user or a project root put in front
+    of the shipped ones has the last word, and within one root the later name.
+    """
+    visible = sorted(packkit.discover("industry", strict=False), key=lambda found: (-found.rank, found.envelope.name))
+    words: dict[str, str] = {}
+    for found in visible:
+        try:
+            body: packkit.IndustryPack = packkit.resolve(found.envelope.ref()).body
+        except (KeyError, ValueError):
+            # One malformed pack in a user's root must not stop every company
+            # from resolving; `worldloom pack list`/`show` names what is wrong.
+            continue
+        if body.industry:
+            words.update(dict.fromkeys(body.aliases, body.industry))
+    return words
+
+
 def industry_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
     """Every phrase that names a catalogue industry, lowercased, to its key.
 
     The overlay keys themselves (with underscores spoken as spaces), the
-    crosswalk codes, each overlay's sector framework, and `INDUSTRY_WORDS`.
-    A declared table has the last word where two sources disagree.
+    crosswalk codes, each overlay's sector framework, and every visible
+    industry pack's `aliases`. A declared alias has the last word where two
+    sources disagree.
     """
     cat = catalogue if catalogue is not None else load_catalogue()
     words: dict[str, str] = {}
@@ -239,7 +212,7 @@ def industry_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
     for code, key in cat.get("industry_crosswalk", {}).items():
         if key in cat["industry_overlays"]:
             words[code.casefold()] = key
-    words.update(INDUSTRY_WORDS)
+    words.update(aliases())
     return dict(sorted(words.items()))
 
 
@@ -454,9 +427,10 @@ def derive_lobs(
             tier: (function.titles[tier].title if function is not None and tier in function.titles else None)
             for tier in ("head", "manager", "professional", "support")
         }
-        purpose = (
-            f"{title} at {compiled.company}: {len({row.activity_id for row in rows})} activities across"
-            f" {', '.join(names.get(s, s) for s in streams)}, owned by {', '.join(owners)}."
+        purpose = packkit.text(
+            "industry.lob.purpose", title=title, company=compiled.company,
+            count=len({row.activity_id for row in rows}),
+            streams=", ".join(names.get(s, s) for s in streams), owners=", ".join(owners),
         )
         lobs.append(
             Lob(
@@ -468,19 +442,19 @@ def derive_lobs(
                     *([root] if root is not None else []),
                     RoleSpec(
                         key=head,
-                        title=seat_titles["head"] or f"Head of {title}",
+                        title=seat_titles["head"] or packkit.text("industry.seat.head", function=title),
                         function=title,
                         reports_to=root.key if root is not None else None,
                     ),
                     RoleSpec(
                         key=manager,
-                        title=seat_titles["manager"] or f"{title} Manager",
+                        title=seat_titles["manager"] or packkit.text("industry.seat.manager", function=title),
                         function=title,
                         reports_to=head,
                     ),
                     RoleSpec(
                         key=analyst,
-                        title=seat_titles["professional"] or f"{title} Analyst",
+                        title=seat_titles["professional"] or packkit.text("industry.seat.analyst", function=title),
                         function=title,
                         reports_to=manager,
                     ),
@@ -610,17 +584,17 @@ class Request(Model):
             id=self.id,
             question=self.brief,
             evaluation_type=self.grading,
-            expected_answer=_ABSTAIN_ANSWER if abstains else self.expected_answer,
+            expected_answer=packkit.text("industry.abstain_answer") if abstains else self.expected_answer,
             expected_fact_ids=[] if abstains else list(self.expected_fact_ids),
             expects_abstention=abstains,
             difficulty="hard"
             if abstains
             else ("medium" if self.effect == "write" else "easy"),
             reasoning=(
-                f"Derived from binding {self.occasion} by {self.intent}; the answer is read off"
-                f" {len(self.expected_record_ids)} records of {self.period} in {self.system_of_record}."
+                packkit.text("industry.reasoning.records", occasion=self.occasion, intent=self.intent,
+                             count=len(self.expected_record_ids), period=self.period, system=self.system_of_record)
                 if self.expected_record_ids
-                else f"Derived from binding {self.occasion} by {self.intent}; the answer is the catalogue's declaration."
+                else packkit.text("industry.reasoning.declaration", occasion=self.occasion, intent=self.intent)
             ),
             asker=self.asker,
             occasion=self.occasion,
@@ -642,21 +616,20 @@ def _seat(family: str, activity_type: str) -> str:
 
 def _brief(intent: Intent, row: ActivityBinding, constraint: str, period: str | None = None) -> str:
     verb = intent.verb[:1].upper() + intent.verb[1:]
-    text = (
-        f"{verb}: {row.activity} ({row.stream_name}) for {row.owner_bu}, {row.country}."
-        f" The record is in {row.sor_product}."
-    )
+    text = packkit.text("industry.brief", verb=verb, activity=row.activity, stream=row.stream_name,
+                        owner=row.owner_bu, country=row.country, system=row.sor_product)
     if period:
-        text += f" Period: {period}."
+        text += packkit.text("industry.brief.period", period=period)
     if constraint:
-        text += f" Constraint: {constraint}."
+        text += packkit.text("industry.brief.constraint", constraint=constraint)
     return text
 
 
 def _answer(row: ActivityBinding) -> str:
-    text = f"{row.owner_bu} owns {row.activity} in {row.country}; system of record {row.sor_product}"
+    text = packkit.text("industry.answer", owner=row.owner_bu, activity=row.activity, country=row.country,
+                        system=row.sor_product)
     if row.control.strip():
-        text += f"; control: {row.control.strip()}"
+        text += packkit.text("industry.answer.control", control=row.control.strip())
     return text + "."
 
 
@@ -1240,8 +1213,8 @@ def programme(
     catalogue: dict[str, Any] | None = None,
     as_of: datetime = EPOCH,
     root: RoleSpec | None = ROOT,
-    period: str = sor.ANCHOR_PERIOD,
-    periods: int = sor.DEFAULT_PERIODS,
+    period: str | None = None,
+    periods: int | None = None,
 ) -> Programme:
     """The whole programme for an industry (its default company) or a company spec.
 
@@ -1253,11 +1226,14 @@ def programme(
 
     The company's system-of-record records are derived for *periods* months
     ending at *period* (`sor.records`), and every request whose intent rests
-    on a record set is asked about the latest of them.
+    on a record set is asked about the latest of them. Both default to the
+    policy in force (`sor.anchor_period`, `sor.default_periods`).
     """
     from . import domains
     from . import staffing as staffing_module
 
+    period = period if period is not None else sor.anchor_period()
+    periods = periods if periods is not None else sor.default_periods()
     cat = catalogue if catalogue is not None else load_catalogue()
     company = default_company(spec) if isinstance(spec, str) else spec
     compiled = compile_company(company, catalogue=cat)
@@ -1346,16 +1322,26 @@ _PROCESS_BY_CONNECTOR: tuple[tuple[str, str], ...] = (
     ("salesforce", "customer_lifecycle"),
 )
 
-_PROMPT_TEMPLATE = (
-    "For {company}, {purpose}. Use {sources}; join by the record's stable identifier"
-    " and read the observation history before acting. {action_instruction}"
-    " {output_label} in {destination}, then {verification_instruction}.{failure_instruction}"
-)
+#: The workflow's prompt template is the prompts pack's
+#: `industry.use_case.prompt`, read with the industry's terms filled and its
+#: `{placeholders}` left for `WorkflowSpec` to fill.
+#:
+#: `UseCase.count`'s ceiling is the policy `industry.count_ceiling`, and how
+#: many activities a request names before it names the span instead is
+#: `industry.named_activities` (three reads as a list; twelve reads as a
+#: catalogue dump). Read when a use case is derived, never at import, so an
+#: industry pack in force governs them; `COUNT_CEILING` and `NAMED_ACTIVITIES`
+#: remain as module attributes answering the policy in force (`__getattr__`).
 
-#: `UseCase.count`'s ceiling. Named here so the cap is visible where the count
-#: is derived, and so a line larger than it is reported rather than truncated
-#: silently.
-COUNT_CEILING = 100_000
+
+def default_count_ceiling() -> int:
+    """`UseCase.count`'s ceiling in force; a line larger than it is capped, and says so."""
+    return int(packkit.policy("industry.count_ceiling"))
+
+
+def named_activities() -> int:
+    """How many activities a request names before it names their span instead."""
+    return int(packkit.policy("industry.named_activities"))
 
 
 def _slug(value: str) -> str:
@@ -1369,66 +1355,62 @@ def _join(items: Sequence[str]) -> str:
     return ", ".join(items[:-1]) + f" and {items[-1]}"
 
 
-#: How many activities a request names before it names the span instead.
-#: Three reads as a list; twelve reads as a catalogue dump.
-NAMED_ACTIVITIES = 3
-
-
 def request_for(line: ProcessLine, rows: Sequence[ActivityBinding]) -> str:
     """The use case's request, as the person who owns the line would put it.
 
     Every noun is the rows' own: the activity names in catalogue order, the
     stream, the owning units, the countries and the systems of record. The
     verb is the line's capability, which is read off the same rows. A line
-    of more than `NAMED_ACTIVITIES` activities names its first and last and
+    of more than `named_activities()` activities names its first and last and
     counts the rest, so a twelve-activity line is one sentence and not a
     list. Nothing is invented and nothing is left as a placeholder: the
     template used to read `work admit to discharge for Billing (Corporate
-    Services; SG)`, which is a slug with spaces in it.
+    Services; SG)`, which is a slug with spaces in it. The sentences are the
+    prompts pack's `industry.request.*`, so an industry pack in force words
+    them in its own terms.
     """
     if not rows:
         raise ValueError(f"line {line.key!r} has no rows to write a request from")
     names = list(dict.fromkeys(row.activity for row in rows))
-    if len(names) <= NAMED_ACTIVITIES:
+    if len(names) <= named_activities():
         activities = _join(names)
     else:
-        activities = f"{names[0]} through {names[-1]} ({len(names)} activities)"
-    where = f"for {_join(list(line.owners))} in {_join(list(line.countries))}"
+        activities = packkit.text("industry.request.span", first=names[0], last=names[-1], count=len(names))
+    where = packkit.text("industry.request.where", owners=_join(list(line.owners)),
+                         countries=_join(list(line.countries)))
     systems = _join(list(line.systems))
     if line.capability == "search":
-        records = "records" if len(line.systems) == 1 else "record"
-        return (
-            f"Report on {activities} {where}: read what {systems} {records} for"
-            f" {line.stream_name} and say what it shows."
-        )
+        # The verb agrees with its subject: one system "records", two "record".
+        reads = "records" if len(line.systems) == 1 else "record"
+        return packkit.text("industry.request.search", activities=activities, where=where, systems=systems,
+                            reads=reads, stream=line.stream_name)
     if line.capability == "reconcile":
-        return (
-            f"Reconcile {activities} {where}: match the {line.stream_name} records"
-            f" in {systems} and list what does not agree."
-        )
-    return (
-        f"Move {activities} forward {where}: find the evidence {line.stream_name}"
-        f" leaves in {systems}, act on it, and send the result back to whoever asked."
-    )
+        return packkit.text("industry.request.reconcile", activities=activities, where=where, systems=systems,
+                            stream=line.stream_name)
+    return packkit.text("industry.request.act", activities=activities, where=where, systems=systems,
+                        stream=line.stream_name)
 
 
 def use_cases(
     derived: Programme,
     *,
-    count_ceiling: int = COUNT_CEILING,
+    count_ceiling: int | None = None,
     lines_selected: Iterable[str] | None = None,
 ) -> tuple[UseCase, ...]:
     """A Studio use case per supported line, with the line's count.
 
     Sources are the line's emulated `connector.entity` pairs; destinations are
     the emulators of the channels the line declares, and an email draft
-    always, because a request's deliverable goes back to whoever asked. The
+    always (the policy `industry.destination_channels`), because a request's
+    deliverable goes back to whoever asked. The
     construction `EvalSpec` requires each source constrained to the line's LOB,
     stream and owner, so a Foundry run cannot satisfy it with another line's
-    records. `count` is the line's situations, capped at `count_ceiling`.
-    The spec's capability and difficulty are the line's own
-    (`ProcessLine.capability`, `ProcessLine.difficulty`), read off its rows,
-    and its request is written from them (`request_for`).
+    records. `count` is the line's situations, capped at `count_ceiling`
+    (the policy in force when not given). The spec's capability and
+    difficulty are the line's own (`ProcessLine.capability`,
+    `ProcessLine.difficulty`), read off its rows, and its request is written
+    from them (`request_for`). Every sentence is the prompts pack's
+    (`industry.use_case.*`), so an industry pack in force words them.
     """
     from .enterprise_specs import (
         ContentAction,
@@ -1443,6 +1425,10 @@ def use_cases(
 
     table = emulated_systems()
     destinations_table = table["destinations"]
+    ceiling = count_ceiling if count_ceiling is not None else default_count_ceiling()
+    always = tuple(packkit.policy("industry.destination_channels"))
+    failures = tuple(packkit.policy("industry.failures"))
+    prompt_template = packkit.template("industry.use_case.prompt")
     wanted = set(lines_selected) if lines_selected is not None else None
     rows_by_line: dict[tuple[str, str], list[ActivityBinding]] = {}
     for row in _bound(derived.compiled):
@@ -1461,7 +1447,7 @@ def use_cases(
             for connector, entities in sorted(by_connector.items())
         )
         destinations: dict[str, DestinationRole] = {}
-        for channel in ("email", *line.channels):
+        for channel in (*always, *line.channels):
             mapped = destinations_table.get(channel)
             if mapped is None or mapped["connector"] in destinations:
                 continue
@@ -1480,10 +1466,8 @@ def use_cases(
             "delivery_work",
         )
         name = f"{_slug(line.lob)}-{_slug(line.stream)}"
-        purpose = (
-            f"work {line.stream_name.lower()} for {line.lob_title}"
-            f" ({', '.join(line.owners)}; {', '.join(line.countries)})"
-        )
+        purpose = packkit.text("industry.use_case.purpose", stream=line.stream_name.lower(), lob=line.lob_title,
+                               owners=", ".join(line.owners), countries=", ".join(line.countries))
         # By the line's capability, not by `line.writes`: every activity type
         # suits at least one write verb, so `writes` is never zero and the
         # read-only branch never ran. A search line summarises and extracts;
@@ -1501,15 +1485,16 @@ def use_cases(
             destinations=tuple(destinations.values()),
             content_actions=actions,
             audiences=(line.lob,),
-            prompt_template=_PROMPT_TEMPLATE,
+            prompt_template=prompt_template,
         )
         connectors = tuple(sorted(set(by_connector) | set(destinations)))
         scenario = ScenarioProfile(
             name=name,
             industry=derived.summary.industry,
-            company_description=(
-                f"{derived.summary.company}: a {derived.summary.operating_model} {derived.summary.industry}"
-                f" company in {', '.join(derived.summary.countries)}, as its process catalogue declares."
+            company_description=packkit.text(
+                "industry.use_case.company_description", company=derived.summary.company,
+                operating_model=derived.summary.operating_model, industry=derived.summary.industry,
+                countries=", ".join(derived.summary.countries),
             ),
             workflows=(name,),
             connectors=connectors,
@@ -1518,7 +1503,7 @@ def use_cases(
         scenario = scenario.model_copy(
             update={
                 "coverage": scenario.coverage.model_copy(
-                    update={"failures": ("none", "partial_write")}
+                    update={"failures": failures}
                 ),
             }
         )
@@ -1583,12 +1568,12 @@ def use_cases(
         out.append(
             UseCase(
                 id=name,
-                title=f"{line.lob_title}: {line.stream_name}",
+                title=packkit.text("industry.use_case.title", lob=line.lob_title, stream=line.stream_name),
                 objective=purpose[:1].upper() + purpose[1:],
                 owner=owner,
                 lob=line.lob,
                 activities=line.activities,
-                count=max(1, min(line.distinct_answers or line.situations, count_ceiling)),
+                count=max(1, min(line.distinct_answers or line.situations, ceiling)),
                 scenario=scenario,
                 construction=design,
             )
@@ -1601,11 +1586,11 @@ def use_cases(
 # ---------------------------------------------------------------------------
 
 
-#: The unit archetypes that carry no trading revenue. `ownership.materialize_owners`
-#: makes them real World entities without allocating any, so they are business
-#: units of the company and never revenue divisions of it.
-SUPPORT_ARCHETYPES: frozenset[str] = frozenset({"shared_service_centre", "group_function"})
-
+#: `SUPPORT_ARCHETYPES` (imported from `process_bindings.models`, the one
+#: table the compiler and ownership read too) are the unit archetypes that
+#: carry no trading revenue. `ownership.materialize_owners` makes them real
+#: World entities without allocating any, so they are business units of the
+#: company and never revenue divisions of it.
 
 def divisions(
     structure: CompanySpec, *, compiled: CompiledCatalogue | None = None
@@ -1735,9 +1720,9 @@ def locale_finding(
     )
 
 
-#: The unit archetypes that earn revenue; the function they bind most is the
-#: company's revenue function, the one the engine's commercial seats take.
-REVENUE_ARCHETYPES: frozenset[str] = frozenset({"product_line", "geography", "customer_segment", "channel", "legal_entity"})
+#: `REVENUE_ARCHETYPES` (from `process_bindings.models`) are the unit
+#: archetypes that earn revenue; the function they bind most is the company's
+#: revenue function, the one the engine's commercial seats take.
 
 #: The retail engine's commercial seats, which a company of another industry
 #: fills from its own revenue function: the spine keys and the per-unit post.
@@ -1801,9 +1786,11 @@ def role_table(structure: CompanySpec, *, catalogue: dict[str, Any] | None = Non
     compiled = compile_company(structure, catalogue=catalogue)
     function = functions.load().function(revenue_function(compiled, catalogue=catalogue))
     titles = {tier: function.title_for(tier) for tier in ("head", "manager", "professional")}
-    head = titles["head"].title if titles["head"] else f"Head of {function.title}"
-    manager = titles["manager"].title if titles["manager"] else f"{function.title} Manager"
-    professional = titles["professional"].title if titles["professional"] else f"{function.title} Analyst"
+    derived = {tier: packkit.text(f"industry.seat.{seat}", function=function.title)
+               for tier, seat in (("head", "head"), ("manager", "manager"), ("professional", "analyst"))}
+    head, manager, professional = (
+        found.title if found else derived[tier] for tier, found in titles.items()
+    )
     table = []
     for role in roles._shipped("retail"):
         if role.key in COMMERCIAL_ROLES:
@@ -1818,8 +1805,9 @@ def role_table(structure: CompanySpec, *, catalogue: dict[str, Any] | None = Non
     unit_roles = []
     for post in roles._shipped_unit_roles("retail"):
         if post.suffix == COMMERCIAL_UNIT_ROLE:
-            unit_roles.append({"suffix": post.suffix, "title": f"{manager}, {{unit}}", "function": function.title,
-                               "manager": post.manager, "manager_suffix": post.manager_suffix,
+            # `{unit}` stays in the title: the generator names the unit.
+            unit_roles.append({"suffix": post.suffix, "title": packkit.text("industry.seat.unit_post", manager=manager),
+                               "function": function.title, "manager": post.manager, "manager_suffix": post.manager_suffix,
                                "kinds": list(revenue_kinds)})
         else:
             unit_roles.append({"suffix": post.suffix, "title": post.title, "function": post.function,
@@ -1894,6 +1882,7 @@ def project(
         if line.lob in chosen and line.supported
     ]
     cases = derived.use_cases(lines_selected=lines_selected)
+    pool_size = int(packkit.policy("industry.project.pool_size"))
     return ProjectSpec(
         company=document,
         seed=seed,
@@ -1902,11 +1891,25 @@ def project(
         lobs=selected,
         use_cases=cases,
         acknowledged_unmet=tuple(resolution.unmet),
-        pool_size=24,
-        planning_budget=512,
-        max_batches=12,
-        max_per_case=6,
+        pool_size=pool_size,
+        planning_budget=int(packkit.policy("industry.project.planning_budget")),
+        max_batches=batch_budget(cases, pool_size),
+        max_per_case=int(packkit.policy("industry.project.max_per_case")),
     )
+
+
+def batch_budget(cases: Sequence[Any], pool_size: int) -> int:
+    """Dataset batches enough for every use case's count, and one more each.
+
+    A batch serves one use case and admits at most `pool_size` queries, so a
+    fixed budget smaller than the number of use cases leaves most of a
+    catalogue programme unattempted. The budget is the batches each count
+    needs at a full pool, plus one per use case for the pools a case cap or
+    a refusal thins; a compile stops as soon as every count is met, so an
+    unspent batch costs nothing.
+    """
+    needed = sum(-(-max(1, int(case.count)) // pool_size) for case in cases)
+    return max(1, min(10_000, needed + len(cases)))
 
 
 def rederive(spec: ProjectSpec, *, lobs: Sequence[str] | None = None) -> ProjectSpec:
@@ -1935,6 +1938,9 @@ def rederive(spec: ProjectSpec, *, lobs: Sequence[str] | None = None) -> Project
         "lobs": derived.lobs,
         "use_cases": derived.use_cases,
         "acknowledged_unmet": derived.acknowledged_unmet,
+        # A company with more lines needs more batches; one with fewer keeps
+        # the budget it had, as every other budget is kept.
+        "max_batches": max(spec.max_batches, derived.max_batches),
     })
 
 
@@ -1947,12 +1953,33 @@ def rederive(spec: ProjectSpec, *, lobs: Sequence[str] | None = None) -> Project
 #: off what comes back.
 RECORD_LOOKUP_SHAPE = "record_lookup"
 
-#: Calls a record request allows beyond one search per record kind: a
-#: second page or a re-read, not a retry storm.
-RECORD_LOOKUP_SLACK = 2
+#: Calls a record request allows beyond one search per record kind (a second
+#: page or a re-read, not a retry storm) are the policy
+#: `industry.record_lookup_slack`, read when the row is built.
 
 
-def evalrun_row(request: Request, records: Sequence[ConnectorRecord]) -> dict[str, Any]:
+@dataclass(frozen=True)
+class _RecordIndex:
+    """A record set indexed once for every request a programme asks of it.
+
+    Scanning the whole set per request made a large catalogue company's case
+    set quadratic (banking: requests x records). The index keeps each
+    population in record order, so every row reads exactly as a scan built it.
+    """
+
+    by_id: dict[str, ConnectorRecord]
+    populations: dict[tuple[Any, Any], list[ConnectorRecord]]
+
+    @classmethod
+    def of(cls, records: Sequence[ConnectorRecord]) -> _RecordIndex:
+        populations: dict[tuple[Any, Any], list[ConnectorRecord]] = {}
+        for record in records:
+            populations.setdefault((record.fields.get("binding_id"), record.fields.get("period")), []).append(record)
+        return cls({record.id: record for record in records}, populations)
+
+
+def evalrun_row(request: Request, records: Sequence[ConnectorRecord], *,
+                index: _RecordIndex | None = None) -> dict[str, Any]:
     """One record request as the row an `evalrun` case is read from.
 
     The plan is a search on the `sor` connector per record kind the binding
@@ -1966,13 +1993,14 @@ def evalrun_row(request: Request, records: Sequence[ConnectorRecord]) -> dict[st
     """
     if not request.expected_record_ids or request.period is None:
         raise ValueError(f"request {request.id} rests on the catalogue's declaration; it has no records to search")
-    by_id = {record.id: record for record in records}
-    cited = [by_id[record_id] for record_id in request.expected_record_ids if record_id in by_id]
+    # `index` is `records` indexed once (`evalrun_cases` passes it); a lone
+    # call indexes the set itself.
+    index = index if index is not None else _RecordIndex.of(records)
+    cited = [index.by_id[record_id] for record_id in request.expected_record_ids if record_id in index.by_id]
     if not cited:
         raise ValueError(f"request {request.id} cites records absent from the record set")
     binding_id = str(cited[0].fields["binding_id"])
-    population = [record for record in records
-                  if record.fields.get("binding_id") == binding_id and record.fields.get("period") == request.period]
+    population = index.populations.get((binding_id, request.period), [])
     nodes: list[dict[str, Any]] = []
     assertions: list[dict[str, Any]] = []
     for kind in sorted({str(record.fields["object"]) for record in population}):
@@ -1992,7 +2020,7 @@ def evalrun_row(request: Request, records: Sequence[ConnectorRecord]) -> dict[st
         "shape": RECORD_LOOKUP_SHAPE,
         "expected_dag": {"nodes": nodes, "edges": []},
         "assertions": assertions,
-        "max_calls": len(nodes) + RECORD_LOOKUP_SLACK,
+        "max_calls": len(nodes) + int(packkit.policy("industry.record_lookup_slack")),
         "expected_fact_ids": list(request.expected_fact_ids),
         "expected_record_ids": list(request.expected_record_ids),
         "expected_answer": request.expected_answer,
@@ -2019,11 +2047,12 @@ def evalrun_cases(derived: Programme, *, requests_selected: Iterable[str] | None
     from .evalrun.contract import AnswerOutcome, case_from_row
 
     wanted = set(requests_selected) if requests_selected is not None else None
+    index = _RecordIndex.of(derived.records)
     out = []
     for request in derived.requests:
         if not request.expected_record_ids or (wanted is not None and request.id not in wanted):
             continue
-        row = evalrun_row(request, derived.records)
+        row = evalrun_row(request, derived.records, index=index)
         out.append(case_from_row(
             row, query=request.brief, persona=request.asker,
             dimensions={"lob": request.lob, "stream": request.stream, "intent": request.intent,
@@ -2120,18 +2149,35 @@ def describe(industry: str) -> dict[str, Any]:
     }
 
 
+#: Module attributes that were constants before the policy pack held them,
+#: answered from the policy in force when read so code written against the
+#: constant keeps working and an industry pack still governs it.
+_POLICY_ALIASES: dict[str, str] = {
+    "COUNT_CEILING": "industry.count_ceiling",
+    "NAMED_ACTIVITIES": "industry.named_activities",
+    "RECORD_LOOKUP_SLACK": "industry.record_lookup_slack",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _POLICY_ALIASES:
+        return packkit.policy(_POLICY_ALIASES[name])
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
+    "aliases",
+    "default_count_ceiling",
+    "named_activities",
     "function_finding",
     "function_of",
     "function_words",
     "stream_of",
     "stream_words",
-    "COUNT_CEILING",
     "EMULATED_SYSTEMS",
     "EPOCH",
     "KIND_PREFIX",
     "PROGRAMME_SCHEMA",
-    "INDUSTRY_WORDS",
     "ROOT",
     "SEAT_BY_TYPE",
     "IndustryProgramme",
@@ -2140,7 +2186,6 @@ __all__ = [
     "Request",
     "CAPABILITY_ORDER",
     "CLOSING_STEP",
-    "NAMED_ACTIVITIES",
     "CONTROL_TYPES",
     "DIFFICULTY_ORDER",
     "READ_ONLY_TYPES",
@@ -2178,10 +2223,10 @@ __all__ = [
     "COMMERCIAL_UNIT_ROLE",
     "OPERATING_CATEGORIES",
     "REVENUE_ARCHETYPES",
+    "SUPPORT_ARCHETYPES",
     "revenue_function",
     "role_table",
     "RECORD_LOOKUP_SHAPE",
-    "RECORD_LOOKUP_SLACK",
     "evalrun_cases",
     "evalrun_row",
 ]

@@ -1,0 +1,15 @@
+{
+  "texts": {
+    "render.confluence.space": "{company} — Finance and Operations",
+    "render.confluence.stale_comment": "Superseded by later findings. Left as written.",
+    "render.jira.control.criterion.01": "A named owner is registered for the mapping in the service catalogue",
+    "render.jira.control.criterion.02": "Changes require an approving reviewer from the owning team",
+    "render.jira.control.criterion.03": "The manual override is persisted to the master or reverted with a documented decision",
+    "render.jira.control.summary": "Assign ownership of the hierarchy mapping and require a reviewer",
+    "render.jira.detection.criterion.01": "Validation runs before the valuation job and reports unmapped record count",
+    "render.jira.detection.criterion.02": "A non-zero count blocks the job and notifies the on-call engineer",
+    "render.jira.detection.summary": "Automate validation of the product hierarchy mapping",
+    "render.servicenow.incident.summary": "{service} failed - month-end close at risk",
+    "render.servicenow.problem.summary": "Product hierarchy mapping has no registered owner"
+  }
+}

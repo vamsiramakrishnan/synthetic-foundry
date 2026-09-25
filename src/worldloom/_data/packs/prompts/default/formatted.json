@@ -1,0 +1,8 @@
+{
+  "formatted": {
+    "enterprise.workflow.prompt": true,
+    "industry.use_case.prompt": true,
+    "studio.pilot.retail.prompt_template": true,
+    "synthesis.operational.prompt_template": true
+  }
+}

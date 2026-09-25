@@ -220,6 +220,15 @@ def definition(catalogue: dict[str, Any]) -> dict[str, Any]:
         "tools": tools,
         "aliases": {},
         "query_fields": QUERY_FIELDS,
+        # How the planner names it: every record kind above, keyed by the
+        # ident, readable, writable and annotatable. No record verbs, because
+        # the corpus's connector dataset declares no capability for it.
+        "catalog": {
+            "display_name": "System of record",
+            "content_actions": ["summarize", "extract", "compare", "reconcile"],
+            "stable_id": "ident",
+            "operations": ["search", "list", "read", "create", "update", "patch", "upsert", "comment"],
+        },
     }
 
 

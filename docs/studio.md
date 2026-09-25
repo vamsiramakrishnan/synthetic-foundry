@@ -212,6 +212,29 @@ It does not apply an interview response or a proposed native suite. Those
 change the evaluation contract and remain separate, reviewable revisions.
 A missing harness or unmet prerequisite remains visible in the report.
 
+`advance --max-steps N` walks the stage DAG (build, compile, evalrun, and the
+harness stages when `--harness-command` is given) without a human between
+stages, and stops at the first proposal, configuration gap or refusal. Its
+output adds `steps`, one entry per run it executed:
+
+```bash
+worldloom studio advance PROJECT_ID --max-steps 8 --workspace ./worldloom-workspace
+```
+
+A failed run is the named blocker. The report carries a `run_failed` finding
+with the run's error, and its `next_action` is that run with its `job_id`, ranked
+ahead of any other blocked stage. Once the cause is fixed, `advance` (or
+repeating the same `studio run`) resumes that run from its committed
+checkpoints instead of starting a duplicate. A run left `running` by a killed
+process holds no writer lock; `advance` and `run` mark it interrupted and
+resume it. A construction refusal names each cause once, with the use cases and
+requirements it holds for.
+
+Before compiling, the report also names a `batch_budget_short` finding when
+`max_batches` cannot reach the declared counts: a batch serves one use case with
+at most `pool_size` queries. A project derived with `worldloom industry project`
+sizes `max_batches` from its own use cases and counts.
+
 For native evaluations, first build the company's episodes, narrate the source
 evidence and select the accepted narration. Then request tasks from that
 source catalogue:
@@ -503,6 +526,60 @@ every line of business with a supported process line as a LOB, each of its
 lines as a use case whose `count` is the line's distinct answers, the company's
 limitations acknowledged where no engine builds its world. The interview
 request carries the programme's headline numbers under `programme`.
+
+## Industry packs
+
+An industry pack (`worldloom pack kinds`) holds the words, prompts and defaults an
+industry speaks in, and may name an example company and a runnable
+`operational` example (simulation program and sizing, the incident rule that
+opens a case, the use case's title and workflow). A workspace keeps its own
+packs in `WORKSPACE/packs`, searched before `~/.worldloom/packs` and the
+shipped ones, so a workspace pack shadows a shipped one of the same name.
+
+- **Upload.** The **Industry packs** page takes a pack envelope file, or
+  `POST /api/packs` with the envelope as the body. The pack is linted before it
+  is stored; a refusal is HTTP 400 with every finding under `findings`.
+  `GET /api/packs[?kind=industry]` lists what the workspace sees, with each
+  pack's origin (`workspace`, `user`, `env`, `builtin`), and
+  `GET /api/packs/industry/NAME` shows one resolved: merged body, chain,
+  digest and findings. From a terminal: `worldloom studio pack install FILE -w WS`
+  and `worldloom studio pack list -w WS`.
+- **Generate with harness.** The page's **Generate with harness** form (or
+  `POST /api/packs/author` with `{"kind", "message", "name"}`) queues a
+  workspace job that interviews the harness Studio was started with until it
+  proposes a pack the lint accepts, then stores it; a browser names what it
+  wants, never a command. The same loop runs from a terminal as
+  `worldloom studio pack author industry --message "..." --harness-command CMD -w WS`,
+  or through files with `worldloom studio pack interview request` and
+  `worldloom studio pack interview accept`, which stores an accepted pack in
+  the workspace and exits 3 with the findings on a refusal. A harness that
+  asks questions instead of proposing stops the loop; answer them in the next
+  message.
+- **Choose for a company.** The page's industry selector, `POST
+  /api/projects/ID/packs` with `{"revision", "packs": ["industry:NAME"]}`, or
+  `worldloom studio pack use PROJECT industry:NAME -w WS` records a reviewed
+  revision whose `packs` holds the pack pinned to its digest
+  (`industry:NAME@...`). Interviews, builds, compiles and runs of that
+  revision run under it, and it is part of the snapshot identity, so a
+  changed industry is a new snapshot; a project with no packs keeps the
+  identity it had before. A pinned pack whose content later changes is
+  refused rather than rebuilt silently: choose it again to re-pin.
+
+```bash
+worldloom studio pack interview request industry --message "A regional credit union" \
+  --name credit-union -o request.json -w ./worldloom-workspace
+# The harness answers request.json with reply.json.
+worldloom studio pack interview accept --request request.json --from reply.json -w ./worldloom-workspace
+worldloom studio pack use PROJECT_ID industry:credit-union -w ./worldloom-workspace
+```
+
+The onboarding examples come from the same data: the shipped operational
+examples (`studio.operational` in the policy pack), every visible industry
+pack with an `example` or an `operational` block (`GET /api/preset?engine=NAME`
+builds it, carrying the pack pinned), and the connected retail pilot. The
+`ProjectSpec` budget defaults remain field literals, because they are the JSON
+schema a harness reads; `studio.project.*` in the policy pack holds the same
+numbers for the presets, which an industry pack may resize.
 
 ## Connected retailer
 

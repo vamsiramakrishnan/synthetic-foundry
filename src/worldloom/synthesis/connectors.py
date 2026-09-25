@@ -256,7 +256,16 @@ def operational_projections(simulator: Simulator, rule: IncidentRule, *,
 
 
 def operational_profile(vertical: str) -> ScenarioProfile:
-    """Industry-specific source contracts; no IT changes smuggled into retail."""
+    """Industry-specific source contracts; no IT changes smuggled into retail.
+
+    Which workflow a vertical runs (its name, purpose, process, the connector
+    records it reads and the audience it writes for) is data:
+    ``synthesis.operational.workflows`` in the policy pack, which an industry
+    pack may override to add its own vertical. The request template and the
+    company description are prompts. The destination, content actions and
+    reply shape are the operational seam's own contract and stay here.
+    """
+    from .. import packkit
     from ..enterprise_specs import (
         ContentAction,
         DestinationRole,
@@ -266,38 +275,20 @@ def operational_profile(vertical: str) -> ScenarioProfile:
         WorkflowSpec,
     )
 
-    sources: tuple[SourceRole, ...]
-    if vertical == "retail":
-        name, purpose, process = (
-            "inventory_exception_review",
-            "store-product stock availability and replenishment exception review",
-            "retail_replenishment",
-        )
-        sources = (SourceRole(connector="jira", entities=("issue",)),
-                   SourceRole(connector="servicenow", entities=("incident",)),
-                   SourceRole(connector="email", entities=("thread",)))
-        audience = "retail_operations"
-    elif vertical == "banking":
-        name, purpose, process = (
-            "loan_arrears_review", "loan servicing, payment and arrears review", "loan_servicing",
-        )
-        sources = (SourceRole(connector="salesforce", entities=("case",)),
-                   SourceRole(connector="email", entities=("thread",)))
-        audience = "servicing_operations"
-    else:
+    declared = packkit.policy("synthesis.operational.workflows").get(vertical)
+    if not isinstance(declared, dict):
         raise SynthesisError("unknown_vertical", vertical)
+    name = str(declared["name"])
+    sources = tuple(SourceRole.model_validate(source) for source in declared["sources"])
     workflow = WorkflowSpec(
-        name=name, purpose=purpose, process=process, sources=sources,
+        name=name, purpose=declared["purpose"], process=declared["process"], sources=sources,
         destinations=(DestinationRole(connector="email", entities=("message",),
                                       operations=(Operation.DRAFT,), formats=("html",)),),
         content_actions=(ContentAction.RECONCILE, ContentAction.GENERATE),
-        audiences=(audience,),
-        prompt_template=("Prepare {purpose} for {company}. Use {sources}. "
-                         "Join case_id and use the attached observation histories. "
-                         "{action_instruction} {output_label} in {destination}, then "
-                         "{verification_instruction}.{failure_instruction}"),
+        audiences=(declared["audience"],),
+        prompt_template=packkit.template("synthesis.operational.prompt_template"),
     )
     return ScenarioProfile(name=name, industry=vertical,
-                           company_description=f"Declared {vertical} operational simulation.",
+                           company_description=packkit.text("synthesis.operational.company_description", vertical=vertical),
                            workflows=(name,), connectors=tuple(sorted({s.connector for s in sources} | {"email"})),
                            additional_workflows=(workflow,))
