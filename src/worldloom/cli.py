@@ -1087,6 +1087,7 @@ def demo(
 
 @app.command()
 def build(
+    ctx: typer.Context,
     seed: int = typer.Option(8128, "--seed", "-s", help="World seed. The same seed rebuilds the same world."),
     period: str = typer.Option("2026-03", "--period", "-p", help="Reporting period, YYYY-MM."),
     out: Path = typer.Option(None, "--out", "-o", help="Directory to write the corpus into."),
@@ -1490,6 +1491,21 @@ def build(
     from . import archetypes as archetype_registry
     from . import domains
     from .retail import MonthEndClose, RetailWorld
+
+    # A replayed corpus is rebuilt under the packs it recorded, from the record
+    # alone, before anything below is built: a build made with `--pack
+    # industry:bank` replays byte for byte with no `--pack` and no pack file,
+    # and the recipe comparison further down then sees the same `packs` key.
+    # Held for the whole command, so rendering speaks the same words.
+    replay_source = None
+    if replay is not None:
+        from .recipe import RecipeError, packs_in_force
+
+        replay_source = _load(str(replay))
+        try:
+            ctx.with_resource(packs_in_force(replay_source.recipe))
+        except RecipeError as exc:
+            _refuse("pack_rejected", f"[red]error:[/red] {escape(str(exc))}", corpus=str(replay))
 
     if eval_density not in _EVAL_DENSITY_LEVELS:
         _refuse(
@@ -2958,7 +2974,7 @@ def build(
         ledger = ()
         provider = DeterministicProvider()
         if replay is not None:
-            source = _load(str(replay))
+            source = replay_source if replay_source is not None else _load(str(replay))
             ledger = source._ledger
             if not ledger:
                 _refuse("no_ledger",

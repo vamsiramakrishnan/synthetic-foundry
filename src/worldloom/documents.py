@@ -23,7 +23,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Protocol
 
 from . import columns as columns_module
-from . import domains, roleseq, structure
+from . import domains, packkit, roleseq, structure
 from . import recipe as recipe_module
 from .ids import Minter
 from .models import (
@@ -745,6 +745,16 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     unit_keys = [unit.id for unit in units]
     columns = bound.columns()
 
+    # The sheet's words, in the industry's language (`packkit.text`): a bank's
+    # workbook has a Branch Performance tab where a retailer's has Store
+    # Performance. Titles, labels and notes only. Every structural decision
+    # below (which tab exists, which row sums which) reads table and row
+    # *keys*, never these strings, so a renamed tab is the same workbook. The
+    # shipped prompts hold exactly the literals this function used to, which
+    # is what keeps a build that names no pack byte-identical.
+    group_label = packkit.text("documents.workbook.group")
+    division_axis = packkit.text("documents.workbook.division_axis")
+
     categories_of = {
         unit.id: [c for c in world.categories if c.business_unit_id == unit.id]
         for unit in units
@@ -776,16 +786,17 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         for unit in units
     ]
     rows.append(
-        _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
+        _measure_row(index, key=company.id, label=group_label, subject=company.id, period=period,
                      columns=columns, children=unit_keys, emphasis=True, bound=bound)
     )
 
+    pnl_title = packkit.text("documents.workbook.pnl.title")
     pnl = Table(
         key="pnl",
-        title="Business Unit P&L",
+        title=pnl_title,
         columns=columns,
         rows=rows,
-        note="Group is the sum of the business units above. Variances recompute from actual less budget.",
+        note=packkit.text("documents.workbook.pnl.note"),
     )
     group_cells = rows[-1].cells
 
@@ -814,7 +825,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     sections = [
         ArtifactSection(heading="Summary", table=summary),
         ArtifactSection(
-            heading="Business Unit P&L",
+            heading=pnl_title,
             table=pnl,
             # Budget beside actual, by division. The chart plots the unit rows
             # only: including the group row would put a bar four times the height
@@ -823,17 +834,17 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             charts=[
                 Chart(
                     key="pnl_revenue",
-                    title="Revenue against budget by division",
+                    title=packkit.text("documents.workbook.pnl.revenue_chart"),
                     kind=ChartKind.COLUMN,
                     table="pnl",
                     series=["revenue_budget", "revenue_actual"],
                     rows=unit_keys,
-                    category_axis="Division",
+                    category_axis=division_axis,
                     value_axis=f"{company.currency} {company.currency_unit}",
                 ),
                 Chart(
                     key="pnl_margin",
-                    title="Gross margin against budget by division",
+                    title=packkit.text("documents.workbook.pnl.margin_chart"),
                     kind=ChartKind.COLUMN,
                     table="pnl",
                     # The title said "against budget" while the chart plotted one
@@ -841,7 +852,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                     # not exist, though the fact behind it did.
                     series=["gm_pct_budget", "gm_pct_actual"],
                     rows=unit_keys,
-                    category_axis="Division",
+                    category_axis=division_axis,
                     value_axis="Gross margin %",
                 ),
             ],
@@ -874,26 +885,23 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     if category_rows:
         covers_group = len(subtotal_keys) == len(units)
         category_rows.append(
-            _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
+            _measure_row(index, key=company.id, label=group_label, subject=company.id, period=period,
                          columns=columns, children=subtotal_keys, emphasis=True, bound=bound)
             if covers_group
-            else _sum_row(company.id, "Total, categorised units", columns=columns,
+            else _sum_row(company.id, packkit.text("documents.workbook.category.partial_total"), columns=columns,
                           children=subtotal_keys, source=category_rows, bound=bound)
         )
+        category_title = packkit.text("documents.workbook.category.title")
         category_table = Table(
             key="category",
-            title="Category P&L",
+            title=category_title,
             columns=columns,
             rows=category_rows,
-            note=(
-                "Categories sum to their business unit; the unit totals sum to group. "
-                "Margin varies by category, so the group rate moves with the mix as well "
-                "as with performance."
-            ),
+            note=packkit.text("documents.workbook.category.note"),
         )
         sections.append(
             ArtifactSection(
-                heading="Category P&L",
+                heading=category_title,
                 table=category_table,
                 # Horizontal bars: category names are long, and there are enough
                 # of them that a column chart would stack its labels vertically
@@ -901,14 +909,14 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 charts=[
                     Chart(
                         key="category_variance",
-                        title="Gross profit against budget by category",
+                        title=packkit.text("documents.workbook.category.chart"),
                         kind=ChartKind.BAR,
                         table="category",
                         series=["gp_variance"],
                         rows=[c.id for unit in units for c in categories_of[unit.id]],
-                        category_axis="Category",
+                        category_axis=packkit.text("documents.workbook.category.axis"),
                         value_axis=f"{company.currency} {company.currency_unit}",
-                        note="Bars left of zero are categories behind plan.",
+                        note=packkit.text("documents.workbook.category.chart_note"),
                     )
                 ],
             )
@@ -952,25 +960,22 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         blank = {"region": Cell(value=""), "format": Cell(value="")}
         covers_group = len(store_subtotals) == len(units)
         store_rows.append(
-            _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
+            _measure_row(index, key=company.id, label=group_label, subject=company.id, period=period,
                          columns=store_money, children=store_subtotals, emphasis=True,
                          extra=blank, bound=bound)
             if covers_group
-            else _sum_row(company.id, "Total, trading stores", columns=store_money,
+            else _sum_row(company.id, packkit.text("documents.workbook.stores.partial_total"), columns=store_money,
                           children=store_subtotals, source=store_rows, extra=blank, bound=bound)
         )
+        store_title = packkit.text("documents.workbook.stores.title")
         store_table = Table(
             key="stores",
-            title="Store Performance",
+            title=store_title,
             columns=store_columns,
             rows=store_rows,
-            note=(
-                "Stores decompose the same unit revenue the categories do, so both sheets "
-                "reach the same unit total by different routes. Distribution centres hold "
-                "stock and book no revenue, so they are not listed here."
-            ),
+            note=packkit.text("documents.workbook.stores.note"),
         )
-        sections.append(ArtifactSection(heading="Store Performance", table=store_table))
+        sections.append(ArtifactSection(heading=store_title, table=store_table))
 
     # -- Corporate cost base and the distribution network ------------------
     # Two tabs that exist because `validate.reachability` measured this
@@ -1079,7 +1084,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 ],
                 rows=[
                     *[recharge_row(u.id, u.name, u.id) for u in recharged],
-                    recharge_row(company.id, "Group", company.id,
+                    recharge_row(company.id, group_label, company.id,
                                  children=recharge_keys, emphasis=True),
                 ],
                 note=(
@@ -1128,17 +1133,18 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
 
     if network_rows:
         network_rows.append(network_row(
-            company.id, "Distribution network", company.id,
+            company.id, packkit.text("documents.workbook.distribution.total"), company.id,
             children=network_subtotals, emphasis=True))
+        network_title = packkit.text("documents.workbook.distribution.title")
         sections.append(ArtifactSection(
-            heading="Distribution Network",
+            heading=network_title,
             table=Table(
                 key="distribution",
-                title="Distribution Network",
+                title=network_title,
                 columns=[
                     Column(key="region", label="Region"),
                     Column(key="format", label="Format"),
-                    Column(key="cartons", label="Cartons dispatched",
+                    Column(key="cartons", label=packkit.text("documents.workbook.distribution.cartons"),
                            number_format=MONEY_FORMAT),
                     Column(key="cost_to_serve", label="Cost to serve",
                            number_format=MONEY_FORMAT),
@@ -1146,13 +1152,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                            number_format=RATE_FORMAT),
                 ],
                 rows=network_rows,
-                note=(
-                    "The sites the Store Performance sheet leaves out, and the "
-                    "measures they own. A distribution centre holds stock and books "
-                    "no turnover, so it has no line on a store P&L and a volume and "
-                    "a cost of its own here. The network total is the sum of the "
-                    "divisions that have one, not of every division."
-                ),
+                note=packkit.text("documents.workbook.distribution.note"),
             ),
         ))
 
@@ -1179,16 +1179,17 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # would give a pack that re-points its columns three trend tabs of empty
     # cells, which is the defect recorded above arriving by a second route.
     #
-    # The *headings* stay the engine's English. They title a tab rather than a
-    # column, a pack has no field for them, and a tab called "Written premium
-    # actual Trend" is not what the missing field would have said anyway.
+    # The *headings* are not derived from the column labels: they title a tab
+    # rather than a column, and a tab called "Written premium actual Trend" is
+    # not what anyone would call it. They are prompts keys instead
+    # (`documents.workbook.trend.*`), which an industry pack overrides by name.
     formats = {column.key: column.number_format for column in columns}
     _TRENDS: tuple[tuple[str, str, str, str], ...] = tuple(
-        (table_key, heading, measures[column_key], formats[column_key])
-        for table_key, heading, column_key in (
-            ("trend", "Revenue Trend", "revenue_actual"),
-            ("trend_gp", "Gross Profit Trend", "gp_actual"),
-            ("trend_margin", "Margin Trend", "gm_pct_actual"),
+        (table_key, packkit.text(f"documents.workbook.trend.{word}"), measures[column_key], formats[column_key])
+        for table_key, word, column_key in (
+            ("trend", "revenue", "revenue_actual"),
+            ("trend_gp", "gross_profit", "gp_actual"),
+            ("trend_margin", "margin", "gm_pct_actual"),
         )
     )
     if len(periods) > 1:
@@ -1236,7 +1237,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                     trend_rows.append(trend_row(kind, unit.id, unit.name, unit.id))
                     trend_subtotals.append(unit.id)
             trend_rows.append(
-                trend_row(kind, company.id, "Group", company.id,
+                trend_row(kind, company.id, group_label, company.id,
                           children=trend_subtotals, emphasis=True)
             )
             # One chart, on revenue. Three line charts of the same rows would
@@ -1245,7 +1246,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             charts = [
                 Chart(
                     key="trend_units",
-                    title="Revenue by division, by month",
+                    title=packkit.text("documents.workbook.trend.chart"),
                     kind=ChartKind.LINE,
                     table="trend",
                     series=list(periods),
@@ -1255,7 +1256,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                     # is twelve lines of a single point each, and it renders
                     # without complaint.
                     by_row=True,
-                    category_axis="Division",
+                    category_axis=division_axis,
                     value_axis=f"{company.currency} {company.currency_unit}",
                     note="A line chart is only honest where the axis is ordered. It is here.",
                 )
@@ -1463,7 +1464,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     return ArtifactIR(
         id=intent.id,
         intent_id=intent.id,
-        title=f"{company.name} — Month-End Model",
+        title=packkit.text("documents.workbook.title", company=company.name),
         subtitle=f"{period} · {company.currency} {company.currency_unit} · final",
         sections=sections,
         metadata={
@@ -2013,6 +2014,30 @@ def _in_scope(fact: CanonicalFact, scope: str, *, company_id: str, unit_ids: set
 UNIT_NAME_VARIABLE = "{{var:unit.name}}"
 
 
+def spoken_heading(heading: str) -> str:
+    """*heading* as the industry in force says it, or unchanged.
+
+    An outline's headings are authored once, in the engine's English, and read
+    raw by more than this module (``adjacency``, ``doctypes``' shipped export,
+    ``vendi``), so the words cannot live in ``_OUTLINES`` itself. A heading
+    that names an industry's noun instead has a prompts key,
+    ``documents.outline.heading.<slug>`` ("By business unit" →
+    ``…by_business_unit``), whose shipped text is the heading: an industry pack
+    that says "line of business" overrides the term or the key, and a heading
+    with no key is spoken as authored.
+
+    Only the displayed heading moves. Structure keeps reading the authored one:
+    the semantic role and the "root cause" section a flow rides are decided on
+    it (see ``outline``), so a colloquialised heading cannot change what a
+    section is for.
+    """
+    slug = "".join(ch if ch.isalnum() else "_" for ch in heading.strip().lower()).strip("_")
+    try:
+        return packkit.text(f"documents.outline.heading.{slug}")
+    except KeyError:
+        return heading
+
+
 def _repeated_over_units(
     world: World, step: SectionPlan, facts: Sequence[CanonicalFact],
 ) -> list[ArtifactSection]:
@@ -2039,11 +2064,13 @@ def _repeated_over_units(
         ]
         if not assigned:
             continue
-        heading, _ = templating.substitute(step.heading.replace(UNIT_NAME_VARIABLE, unit.name), world)
+        authored, _ = templating.substitute(step.heading.replace(UNIT_NAME_VARIABLE, unit.name), world)
+        heading, _ = templating.substitute(
+            spoken_heading(step.heading).replace(UNIT_NAME_VARIABLE, unit.name), world)
         purpose, _ = templating.substitute(step.purpose.replace(UNIT_NAME_VARIABLE, unit.name), world)
         out.append(ArtifactSection(
             heading=heading, body=None, fact_ids=assigned, purpose=purpose,
-            semantic_role=infer_semantic_role(heading, step.kinds),
+            semantic_role=infer_semantic_role(authored, step.kinds),
         ))
     return out
 
@@ -2622,6 +2649,9 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     persona = world.personas.get(author.persona_id) if author.persona_id else None
 
     sections: list[ArtifactSection] = _planned_sections(world, intent, facts)
+    #: The authored heading of each section this loop adds, by index: what
+    #: structure is matched on when the displayed one is an industry's words.
+    authored_headings: dict[int, str] = {}
     for step in plan if not sections else ():
         if step.repeat == "unit":
             sections.extend(_repeated_over_units(world, step, facts))
@@ -2644,10 +2674,12 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             # substitution), and unresolved variables are left as [missing var:NAME].
             resolved_heading, _ = templating.substitute(step.heading, world)
             resolved_purpose, _ = templating.substitute(step.purpose, world)
+            displayed_heading, _ = templating.substitute(spoken_heading(step.heading), world)
 
+            authored_headings[len(sections)] = resolved_heading
             sections.append(
                 ArtifactSection(
-                    heading=resolved_heading,
+                    heading=displayed_heading,
                     body=None,
                     fact_ids=assigned,
                     purpose=resolved_purpose,
@@ -2670,7 +2702,8 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             index for index, section in enumerate(sections)
             if section.semantic_role == "explanation"
         ]
-        named = [i for i in explanations if "root cause" in sections[i].heading.lower()]
+        named = [i for i in explanations
+                 if "root cause" in authored_headings.get(i, sections[i].heading).lower()]
         for index in (named or explanations)[:1]:
             sections[index] = sections[index].model_copy(update={"flow": flow})
 
@@ -2999,10 +3032,12 @@ def _divisional_summary(
     ]
 
     return ArtifactSection(
+        # The heading stays literal: `doctypes.RESERVED_HEADINGS` refuses an
+        # authored section by this exact string, so it is structural here.
         heading="Divisional summary",
         table=Table(
             key="divisions",
-            title=f"By division · {period}",
+            title=packkit.text("documents.divisional.title", period=period),
             columns=columns,
             rows=rows,
             note="The same figures the prose cites, and the workbook computes.",
@@ -3010,12 +3045,12 @@ def _divisional_summary(
         charts=[
             Chart(
                 key="division_variance",
-                title="Revenue against plan by division",
+                title=packkit.text("documents.divisional.chart"),
                 kind=ChartKind.BAR,
                 table="divisions",
                 series=["revenue_variance"],
                 rows=[unit.id for unit in units],
-                category_axis="Division",
+                category_axis=packkit.text("documents.workbook.division_axis"),
                 value_axis=f"{world.company.currency} {world.company.currency_unit}",
             )
         ],
