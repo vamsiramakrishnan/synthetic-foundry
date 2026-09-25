@@ -9,7 +9,9 @@ instructions are compared with what the code produced before any of it moved
 from __future__ import annotations
 
 import json
+import os
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 from threading import Thread
@@ -191,7 +193,11 @@ def _harness(tmp_path: Path) -> str:
         "request = json.load(sys.stdin)\n"
         f"proposal = json.loads({body!r})\n"
         "print(json.dumps({'request_id': request['request_id'], 'message': 'Proposed.', 'proposal': proposal}))\n")
-    return shlex.join([sys.executable, str(script)])
+    # Windows hands the string to CreateProcess whole, whose quoting is
+    # `list2cmdline`'s; `shlex` quoting there is how `test_exec_seam._cmd`
+    # once failed the Windows leg too.
+    argv = [sys.executable, str(script)]
+    return subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
 
 
 def test_the_pack_interview_is_a_structured_no_tools_seam() -> None:
