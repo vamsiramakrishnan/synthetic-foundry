@@ -16,6 +16,7 @@ reconciliation constraints everything else is checked against.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
@@ -1544,6 +1545,25 @@ class SectionPlan:
     normal" made concrete.
     """
 
+    key: str = ""
+    """What this section *is*, stated once so that nothing structural reads words.
+
+    Empty, the default, derives it from the authored heading (``section_key``:
+    "Root cause" is ``root_cause``), which is what every decision below used to
+    read directly. Set it only to keep a key stable while rewording the
+    engine's own heading. The key names the heading's prompt
+    (``documents.outline.heading.<key>``, see ``spoken_heading``), so a pack
+    may say a section any way it likes and the section stays what it was:
+    its semantic role, whether a causal flow rides it, and whether it collides
+    with a reserved section are all decided on the key and the authored
+    heading, never on the displayed one.
+    """
+
+    @property
+    def structural_key(self) -> str:
+        """The structural key: ``key`` when stated, else derived from ``heading``."""
+        return self.key or section_key(self.heading)
+
 
 _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
     "cfo_variance_memo": (
@@ -2014,26 +2034,43 @@ def _in_scope(fact: CanonicalFact, scope: str, *, company_id: str, unit_ids: set
 UNIT_NAME_VARIABLE = "{{var:unit.name}}"
 
 
-def spoken_heading(heading: str) -> str:
-    """*heading* as the industry in force says it, or unchanged.
+def section_key(heading: str) -> str:
+    """The structural key an authored *heading* derives: "Root cause" → ``root_cause``.
+
+    Lower case, every run of non-alphanumerics one underscore, trimmed. The
+    default for ``SectionPlan.key``, and the suffix of the heading's prompt.
+    """
+    slug = "".join(ch if ch.isalnum() else "_" for ch in heading.strip().lower())
+    return re.sub(r"_+", "_", slug).strip("_")
+
+
+#: The section ``_divisional_summary`` appends, by its authored heading. A
+#: constant because it is structural twice over: ``doctypes.RESERVED_HEADINGS``
+#: refuses an authored section by it, and its key names the prompt its
+#: displayed heading is read from (``spoken_heading``).
+DIVISIONAL_SUMMARY = "Divisional summary"
+
+
+def spoken_heading(heading: str, key: str | None = None) -> str:
+    """*heading* as the packs in force say it, or unchanged.
 
     An outline's headings are authored once, in the engine's English, and read
     raw by more than this module (``adjacency``, ``doctypes``' shipped export,
-    ``vendi``), so the words cannot live in ``_OUTLINES`` itself. A heading
-    that names an industry's noun instead has a prompts key,
-    ``documents.outline.heading.<slug>`` ("By business unit" →
-    ``…by_business_unit``), whose shipped text is the heading: an industry pack
-    that says "line of business" overrides the term or the key, and a heading
-    with no key is spoken as authored.
+    ``vendi``), so the words cannot live in ``_OUTLINES`` itself. Each shipped
+    heading has a prompts key instead, ``documents.outline.heading.<key>``
+    (*key* defaults to ``section_key(heading)``: "By business unit" →
+    ``…by_business_unit``), whose shipped text is the heading: a pack
+    overrides the key (or, where the text names a noun, the term) and says the
+    section its own way. A heading with no key (a pack's own document type) is
+    spoken as authored.
 
-    Only the displayed heading moves. Structure keeps reading the authored one:
-    the semantic role and the "root cause" section a flow rides are decided on
-    it (see ``outline``), so a colloquialised heading cannot change what a
-    section is for.
+    Only the displayed heading moves. Structure keeps reading the key and the
+    authored heading: the semantic role and the "root cause" section a flow
+    rides are decided on them (see ``outline``), so a colloquialised heading
+    cannot change what a section is for.
     """
-    slug = "".join(ch if ch.isalnum() else "_" for ch in heading.strip().lower()).strip("_")
     try:
-        return packkit.text(f"documents.outline.heading.{slug}")
+        return packkit.text(f"documents.outline.heading.{key or section_key(heading)}")
     except KeyError:
         return heading
 
@@ -2066,7 +2103,7 @@ def _repeated_over_units(
             continue
         authored, _ = templating.substitute(step.heading.replace(UNIT_NAME_VARIABLE, unit.name), world)
         heading, _ = templating.substitute(
-            spoken_heading(step.heading).replace(UNIT_NAME_VARIABLE, unit.name), world)
+            spoken_heading(step.heading, step.structural_key).replace(UNIT_NAME_VARIABLE, unit.name), world)
         purpose, _ = templating.substitute(step.purpose.replace(UNIT_NAME_VARIABLE, unit.name), world)
         out.append(ArtifactSection(
             heading=heading, body=None, fact_ids=assigned, purpose=purpose,
@@ -2649,12 +2686,14 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     persona = world.personas.get(author.persona_id) if author.persona_id else None
 
     sections: list[ArtifactSection] = _planned_sections(world, intent, facts)
-    #: The authored heading of each section this loop adds, by index: what
-    #: structure is matched on when the displayed one is an industry's words.
-    authored_headings: dict[int, str] = {}
+    #: The structural key of each section this loop adds, by index: what
+    #: structure is matched on, since the displayed heading is a pack's words.
+    section_keys: dict[int, str] = {}
     for step in plan if not sections else ():
         if step.repeat == "unit":
-            sections.extend(_repeated_over_units(world, step, facts))
+            repeated = _repeated_over_units(world, step, facts)
+            section_keys.update({len(sections) + i: step.structural_key for i in range(len(repeated))})
+            sections.extend(repeated)
             continue
         assigned = _assigned(facts, step, company_id=world.company.id, unit_ids=unit_ids)
         # A section with nothing to say does not belong in the document. The plan
@@ -2674,9 +2713,10 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             # substitution), and unresolved variables are left as [missing var:NAME].
             resolved_heading, _ = templating.substitute(step.heading, world)
             resolved_purpose, _ = templating.substitute(step.purpose, world)
-            displayed_heading, _ = templating.substitute(spoken_heading(step.heading), world)
+            displayed_heading, _ = templating.substitute(
+                spoken_heading(step.heading, step.structural_key), world)
 
-            authored_headings[len(sections)] = resolved_heading
+            section_keys[len(sections)] = step.structural_key
             sections.append(
                 ArtifactSection(
                     heading=displayed_heading,
@@ -2702,8 +2742,12 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             index for index, section in enumerate(sections)
             if section.semantic_role == "explanation"
         ]
+        # By key, never by the words shown: a pack that calls the section
+        # "Why it broke" must not move the diagram off it. A section this
+        # function did not outline (a planned one, `_planned_sections`) is
+        # headed as its plan authored it, so its key derives from that.
         named = [i for i in explanations
-                 if "root cause" in authored_headings.get(i, sections[i].heading).lower()]
+                 if "root_cause" in (section_keys.get(i) or section_key(sections[i].heading))]
         for index in (named or explanations)[:1]:
             sections[index] = sections[index].model_copy(update={"flow": flow})
 
@@ -3031,10 +3075,20 @@ def _divisional_summary(
         for unit in units
     ]
 
+    # Spoken through its prompt like an outline heading, so a pack may call it
+    # "Branch summary". What it *is* stays the key: `doctypes.RESERVED_HEADINGS`
+    # refuses an authored section by it, and a renamed one carries its role
+    # explicitly, because a composer that finds no role infers one from the
+    # displayed words (`compiler.compose`) and "Branch results" reads as
+    # evidence where "Divisional summary" read as a summary. Unset when the
+    # words are the engine's, which is every default build's exact IR.
+    heading = spoken_heading(DIVISIONAL_SUMMARY)
+    from .compiler.compose import infer_semantic_role
+
+    role = "" if heading == DIVISIONAL_SUMMARY else infer_semantic_role(DIVISIONAL_SUMMARY, ())
     return ArtifactSection(
-        # The heading stays literal: `doctypes.RESERVED_HEADINGS` refuses an
-        # authored section by this exact string, so it is structural here.
-        heading="Divisional summary",
+        heading=heading,
+        semantic_role=role,
         table=Table(
             key="divisions",
             title=packkit.text("documents.divisional.title", period=period),

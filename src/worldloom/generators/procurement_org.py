@@ -53,7 +53,14 @@ from ..models import (
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
-from ..roles import UnitRole, parse_unit_role
+from ..roles import (
+    RoleShape,
+    TitledTable,
+    UnitRole,
+    parse_unit_role,
+    titled,
+    titled_unit_roles,
+)
 from . import hierarchy, names
 from .org_builder import (
     accountability_facts,
@@ -118,17 +125,16 @@ STRICT_ACCESS: dict[str, str] = {
 #: and ``accounts_payable_lead`` posts the invoice under the CFO. No two of
 #: the three share a manager below the CEO, which is what the segregation-of-
 #: duties check in ``worldloom.procurement`` actually rests on.
-_ROLES: tuple[tuple[str, str, str, str | None], ...] = (
-    ("ceo", "Group Chief Executive Officer", "Executive", None),
-    ("cfo", "Group Chief Financial Officer", "Finance", "ceo"),
-    ("chief_procurement", "Chief Procurement Officer", "Procurement", "ceo"),  # not under the CFO
-    ("operations_director", "Group Operations Director", "Operations", "ceo"),
-    ("financial_controller", "Group Financial Controller", "Finance", "cfo"),
-    ("accounts_payable_lead", "Accounts Payable Lead", "Finance", "financial_controller"),
-    ("category_manager", "Category Manager, Subcontract and Plant", "Procurement",
-     "chief_procurement"),
-    ("site_receiving_lead", "Site Receiving Lead", "Operations", "operations_director"),
-    ("audit", "Chief Internal Auditor", "Audit", "ceo"),
+_ROLE_SHAPE: tuple[RoleShape, ...] = (
+    ("ceo", "Executive", None),
+    ("cfo", "Finance", "ceo"),
+    ("chief_procurement", "Procurement", "ceo"),  # not under the CFO
+    ("operations_director", "Operations", "ceo"),
+    ("financial_controller", "Finance", "cfo"),
+    ("accounts_payable_lead", "Finance", "financial_controller"),
+    ("category_manager", "Procurement", "chief_procurement"),
+    ("site_receiving_lead", "Operations", "operations_director"),
+    ("audit", "Audit", "ceo"),
 )
 
 _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, ...]], ...] = (
@@ -171,9 +177,23 @@ _ROLE_PERSONA = {
 #: The rows ``generate`` mints per business unit — MDs only, as in banking and
 #: insurance. Shares ``roles.UnitRole``/``unit_role_key`` with the siblings so
 #: the key format exists in exactly one place.
-_UNIT_ROLES: tuple[UnitRole, ...] = (
-    UnitRole("_md", "Managing Director, {unit}", "Executive", manager="ceo"),
+_UNIT_ROLE_SHAPE: tuple[UnitRole, ...] = (
+    UnitRole("_md", "", "Executive", manager="ceo"),
 )
+
+#: The engine whose prompts title the rows above: ``roles.title.procurement.<key>``
+#: and ``roles.title.procurement.per_unit.<suffix>``, whose shipped texts are the
+#: literals these tables held (``roles.titled``).
+_ENGINE = "procurement"
+
+#: The engine's tables titled by the packs in force, each time they are
+#: read (``roles.TitledTable``): what ``_ROLES`` and ``_UNIT_ROLES`` have
+#: always been called, so every reader keeps working and gets pack titles.
+_ROLES: TitledTable[tuple[str, str, str, str | None]] = TitledTable(
+    lambda: titled(_ENGINE, _ROLE_SHAPE))
+_UNIT_ROLES: TitledTable[UnitRole] = TitledTable(
+    lambda: titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE))
+
 
 #: The per-unit roles ``generate`` appends, by suffix — unit MDs only, as in
 #: banking and insurance.
@@ -281,10 +301,12 @@ def generate(
     units = archetype.units
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
-    role_table = list(_ROLES if role_table is None else role_table)
-    unit_role_specs = _UNIT_ROLES if unit_roles is None else tuple(unit_roles)
+    role_table = list(titled(_ENGINE, _ROLE_SHAPE) if role_table is None else role_table)
+    unit_role_specs = (
+        titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE) if unit_roles is None else tuple(unit_roles)
+    )
     supplied_suffixes = {spec.suffix for spec in unit_role_specs}
-    missing = [spec.suffix for spec in _UNIT_ROLES if spec.suffix not in supplied_suffixes]
+    missing = [spec.suffix for spec in _UNIT_ROLE_SHAPE if spec.suffix not in supplied_suffixes]
     if missing:
         raise ValueError(
             f"unit_roles must mint the procurement engine's own per-unit posts —"
@@ -326,7 +348,7 @@ def generate(
         reporting line would have put Operations with the CEO and said nothing.
         """
         business_unit = None
-        parsed = parse_unit_role(role, tuple(spec.suffix for spec in _UNIT_ROLES))
+        parsed = parse_unit_role(role, tuple(spec.suffix for spec in _UNIT_ROLE_SHAPE))
         if parsed is not None:
             business_unit = unit_ids[parsed[0]]
         cost_centre = (

@@ -50,7 +50,14 @@ from ..models import (
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
-from ..roles import UnitRole, parse_unit_role
+from ..roles import (
+    RoleShape,
+    TitledTable,
+    UnitRole,
+    parse_unit_role,
+    titled,
+    titled_unit_roles,
+)
 from . import hierarchy, names
 from .org_builder import (
     accountability_facts,
@@ -106,25 +113,25 @@ STRICT_ACCESS: dict[str, str] = {
 #: The people a capital-return episode needs, in reporting order. The first
 #: line prepares and files, the second line challenges, the third line rules —
 #: the table is the topology the episode exercises, so the lines are labelled.
-_ROLES: tuple[tuple[str, str, str, str | None], ...] = (
-    ("ceo", "Group Chief Executive Officer", "Executive", None),
-    ("cfo", "Group Chief Financial Officer", "Finance", "ceo"),          # 1st line
-    ("cro", "Chief Risk Officer", "Risk", "ceo"),                        # 2nd line — NOT under the CFO
-    ("cio", "Chief Information Officer", "Technology", "ceo"),
-    ("audit", "Chief Internal Auditor", "Audit", "ceo"),                 # 3rd line, administratively
-    ("controller", "Group Financial Controller", "Finance", "cfo"),
-    ("reg_reporting_manager", "Regulatory Reporting Manager", "Finance", "cfo"),
-    ("treasurer", "Group Treasurer", "Treasury", "cfo"),
-    ("reg_analyst", "Regulatory Reporting Analyst", "Finance", "reg_reporting_manager"),
-    ("liquidity_analyst", "Liquidity Reporting Analyst", "Treasury", "treasurer"),
-    ("prudential_risk_head", "Head of Prudential Risk", "Risk", "cro"),
-    ("credit_risk_lead", "Head of Credit Risk Analytics", "Risk", "cro"),
-    ("audit_manager", "Internal Audit Manager", "Audit", "audit"),
-    ("platform_lead", "Head of Risk Data Platform", "Technology", "cio"),
-    ("platform_senior", "Senior Risk Platform Engineer", "Technology", "platform_lead"),
-    ("svc_lead", "Head of Service Operations", "ServiceOperations", "cio"),
-    ("svc_desk", "Service Desk Analyst", "ServiceOperations", "svc_lead"),
-    ("svc_incident", "Major Incident Manager", "ServiceOperations", "svc_lead"),
+_ROLE_SHAPE: tuple[RoleShape, ...] = (
+    ("ceo", "Executive", None),
+    ("cfo", "Finance", "ceo"),  # 1st line
+    ("cro", "Risk", "ceo"),  # 2nd line — NOT under the CFO
+    ("cio", "Technology", "ceo"),
+    ("audit", "Audit", "ceo"),  # 3rd line, administratively
+    ("controller", "Finance", "cfo"),
+    ("reg_reporting_manager", "Finance", "cfo"),
+    ("treasurer", "Treasury", "cfo"),
+    ("reg_analyst", "Finance", "reg_reporting_manager"),
+    ("liquidity_analyst", "Treasury", "treasurer"),
+    ("prudential_risk_head", "Risk", "cro"),
+    ("credit_risk_lead", "Risk", "cro"),
+    ("audit_manager", "Audit", "audit"),
+    ("platform_lead", "Technology", "cio"),
+    ("platform_senior", "Technology", "platform_lead"),
+    ("svc_lead", "ServiceOperations", "cio"),
+    ("svc_desk", "ServiceOperations", "svc_lead"),
+    ("svc_incident", "ServiceOperations", "svc_lead"),
 )
 
 _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, ...]], ...] = (
@@ -177,9 +184,23 @@ _ROLE_PERSONA = {
 #: finance and buying live in the role table proper. Shares
 #: ``roles.UnitRole``/``unit_role_key`` with the siblings so the key format
 #: exists in exactly one place.
-_UNIT_ROLES: tuple[UnitRole, ...] = (
-    UnitRole("_md", "Managing Director, {unit}", "Executive", manager="ceo"),
+_UNIT_ROLE_SHAPE: tuple[UnitRole, ...] = (
+    UnitRole("_md", "", "Executive", manager="ceo"),
 )
+
+#: The engine whose prompts title the rows above: ``roles.title.banking.<key>``
+#: and ``roles.title.banking.per_unit.<suffix>``, whose shipped texts are the
+#: literals these tables held (``roles.titled``).
+_ENGINE = "banking"
+
+#: The engine's tables titled by the packs in force, each time they are
+#: read (``roles.TitledTable``): what ``_ROLES`` and ``_UNIT_ROLES`` have
+#: always been called, so every reader keeps working and gets pack titles.
+_ROLES: TitledTable[tuple[str, str, str, str | None]] = TitledTable(
+    lambda: titled(_ENGINE, _ROLE_SHAPE))
+_UNIT_ROLES: TitledTable[UnitRole] = TitledTable(
+    lambda: titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE))
+
 
 #: The per-unit roles ``generate`` appends, by suffix. Banking mints only unit
 #: MDs; naming the suffix keeps them from depending on the catch-all below,
@@ -314,10 +335,12 @@ def generate(
     units = archetype.units
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
-    role_table = list(_ROLES if role_table is None else role_table)
-    unit_role_specs = _UNIT_ROLES if unit_roles is None else tuple(unit_roles)
+    role_table = list(titled(_ENGINE, _ROLE_SHAPE) if role_table is None else role_table)
+    unit_role_specs = (
+        titled_unit_roles(_ENGINE, _UNIT_ROLE_SHAPE) if unit_roles is None else tuple(unit_roles)
+    )
     supplied_suffixes = {spec.suffix for spec in unit_role_specs}
-    missing = [spec.suffix for spec in _UNIT_ROLES if spec.suffix not in supplied_suffixes]
+    missing = [spec.suffix for spec in _UNIT_ROLE_SHAPE if spec.suffix not in supplied_suffixes]
     if missing:
         raise ValueError(
             f"unit_roles must mint the banking engine's own per-unit posts —"
@@ -353,7 +376,7 @@ def generate(
         treasury desk in its own; cost centres split finance-side from
         risk-and-platform; personas come from the role table."""
         business_unit = None
-        parsed = parse_unit_role(role, tuple(spec.suffix for spec in _UNIT_ROLES))
+        parsed = parse_unit_role(role, tuple(spec.suffix for spec in _UNIT_ROLE_SHAPE))
         if parsed is not None:
             business_unit = unit_ids[parsed[0]]
         elif role in ("treasurer", "liquidity_analyst") and "treasury" in unit_ids:
