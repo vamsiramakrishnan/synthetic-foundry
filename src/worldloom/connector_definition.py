@@ -245,6 +245,81 @@ class ConnectorAclDefinition(Model):
     archived_blocks_edit: bool = False
 
 
+#: The operations a planner's `EntitySpec` may name (`enterprise_specs.Operation`).
+CatalogOperation = Literal[
+    "search", "list", "read", "create", "update", "patch", "upsert", "delete", "move",
+    "comment", "attach", "link", "draft", "send", "reply", "forward",
+]
+#: The verbs a connector dataset declares for a record (`connector_data.ConnectorVerb`):
+#: the planner's vocabulary without `move`, with `unlink`.
+CatalogRecordVerb = Literal[
+    "search", "list", "read", "create", "update", "patch", "upsert", "delete",
+    "comment", "attach", "link", "unlink", "draft", "send", "reply", "forward",
+]
+#: What may be done with content once read (`ContentAction` and `ContentVerb`, one set).
+CatalogContentVerb = Literal[
+    "summarize", "extract", "classify", "compare", "reconcile", "transform", "generate", "render", "convert",
+]
+
+
+class ConnectorCatalogEntity(Model):
+    """One entity as the planner and the connector dataset name it.
+
+    The name (the key it is stored under) is a definition entity or one of
+    its ``entity_aliases``: the planner speaks of Jira's ``issue`` and
+    SharePoint's ``file``, the coarse alias, where the emulator serves the
+    concrete ``bug``/``story`` or ``docx``/``pdf``.
+    """
+
+    stable_id: str | None = None
+    """The field a fixture and a corpus record carry the record's handle in
+    (Jira ``key``, ServiceNow ``sys_id``). Not the definition's ``id.field``,
+    which is where the *emulator* keeps its ident; the two differ for every
+    connector whose records predate the emulator. ``None`` takes the
+    catalog's ``stable_id``, then ``id.field``."""
+    operations: tuple[CatalogOperation, ...] | None = None
+    """What a planned workflow may do to it, in the order the planner lists
+    them. ``None`` takes the catalog's ``operations``, then derives them from
+    the entity's ``ops`` (``connector_spec_from_definition``)."""
+    formats: tuple[str, ...] = ()
+    """The file formats a destination may write it as; empty is any."""
+    record_verbs: tuple[CatalogRecordVerb, ...] | None = None
+    """The verbs a corpus's connector dataset declares for its records. A
+    capability exists only where this is stated: a connector nothing
+    projects records for (Slack, the system of record) declares none, and
+    a pack opts in by stating it."""
+    content_verbs: tuple[CatalogContentVerb, ...] = ()
+    """What the dataset says may be done with the record's content; only
+    meaningful beside ``record_verbs``."""
+
+
+class ConnectorCatalog(Model):
+    """How the planner and the connector dataset name a connector: build-time, never served.
+
+    The emulator serves the definition's entities, tools and ids. The query
+    planner (`enterprise_specs.ConnectorSpec`) and the corpus's connector
+    dataset (`connector_data.CAPABILITIES`) speak a coarser, older
+    vocabulary, and this block is where that vocabulary is stated, so both
+    tables are derived from the definition instead of kept beside it. Every
+    field is optional; an absent one takes the definition's own answer.
+    """
+
+    display_name: str | None = None
+    """The name a prompt or a report uses (``Jira``), not the product the
+    emulator imitates (``vendor_product``: ``Jira Cloud``). ``None`` takes
+    ``vendor_product``."""
+    content_actions: tuple[CatalogContentVerb, ...] = ("summarize", "extract")
+    """What a planned workflow may do with this connector's content."""
+    stable_id: str | None = None
+    """The default ``stable_id`` for an entity that states none; ``None`` is ``id.field``."""
+    operations: tuple[CatalogOperation, ...] | None = None
+    """The default ``operations`` for an entity that states none."""
+    entities: dict[str, ConnectorCatalogEntity] | None = None
+    """The planner's entities, in the order it lists them. ``None`` is every
+    definition entity, in definition order (the system of record's catalogue
+    of record kinds, and every pack that states no catalog)."""
+
+
 class ConnectorDefinition(Model):
     """One complete, versioned connector contract."""
 
@@ -285,6 +360,12 @@ class ConnectorDefinition(Model):
     A build-time concern, not part of the served contract: ``served_dict``
     leaves it out, so an evaluation row carries the definition an agent is
     served and nothing about how its records were derived."""
+    catalog: ConnectorCatalog | None = None
+    """How the planner and the connector dataset name this connector.
+
+    Build-time like ``record_projection``: ``served_dict`` leaves it out. A
+    definition without one (every connector pack written before it existed)
+    gets the defaults each ``ConnectorCatalog`` field documents."""
 
     @model_validator(mode="after")
     def _closed_contract(self) -> ConnectorDefinition:
@@ -336,7 +417,64 @@ class ConnectorDefinition(Model):
         for error_name in ("not_found", "denied", "validation", "bad_transition"):
             if error_name not in self.errors:
                 raise ValueError(f"missing connector error contract {error_name!r}")
+        if self.catalog is not None:
+            findings = self._catalog_findings(self.catalog, entity_names)
+            if findings:
+                raise ValueError("; ".join(findings))
         return self
+
+    def _catalog_findings(self, catalog: ConnectorCatalog, entity_names: set[str]) -> list[str]:
+        """Why a catalog cannot be derived from, each naming the entity, the rule and the fix."""
+
+        findings: list[str] = []
+        for field_name in ("stable_id", "display_name"):
+            if getattr(catalog, field_name) == "":
+                findings.append(f"catalog.{field_name} is empty; state a name or leave it out to take the definition's")
+        for field_name in ("content_actions", "operations"):
+            values = getattr(catalog, field_name) or ()
+            if len(set(values)) != len(values):
+                findings.append(f"catalog.{field_name} repeats a value; state each once")
+        for name, entry in (catalog.entities or {}).items():
+            where = f"catalog.entities.{name}"
+            if name not in entity_names and name not in self.entity_aliases:
+                findings.append(f"{where}: {name!r} is neither an entity nor an entity alias of {self.connector}; "
+                                "name a declared entity, or declare it under entity_aliases")
+            if entry.stable_id == "":
+                findings.append(f"{where}.stable_id is empty; state a field or leave it out to take {self.id.field!r}")
+            for field_name in ("operations", "formats", "record_verbs", "content_verbs"):
+                values = getattr(entry, field_name) or ()
+                if len(set(values)) != len(values):
+                    findings.append(f"{where}.{field_name} repeats a value; state each once")
+            if entry.content_verbs and entry.record_verbs is None:
+                findings.append(f"{where}: content_verbs without record_verbs declares content for a record the "
+                                "dataset does not declare; state record_verbs, or drop content_verbs")
+        return findings
+
+    def catalog_entities(self) -> dict[str, ConnectorCatalogEntity]:
+        """The catalog's entities, in planner order, each with its defaults filled from the catalog.
+
+        ``stable_id`` is always resolved (catalog, then ``id.field``);
+        ``operations`` stays ``None`` when neither the entity nor the catalog
+        states it, because deriving it from ``ops`` is the planner's rule
+        (``enterprise_specs.connector_spec_from_definition``), not the
+        definition's.
+        """
+
+        catalog = self.catalog or ConnectorCatalog()
+        stated = catalog.entities if catalog.entities is not None else {name: ConnectorCatalogEntity() for name in self.entities}
+        return {
+            name: entry.model_copy(update={
+                "stable_id": entry.stable_id or catalog.stable_id or self.id.field,
+                "operations": entry.operations if entry.operations is not None else catalog.operations,
+            })
+            for name, entry in stated.items()
+        }
+
+    @property
+    def display_name(self) -> str:
+        """The name a prompt uses: the catalog's, else the vendor product."""
+
+        return (self.catalog.display_name if self.catalog is not None else None) or self.vendor_product
 
     def canonical_tool(self, name: str) -> str:
         canonical = self.aliases.get(name, name)
@@ -443,21 +581,23 @@ class ConnectorDefinition(Model):
     def wire_dict(self) -> dict[str, object]:
         """Serialize using stable on-disk field names, not Python attribute names.
 
-        An absent ``record_projection`` is left out rather than written as
-        ``null``, so a definition that declares none serialises exactly as it
-        did before the field existed.
+        An absent ``record_projection`` or ``catalog`` is left out rather than
+        written as ``null``, so a definition that declares neither serialises
+        exactly as it did before the fields existed.
         """
 
         out = self.model_dump(mode="json", by_alias=True)
-        if out.get("record_projection") is None:
-            out.pop("record_projection", None)
+        for build_time in ("record_projection", "catalog"):
+            if out.get(build_time) is None:
+                out.pop(build_time, None)
         return out
 
     def served_dict(self) -> dict[str, object]:
-        """``wire_dict`` without the build-time ``record_projection``: what a row embeds."""
+        """``wire_dict`` without the build-time ``record_projection`` and ``catalog``: what a row embeds."""
 
         out = self.wire_dict()
         out.pop("record_projection", None)
+        out.pop("catalog", None)
         return out
 
 
@@ -489,9 +629,20 @@ def _shipped_connectors() -> tuple[str, ...]:
     directory = files("worldloom").joinpath(*_SHIPPED)
     listed = sorted(entry.name[:-5] for entry in directory.iterdir()
                     if entry.name.endswith(".json") and not entry.name.startswith("_"))
-    order = json.loads(directory.joinpath("_order.json").read_text(encoding="utf-8"))["order"]
+    order = shipped_order("order")
     named = [name for name in order if name in listed]
     return (*named, *(name for name in listed if name not in named))
+
+
+@lru_cache(maxsize=8)
+def shipped_order(key: str) -> tuple[str, ...]:
+    """One of the orders ``_order.json`` pins: ``order`` (the reference list),
+    ``specs`` (the planner's registry) or ``capabilities`` (the connector
+    dataset's ``connector/entity`` pairs). Each only orders; what exists is
+    what the definitions declare."""
+
+    directory = files("worldloom").joinpath(*_SHIPPED)
+    return tuple(json.loads(directory.joinpath("_order.json").read_text(encoding="utf-8"))[key])
 
 
 REFERENCE_CONNECTORS = _shipped_connectors()
@@ -539,6 +690,20 @@ def _pack_definition(name: str) -> ConnectorDefinition | None:
 def _shipped_definition(name: str) -> ConnectorDefinition:
     resource = files("worldloom").joinpath(*_SHIPPED, f"{name}.json")
     return parse_connector_definition(resource.read_text(encoding="utf-8"))
+
+
+def shipped_connector_definition(name: str) -> ConnectorDefinition:
+    """The shipped definition of *name*, whatever pack is in force or in view.
+
+    The tables derived from a catalog (the planner's builtin specs, the
+    connector dataset's capabilities) read this, never
+    ``load_connector_definition``: a pack named like a shipped connector
+    changes what is served, not the vocabulary a build plans in.
+    """
+
+    if name not in REFERENCE_CONNECTORS:
+        raise ValueError(f"unknown built-in connector definition {name!r}")
+    return _shipped_definition(name)
 
 
 def reference_connectors() -> tuple[str, ...]:
@@ -592,7 +757,12 @@ def builtin_connector_definitions(
 __all__ = [
     "CONNECTOR_DEFINITION_SCHEMA",
     "REFERENCE_CONNECTORS",
+    "CatalogContentVerb",
+    "CatalogOperation",
+    "CatalogRecordVerb",
     "ConnectorAclDefinition",
+    "ConnectorCatalog",
+    "ConnectorCatalogEntity",
     "ConnectorDefinition",
     "ConnectorEntityDefinition",
     "ConnectorFieldDefinition",
@@ -610,4 +780,6 @@ __all__ = [
     "load_connector_definition",
     "parse_connector_definition",
     "reference_connectors",
+    "shipped_connector_definition",
+    "shipped_order",
 ]

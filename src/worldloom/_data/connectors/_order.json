@@ -1,4 +1,8 @@
 {
   "about": "The order the reference connector list names the shipped definitions in: the order they were added. Every other *.json here is one connector; one this list does not name follows these, alphabetically.",
-  "order": ["jira", "servicenow", "salesforce", "confluence", "sharepoint", "drive", "outlook", "email", "onedrive", "teams", "slack", "teamwork_graph", "rovo", "sor"]
+  "order": ["jira", "servicenow", "salesforce", "confluence", "sharepoint", "drive", "outlook", "email", "onedrive", "teams", "slack", "teamwork_graph", "rovo", "sor"],
+  "about_specs": "The order the query planner's connector registry (enterprise_specs.BUILTIN_CONNECTORS) lists the shipped connectors in, from each definition's catalog. Every planned query row iterates it, so it is pinned. A connector it does not name follows in reference order.",
+  "specs": ["jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email", "sor", "onedrive", "outlook", "slack", "teams", "rovo", "teamwork_graph"],
+  "about_capabilities": "The order a corpus's connector dataset (connector_data.CAPABILITIES) lists each connector/entity whose catalog states record_verbs: the order they were added, so salesforce/case follows the file stores. A pair it does not name follows in reference order, then catalog order.",
+  "capabilities": ["jira/issue", "servicenow/incident", "servicenow/change_request", "email/message", "email/thread", "salesforce/account", "salesforce/contact", "salesforce/opportunity", "confluence/page", "sharepoint/file", "drive/file", "salesforce/case"]
 }

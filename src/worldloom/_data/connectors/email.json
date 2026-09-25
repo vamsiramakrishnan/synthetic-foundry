@@ -258,5 +258,61 @@
         "{function|suffix: team|address}"
       ]
     }
+  },
+  "catalog": {
+    "display_name": "Email",
+    "content_actions": [
+      "summarize",
+      "extract",
+      "classify",
+      "generate"
+    ],
+    "entities": {
+      "message": {
+        "stable_id": "message_id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "draft",
+          "send",
+          "reply",
+          "forward"
+        ],
+        "record_verbs": [
+          "search",
+          "list",
+          "read",
+          "draft",
+          "send",
+          "reply",
+          "forward",
+          "attach",
+          "delete"
+        ],
+        "content_verbs": [
+          "summarize",
+          "extract",
+          "classify"
+        ]
+      },
+      "thread": {
+        "stable_id": "thread_id",
+        "operations": [
+          "search",
+          "list",
+          "read"
+        ],
+        "record_verbs": [
+          "search",
+          "list",
+          "read"
+        ],
+        "content_verbs": [
+          "summarize",
+          "extract"
+        ]
+      }
+    }
   }
 }

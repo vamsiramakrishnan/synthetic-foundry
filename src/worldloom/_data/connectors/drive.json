@@ -546,5 +546,59 @@
     "mentions": "fullText",
     "modified_days": "modifiedTime",
     "name": "name"
+  },
+  "catalog": {
+    "display_name": "Google Drive",
+    "content_actions": [
+      "summarize",
+      "extract",
+      "classify",
+      "compare",
+      "reconcile",
+      "transform",
+      "generate",
+      "render",
+      "convert"
+    ],
+    "entities": {
+      "file": {
+        "stable_id": "file_id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "update",
+          "patch",
+          "upsert",
+          "delete"
+        ],
+        "formats": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "html",
+          "markdown"
+        ],
+        "record_verbs": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "update",
+          "patch",
+          "upsert",
+          "delete"
+        ],
+        "content_verbs": [
+          "summarize",
+          "extract",
+          "generate",
+          "convert"
+        ]
+      }
+    }
   }
 }

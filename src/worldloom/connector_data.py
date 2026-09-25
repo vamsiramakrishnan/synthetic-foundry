@@ -11,6 +11,14 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
+from .connector_definition import (
+    REFERENCE_CONNECTORS,
+    ConnectorDefinition,
+    is_reference_connector,
+    load_connector_definition,
+    shipped_connector_definition,
+    shipped_order,
+)
 from .ids import content_key
 from .models import Model
 
@@ -77,136 +85,66 @@ class ConnectorDataset(Model):
         return [record for record in self.records if record.connector == name]
 
 
-CAPABILITIES = [
-    ConnectorCapability(
-        connector="jira",
-        entity="issue",
-        verbs=(
-            ConnectorVerb.SEARCH,
-            ConnectorVerb.LIST,
-            ConnectorVerb.READ,
-            ConnectorVerb.CREATE,
-            ConnectorVerb.UPDATE,
-            ConnectorVerb.PATCH,
-            ConnectorVerb.UPSERT,
-            ConnectorVerb.COMMENT,
-            ConnectorVerb.ATTACH,
-            ConnectorVerb.LINK,
-            ConnectorVerb.UNLINK,
-        ),
-        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
-        stable_id_field="key",
-    ),
-    ConnectorCapability(
-        connector="servicenow",
-        entity="incident",
-        verbs=(
-            ConnectorVerb.SEARCH,
-            ConnectorVerb.LIST,
-            ConnectorVerb.READ,
-            ConnectorVerb.CREATE,
-            ConnectorVerb.UPDATE,
-            ConnectorVerb.PATCH,
-            ConnectorVerb.UPSERT,
-            ConnectorVerb.COMMENT,
-            ConnectorVerb.ATTACH,
-        ),
-        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
-        stable_id_field="sys_id",
-    ),
-    ConnectorCapability(
-        connector="servicenow",
-        entity="change_request",
-        verbs=(
-            ConnectorVerb.SEARCH,
-            ConnectorVerb.LIST,
-            ConnectorVerb.READ,
-            ConnectorVerb.CREATE,
-            ConnectorVerb.UPDATE,
-            ConnectorVerb.PATCH,
-            ConnectorVerb.UPSERT,
-            ConnectorVerb.COMMENT,
-            ConnectorVerb.ATTACH,
-        ),
-        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
-        stable_id_field="sys_id",
-    ),
-    ConnectorCapability(
-        connector="email",
-        entity="message",
-        verbs=(
-            ConnectorVerb.SEARCH,
-            ConnectorVerb.LIST,
-            ConnectorVerb.READ,
-            ConnectorVerb.DRAFT,
-            ConnectorVerb.SEND,
-            ConnectorVerb.REPLY,
-            ConnectorVerb.FORWARD,
-            ConnectorVerb.ATTACH,
-            ConnectorVerb.DELETE,
-        ),
-        content_verbs=(
-            ContentVerb.SUMMARIZE,
-            ContentVerb.EXTRACT,
-            ContentVerb.CLASSIFY,
-        ),
-        stable_id_field="message_id",
-    ),
-    ConnectorCapability(
-        connector="email",
-        entity="thread",
-        verbs=(ConnectorVerb.SEARCH, ConnectorVerb.LIST, ConnectorVerb.READ),
-        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
-        stable_id_field="thread_id",
-    ),
-    *[
+def definition_capabilities(definition: ConnectorDefinition) -> list[ConnectorCapability]:
+    """The dataset capabilities a definition's catalog declares, in catalog order.
+
+    Only an entity whose catalog entry states ``record_verbs`` has one: the
+    dataset declares what a projection hands it records for, and a connector
+    nothing projects (Slack, the system of record, a pack that states no
+    catalog) declares nothing, exactly as before the table was derived.
+    """
+
+    return [
         ConnectorCapability(
-            connector="salesforce",
-            entity=entity,
-            verbs=(
-                ConnectorVerb.SEARCH,
-                ConnectorVerb.LIST,
-                ConnectorVerb.READ,
-                ConnectorVerb.CREATE,
-                ConnectorVerb.UPDATE,
-                ConnectorVerb.PATCH,
-                ConnectorVerb.UPSERT,
-            ),
-            content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
-            stable_id_field="id",
+            connector=definition.connector,
+            entity=name,
+            verbs=tuple(ConnectorVerb(verb) for verb in entry.record_verbs),
+            content_verbs=tuple(ContentVerb(verb) for verb in entry.content_verbs),
+            stable_id_field=str(entry.stable_id),
         )
-        for entity in ("account", "contact", "opportunity")
-    ],
-    *[
-        ConnectorCapability(
-            connector=connector,
-            entity=entity,
-            verbs=(
-                ConnectorVerb.SEARCH,
-                ConnectorVerb.LIST,
-                ConnectorVerb.READ,
-                ConnectorVerb.CREATE,
-                ConnectorVerb.UPDATE,
-                ConnectorVerb.PATCH,
-                ConnectorVerb.UPSERT,
-                ConnectorVerb.DELETE,
-            ),
-            content_verbs=(
-                ContentVerb.SUMMARIZE,
-                ContentVerb.EXTRACT,
-                ContentVerb.GENERATE,
-                ContentVerb.CONVERT,
-            ),
-            stable_id_field=stable_id,
-        )
-        for connector, entity, stable_id in (
-            ("confluence", "page", "page_id"),
-            ("sharepoint", "file", "item_id"),
-            ("drive", "file", "file_id"),
-            ("salesforce", "case", "id"),
-        )
-    ],
-]
+        for name, entry in definition.catalog_entities().items()
+        if entry.record_verbs is not None
+    ]
+
+
+def _shipped_capabilities() -> list[ConnectorCapability]:
+    """Every shipped catalog's capabilities, in the order ``_order.json`` pins.
+
+    The order is the order the pairs were added (``salesforce/case`` after
+    the file stores) and every corpus's ``connector_data`` lists them in it,
+    so it is stated rather than re-derived; a pair it does not name follows
+    in reference order.
+    """
+
+    declared = {
+        (capability.connector, capability.entity): capability
+        for name in REFERENCE_CONNECTORS
+        for capability in definition_capabilities(shipped_connector_definition(name))
+    }
+    pinned = [tuple(pair.split("/", 1)) for pair in shipped_order("capabilities")]
+    named = [declared[(connector, entity)] for connector, entity in pinned if (connector, entity) in declared]
+    return [*named, *(capability for pair, capability in declared.items() if pair not in set(pinned))]
+
+
+CAPABILITIES = _shipped_capabilities()
+"""The shipped connector dataset capabilities, derived from each definition's
+``catalog`` (``tests/test_connector_tables.py`` pins them to the literal table
+they replaced). A connector pack's come from ``connector_capabilities``."""
+
+
+def connector_capabilities(connectors: Sequence[str]) -> list[ConnectorCapability]:
+    """The capabilities of *connectors*: the shipped ones in pinned order, then each pack's.
+
+    A pack named like a shipped connector keeps the shipped capabilities (the
+    rule ``enterprise_specs`` applies to specs); a pack of a new name
+    contributes what its own catalog declares, by name.
+    """
+
+    wanted = set(connectors)
+    shipped = [capability for capability in CAPABILITIES if capability.connector in wanted]
+    extra = sorted(name for name in wanted - set(REFERENCE_CONNECTORS) if is_reference_connector(name))
+    return [*shipped, *(capability for name in extra
+                        for capability in definition_capabilities(load_connector_definition(name)))]
 
 
 def canonical_verb(value: str, *, target: str = "record") -> str:
@@ -892,11 +830,7 @@ def generate_connector_data(
         for connector in connectors
         for record in projections.project(connector, world)
     ]
-    capabilities = [
-        capability
-        for capability in CAPABILITIES
-        if capability.connector in connectors
-    ]
+    capabilities = connector_capabilities(connectors)
     if world.recipe.get("artifact_realism") == "ecology/v1":
         from .artifact_ecology import enrich_connector_records
 

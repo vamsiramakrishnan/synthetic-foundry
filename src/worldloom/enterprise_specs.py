@@ -13,10 +13,13 @@ from pydantic import Field, model_validator
 from . import packkit
 from .cascade import Brief, CascadeModel, Finding, load, refuse
 from .connector_definition import (
+    REFERENCE_CONNECTORS,
     ConnectorDefinition,
     ConnectorFieldDefinition,
     builtin_connector_definitions,
     reference_connectors,
+    shipped_connector_definition,
+    shipped_order,
 )
 
 
@@ -224,10 +227,6 @@ class SpecRegistry:
         return tuple(findings)
 
 
-def _entity(name: str, stable_id: str, operations: tuple[Operation, ...], *formats: str) -> EntitySpec:
-    return EntitySpec(name=name, stable_id=stable_id, operations=operations, formats=formats)
-
-
 READ = (Operation.SEARCH, Operation.LIST, Operation.READ)
 MUTATE = (Operation.CREATE, Operation.UPDATE, Operation.PATCH, Operation.UPSERT)
 #: Operations that address a record which must already exist at the
@@ -235,48 +234,6 @@ MUTATE = (Operation.CREATE, Operation.UPDATE, Operation.PATCH, Operation.UPSERT)
 #: a create, draft or send makes its own record.
 RECORD_ADDRESSED = (Operation.UPDATE, Operation.PATCH, Operation.UPSERT, Operation.DELETE, Operation.MOVE,
                     Operation.COMMENT, Operation.ATTACH, Operation.LINK, Operation.REPLY, Operation.FORWARD)
-FILES = ("docx", "xlsx", "pptx", "pdf", "csv", "html", "markdown")
-
-def _sor_connector() -> ConnectorSpec:
-    """The system-of-record connector, its entities read from its definition."""
-    from .connector_definition import load_connector_definition
-
-    definition = load_connector_definition("sor")
-    return ConnectorSpec(
-        name="sor", display_name="System of record",
-        entities=tuple(_entity(name, "ident", READ + MUTATE + (Operation.COMMENT,)) for name in definition.entities),
-        content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE, ContentAction.RECONCILE),
-    )
-
-
-BUILTIN_CONNECTORS = (
-    ConnectorSpec(name="jira", display_name="Jira", entities=(_entity("issue", "key", READ + MUTATE + (Operation.COMMENT,)),), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
-    ConnectorSpec(name="confluence", display_name="Confluence", entities=(_entity("page", "page_id", READ + MUTATE + (Operation.COMMENT,), "html", "markdown", "pdf"),), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="sharepoint", display_name="SharePoint", entities=(_entity("file", "item_id", READ + MUTATE + (Operation.DELETE,), *FILES), _entity("list_item", "item_id", READ + MUTATE)), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="drive", display_name="Google Drive", entities=(_entity("file", "file_id", READ + MUTATE + (Operation.DELETE,), *FILES),), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="servicenow", display_name="ServiceNow", entities=(_entity("incident", "sys_id", READ + MUTATE + (Operation.COMMENT,)), _entity("change_request", "sys_id", READ + MUTATE + (Operation.COMMENT,))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
-    ConnectorSpec(name="salesforce", display_name="Salesforce", entities=(_entity("account", "id", READ + MUTATE), _entity("contact", "id", READ + MUTATE), _entity("opportunity", "id", READ + MUTATE), _entity("case", "id", READ + MUTATE)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
-    ConnectorSpec(name="email", display_name="Email", entities=(_entity("message", "message_id", READ + (Operation.DRAFT, Operation.SEND, Operation.REPLY, Operation.FORWARD)), _entity("thread", "thread_id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
-    _sor_connector(),
-    # The six below mirror `builtin_connector_definitions()` entity for entity,
-    # because for a long while they did not exist at all: the definitions
-    # carried fourteen connectors and this tuple eight, so a scenario profile
-    # naming `slack` was refused as unknown while the emulator stood ready to
-    # serve it. Each operation is one the definition maps to a tool. `patch`
-    # and `upsert`, which no definition carries, stay off them, so a workflow
-    # asking for one is reported by `review()` instead of planned. `list` is
-    # the definition's `search` where the product's search is a listing call.
-    # Maturity is not a gate here, and it is not one anywhere else either: the
-    # definitions expose `rovo` (product_surface) and `teamwork_graph` (eap)
-    # unconditionally and the binding carries the maturity through as data,
-    # so the specs follow suit.
-    ConnectorSpec(name="onedrive", display_name="OneDrive", entities=(_entity("file", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE), "docx", "xlsx", "pptx", "pdf"), _entity("folder", "id", READ + (Operation.CREATE, Operation.DELETE))), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="outlook", display_name="Outlook", entities=(_entity("message", "id", READ + (Operation.CREATE, Operation.DRAFT, Operation.UPDATE, Operation.SEND, Operation.REPLY, Operation.FORWARD, Operation.COMMENT, Operation.DELETE)), _entity("mail_folder", "id", READ + (Operation.CREATE,)), _entity("attachment", "id", READ + (Operation.CREATE, Operation.DELETE))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
-    ConnectorSpec(name="slack", display_name="Slack", entities=(_entity("channel", "id", READ + (Operation.CREATE,)), _entity("message", "ts", READ + (Operation.CREATE, Operation.UPDATE, Operation.COMMENT, Operation.REPLY, Operation.DELETE)), _entity("thread", "ts", READ + (Operation.COMMENT, Operation.REPLY)), _entity("file", "id", READ), _entity("user", "id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
-    ConnectorSpec(name="teams", display_name="Microsoft Teams", entities=(_entity("team", "id", READ), _entity("channel", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)), _entity("chat", "id", READ + (Operation.CREATE,)), _entity("channel_message", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.COMMENT, Operation.REPLY, Operation.DELETE)), _entity("chat_message", "id", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)), _entity("member", "id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),
-    ConnectorSpec(name="rovo", display_name="Rovo", entities=tuple(_entity(name, "ari", READ) for name in ("document", "message", "work_item", "person", "team", "project", "goal")), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
-    ConnectorSpec(name="teamwork_graph", display_name="Teamwork Graph", entities=tuple(_entity(name, "ari", READ + (Operation.CREATE, Operation.UPDATE, Operation.DELETE)) for name in ("document", "message", "work_item", "project", "comment", "pull_request", "repository", "space")) + tuple(_entity(name, "ari", READ) for name in ("team", "user", "goal")), content_actions=(ContentAction.EXTRACT, ContentAction.COMPARE)),
-)
 
 
 #: A definition operation that is the same act as a spec `Operation`. A
@@ -284,27 +241,73 @@ BUILTIN_CONNECTORS = (
 _DEFINITION_OPERATIONS = {**{item.value: item for item in Operation}, "post": Operation.CREATE, "upload": Operation.CREATE}
 
 
-def connector_spec_from_definition(definition: ConnectorDefinition) -> ConnectorSpec:
-    """The spec a connector pack gets when no hand-written `ConnectorSpec` names it.
+def _derived_operations(definition: ConnectorDefinition, entity: str) -> tuple[Operation, ...]:
+    """What an entity the catalog states no operations for may do: read, and write through each tool its ops map.
 
-    Every entity the definition declares, keyed by the definition's identity
-    field, reading as `search`/`list`/`read` and writing through each
-    operation its entity maps to a tool; `patch` and `upsert`, which no
-    definition carries, stay off, the rule the six hand-mirrored specs in
-    `BUILTIN_CONNECTORS` follow. The builtin tuple is not derived through this:
-    its display names, stable ids and operation order predate the definitions
-    and are pinned by every planned query row, and they differ from what the
-    definitions say (``Jira`` is ``Jira Cloud``, Jira's entity is ``issue``,
-    not the definition's issue types).
+    `patch` and `upsert`, which no definition carries, stay off, so a
+    workflow asking for one is reported by `review()` instead of planned. An
+    alias (Jira's `issue`) writes through what any of its members does.
     """
 
-    entities = []
-    for name, entity in definition.entities.items():
-        writes = {_DEFINITION_OPERATIONS[op] for op in entity.ops if op in _DEFINITION_OPERATIONS} - set(READ)
-        writes -= {Operation.PATCH, Operation.UPSERT}
-        entities.append(_entity(name, definition.id.field, READ + tuple(item for item in Operation if item in writes)))
-    return ConnectorSpec(name=definition.connector, display_name=definition.vendor_product, entities=tuple(entities),
-                         content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT))
+    ops = {op for member in definition.entity_members(entity) for op in definition.entities[member].ops}
+    writes = {_DEFINITION_OPERATIONS[op] for op in ops if op in _DEFINITION_OPERATIONS} - set(READ)
+    writes -= {Operation.PATCH, Operation.UPSERT}
+    return READ + tuple(item for item in Operation if item in writes)
+
+
+def connector_spec_from_definition(definition: ConnectorDefinition) -> ConnectorSpec:
+    """The planner's spec for a connector, read from its definition's `catalog`.
+
+    Every shipped connector's spec is this (`BUILTIN_CONNECTORS`), and so is
+    a connector pack's. What the catalog states wins: the display name a
+    prompt uses (``Jira``, where the product is ``Jira Cloud``), the coarse
+    entity the planner names (``issue``, where the emulator serves issue
+    types), the stable id a fixture carries (``key``, where the emulator's
+    ident is ``ident``) and the operations in the order a planned row lists
+    them. What it leaves out is derived: every definition entity, keyed by
+    the definition's identity field, reading as `search`/`list`/`read` and
+    writing through each tool its entity maps (`_derived_operations`), named
+    by `vendor_product`, content `summarize` and `extract`.
+    """
+
+    catalog = definition.catalog
+    entities = tuple(
+        EntitySpec(
+            name=name,
+            stable_id=str(entry.stable_id),
+            operations=(tuple(Operation(op) for op in entry.operations) if entry.operations is not None
+                        else _derived_operations(definition, name)),
+            formats=entry.formats,
+        )
+        for name, entry in definition.catalog_entities().items()
+    )
+    actions = catalog.content_actions if catalog is not None else ("summarize", "extract")
+    return ConnectorSpec(name=definition.connector, display_name=definition.display_name, entities=entities,
+                         content_actions=tuple(ContentAction(action) for action in actions))
+
+
+def _builtin_connectors() -> tuple[ConnectorSpec, ...]:
+    """Every shipped connector's spec, in the registry order ``_order.json`` pins.
+
+    Every planned query row iterates this order, so it is stated rather than
+    derived; a shipped connector the order does not name follows in
+    reference order. Maturity is not a gate: the definitions expose `rovo`
+    (product_surface) and `teamwork_graph` (eap) unconditionally and the
+    binding carries the maturity through as data, so the specs follow suit.
+    """
+
+    pinned = [name for name in shipped_order("specs") if name in REFERENCE_CONNECTORS]
+    names = (*pinned, *(name for name in REFERENCE_CONNECTORS if name not in pinned))
+    return tuple(connector_spec_from_definition(shipped_connector_definition(name)) for name in names)
+
+
+BUILTIN_CONNECTORS = _builtin_connectors()
+"""The planner's builtin connector specs, derived from each shipped
+definition's ``catalog``. ``tests/test_connector_tables.py`` pins them to the
+literal tuple they replaced. That tuple sat beside the definitions and
+silently disagreed with them (``Jira`` against ``Jira Cloud``, ``issue``
+against the issue types, ``key`` against ``ident``); the disagreements are
+now fields a catalog states, and a pack states its own."""
 
 
 def _connectors() -> tuple[ConnectorSpec, ...]:

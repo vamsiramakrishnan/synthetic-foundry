@@ -382,5 +382,64 @@
     "chat.delete": "delete_message",
     "files.info": "get_file",
     "users.info": "get_user"
+  },
+  "catalog": {
+    "display_name": "Slack",
+    "content_actions": [
+      "summarize",
+      "extract",
+      "classify",
+      "generate"
+    ],
+    "entities": {
+      "channel": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create"
+        ]
+      },
+      "message": {
+        "stable_id": "ts",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "create",
+          "update",
+          "comment",
+          "reply",
+          "delete"
+        ]
+      },
+      "thread": {
+        "stable_id": "ts",
+        "operations": [
+          "search",
+          "list",
+          "read",
+          "comment",
+          "reply"
+        ]
+      },
+      "file": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read"
+        ]
+      },
+      "user": {
+        "stable_id": "id",
+        "operations": [
+          "search",
+          "list",
+          "read"
+        ]
+      }
+    }
   }
 }
