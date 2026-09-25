@@ -92,14 +92,22 @@ class ProjectSpec(Model):
     #: harness reads; ``studio.project.*`` in the policy pack holds the same
     #: numbers for the presets that an industry pack may resize.
     packs: tuple[str, ...] = ()
+    #: How many dataset batches one scheduling wave requests from the same
+    #: admission state (`DatasetPlan.batch_wave`). A wider wave lets the
+    #: compile commit batches on several processes (`WORLDLOOM_DATASET_WORKERS`)
+    #: and is part of what the dataset is; the process count is not.
+    batch_wave: int = Field(default=1, ge=1, le=64, strict=True)
 
     @model_serializer(mode="wrap")
     def _omit_no_packs(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         # A project with no packs dumps exactly as before packs existed, so its
         # project key, revision digests and snapshot identity are unchanged.
+        # A sequential wave is omitted for the same reason.
         data: dict[str, Any] = handler(self)
         if not self.packs:
             data.pop("packs", None)
+        if self.batch_wave == 1:
+            data.pop("batch_wave", None)
         return data
 
     @model_validator(mode="after")

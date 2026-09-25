@@ -144,6 +144,39 @@ checked. External callbacks therefore have at-least-once delivery until batch
 commit; callers must use the request digest for idempotency. Use one writer per
 run directory. Changing quotas, sources, builder ID or policies needs a new run.
 
+### Parallel waves
+
+Committing a batch (building the world export, then qualifying every query in
+its pool) is most of a compile's time, and it is CPU-bound Python. A plan's
+`batch_wave` (Studio: the project's `batch_wave`) schedules batches in waves:
+each wave issues up to that many generation requests from the admission state
+at the wave's start, spread across strata by the usual tie-break, and admission
+then reads the wave's batches in batch order. The rows therefore depend on the
+wave, which the plan records, and never on how the wave was executed.
+
+```bash
+worldloom evals dataset compile plan.json --out ./dataset --workers 4
+```
+
+`--workers` (or `WORLDLOOM_DATASET_WORKERS`, then the policy `dataset.workers`,
+default 1) is how many spawn-started processes commit a wave's missing batches.
+It is a runtime choice: one worker and four write the same directory, byte for
+byte. Workers reinstate the packs in force from their recorded bodies, and a
+builder must be picklable to cross the process boundary; one that is not (a
+lambda query transform, say) is refused by name, and compiles with one worker.
+A builder caches what it derives per stratum (a company builder's operational
+harness costs several batches to build), so each stratum is sent back to a
+worker that has already built it where the wave allows; placement moves time,
+never bytes.
+
+A wave of one is the sequential schedule, and a plan that leaves `batch_wave`
+at 1 dumps and digests exactly as before the field existed. A wider wave spends
+some speculation: a stratum can be asked for more batches than its remaining
+quota turns out to need. Wave boundaries fall every `batch_wave` indices and
+only the budget cuts them, so `--batch-limit` inside a wave commits exactly the
+wave's prefix, and a run killed mid-wave resumes from whichever batches reached
+their receipts; each batch stages under its own `<index>.pending`.
+
 `verify` checks the content inventory of the exported run. These are integrity
 receipts, not signatures authenticating an adversarial file author. Existing
 qualification remains the execution authority.

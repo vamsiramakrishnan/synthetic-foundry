@@ -588,6 +588,7 @@ worldloom evals dataset compile <PLAN_PATH>
 | `--batch-limit` | Pause after this many total batches. |
 | `--out`, `-o` | Dataset run directory; reuse it to resume the same plan. |
 | `--replay` | Require committed batches; never call a generator or executor. |
+| `--workers` | Processes that commit a wave's batches; never changes the output. Default: WORLDLOOM_DATASET_WORKERS, then policy dataset.workers. |
 
 ### `worldloom evals dataset verify`
 

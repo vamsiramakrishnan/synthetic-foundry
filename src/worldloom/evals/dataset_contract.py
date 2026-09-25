@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from ..enterprise_specs import ScenarioProfile
 from ..models import Model
@@ -66,6 +71,21 @@ class DatasetPlan(Model):
     minimum_companies: int = Field(default=2, ge=1, strict=True)
     split_by: Literal["task", "company", "case"] = "task"
     split_weights: dict[str, int] = Field(default_factory=lambda: {"train": 80, "validation": 10, "test": 10})
+    #: How many generation requests one scheduling wave issues from the same
+    #: admission state. The requests in a wave can be committed concurrently
+    #: and are admitted in batch order, so the rows depend on the wave, which
+    #: the plan records, and never on how many processes ran it. One wave of
+    #: one is the sequential schedule every existing plan was compiled under.
+    batch_wave: int = Field(default=1, ge=1, le=64, strict=True)
+
+    @model_serializer(mode="wrap")
+    def _existing_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # A sequential plan dumps exactly as before waves existed, so its
+        # digest, every request's plan_digest and every row id are unchanged.
+        data: dict[str, Any] = handler(self)
+        if self.batch_wave == 1:
+            data.pop("batch_wave", None)
+        return data
 
     @model_validator(mode="after")
     def _plan(self) -> DatasetPlan:
