@@ -434,6 +434,7 @@ worldloom evalrun campaign <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--brief` | What every stage's proposer is shown: summary or traces (see `evalrun improve --brief`). Default: policy `evalrun.improve.brief`, summary. |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
@@ -602,6 +603,7 @@ worldloom evalrun improve <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--brief` | What the proposer is shown: summary (the failure clusters) or traces (also the connectors' own error messages, the arguments behind them, the tools' contracts and failing trajectories). Default: policy `evalrun.improve.brief`, summary. |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
@@ -618,6 +620,7 @@ worldloom evalrun improve <CORPUS>
 | `--proposer-pack` | The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest. |
 | `--rater` | grounded or exec:<command>; pinned for the whole loop. |
 | `--rater-timeout` |  |
+| `--reference-run` | A run directory of the reference agent over the training cases only, whose accepted calls a traces brief shows beside the failing ones. Refused when it holds a held-out case. |
 | `--repeats` | Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`. |
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |

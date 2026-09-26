@@ -173,6 +173,10 @@ class ImproveLoop:
     ablate: bool | None = None
     #: Runs of each policy per case set; ``None`` is the policy ``evalrun.improve.repeats``.
     repeats: int | None = None
+    #: What the proposer is shown, ``summary`` or ``traces``; ``None`` is the policy ``evalrun.improve.brief``.
+    brief: str | None = None
+    #: A reference-agent run over the training cases, for a ``traces`` brief's accepted calls.
+    reference_run: RunReport | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
@@ -226,7 +230,8 @@ class ImproveLoop:
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
                        max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
-                       holdout_values=holdout_values, repeats=self.repeats)
+                       holdout_values=holdout_values, repeats=self.repeats, brief=self.brief,
+                       reference_run=self.reference_run)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -374,6 +379,8 @@ class EvalSession:
         ablate: bool | None = None,
         proposer_pack: str | ResolvedPack | None = None,
         repeats: int | None = None,
+        brief: str | None = None,
+        reference_run: RunRef | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -393,7 +400,15 @@ class EvalSession:
         skill tree is materialised under ``out``.
         ``repeats`` runs each policy that many times per case set and gates on
         a paired interval (default: the policy ``evalrun.improve.repeats``, 1).
+        ``brief="traces"`` shows the proposer the connectors' own error
+        messages, the arguments behind them, the tools' contracts and failing
+        trajectories beside the autopsy (default: the policy
+        ``evalrun.improve.brief``, ``summary``); ``reference_run`` (a run of
+        the reference agent over the training cases: a label, a directory or
+        a report) supplies accepted calls for it and is refused when it
+        touches a held-out case.
         """
+        from .evidence import brief_mode
         from .runner import default_concurrency
 
         records: tuple[Any, ...] = self._records
@@ -417,7 +432,9 @@ class EvalSession:
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
                            max_axis_regression=max_axis_regression, value=value, ablate=ablate,
-                           repeats=repeats, _records=records, _holdout_records=held_records)
+                           repeats=repeats, brief=brief_mode(brief),
+                           reference_run=None if reference_run is None else self.report(reference_run),
+                           _records=records, _holdout_records=held_records)
 
     def campaign(
         self,

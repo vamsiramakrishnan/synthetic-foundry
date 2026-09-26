@@ -387,6 +387,28 @@ an earlier loop's champion always resolves by its pinned digest. The loop writes
 output directory and that pack root: a candidate's skill tree is
 materialised under `skills-cache/` there, not in the user's cache.
 
+**Trace-level brief.** The autopsy brief names what kind of failure
+dominates; it never shows a connector's own words, so a proposer facing
+`error:validation_error` can only advise retrying. `--brief traces` (SDK
+`brief="traces"`, policy `evalrun.improve.brief`, default `summary`, whose
+bytes are unchanged) adds three sections from the same training run
+(`worldloom.evalrun.evidence`): an error catalogue of each distinct tool,
+error code and normalised message (record ids, quoted values and numbers
+masked) with its count, one raw message, the arguments that met it and, for
+the same tool, the argument shapes that were accepted; the tool contracts
+of those tools as their connector definitions declare them (parameters,
+required create fields, query language and fields, enumerated values); and,
+for the most frequent clusters, one failing case turn by turn. With
+`--reference-run DIR` (SDK `reference_run=`), a run of the reference agent
+over the training cases, the accepted shapes and a reference trajectory
+for the same case come from it too, with record ids masked and write
+payloads reduced to field names, and never its answer. Sections fill the
+room the interview message leaves in that order, after the summary, and
+the lowest-priority items are dropped whole with a line counting them. A
+reference run marked held out, over the held-out case set, or holding any
+held-out case is refused before a run is paid for, and a brief that would
+name a held-out case id is refused before the proposer sees it.
+
 ## Recursion: improving the improver
 
 The improve loop revises the agent's policy, but the proposer that writes
