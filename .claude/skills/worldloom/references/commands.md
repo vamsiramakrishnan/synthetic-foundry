@@ -449,6 +449,21 @@ worldloom evalrun compare <BASELINE> <RECENT>
 | --- | --- |
 | `--json` |  |
 
+### `worldloom evalrun corners`
+
+Draw corner cases from the world's own events, keep the ones the reference agent solves.
+
+```
+worldloom evalrun corners <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit corners.json on stdout. |
+| `--limit` | Keep only the first N solvable cases. |
+| `--out`, `-o` | Case set directory to write (evalrun-cases.jsonl, records.jsonl, corners.json). |
+| `--templates` | Corner templates to draw from (repeat, or comma-separate); default every template. |
+
 ### `worldloom evalrun curriculum`
 
 Write a dataset plan of fresh cases aimed at a run's failures, and name saturated slices.
@@ -491,6 +506,30 @@ worldloom evalrun export <RUN>
 | `--min-score` | sft: the least overall score a demonstration may have. |
 | `--out`, `-o` | JSONL file to write. |
 | `--split` | Keep only this dataset split (repeatable). Default: train, plus any case that carries no split. |
+
+### `worldloom evalrun frontier`
+
+Keep the cases the reference agent solves and the champion fails: the frontier.
+
+```
+worldloom evalrun frontier <CASE_SET>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
+| `--budget` | Champion case runs to spend. |
+| `--champion-exec` | The champion as an executable (the `evalrun run --exec` seam). |
+| `--champion-harness` | An installed coding harness as the champion: codex or claude. |
+| `--holdout` | Held-out cases: a case set directory, a cases JSONL file or a file of ids (repeat). |
+| `--holdout-id` | A held-out case id (repeat). |
+| `--holdout-seed` | A seed held out for judging (repeat); searching it is refused. |
+| `--json` | Emit frontier.json on stdout. |
+| `--max-turns` |  |
+| `--out`, `-o` | Case set directory for the frontier (frontier.json beside it). |
+| `--seed` | Seed(s) ordering the search (repeat); default 0. |
+| `--shell` | Run --champion-exec through the shell. |
+| `--timeout` | Seconds the champion child may run per turn. |
 
 ### `worldloom evalrun import-served`
 
