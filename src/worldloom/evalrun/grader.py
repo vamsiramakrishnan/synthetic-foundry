@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 from .. import packkit
@@ -55,37 +56,93 @@ def _unquote(word: str) -> str:
     return _QUOTED.sub(lambda match: match.group(1) or match.group(2) or "", word)
 
 
+#: A header inside a word (``-H "Authorization: Bearer sk-..."``, ``--header
+#: "x-api-key: ..."``): a secret-looking name, a colon, an optional scheme,
+#: then the value, which is what is redacted.
+_HEADER = re.compile(r"([A-Za-z0-9_-]*(?:key|token|secret|passw|credential|auth|bearer|cookie|session)[A-Za-z0-9_-]*"
+                     r"\s*:\s*(?:(?:bearer|basic|token|digest)\s+)?)([^\s'\"]+)", re.IGNORECASE)
+#: A ``name=value`` pair in a URL query string (``?key=...``, ``&access_token=...``).
+_QUERY = re.compile(r"([?&;])([^=&\s'\"#?;]+)=([^&\s'\"#;]*)")
+#: Credentials recognisable by their prefix alone, wherever they appear (``-k
+#: sk-...`` names nothing secret, but the value says what it is). A prefix
+#: glued to a preceding word character or hyphen (``task-list``) is not one.
+_TOKEN_PREFIX = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:sk-[A-Za-z0-9_-]+|sk_(?:live|test)_[A-Za-z0-9]+|gh[pousr]_[A-Za-z0-9]+"
+    r"|github_pat_[A-Za-z0-9_]+|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,}|xox[abposr]-[A-Za-z0-9-]+)")
+#: A value that is a file name, not a credential: an extension of a few letters.
+_FILE_LIKE = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,4}$")
+
+
+def _scan(text: str) -> str:
+    """*text* with header values, secret query values and prefixed tokens replaced; nothing else moves."""
+
+    text = _HEADER.sub(lambda match: f"{match.group(1)}{_REDACTED}", text)
+    text = _QUERY.sub(lambda match: f"{match.group(1)}{match.group(2)}={_REDACTED}"
+                      if _SECRET_NAME.search(match.group(2)) else match.group(0), text)
+    return _TOKEN_PREFIX.sub(_REDACTED, text)
+
+
+def _takes_secret(token: str) -> bool:
+    """Whether the word after this secret-named flag is its value, not another argument.
+
+    Not when it is another flag, and not when it names a file: a script or a
+    config path (an extension, or a path that exists) is what the judge
+    runs or reads, and hiding it would misreport the grader.
+    """
+    if not token or token.startswith("-"):
+        return False
+    if _FILE_LIKE.search(token):
+        return False
+    if "/" in token or "\\" in token:
+        try:
+            return not Path(token).is_file()
+        except (OSError, ValueError):
+            return True
+    return True
+
+
 def redact_command(command: str) -> str:
     """The command with any credential-looking value replaced by ``REDACTED``.
 
-    Three shapes are caught: an environment assignment (``OPENAI_API_KEY=sk-...
-    judge``), a flag with its value attached (``--api-key=sk-...``) and a flag
-    followed by its value (``--token sk-...``), whenever the name mentions a
-    key, token, secret, password, credential, auth, bearer, cookie or session.
-    A command that does not tokenize is kept whole but for such spans.
+    Shapes caught, whenever the name mentions a key, token, secret, password,
+    credential, auth, bearer, cookie or session: an environment assignment
+    (``OPENAI_API_KEY=sk-... judge``), a flag with its value attached
+    (``--api-key=sk-...``), a flag followed by its value (``--token sk-...``),
+    a header inside a word (``-H "Authorization: Bearer ..."``) and a
+    ``name=value`` pair in a URL query string. Independently of any name, a
+    value with a known credential prefix (``sk-``, ``ghp_``, ``AKIA``,
+    ``xox``) is redacted wherever it stands. A flag's next word is taken as
+    its value only when it is not itself a flag and does not name a file; a
+    negated flag (``--no-auth``) takes no value. Only the value is replaced,
+    so rotating a key never changes the result.
     """
 
     # Spans of the original text are replaced in place rather than the
     # command re-joined from shlex tokens: POSIX tokenizing eats Windows
     # backslashes, so a re-joined command would misreport the judge it ran.
-    words = [(match.start(), match.end(), _unquote(match.group(0))) for match in _WORD.finditer(command)]
+    words = [(match.start(), match.end(), match.group(0), _unquote(match.group(0)))
+             for match in _WORD.finditer(command)]
     replacements: list[tuple[int, int, str]] = []
     redact_next = False
-    for start, end, token in words:
+    for start, end, raw, token in words:
         if redact_next:
-            replacements.append((start, end, _REDACTED))
             redact_next = False
-            continue
+            if _takes_secret(token):
+                replacements.append((start, end, _REDACTED))
+                continue
         assignment = _ASSIGNMENT.match(token)
         if assignment and _SECRET_NAME.search(assignment.group(1)):
             replacements.append((start, end, f"{assignment.group(1)}={_REDACTED}"))
             continue
         flag = _FLAG.match(token)
-        if flag and _SECRET_NAME.search(flag.group(1)):
+        if flag and _SECRET_NAME.search(flag.group(1)) and not flag.group(1).lower().startswith("--no-"):
             if flag.group(2) is not None:
                 replacements.append((start, end, f"{flag.group(1)}={_REDACTED}"))
-            else:
-                redact_next = True
+                continue
+            redact_next = True
+        scanned = _scan(raw)
+        if scanned != raw:
+            replacements.append((start, end, scanned))
     out = command
     for start, end, text in reversed(replacements):
         out = out[:start] + text + out[end:]
@@ -102,8 +159,8 @@ def _redact_inline(text: str) -> str:
     which is the credential itself when the command starts ``KEY=... judge``.
     """
 
-    return _INLINE_ASSIGNMENT.sub(
-        lambda match: f"{match.group(1)}={_REDACTED}" if _SECRET_NAME.search(match.group(1)) else match.group(0), text)
+    return _scan(_INLINE_ASSIGNMENT.sub(
+        lambda match: f"{match.group(1)}={_REDACTED}" if _SECRET_NAME.search(match.group(1)) else match.group(0), text))
 
 
 def _rater_identity(rater: Any) -> dict[str, Any]:
@@ -112,6 +169,15 @@ def _rater_identity(rater: Any) -> dict[str, Any]:
     kind = str(getattr(rater, "kind", "custom"))
     name = _redact_inline(str(getattr(rater, "name", type(rater).__name__)))
     identity: dict[str, Any] = {"name": name, "kind": kind}
+    if kind == "model":
+        # Two judge models are two graders. A model rater that does not say
+        # which model it calls would give them one digest, and a loop pinned
+        # to it could swap the judge without the freeze noticing.
+        model = getattr(rater, "model", None)
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError(f"model rater {name!r} names no model; build it with model_rater(complete, model=...) "
+                             "so the grader's digest says which judge rated")
+        identity["model"] = _redact_inline(model.strip())
     command = getattr(rater, "command", None)
     if kind == "exec" and isinstance(command, str):
         identity["command"] = redact_command(command)

@@ -127,7 +127,12 @@ the plan alone.
 - **Sizing.** Each stratum gets at least `min_per_cluster` rows and at most
   `max_share` of `total` (which defaults to the base plan's row count). In
   between, rows are shared by the cluster's share of the failures, with
-  largest remainders deciding the last rows.
+  largest remainders deciding the last rows. The plan always has exactly
+  `total` rows: when the funded strata could not hold it under the
+  `max_share` cap (two strata capped at five and a total of eleven), the cap
+  is raised to the even share rather than planning fewer rows than asked.
+  A `total` under `min_per_cluster` is refused, since not even one stratum
+  can be funded at its floor.
 - **Sources.** Each stratum copies the closest base stratum's source, adds
   the predicates, narrows `dag_shapes` to the asked shape and the coverage
   profile's failures to the asked failure, so the compiler plans only what
@@ -330,9 +335,15 @@ template), `event`, `evidence` (the event ids it cites, also the row's
 other dimension.
 
 **Solvability.** Every generated case is run by the reference agent through
-`run_cases` with its full expected outcome. A case the reference cannot solve is
-dropped and the reason recorded; `corners.json` reports generated, solvable,
-dropped and unmatched per template. Over seeds 1 to 10 of the four seeded
+`run_cases` with its full expected outcome, answer included: a case with an
+answer contract is graded by a rater during the proof (`prove(...,
+rater=...)`, `corner_cases(..., rater=...)`, `evalrun corners --rater`). The
+default is the grounded rater wherever the shape allows it; on a judge-only
+shape, or a golden with no figure to check, the answer is left to the other
+axes, and a model judge given as the rater grades it. A case the reference
+cannot solve is dropped and the reason recorded; `corners.json` reports
+generated, solvable, dropped and unmatched per template, and the rater the
+proof used. Over seeds 1 to 10 of the four seeded
 worlds (`seeded_world`), every generated case was solvable: 20
 `confirmed_cause`, 60 `restated_figure`, 10 `escalated_exception` and 10
 `approver_handover`, with 10 leadership changes unmatched.
@@ -359,7 +370,10 @@ worldloom evalrun run ./frontier -o ./runs/frontier-candidate --harness claude -
 case set (`evalrun-cases.jsonl`, `records.jsonl`, `corners.json`) that
 `evalrun run` takes. `evalrun frontier` reads a case set, runs the champion
 given by `--champion-exec` or `--champion-harness` under `--agent-pack`, and
-writes the frontier as a case set with `frontier.json` beside it. `--holdout`
+writes the frontier as a case set with `frontier.json` beside it; frontier
+batches from several worlds go one case set per directory, named for the
+seed or the world, with the batch index appended when two would share a
+name, so no batch overwrites another. `--holdout`
 takes a case set directory, a cases JSONL file or a file of ids;
 `--holdout-id` and `--holdout-seed` name them one at a time.
 
@@ -412,12 +426,18 @@ missing, naming the record ids and fields.
   over the periods they span, else, for an operational case with no
   activity, the exception episodes the simulation raised on its source.
   Every one of these is the simulated company's volume, an authored prior.
+  The first two are per period; the episode count is over the simulation's
+  whole horizon, so a case records its `frequency_unit` (`period` or
+  `horizon`) and is only ever compared with frequencies in the same unit.
 - **Error cost.** A multiplier by operation class, the case's costliest
   expected outcome (`read` when it writes nothing), times a factor when it
   carries a designed failure.
 - **Weight.** `at-stake factor x frequency factor x error cost`. Each factor
   is the part divided by the set's median of that part, so a typical case
-  is 1.0, clamped to `[1/max_factor, max_factor]`. A missing part is 1.0,
+  is 1.0, clamped to `[1/max_factor, max_factor]`. Medians are taken within
+  one currency and one frequency unit: a case's money is relative to the
+  median of its own currency, never to a median that mixes yen and dollars.
+  A missing part is 1.0,
   the typical case: a case with no money is neither favoured nor ignored,
   and its basis says so. `value_table(cases, records)` weighs a whole set
   against its own medians; `value_of` alone can only compare a case with

@@ -184,15 +184,30 @@ def _slug(key: str) -> str:
 
 
 def _allocate(weights: Sequence[float], total: int, floor: int, cap: int) -> list[int]:
-    """Largest-remainder shares of ``total``, each within ``[floor, cap]``; deterministic."""
+    """Largest-remainder shares of ``total``, each within ``[floor, cap]``; deterministic.
+
+    The counts always sum to ``total``. A cap too low to hold it (two strata
+    capped at five cannot hold eleven rows) is raised to the even share,
+    ``ceil(total / count)``, rather than silently planning fewer rows than
+    asked for; a total under ``floor`` per stratum is refused.
+    """
 
     count = len(weights)
+    if not count:
+        return []
+    if total < floor * count:
+        raise ValueError(f"total {total} is under the floor of {floor} row(s) for each of {count} stratum(s)")
+    cap = max(cap, -(-total // count))
     counts = [floor] * count
     remaining = total - floor * count
     if remaining <= 0:
         return counts
-    whole = sum(weights) or float(count)
-    raw = [remaining * (weight or (whole / count)) / whole for weight in weights]
+    # A zero weight stands in at the mean weight; the shares are taken over
+    # the weights as filled, so they never add up to more than `remaining`.
+    fill = (sum(weights) / count) if sum(weights) else 1.0
+    filled = [weight or fill for weight in weights]
+    whole = sum(filled)
+    raw = [remaining * weight / whole for weight in filled]
     for index, value in enumerate(raw):
         counts[index] = min(cap, counts[index] + int(value))
     order = sorted(range(count), key=lambda index: (-(raw[index] - int(raw[index])), index))
@@ -270,9 +285,11 @@ def design_curriculum(
     """The targeted plan for one improvement round, with an account of every cluster.
 
     ``total`` defaults to the base plan's row count. Each stratum gets at
-    least ``min_per_cluster`` rows and at most ``max_share`` of the total;
-    between those bounds its count is proportional to its clusters' share
-    of failures. Clusters that map onto the same predicates share a stratum.
+    least ``min_per_cluster`` rows and at most ``max_share`` of the total
+    (raised to the even share when the funded strata could not otherwise
+    hold the total, so the plan always has exactly ``total`` rows); between
+    those bounds its count is proportional to its clusters' share of
+    failures. A total under ``min_per_cluster`` is refused. Clusters that map onto the same predicates share a stratum.
     ``holdout_share`` becomes the ``test`` split weight; the rest is ``train``.
     Everything not in a stratum is in ``unmappable`` with its reason.
 
@@ -301,6 +318,9 @@ def design_curriculum(
     budget = total if total is not None else sum(stratum.count for stratum in base.strata)
     if budget < 1:
         raise ValueError("total must be positive")
+    if budget < min_per_cluster:
+        raise ValueError(f"total {budget} is under min_per_cluster {min_per_cluster}: not even one stratum can be "
+                         "funded at its floor; raise --total or lower the floor")
 
     unmapped: list[Unmapped] = []
     grouped: dict[tuple[tuple[str, str], ...], list[Cluster]] = {}

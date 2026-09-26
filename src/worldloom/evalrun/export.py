@@ -26,10 +26,15 @@ Three exports:
   program checked and nothing a model judged.
 
 The leakage guard: a case set compiled by the dataset compiler carries a
-split. Training on a test or holdout row makes every later promotion decision
-over that row meaningless, so the exporter keeps ``train`` by default and
-refuses a holdout split unless it is asked for by name with
-``include_holdout``. A case set without splits has nothing to guard.
+split. Training on a held-out row (``test``, ``holdout`` or ``validation``,
+the set ``evalrun.splits`` owns) makes every later promotion decision over
+that row meaningless, so the exporter keeps ``train`` by default and refuses
+a held-out split unless it is asked for by name with ``include_holdout``. A
+run can be held out as a whole: the improve loop holds cases back by hash,
+so they carry no split, and marks the run it made over them
+(``RunReport.split``). Such a run is refused outright without
+``include_holdout``, whatever its cases say. A case set without splits, in a
+run nobody sealed, has nothing to guard.
 
 Output order is case id, and the JSONL writer pins key order and newlines,
 so one ledger always exports to the same bytes.
@@ -49,6 +54,7 @@ from ..ids import content_key
 from .contract import EvalCase
 from .grading import CaseScore, OutcomeGrade
 from .runner import CaseResult, RunReport, case_set_digest
+from .splits import HELD_OUT_SPLITS, declared_split, is_held_out
 
 SFT_SCHEMA = "worldloom.trace-export.sft/v1"
 PAIR_SCHEMA = "worldloom.trace-export.pair/v1"
@@ -59,8 +65,10 @@ FORMATS = ("sft", "pairs", "rewards")
 #: The split every export keeps when none is asked for.
 TRAIN_SPLIT = "train"
 #: Splits an export refuses unless ``include_holdout`` is given: promotion is
-#: decided on them, and a model trained on them has seen the exam.
-HOLDOUT_SPLITS = frozenset({"test", "holdout"})
+#: decided on them, and a model trained on them has seen the exam. The one
+#: set every part of evalrun reads (``evalrun.splits``), so ``validation`` is
+#: sealed here exactly as the improve loop seals it.
+HOLDOUT_SPLITS = HELD_OUT_SPLITS
 
 AXES = ("plan", "trajectory", "outcomes")
 
@@ -103,13 +111,17 @@ def _by_id(cases: Iterable[EvalCase] | Mapping[str, EvalCase]) -> dict[str, Eval
     return {case.id: case for case in cases}
 
 
-def case_split(result: CaseResult | None, case: EvalCase | None) -> str | None:
-    """The dataset split a case belongs to: its dimensions first, then its row."""
-    for source in (case.dimensions if case is not None else None, result.dimensions if result is not None else None,
-                   case.row if case is not None else None):
-        if source and source.get("split"):
-            return str(source["split"])
-    return None
+def case_split(result: CaseResult | None, case: EvalCase | None, report: RunReport | None = None) -> str | None:
+    """The dataset split a case belongs to, as ``evalrun.splits`` resolves it, else its run's.
+
+    The case's dimensions, its row, the row's ``dimensions``, then the
+    result's dimensions; a case that names none is in the split its run was
+    made on (``RunReport.split``), when the run names one.
+    """
+    found = declared_split(case, result)
+    if found is None and report is not None and report.split:
+        return str(report.split)
+    return found
 
 
 @dataclass
@@ -150,6 +162,20 @@ class SplitFilter:
         why = (" (training on holdout rows invalidates promotion; --include-holdout overrides)" if held
                else "")
         return f"withheld {counts} case(s) outside the exported split(s){why}"
+
+
+def _check_run_split(report: RunReport, guard: SplitFilter) -> None:
+    """A run made on a held-out split is refused whole unless ``include_holdout``.
+
+    Its cases may carry no split at all (the improve loop holds cases back
+    by hash), so a per-case filter would read every one of them as training
+    data; the run's own mark is the only thing that says otherwise.
+    """
+    if is_held_out(report.split) and not guard.include_holdout:
+        raise HoldoutRefused(
+            f"run by {report.agent!r} was made on the held-out split {report.split!r}: promotion is decided on it, "
+            "and a model trained on it has seen the exam; pass include_holdout (--include-holdout) only for a "
+            "set that will never be used to promote")
 
 
 def _check_case_set(report: RunReport, cases: Mapping[str, EvalCase]) -> None:
@@ -248,6 +274,13 @@ def continuation(result: CaseResult, *, cap: int | None = None) -> tuple[list[di
     labels say ``refused`` so a reader knows its place is not measured. The
     refused call's argument values were never recorded either; its names are
     kept with null values.
+
+    Ties: a question and a refusal can share a span index, and the service
+    records them in two separate lists with no sequence across the two, so
+    their true order at that index is not on the ledger. The rule is fixed
+    rather than guessed: at one index, questions first, then refusals, each
+    list in the order it was recorded. The labels in ``order`` make the
+    choice visible to a reader of the record.
     """
     limit = max_result_chars() if cap is None else cap
     spans = sorted(result.spans, key=lambda span: int(span.get("ordinal") or 0))
@@ -307,7 +340,7 @@ def _metadata(report: RunReport, result: CaseResult, case: EvalCase) -> dict[str
         "agent_pack": _digest(report.agent_pack), "grader": _digest(report.grader),
         "scores": _axis_scores(result.score), "observed": list(result.score.observed),
         "passed": result.score.passed, "dimensions": dict(sorted(case.dimensions.items())),
-        "split": case_split(result, case), "shape": result.shape,
+        "split": case_split(result, case, report), "shape": result.shape,
     }
 
 
@@ -337,6 +370,7 @@ def sft_records(
     by_id = _by_id(cases)
     _check_case_set(report, by_id)
     guard = split_filter or SplitFilter(tuple(splits) if splits is not None else None, include_holdout)
+    _check_run_split(report, guard)
     system = system_text if system_text is not None else agent_system_text(report.agent_pack)
     head = _system_message(system)
     out: list[dict[str, Any]] = []
@@ -346,7 +380,7 @@ def sft_records(
             continue
         if result.score.score < min_score or (require_passed and not result.score.passed):
             continue
-        if not guard.keeps(case_split(result, case)):
+        if not guard.keeps(case_split(result, case, report)):
             continue
         tail, order = continuation(result, cap=max_chars)
         messages = [head, _user_message(case.query, case.persona), *tail]
@@ -374,7 +408,8 @@ def preference_pairs(
     """Chosen and rejected continuations of one prompt, from two runs of one case set.
 
     A case pairs when both runs graded it on the same axes and one leads on
-    the overall score by at least *margin* (default: ``evalrun.delta_band``).
+    the overall score by more than *margin* (default: ``evalrun.delta_band``;
+    a lead of exactly the band is one ``compare`` calls stable).
     Refused: two runs over different case sets, two runs whose graders carry
     different digests, and one run paired with itself.
     """
@@ -392,6 +427,8 @@ def preference_pairs(
     _check_case_set(b, by_id)
     band = default_margin() if margin is None else margin
     guard = split_filter or SplitFilter(tuple(splits) if splits is not None else None, include_holdout)
+    _check_run_split(a, guard)
+    _check_run_split(b, guard)
     head = _system_message(None)
     left = {row.case_id: row for row in a.results}
     right = {row.case_id: row for row in b.results}
@@ -403,10 +440,13 @@ def preference_pairs(
         if set(x.score.observed) != set(y.score.observed):
             continue
         case = by_id[case_id]
-        if not guard.keeps(case_split(x, case)):
+        split = case_split(x, case, a) or case_split(y, case, b)
+        if not guard.keeps(split):
             continue
         delta = round(x.score.score - y.score.score, 4)
-        if delta == 0 or abs(delta) < band:
+        # Inside the band, edge included: `compare` calls |delta| <= band
+        # stable, and a pair must not teach a difference it does not report.
+        if delta == 0 or abs(delta) <= band + 1e-9:
             continue
         (chosen, chosen_run), (rejected, rejected_run) = ((x, a), (y, b)) if delta > 0 else ((y, b), (x, a))
         assert chosen.score is not None and rejected.score is not None
@@ -426,7 +466,7 @@ def preference_pairs(
                            "scores": _axis_scores(chosen.score), "passed": chosen.score.passed},
                 "rejected": {"agent": rejected_run.agent, "agent_pack": _digest(rejected_run.agent_pack),
                              "scores": _axis_scores(rejected.score), "passed": rejected.score.passed},
-                "dimensions": dict(sorted(case.dimensions.items())), "split": case_split(x, case),
+                "dimensions": dict(sorted(case.dimensions.items())), "split": split,
                 "shape": x.shape,
             },
         })
@@ -470,7 +510,7 @@ def _no_write(case: EvalCase | None, outcomes: OutcomeGrade) -> bool:
 
 def reward_records(
     report: RunReport,
-    cases: Iterable[EvalCase] | Mapping[str, EvalCase] | None = None,
+    cases: Iterable[EvalCase] | Mapping[str, EvalCase],
     *,
     splits: Sequence[str] | None = None,
     include_holdout: bool = False,
@@ -484,17 +524,25 @@ def reward_records(
     score recomputed without that term, over the executed axes; it is null
     for a run that executed nothing (an Eval Studio import), where the
     answer is all there is.
+
+    *cases* is required: a compiled row carries its split at its top level,
+    which the result does not copy, so without the cases the holdout guard
+    would pass every row it cannot see.
     """
-    by_id = _by_id(cases) if cases is not None else {}
-    if by_id:
-        _check_case_set(report, by_id)
+    if cases is None:
+        raise ExportRefused("a reward export needs the case set the run was over: the rows' splits live there, "
+                            "and without them a held-out row would be exported as training data")
+    by_id = _by_id(cases)
+    _check_case_set(report, by_id)
     guard = split_filter or SplitFilter(tuple(splits) if splits is not None else None, include_holdout)
+    _check_run_split(report, guard)
     out: list[dict[str, Any]] = []
     for result in sorted(report.results, key=lambda row: row.case_id):
         if not result.graded or result.score is None:
             continue
         case = by_id.get(result.case_id)
-        if not guard.keeps(case_split(result, case)):
+        split = case_split(result, case, report)
+        if not guard.keeps(split):
             continue
         score = result.score
         executed = "trajectory" in score.observed
@@ -542,7 +590,7 @@ def reward_records(
             "axes": _axis_scores(score), "observed": list(score.observed),
             "verifiable": verifiable,
             "model_rated": {"answer_score": score.outcomes.answer_score, "answer_error": score.outcomes.answer_error},
-            "dimensions": dict(sorted(result.dimensions.items())), "split": case_split(result, case),
+            "dimensions": dict(sorted(result.dimensions.items())), "split": split,
         })
     return out
 

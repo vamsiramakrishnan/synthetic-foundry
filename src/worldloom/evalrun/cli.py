@@ -659,7 +659,10 @@ def agreement_command(
         _refuse("results_unjoinable", f"{results}: {error}")
     if not studio.results:
         _refuse("results_unjoinable", f"{results}: no row's query text matches a case in {corpus}")
-    report = agreement(studio, cases, grader, instruction=instruction)
+    try:
+        report = agreement(studio, cases, grader, instruction=instruction)
+    except ValueError as error:
+        _refuse("results_unjoinable", f"{results}: {error}")
     payload = report.model_dump(mode="json", by_alias=True)
     if out is not None:
         out.mkdir(parents=True, exist_ok=True)
@@ -685,6 +688,8 @@ def agreement_command(
     typer.echo(f"excluded: {excluded.studio_errors} Studio error(s), {excluded.local_errors} local error(s),"
                f" {excluded.no_answer_contract} without an answer contract;"
                f" {report.abstained.cases} judge-only case(s) the local rater abstains on")
+    if excluded.unknown_cases:
+        typer.echo(f"  {excluded.unknown_cases} Studio row(s) matched no case in {corpus}")
     for name, reason in sorted(stats.undefined.items()):
         typer.echo(f"  {name} undefined: {reason}")
     for item in report.worst[:5]:
@@ -808,7 +813,7 @@ def export_command(
     include_failed: bool = typer.Option(False, "--include-failed", help="sft: keep cases that scored at least --min-score without passing."),
     margin: float | None = typer.Option(None, "--margin", min=0.0, help="pairs: the least overall-score lead of chosen over rejected (default: policy `evalrun.delta_band`)."),
     split: list[str] | None = typer.Option(None, "--split", help="Keep only this dataset split (repeatable). Default: train, plus any case that carries no split."),
-    include_holdout: bool = typer.Option(False, "--include-holdout", help="Allow test and holdout splits. A model trained on them has seen the exam, so promotion over them is void."),
+    include_holdout: bool = typer.Option(False, "--include-holdout", help="Allow held-out splits (test, holdout, validation) and runs marked held out. A model trained on them has seen the exam, so promotion over them is void."),
     max_result_chars: int | None = typer.Option(None, "--max-result-chars", min=16, help="sft and pairs: characters of one tool result kept before a truncation marker (default: policy `evalrun.export.max_result_chars`)."),
 ) -> None:
     """Export a graded run as training data: SFT transcripts, preference pairs or reward records.
@@ -818,7 +823,8 @@ def export_command(
     each refused call as a tool error, then the answer. Pairs join two runs
     of one case set on case id and refuse runs graded by different graders.
     Reward records keep the deterministic parts apart from the rated
-    answer. Test and holdout splits are withheld unless --include-holdout.
+    answer. Held-out splits (test, holdout, validation) are withheld, and a
+    run marked held out is refused, unless --include-holdout.
     """
     from ..cli import _refuse
     from .export import (
@@ -1000,6 +1006,8 @@ def corners_command(
     out: Path = typer.Option(..., "--out", "-o", help="Case set directory to write (evalrun-cases.jsonl, records.jsonl, corners.json)."),
     templates: list[str] | None = typer.Option(None, "--templates", help="Corner templates to draw from (repeat, or comma-separate); default every template."),
     limit: int | None = typer.Option(None, "--limit", min=1, help="Keep only the first N solvable cases."),
+    rater: str | None = typer.Option(None, "--rater", help="The rater the proof grades answer contracts with: grounded or exec:<command>. Default: grounded wherever the shape allows it."),
+    rater_timeout: float = typer.Option(600.0, "--rater-timeout", help="Seconds an exec: rater child may run per answer."),
     json_output: bool = typer.Option(False, "--json", help="Emit corners.json on stdout."),
 ) -> None:
     """Draw corner cases from the world's own events, keep the ones the reference agent solves.
@@ -1008,8 +1016,9 @@ def corners_command(
     superseded a hypothesis, a restated return, an escalated exception, a
     departure) to the activity it belongs to and a case whose difficulty is
     that event. A template the world has no event for yields nothing. Every
-    case is run by the reference agent with its full expected outcome; one it
-    cannot solve is dropped and the reason printed. The output is a case set
+    case is run by the reference agent with its full expected outcome,
+    including any answer contract (graded by --rater); one it cannot solve
+    is dropped and the reason printed. The output is a case set
     `worldloom evalrun run` reads.
     """
     from ..cli import _refuse
@@ -1024,7 +1033,8 @@ def corners_command(
         world = World.load(str(corpus))
     except Exception as error:  # a corpus that will not load is a refusal, whatever the cause
         _refuse("corpus_unloadable", f"{corpus}: {error}", fix="point at a directory written by `worldloom build --out`")
-    batch = corner_cases(world, templates=names or None, limit=limit)
+    batch = corner_cases(world, templates=names or None, limit=limit,
+                         rater=_rater_from(rater, timeout=rater_timeout, shell=False))
     write_corner_set(batch, out)
     summary = batch.summary()
     if json_output:

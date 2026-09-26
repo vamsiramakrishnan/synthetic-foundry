@@ -22,11 +22,15 @@ case in one class) is ``None`` with the reason, never a number that looks
 like a measurement.
 
 Exclusions are counted, not hidden: a Studio row with a ``scoreError`` (or an
-``Error:`` answer), a case the local rater could not rate, and, separately, a
-case whose shape the local rater abstains on by design (``rater.JUDGE_ONLY``
-under the grounded rater): those have a Studio score and no local one, and
-are reported as their own bucket so the reader sees how much of the set the
-local grader cannot vouch for.
+``Error:`` answer), a Studio row that matched no case (counted by
+``import_studio_results`` and reported as ``unknown_cases``), a case the
+local rater could not rate, and, separately, a case whose shape the local
+rater abstains on by design (``rater.JUDGE_ONLY`` under the grounded rater,
+and only that rater: a model or exec judge that returns no score on such a
+shape failed, and is a local error). Abstentions have a Studio score and no
+local one, and are reported as their own bucket so the reader sees how much
+of the set the local grader cannot vouch for. A case graded twice by Studio
+(two rows with its query) is refused with its id rather than counted twice.
 
 Statistics are computed here in plain Python. They are small, and a grader
 audit should not need a numerical stack to be reproduced.
@@ -35,7 +39,7 @@ audit should not need a numerical stack to be reproduced.
 from __future__ import annotations
 
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from typing import Any
 
@@ -179,10 +183,11 @@ class Abstained(Model):
 class Excluded(Model):
     #: Studio rows carrying a ``scoreError`` or an ``Error:`` answer.
     studio_errors: int
-    #: Rows the local rater could not rate (outside ``JUDGE_ONLY``), by message.
+    #: Rows the local rater could not rate (outside a grounded rater's ``JUDGE_ONLY``), by message.
     local_errors: int
     local_error_messages: dict[str, int]
-    #: Studio rows whose case is not in the case set given.
+    #: Studio rows whose case is not in the case set given, including the
+    #: CSV rows whose query matched no case at import.
     unknown_cases: int
     #: Cases with no answer contract, so no golden to rate against.
     no_answer_contract: int
@@ -305,16 +310,31 @@ def agreement(
     inside). ``instruction`` is the auto-rater instruction the Studio run
     was configured with, when the operator knows it: it is recorded, not
     used, because only Eval Studio ran it.
+
+    Raises ``ValueError`` naming the case ids when one case appears more
+    than once in ``studio``: two Studio grades of one case would count as
+    two pairs, and which one is the measurement is not ours to choose.
     """
 
     from .results import delta_band
 
+    seen: Counter[str] = Counter(result.case_id for result in studio.results)
+    twice = sorted(case_id for case_id, count in seen.items() if count > 1)
+    if twice:
+        raise ValueError(f"Eval Studio graded {len(twice)} case(s) more than once ({', '.join(twice[:5])}"
+                         + (", ..." if len(twice) > 5 else "") + "); keep one row per query and measure again")
     pass_mark = float(packkit.policy("evalrun.answer_pass_score")) if threshold is None else float(threshold)
     tolerance = delta_band() if band is None else float(band)
+    grounded = getattr(rater, "kind", None) == "grounded"
     by_id = {case.id: case for case in cases}
     rows: list[AgreementCase] = []
     abstained: list[tuple[str, str, float]] = []
-    studio_errors = unknown = no_contract = 0
+    studio_errors = no_contract = 0
+    # Rows the import could not attribute never became results; it recorded
+    # how many, and they are unknown cases as much as a result for a case
+    # outside *cases* is.
+    recorded = (studio.agent_identity or {}).get("unmatched_rows", 0)
+    unknown = int(recorded) if isinstance(recorded, int) and not isinstance(recorded, bool) else 0
     local_errors: dict[str, int] = defaultdict(int)
     for result in studio.results:
         case = by_id.get(result.case_id)
@@ -331,7 +351,9 @@ def agreement(
             continue
         local_value, error = rater(case, result.answer)
         if local_value is None:
-            if contract.rubric in JUDGE_ONLY:
+            # Only the grounded rater declines these shapes by design; any
+            # other rater was asked to rate them, and no score is a failure.
+            if grounded and contract.rubric in JUDGE_ONLY:
                 abstained.append((case.id, contract.rubric.value, studio_value))
             else:
                 local_errors[(error or "no score").split(":")[0]] += 1

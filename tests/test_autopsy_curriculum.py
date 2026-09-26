@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from typer.testing import CliRunner
 
 from worldloom import RetailWorld
@@ -350,6 +352,37 @@ def test_allocation_is_proportional_within_its_bounds() -> None:
     assert counts[0] >= counts[1] >= counts[2]
     assert _allocate([0.5, 0.5], 8, 4, 8) == [4, 4]
     assert _allocate([1.0, 0.1], 10, 4, 5) == [5, 5], "the cap binds before the proportion"
+
+
+def test_an_allocation_always_spends_its_whole_total() -> None:
+    # Two strata capped at 5 cannot hold 11 rows: the cap rises to the even share.
+    assert sum(_allocate([0.5, 0.5], 11, 4, 5)) == 11
+    assert sorted(_allocate([0.5, 0.5], 11, 4, 5)) == [5, 6]
+    with pytest.raises(ValueError, match="under the floor"):
+        _allocate([1.0], 2, 4, 2)
+
+
+@settings(derandomize=True, database=None, deadline=None, max_examples=300)
+@given(weights=st.lists(st.floats(min_value=0.0, max_value=1.0, allow_nan=False), min_size=1, max_size=8),
+       floor=st.integers(min_value=0, max_value=6), extra=st.integers(min_value=0, max_value=60),
+       share=st.floats(min_value=0.05, max_value=1.0, allow_nan=False))
+def test_property_allocations_sum_to_the_total_when_feasible(weights: list[float], floor: int, extra: int,
+                                                              share: float) -> None:
+    total = floor * len(weights) + extra
+    cap = max(floor, int(total * share))
+    counts = _allocate(weights, total, floor, cap)
+    assert sum(counts) == total
+    assert all(count >= floor for count in counts)
+    assert max(counts) <= max(cap, -(-total // len(weights)))
+
+
+def test_a_total_under_the_floor_is_refused(runs: dict[str, Any]) -> None:
+    base = _base_plan()
+    report = autopsy(runs["lazy"], cases=runs["cases"])
+    with pytest.raises(ValueError, match="min_per_cluster"):
+        design_curriculum(report, base, round=1, total=2, min_per_cluster=4)
+    curriculum = design_curriculum(report, base, round=1, total=11, min_per_cluster=4, max_share=0.45)
+    assert sum(target.count for target in curriculum.targets) == 11
 
 
 # -- escalation ------------------------------------------------------------------------

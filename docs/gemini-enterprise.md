@@ -140,13 +140,18 @@ default, or `exec:<command>` for a model judge over the exec seam). Whatever
 differs is the graders.
 
 **What is left out, and counted.** A Studio row with a `scoreError` or an
-`Error:` answer, a row the local rater could not rate, and a case with no
-answer contract are excluded and counted under `excluded`. Cases whose shape
-the grounded rater declines by design (causal chains, authority resolution,
-citation required) have a Studio score and no local one; they are reported
-under `abstained` with Studio's mean, so the reader sees how much of the set
-the local grader cannot vouch for. A model judge does not abstain, so those
-cases join the comparison when one is used.
+`Error:` answer, a row the local rater could not rate, a case with no
+answer contract, and a Studio row whose query matches no case
+(`unknown_cases`, counted at import rather than dropped) are excluded and
+counted under `excluded`. Cases whose shape the grounded rater declines by
+design (causal chains, authority resolution, citation required) have a
+Studio score and no local one; they are reported under `abstained` with
+Studio's mean, so the reader sees how much of the set the local grader cannot
+vouch for. Only the grounded rater abstains: a model or exec judge that
+returns no score on such a shape failed, and is counted as a local error, so
+those cases join the comparison when a judge rates them. A case Studio graded
+twice (two rows with one query) is refused with its id rather than counted
+twice; keep one row per query.
 
 **How to read it.** Every statistic is over the rated pairs, overall and per
 shape:
@@ -185,7 +190,12 @@ of them, and the report records the values in force.
 
 **The grader is frozen by digest.** `evalrun.grader.grader_identity(rater)`
 names what graded a run: the rater and its kind (for an exec judge, its
-command with anything credential-shaped redacted), a digest of the `rater.*`
+command with anything credential-shaped redacted: secret-named assignments
+and flags, header values such as `Authorization: Bearer ...` and
+`x-api-key: ...`, secret query parameters, and values with a known token
+prefix such as `sk-`, `ghp_`, `AKIA` or `xox`; for a model judge, the model
+`model_rater(complete, model=...)` names, which is required so two judge
+models are two graders), a digest of the `rater.*`
 judge texts in force, a digest of the per-shape rubrics, the grading policy
 values in force (`evalrun.answer_pass_score`, `evalrun.delta_band`), and a
 grading code version, all under one `digest`. The agreement report carries it
