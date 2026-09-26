@@ -161,6 +161,14 @@ class ExecAgent:
             self.skills_dir = materialise(policy.body.files, cache).resolve()
             self.skill_index = skill_index(policy.body.files, self.skills_dir)
 
+    def fingerprint(self) -> dict[str, Any]:
+        """The whole command (credentials redacted), how it runs, and the policy it runs under."""
+        from .grader import redact_command
+
+        return {"kind": "exec", "command": redact_command(self.command), "shell": self.shell,
+                "timeout": self.timeout, "max_turns": self.max_turns,
+                "agent_pack": self.policy.digest if self.policy is not None else None}
+
     def _unadvisable(self, tools: ToolSurface, catalog: list[dict[str, Any]]) -> tuple[str, ...]:
         """Tools the policy advises that nothing serves: a finding about the policy, not a failure of the run.
 
@@ -325,6 +333,11 @@ class ResponsesAgent:
     def __init__(self, scripts: Mapping[str, Mapping[str, Any]], *, name: str = "responses") -> None:
         self.name = name
         self._scripts = dict(scripts)
+
+    def fingerprint(self) -> dict[str, Any]:
+        from ..providers import digest
+
+        return {"kind": "responses", "name": self.name, "scripts": digest(self._scripts)}
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         from .agents import ScriptedAgent

@@ -216,7 +216,7 @@ def append_result(directory: Path, result: CaseResult) -> None:
 
 #: The identity fields two ledgers must share to be one run: a resume refuses
 #: a ledger that differs in any, and a merge refuses shards that do.
-IDENTITY_FIELDS = ("agent", "principal", "case_set", "agent_pack", "grader")
+IDENTITY_FIELDS = ("agent", "principal", "case_set", "agent_pack", "grader", "agent_identity", "split")
 
 
 def _header(report: RunReport, cases: int) -> dict[str, Any]:
@@ -227,6 +227,10 @@ def _header(report: RunReport, cases: int) -> dict[str, Any]:
         header["agent_pack"] = report.agent_pack
     if report.grader is not None:
         header["grader"] = report.grader
+    if report.agent_identity is not None:
+        header["agent_identity"] = report.agent_identity
+    if report.split is not None:
+        header["split"] = report.split
     return header
 
 
@@ -297,7 +301,8 @@ def read_run(directory: Path) -> RunReport:
         warnings.warn(note, LedgerWarning, stacklevel=2)
     return RunReport(agent=str(header["agent"]), principal=str(header.get("principal", "agent")),
                      case_set=str(header["case_set"]), results=tuple(results),
-                     agent_pack=header.get("agent_pack"), grader=header.get("grader"))
+                     agent_pack=header.get("agent_pack"), grader=header.get("grader"),
+                     agent_identity=header.get("agent_identity"), split=header.get("split"))
 
 
 def _mismatches(header: Mapping[str, Any], identity: RunReport) -> list[str]:
@@ -432,7 +437,7 @@ def merge_shards(directories: Sequence[Path]) -> RunReport:
         loaded.append((directory, shard, header, read_run(directory)))
     first_dir, first_shard, first_header, first = loaded[0]
     for directory, shard, header, _report in loaded[1:]:
-        differs = [key for key in ("agent", "principal", "agent_pack", "grader") if header.get(key) != first_header.get(key)]
+        differs = [key for key in ("agent", "principal", "agent_pack", "grader", "agent_identity", "split") if header.get(key) != first_header.get(key)]
         differs += [key for key in ("count", "case_set", "order") if shard.get(key) != first_shard.get(key)]
         if differs:
             raise ValueError(f"{directory}: not a shard of the same run as {first_dir}: differs in "
@@ -467,7 +472,8 @@ def merge_shards(directories: Sequence[Path]) -> RunReport:
         raise ValueError(f"{len(unknown)} result(s) for cases outside the case set (first {unknown[0]})")
     return RunReport(agent=first.agent, principal=first.principal, case_set=str(first_shard["case_set"]),
                      results=tuple(results[case_id] for case_id in order),
-                     agent_pack=first.agent_pack, grader=first.grader)
+                     agent_pack=first.agent_pack, grader=first.grader, agent_identity=first.agent_identity,
+                     split=first.split)
 
 
 # -- comparison ---------------------------------------------------------------

@@ -27,7 +27,7 @@ from .. import packkit
 from ..connectors.serving import ConnectorEvaluationService, ServingError, ServingLimits
 from ..ids import content_key
 from ..models import Model
-from .agents import AgentResponse, AgentTask, AgentUnderTest, ToolSurface
+from .agents import AgentResponse, AgentTask, AgentUnderTest, ToolSurface, fingerprint
 from .contract import EvalCase
 from .grader import grader_identity
 from .grading import CaseScore, grade_outcomes, grade_plan, grade_trajectory, score_case
@@ -91,6 +91,15 @@ class RunReport(Model):
     #: What graded the run (rater identity and the grader's digest), so a
     #: comparison can refuse two runs that were not measured the same way.
     grader: dict[str, Any] | None = None
+    #: What the agent under test was, beyond its name (``agents.fingerprint``):
+    #: the full command, turn budget and policy of an exec agent, the content
+    #: of a script. Resume, merge and the improve loop's cache compare it, so
+    #: two agents that share a name are never mixed into one measurement.
+    agent_identity: dict[str, Any] | None = None
+    #: The split every case of this run was drawn from, when a caller ran one
+    #: split on purpose (the improve loop marks its held-out runs ``holdout``),
+    #: so export can refuse a sealed run even after its cases lose their split.
+    split: str | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -272,7 +281,8 @@ def run_cases(
                                     safety=safety, on_result=on_result, concurrency=concurrency)
     return RunReport(agent=agent.name, principal=principal or (listed[0].principal if listed else "agent"),
                      case_set=case_set_digest(listed), results=ordered,
-                     agent_pack=getattr(agent, "pack_record", None), grader=grader_identity(rater))
+                     agent_pack=getattr(agent, "pack_record", None), grader=grader_identity(rater),
+                     agent_identity=fingerprint(agent))
 
 
 def admitted_concurrency(service: ConnectorEvaluationService) -> int:

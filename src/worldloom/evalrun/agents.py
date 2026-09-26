@@ -162,6 +162,14 @@ class ScriptedAgent:
                     break
         return AgentResponse(answer=self.answer, artifacts=self.artifacts)
 
+    def fingerprint(self) -> dict[str, Any]:
+        from ..providers import digest
+
+        return {"kind": "scripted", "name": self.name, "stop_on_error": self.stop_on_error,
+                "script": digest({"calls": [call.model_dump(mode="json") for call in self.calls],
+                                  "answer": self.answer,
+                                  "artifacts": [artifact.model_dump(mode="json") for artifact in self.artifacts]})}
+
 
 class CallableAgent:
     """Any ``(task, tools) -> AgentResponse`` callable, named."""
@@ -172,6 +180,19 @@ class CallableAgent:
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         return self._fn(task, tools)
+
+
+def fingerprint(agent: Any) -> dict[str, Any]:
+    """What an agent under test is, beyond its name: two agents with one name differ here.
+
+    An agent may say it itself (``fingerprint()``); otherwise its name and
+    class are all there is to go on, which is exactly what a run recorded
+    before fingerprints existed.
+    """
+    own = getattr(agent, "fingerprint", None)
+    if callable(own):
+        return dict(own())
+    return {"kind": type(agent).__name__, "name": str(getattr(agent, "name", ""))}
 
 
 _CREATE_OPS = frozenset({"create", "send", "post", "upload"})
