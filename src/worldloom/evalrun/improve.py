@@ -44,6 +44,14 @@ dropped. What goes to the held-out cases is the reduced candidate, after it
 passes the training gate again; a change that carried no weight on training
 never reaches the holdout, where it could only add noise.
 
+An agent under test is stochastic, so one run a side can promote by luck.
+With ``repeats`` above 1 (``evalrun.improve.repeats``) each policy runs that
+many times over each case set, each repeat an ordinary pinned run in
+``runs/<pack>@<digest>/<label>/rep-<i>``, and every comparison, ablation's
+included, becomes a paired test over per-case means (``noise.paired``) whose
+bootstrap interval the gates judge (``judge_paired``). At 1 the single-run
+rules, receipts and run directories are exactly what they always were.
+
 The grader is pinned by digest before the first round and checked around
 every run: a loop that could move its own measuring stick would be measuring
 nothing. Nothing here edits source code; what changes is a pack, which is
@@ -64,7 +72,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
 from .. import packkit
 from ..execseam import ExecError
@@ -78,6 +86,7 @@ from .autopsy import autopsy, render_brief
 from .contract import EvalCase
 from .grader import check_frozen, grader_identity
 from .harness import skills_cache_in
+from .noise import Interval, PairedComparison, confidence_level, paired, resample_count
 from .results import Comparison, compare, delta_band, read_run, write_run
 from .runner import RunReport, case_set_digest
 from .splits import HELD_OUT_SPLITS, declared_split, is_held_out
@@ -141,6 +150,39 @@ class Gate(Model):
     #: was given values: then it must clear the same bar as the plain mean,
     #: so a candidate cannot win on cheap cases while losing the costly ones.
     value_delta: float | None = None
+    #: Runs a side the gate compared. At 1 the fields below are absent from
+    #: the receipt, which keeps exactly the bytes a single-run loop wrote.
+    repeats: int = 1
+    #: The paired bootstrap's interval for ``mean_delta`` over per-case means,
+    #: at ``confidence``, with its standard error and the t interval beside it.
+    ci_low: float | None = None
+    ci_high: float | None = None
+    stderr: float | None = None
+    t_low: float | None = None
+    t_high: float | None = None
+    confidence: float | None = None
+    #: The pooled run-to-run standard deviation within each side's repeats.
+    noise_floor_champion: float | None = None
+    noise_floor_candidate: float | None = None
+    method: str | None = None
+    #: Each axis's paired interval, and the value-weighted one when values were given.
+    axis_intervals: dict[str, Interval | None] = Field(default_factory=dict)
+    value_interval: Interval | None = None
+
+    @model_serializer(mode="wrap")
+    def _single_run_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.repeats == 1:
+            for name in _REPEAT_FIELDS:
+                data.pop(name, None)
+        return data
+
+
+#: Gate fields that only a comparison over repeats fills, and so only such a
+#: receipt carries.
+_REPEAT_FIELDS: tuple[str, ...] = ("repeats", "ci_low", "ci_high", "stderr", "t_low", "t_high", "confidence",
+                                   "noise_floor_champion", "noise_floor_candidate", "method", "axis_intervals",
+                                   "value_interval")
 
 
 def judge(comparison: Comparison, *, name: str, min_delta: float, strict: bool, max_axis_regression: float,
@@ -174,6 +216,81 @@ def judge(comparison: Comparison, *, name: str, min_delta: float, strict: bool, 
                 value_delta=value_delta)
 
 
+def _clears(estimate: Interval, *, strict: bool, min_delta: float, min_ci: float) -> list[str]:
+    """Why *estimate* is not a win: the rules for a comparison over repeats.
+
+    Held out (*strict*), the interval's lower bound must lie above
+    *min_delta*. On training, the point estimate must reach *min_delta* and
+    the lower bound *min_ci*: the gain is at least the band and
+    distinguishable from zero.
+    """
+    low = estimate.ci_low
+    if low is None:
+        return [f"only {estimate.cases} case(s) compared; an interval needs two"]
+    if strict:
+        return [] if low > min_delta else [f"the interval's lower bound {low} is not above {min_delta}"]
+    reasons = []
+    if estimate.mean < min_delta:
+        reasons.append(f"mean delta {estimate.mean} is not at least {min_delta}")
+    if low < min_ci:
+        reasons.append(f"the interval's lower bound {low} is below {min_ci}: the gain is not distinguishable "
+                       "from run-to-run noise")
+    return reasons
+
+
+def judge_paired(comparison: PairedComparison, *, name: str, min_delta: float, strict: bool,
+                 max_axis_regression: float, min_ci: float = 0.0) -> Gate:
+    """Whether *comparison* (champion repeats to candidate repeats) is a win by the noise-aware rules.
+
+    - Training (not *strict*): the mean of per-case differences is at least
+      *min_delta* and the lower bound of its interval at least *min_ci*.
+    - Held out (*strict*): the lower bound lies strictly above *min_delta*.
+    - The value-weighted difference, when there is one, meets the same rule.
+    - An axis fails only when the upper bound of its interval lies below
+      ``-max_axis_regression``: a fall the noise cannot explain.
+    - A case is newly errored when it errored in a majority of the
+      candidate's repeats and in none of the champion's.
+    """
+    reasons: list[str] = []
+    if comparison.grader_mismatch:
+        reasons.append("the two runs were graded differently")
+    if not comparison.same_case_set:
+        reasons.append("the two runs are over different case sets")
+    if comparison.compared == 0 or comparison.overall is None:
+        reasons.append("no case was graded by both runs")
+    if comparison.newly_errored:
+        reasons.append(f"the candidate errored on {len(comparison.newly_errored)} case(s) in most of its repeats "
+                       "and the champion in none")
+    overall = comparison.overall
+    if overall is not None:
+        reasons.extend(_clears(overall, strict=strict, min_delta=min_delta, min_ci=min_ci))
+    if comparison.value is not None:
+        reasons.extend(f"value-weighted: {reason}" for reason in _clears(comparison.value, strict=strict,
+                                                                         min_delta=min_delta, min_ci=min_ci))
+    for axis, estimate in comparison.axes.items():
+        if estimate is None:
+            continue
+        high = estimate.mean if estimate.ci_high is None else estimate.ci_high
+        if high < -max_axis_regression:
+            reasons.append(f"the {axis} axis fell: its interval's upper bound {high} is below {-max_axis_regression}")
+    return Gate(name=name, passed=not reasons, reasons=tuple(reasons), compared=comparison.compared,
+                mean_delta=overall.mean if overall is not None else 0.0,
+                axis_deltas={axis: None if estimate is None else estimate.mean
+                             for axis, estimate in comparison.axes.items()},
+                improvements=len(comparison.improvements), regressions=len(comparison.regressions),
+                newly_errored=comparison.newly_errored,
+                value_delta=None if comparison.value is None else comparison.value.mean,
+                repeats=max(comparison.baseline_repeats, comparison.recent_repeats),
+                ci_low=None if overall is None else overall.ci_low,
+                ci_high=None if overall is None else overall.ci_high,
+                stderr=None if overall is None else overall.stderr,
+                t_low=None if overall is None else overall.t_low,
+                t_high=None if overall is None else overall.t_high,
+                confidence=comparison.confidence, noise_floor_champion=comparison.noise_floor_baseline,
+                noise_floor_candidate=comparison.noise_floor_recent, method=comparison.method,
+                axis_intervals=dict(comparison.axes), value_interval=comparison.value)
+
+
 # -- receipts -----------------------------------------------------------------
 
 
@@ -190,6 +307,17 @@ class HunkContribution(Model):
     #: then, minus the candidate without it); ``None`` when it was not measured.
     contribution: float | None = None
     reason: str = ""
+    #: The interval around ``contribution`` when the loop ran repeats; absent otherwise.
+    ci_low: float | None = None
+    ci_high: float | None = None
+
+    @model_serializer(mode="wrap")
+    def _single_run_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.ci_low is None and self.ci_high is None:
+            data.pop("ci_low", None)
+            data.pop("ci_high", None)
+        return data
 
 
 class Ablation(Model):
@@ -247,6 +375,15 @@ class ImproveReport(Model):
     #: Training cases that declared a held-out split and were dropped because
     #: a separate holdout was given (without one they join the held-out cases).
     held_out_dropped: int = 0
+    #: Runs a side for every comparison; absent from ``improve.json`` at 1.
+    repeats: int = 1
+
+    @model_serializer(mode="wrap")
+    def _single_run_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.repeats == 1:
+            data.pop("repeats", None)
+        return data
 
 
 def _identity(pack: ResolvedPack) -> dict[str, Any]:
@@ -300,10 +437,53 @@ class Improver:
     #: case ids may repeat the training corpus's for different requests;
     #: ``None`` uses ``values`` for both.
     holdout_values: Mapping[str, Any] | None = None
+    #: Runs of each policy over each case set (``evalrun.improve.repeats``).
+    #: Above 1 every comparison is a paired test over per-case means
+    #: (``noise.paired``) and the gates judge its interval (``judge_paired``);
+    #: at 1 the single-run rules and bytes are unchanged.
+    repeats: int = 1
+    #: The interval's confidence, the bootstrap's resamples, and the least
+    #: lower bound a training gain must have; ``None`` reads the policies
+    #: ``evalrun.improve.confidence``, ``.bootstrap_resamples`` and ``.min_train_ci``.
+    confidence: float | None = None
+    resamples: int | None = None
+    min_train_ci: float | None = None
     _runs: dict[tuple[str, str, str], RunReport] = field(default_factory=dict)
     _candidates: dict[str, ResolvedPack] = field(default_factory=dict)
 
-    def _pinned_run(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str, grader: dict[str, Any]) -> RunReport:
+    def _pinned_runs(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str,
+                     grader: dict[str, Any]) -> tuple[RunReport, ...]:
+        """*pack* over *cases*, ``repeats`` times: each an ordinary pinned run in ``<label>/rep-<i>``.
+
+        At one repeat it is the single run in ``<label>`` itself, where a
+        loop without repeats has always written it.
+        """
+        if self.repeats < 1:
+            raise ValueError(f"repeats must be at least 1, not {self.repeats}")
+        if self.repeats == 1:
+            return (self._pinned_run(pack, cases, label, grader),)
+        return tuple(self._pinned_run(pack, cases, label, grader, repeat=index)
+                     for index in range(1, self.repeats + 1))
+
+    def _gate(self, champion: Sequence[RunReport], candidate: Sequence[RunReport], *, name: str, min_delta: float,
+              strict: bool, max_fall: float, values: Mapping[str, Any] | None) -> Gate:
+        """The gate over one comparison: the single-run rules at one repeat, the paired test above it."""
+        if self.repeats == 1:
+            return judge(compare(champion[0], candidate[0]), name=name, min_delta=min_delta, strict=strict,
+                         max_axis_regression=max_fall, values=values)
+        return judge_paired(self._paired(champion, candidate, values=values), name=name, min_delta=min_delta,
+                            strict=strict, max_axis_regression=max_fall, min_ci=self._min_train_ci())
+
+    def _paired(self, baseline: Sequence[RunReport], recent: Sequence[RunReport], *,
+                values: Mapping[str, Any] | None = None) -> PairedComparison:
+        return paired(baseline, recent, values=values, confidence=confidence_level(self.confidence),
+                      resamples=resample_count(self.resamples))
+
+    def _min_train_ci(self) -> float:
+        return float(packkit.policy("evalrun.improve.min_train_ci")) if self.min_train_ci is None else self.min_train_ci
+
+    def _pinned_run(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str, grader: dict[str, Any],
+                    repeat: int | None = None) -> RunReport:
         # The agent is built first, so a run is reused only when this agent
         # made it: one pack run by two different agents (another command,
         # another harness) is two runs. It is built here so a skill tree it
@@ -312,11 +492,16 @@ class Improver:
         with skills_cache_in(self.out / "skills-cache"):
             agent = self.agent_for(pack)
         identity = fingerprint(agent)
-        key = (pack.digest, label, json.dumps(identity, sort_keys=True, default=str))
+        # A repeat is its own run: its own cache entry and its own directory
+        # under the label's, so a resumed loop reuses every repeat it finished.
+        place = label if repeat is None else f"{label}/rep-{repeat}"
+        key = (pack.digest, place, json.dumps(identity, sort_keys=True, default=str))
         held = self._runs.get(key)
         if held is not None:
             return held
         directory = self.out / "runs" / _slug(pack) / label
+        if repeat is not None:
+            directory = directory / f"rep-{repeat}"
         # A run already on disk for this exact policy, agent, case set and
         # grader is reused, so an interrupted loop resumes without paying for
         # it twice.
@@ -425,6 +610,8 @@ class Improver:
             raise ValueError("no training cases: the loop has nothing to learn from")
         if not holdout:
             raise ValueError("no held-out cases: a candidate could only be judged where it was tuned")
+        if self.repeats < 1:
+            raise ValueError(f"repeats must be at least 1, not {self.repeats}")
         # A case is the same case when its id, request and row all match: case
         # ids are derived from a request's shape, so a corpus built from a
         # fresh seed reuses ids for different requests over a different world,
@@ -469,7 +656,7 @@ class Improver:
                                train_case_set=case_set_digest(train), holdout_case_set=case_set_digest(holdout),
                                initial=_identity(initial), champion=_identity(champion), rounds=tuple(receipts),
                                promotions=sum(item.decision == "promoted" for item in receipts),
-                               held_out_dropped=held_out_dropped)
+                               held_out_dropped=held_out_dropped, repeats=self.repeats)
         _write(self.out / "improve.json", report.model_dump(mode="json", by_alias=True))
         return report
 
@@ -477,8 +664,10 @@ class Improver:
                grader: dict[str, Any], stem: str, protected: frozenset[str] = frozenset(), *,
                min_train: float, min_held: float, max_fall: float) -> RoundReceipt:
         base = {"round": number, "grader": grader["digest"], "champion": _identity(champion)}
-        champion_train = self._pinned_run(champion, train, "train", grader)
-        found = autopsy(champion_train, cases=train)
+        champion_train = self._pinned_runs(champion, train, "train", grader)
+        # The brief is the first repeat's failures: the proposer is shown one
+        # run, as it always was, and the repeats only sharpen the judging.
+        found = autopsy(champion_train[0], cases=train)
         if found.failing == 0:
             return RoundReceipt(**base, decision="no_failures",
                                 reasons=("the champion passes every training case; escalate the curriculum",))
@@ -505,9 +694,9 @@ class Improver:
                                 reasons=("the proposal restates the champion's policy",))
         changed: dict[str, Any] = {"diff": proposed_diff, "diff_hunks": len(diffs.hunks(proposed_diff))}
         self._candidates[candidate.digest] = candidate
-        candidate_train = self._pinned_run(candidate, train, "train", grader)
-        train_gate = judge(compare(champion_train, candidate_train), name="train", min_delta=min_train,
-                           strict=False, max_axis_regression=max_fall, values=self.values)
+        candidate_train = self._pinned_runs(candidate, train, "train", grader)
+        train_gate = self._gate(champion_train, candidate_train, name="train", min_delta=min_train, strict=False,
+                                max_fall=max_fall, values=self.values)
         if not train_gate.passed:
             return RoundReceipt(**common, **changed, decision="rejected", authoring=rounds,
                                 candidate=_identity(candidate), train=train_gate, reasons=train_gate.reasons)
@@ -521,14 +710,24 @@ class Improver:
                 train_gate = ablation.reduced_train
                 reduced_diff = _diff(champion, candidate)
                 changed = {"diff": reduced_diff, "diff_hunks": len(diffs.hunks(reduced_diff))}
-        champion_held = self._pinned_run(champion, holdout, "holdout", grader)
-        candidate_held = self._pinned_run(candidate, holdout, "holdout", grader)
-        held_gate = judge(compare(champion_held, candidate_held), name="holdout", min_delta=min_held,
-                          strict=True, max_axis_regression=max_fall,
-                          values=self.holdout_values if self.holdout_values is not None else self.values)
+        champion_held = self._pinned_runs(champion, holdout, "holdout", grader)
+        candidate_held = self._pinned_runs(candidate, holdout, "holdout", grader)
+        held_gate = self._gate(champion_held, candidate_held, name="holdout", min_delta=min_held, strict=True,
+                               max_fall=max_fall,
+                               values=self.holdout_values if self.holdout_values is not None else self.values)
         return RoundReceipt(**common, **changed, decision="promoted" if held_gate.passed else "rejected",
                             authoring=rounds, candidate=_identity(candidate), train=train_gate, holdout=held_gate,
                             reasons=held_gate.reasons, ablation=ablation)
+
+    def _cost(self, without: Sequence[RunReport],
+              with_: Sequence[RunReport]) -> tuple[float, tuple[float | None, float | None] | None]:
+        """What *with_* scores above *without*: the mean delta, and its interval over repeats (``None`` at one)."""
+        if self.repeats == 1:
+            return compare(without[0], with_[0]).mean_delta, None
+        estimate = self._paired(without, with_).overall
+        if estimate is None:
+            return 0.0, (None, None)
+        return estimate.mean, (estimate.ci_low, estimate.ci_high)
 
     def _search(self) -> tuple[Path, ...]:
         return (self.out / "packs", *(Path(root) for root in self.pack_roots))
@@ -540,9 +739,9 @@ class Improver:
         resolved, findings = check(envelope, roots=self._search(), into=self.out / "packs")
         return resolved, list(findings)
 
-    def _ablate(self, champion: ResolvedPack, candidate: ResolvedPack, champion_train: RunReport,
-                candidate_train: RunReport, train: Sequence[EvalCase], grader: dict[str, Any], *,
-                min_train: float, max_fall: float) -> tuple[ResolvedPack, RunReport, Ablation]:
+    def _ablate(self, champion: ResolvedPack, candidate: ResolvedPack, champion_train: Sequence[RunReport],
+                candidate_train: Sequence[RunReport], train: Sequence[EvalCase], grader: dict[str, Any], *,
+                min_train: float, max_fall: float) -> tuple[ResolvedPack, tuple[RunReport, ...], Ablation]:
         """The candidate with every hunk that carried less than the tolerance taken out, one at a time.
 
         Hunks are tried in the diff's order against the candidate as it
@@ -551,6 +750,11 @@ class Improver:
         left is never dropped: without it the candidate is the champion. The
         reduced candidate is judged by the training gate again and replaces
         the proposed one only if it still passes.
+
+        Over repeats, a hunk's contribution is the paired mean of the
+        candidate as it stands minus the candidate without the hunk, and the
+        hunk is dropped only when the upper bound of that interval lies below
+        the tolerance: it is kept unless the runs show it carries less.
         """
         codec = packkit.kind(candidate.kind)
         assert codec.to_tree is not None and codec.from_tree is not None
@@ -559,7 +763,7 @@ class Improver:
         proposed_diff = diffs.render(base, codec.to_tree(candidate.data))
         every = diffs.hunks(proposed_diff)
         keep = list(range(len(every)))
-        current, current_run = candidate, candidate_train
+        current, current_run = candidate, tuple(candidate_train)
         records: list[HunkContribution] = []
         for position, hunk in enumerate(every):
             if position >= self.ablation_max_hunks:
@@ -568,7 +772,7 @@ class Improver:
                 continue
             remaining = [index for index in keep if index != position]
             if not remaining:
-                cost = compare(champion_train, current_run).mean_delta
+                cost = self._cost(champion_train, current_run)[0]
                 records.append(_contribution(hunk, position, decision="kept", contribution=cost,
                                                 reason="the last hunk left; without it the candidate is the champion"))
                 continue
@@ -583,23 +787,31 @@ class Improver:
                 records.append(_contribution(hunk, position, decision="kept",
                                                 reason=f"the rest does not lint without it: {'; '.join(findings[:2])}"))
                 continue
-            trial_run = self._pinned_run(trial, train, "train", grader)
-            cost = compare(trial_run, current_run).mean_delta
-            if cost < tolerance:
+            trial_run = self._pinned_runs(trial, train, "train", grader)
+            cost, bounds = self._cost(trial_run, current_run)
+            # One run a side: the measured cost against the tolerance. Over
+            # repeats: the upper bound of its interval, so a hunk goes only
+            # when the runs show it carries less than the tolerance.
+            low, high = (None, None) if bounds is None else bounds
+            ceiling = cost if high is None else high
+            if ceiling < tolerance:
                 keep = remaining
                 current, current_run = trial, trial_run
-                records.append(_contribution(hunk, position, decision="dropped", contribution=cost,
-                                                reason=f"removing it cost {cost}, under the tolerance {tolerance}"))
+                why = (f"removing it cost {cost}, under the tolerance {tolerance}" if bounds is None
+                       else f"removing it cost at most {ceiling} (mean {cost}), under the tolerance {tolerance}")
+                records.append(_contribution(hunk, position, decision="dropped", contribution=cost, reason=why,
+                                             ci_low=low, ci_high=high))
             else:
-                records.append(_contribution(hunk, position, decision="kept", contribution=cost))
+                records.append(_contribution(hunk, position, decision="kept", contribution=cost,
+                                             ci_low=low, ci_high=high))
         ablation = Ablation(proposed=_identity(candidate), proposed_diff=proposed_diff, tolerance=tolerance,
                             hunks=tuple(records))
         if current is candidate:
-            return candidate, candidate_train, ablation
-        gate = judge(compare(champion_train, current_run), name="train", min_delta=min_train, strict=False,
-                     max_axis_regression=max_fall, values=self.values)
+            return candidate, tuple(candidate_train), ablation
+        gate = self._gate(champion_train, current_run, name="train", min_delta=min_train, strict=False,
+                          max_fall=max_fall, values=self.values)
         if not gate.passed:
-            return candidate, candidate_train, ablation.model_copy(update={
+            return candidate, tuple(candidate_train), ablation.model_copy(update={
                 "reduced_train": gate,
                 "reason": "the reduced candidate fails the training gate; the proposed one goes to the holdout"})
         # The reduced candidate is what the loop stands behind, so it is what
@@ -612,9 +824,9 @@ class Improver:
 
 
 def _contribution(hunk: diffs.Hunk, position: int, decision: str, contribution: float | None = None,
-                  reason: str = "") -> HunkContribution:
+                  reason: str = "", ci_low: float | None = None, ci_high: float | None = None) -> HunkContribution:
     return HunkContribution(index=position + 1, file=hunk.path, header=hunk.header, decision=decision,
-                            contribution=contribution, reason=reason)
+                            contribution=contribution, reason=reason, ci_low=ci_low, ci_high=ci_high)
 
 
 def _diff(champion: ResolvedPack, candidate: ResolvedPack) -> str:
@@ -643,12 +855,20 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             max_axis_regression: float | None = None, ablate: bool | None = None,
             ablation_max_hunks: int | None = None, ablation_tolerance: float | None = None,
             values: Mapping[str, Any] | None = None,
-            holdout_values: Mapping[str, Any] | None = None) -> ImproveReport:
+            holdout_values: Mapping[str, Any] | None = None, repeats: int | None = None,
+            confidence: float | None = None, resamples: int | None = None,
+            min_train_ci: float | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
     test: a policy that learned this company rather than the task fails
     there. Without one, a share of *cases* is held back by case id.
+
+    *repeats* (default: the policy ``evalrun.improve.repeats``, 1) runs each
+    policy that many times over each case set and judges every comparison as
+    a paired test over per-case means (``judge_paired``); *confidence*,
+    *resamples* and *min_train_ci* tune that test and default to their
+    ``evalrun.improve.*`` policies.
     """
     dropped = 0
     if holdout is None:
@@ -669,7 +889,9 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
                         if ablation_max_hunks is None else ablation_max_hunks,
                         ablation_tolerance=float(packkit.policy("evalrun.improve.ablation_tolerance"))
                         if ablation_tolerance is None else ablation_tolerance,
-                        values=values, holdout_values=holdout_values)
+                        values=values, holdout_values=holdout_values,
+                        repeats=int(packkit.policy("evalrun.improve.repeats")) if repeats is None else int(repeats),
+                        confidence=confidence, resamples=resamples, min_train_ci=min_train_ci)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
@@ -677,4 +899,4 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
 
 
 __all__ = ["HELD_OUT_SPLITS", "IMPROVE_SCHEMA", "ROUND_SCHEMA", "Ablation", "Gate", "HunkContribution", "ImproveReport",
-           "Improver", "RoundReceipt", "improve", "judge", "round_stem", "split_cases"]
+           "Improver", "RoundReceipt", "improve", "judge", "judge_paired", "round_stem", "split_cases"]

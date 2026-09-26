@@ -268,6 +268,68 @@ mean, so a candidate cannot win on cheap cases by losing a costly one. The
 receipt records it as `value_delta`. `--concurrency N` runs every one of the
 loop's runs N cases at a time, and `--no-ablate` skips ablation.
 
+**Repeats.** An agent under test is stochastic: the same policy over the
+same cases scores differently run to run, so one champion run against one
+candidate run can promote a policy that was lucky and reject one that was
+not. `--repeats K` (SDK `repeats=K`, policy `evalrun.improve.repeats`,
+default 1) runs each policy K times over each case set. Each repeat is an
+ordinary pinned run, in `runs/<pack>@<digest>/<label>/rep-<i>`, cached and
+resumed on its own, so an interrupted loop pays only for the repeats it did
+not finish. At K = 1 nothing changes: the runs live in
+`runs/<pack>@<digest>/<label>` and the receipts carry exactly the fields and
+bytes they always did. The proposer's brief is drawn from the champion's
+first repeat.
+
+**The paired test.** Over repeats, each case is reduced to its mean score on
+each side, and the comparison is the per-case differences (candidate minus
+champion), so every case is compared with itself. Their mean gets a
+percentile interval from a paired bootstrap: the cases are resampled with
+replacement `evalrun.improve.bootstrap_resamples` times (2000) at confidence
+`evalrun.improve.confidence` (0.95). The resampling stream is a seeded
+`worldloom.rng.Rng` keyed on the case-set digest and the two policies'
+digests, so the same runs give the same interval on every machine. The
+Student t interval and the standard error are recorded beside it, and each
+axis (plan, trajectory, outcomes) and the value-weighted difference get the
+same treatment; a weighted resample keeps each case's weight. The gates then
+read the interval rather than the point:
+
+| Rule over repeats | Training gate | Held-out gate |
+| --- | --- | --- |
+| Mean of per-case differences | at least the delta band, and its interval's lower bound at least `evalrun.improve.min_train_ci` (0.0) | the interval's lower bound strictly above `evalrun.improve.min_holdout_delta` (0.0) |
+| Value-weighted difference (with `--value`) | the same rule | the same rule |
+| An axis | fails only when the upper bound of its interval is below minus the band: a fall the noise cannot explain | same |
+| Newly errored | a case that errored in a majority of the candidate's repeats and in none of the champion's | same |
+
+A gate over repeats records `repeats`, `ci_low`, `ci_high`, `stderr`,
+`t_low`, `t_high`, `confidence`, `method` (`bootstrap`), `axis_intervals`,
+`value_interval`, and the **noise floor** of each side
+(`noise_floor_champion`, `noise_floor_candidate`): the pooled run-to-run
+standard deviation of a case's score within one policy, which is pure noise
+because nothing about the policy changed between its repeats. Ablation over
+repeats measures a hunk's contribution the same paired way and drops the
+hunk only when the upper bound of that interval is below the tolerance; each
+hunk records `ci_low` and `ci_high`.
+
+**Sizing an experiment.** Before paying for a loop, run the champion a few
+times and ask how noisy it is:
+
+```bash
+worldloom evalrun noise ./runs/champion-1 ./runs/champion-2 ./runs/champion-3
+worldloom evalrun noise ./improve/runs/baseline@<digest>/train --cases 60 --repeats 5 --json
+```
+
+`evalrun noise` takes run directories of one policy over one case set (or a
+directory of `rep-<i>` runs a loop wrote) and reports each case's mean and
+spread, the pooled standard deviation overall and per axis, and the
+**minimum detectable effect**: `(z(1 - a/2) + z(power)) * sqrt(2 s^2 / (k n))`
+for n cases at k repeats a side, at the confidence above and power
+`evalrun.improve.power` (0.8), with a row for 1, 2, 3, 5 and 10 repeats. It
+is a floor: cases differ in how much a change helps them, and that spread
+only widens the interval. When the effect at your repeats is above the delta
+band, the loop cannot tell a real band-sized gain from noise; add repeats or
+cases until it is below. `noise(run_reports)` in `worldloom.evalrun.noise` is
+the same report from Python.
+
 The held-out cases are a separate corpus when `--holdout-corpus` is given,
 which is the stronger test: a policy that learned this company rather than the
 task fails on another. Otherwise a share of the corpus

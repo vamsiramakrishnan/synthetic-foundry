@@ -909,6 +909,7 @@ def improve_command(
     concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1)."),
     value: bool = typer.Option(False, "--value", help="Also require the delta weighted by each case's value at stake to clear every gate."),
     no_ablate: bool = typer.Option(False, "--no-ablate", help="Send the candidate to the holdout whole, without taking out hunks that carry nothing."),
+    repeats: int | None = typer.Option(None, "--repeats", min=1, help="Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
@@ -977,7 +978,8 @@ def improve_command(
                          exchange=run_exec_exchange(proposer, timeout=timeout, proposer=_proposer_policy(proposer_pack),
                                                     skills_cache=out / "skills-cache"), out=out, rater=grader,
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
-                         ablate=False if no_ablate else None, values=values, holdout_values=holdout_values)
+                         ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
+                         repeats=repeats)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
@@ -1359,6 +1361,47 @@ def improve_proposer_command(
         typer.echo(f"meta round {item.round}: {item.decision}{candidate}" + (f" [{gates}]" if gates else "") + why)
     typer.echo(f"proposer champion: {report.champion['ref']}@{report.champion['digest'][:12]}"
                f" after {report.promotions} promotion(s); receipts in {out / 'meta' / 'rounds'}")
+
+
+@app.command("noise")
+def noise_command(
+    runs: list[Path] = typer.Argument(..., help="Run directories of one policy over one case set, or a directory of rep-<i> runs an improve loop wrote."),
+    cases: int | None = typer.Option(None, "--cases", min=1, help="Size the experiment for this many cases (default: the cases the runs graded)."),
+    repeats: int | None = typer.Option(None, "--repeats", min=1, help="Size the experiment for this many repeats a side (default: the number of runs given)."),
+    confidence: float | None = typer.Option(None, "--confidence", help="Confidence of the interval (default: policy `evalrun.improve.confidence`, 0.95)."),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Measure one policy's run-to-run noise, and the smallest effect a comparison could detect through it.
+
+    Given k runs of the same policy, reports each case's mean and spread, the
+    pooled run-to-run standard deviation, and the minimum detectable effect
+    for a paired comparison of that many cases at that many repeats a side,
+    so an improve loop's `--repeats` can be sized before it is paid for.
+    """
+    from ..cli import _refuse
+    from .noise import noise, render_noise
+
+    directories: list[Path] = []
+    for path in runs:
+        nested = [] if (path / "run.json").exists() else sorted(path.glob("rep-*/run.json"))
+        if nested:
+            directories.extend(item.parent for item in nested)
+        else:
+            directories.append(path)
+    try:
+        reports = [_read_run(path) for path in directories]
+    except (OSError, ValueError) as error:
+        _refuse("run_unreadable", str(error))
+    try:
+        report = noise(reports, confidence=confidence, cases=cases, repeats=repeats)
+    except ValueError as error:
+        # Runs of different policies, case sets or graders: a usage error in
+        # what was handed over, not an unreadable run.
+        raise typer.BadParameter(str(error), param_hint="RUNS") from error
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+        return
+    typer.echo(render_noise(report), nl=False)
 
 
 __all__ = ["app"]
