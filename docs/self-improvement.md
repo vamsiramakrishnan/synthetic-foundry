@@ -175,13 +175,25 @@ to pool rounds; the command prints saturated slices after the strata.
 
 ## Agent packs
 
-Placeholder: how an agent's policy is carried as a pack, and how a proposal
-edits it.
+What the loop changes is the policy of the agent under test, held as an
+`agent` pack: a standing instruction, overlays on the shipped turn and plan
+rules, advice per tool, planning guidance and named skills. A pack is
+content-addressed, so two runs under the same policy name the same digest, and
+a run records the pack's reference and digest in `run.json`. The rules that
+define the reply grammar are locked: a policy that could restate them would be
+a protocol variant, and its failures would look like the agent's. See
+[Packs](packs.md#agent-packs) for the schema and the lint.
 
 ## Grader freeze and agreement
 
-Placeholder: freezing the grader across a comparison, and measuring rater
-agreement.
+The grader has an identity: the rater, the `rater.*` prompt texts in force,
+the rubrics and the grading policy, reduced to one digest. The loop pins it
+before the first round and checks it around every run; if it moves, the loop
+stops with `GraderDrift` rather than compare two numbers measured differently.
+`evalrun compare` refuses to call anything an improvement when two runs name
+different graders. Whether the pinned grader agrees with Eval Studio's is
+measured separately, with `worldloom evalrun agreement` (see
+[Gemini Enterprise](gemini-enterprise.md)).
 
 ## Running at scale
 
@@ -189,9 +201,50 @@ Placeholder: running baseline and candidate agents over large case sets.
 
 ## Improve loop
 
-Placeholder: the command that drives baseline, autopsy, proposal, comparison,
-holdout and promotion as one loop.
+```bash
+worldloom evalrun improve ./corpus --agent-pack agent:baseline \
+  --harness claude --proposer-harness claude \
+  --holdout-corpus ./fresh-seed-corpus --rounds 3 -o ./improve
+```
+
+Each round:
+
+1. the champion runs the training cases (`runs/<pack>@<digest>/train`);
+2. `autopsy` clusters its failures and renders the brief;
+3. the proposer receives the brief through the pack interview
+   (`evalrun.improve.message`) with the champion as the draft, and is refused
+   with findings until its proposal lints clean;
+4. the candidate runs the same training cases. It passes the training gate
+   when the mean delta is at least the delta band, no axis falls by more than
+   the band, and it errors on no case the champion was graded on;
+5. only then do both run the held-out cases. The candidate must gain there
+   (`evalrun.improve.min_holdout_delta`, strictly), under the same axis and
+   error rules;
+6. a candidate that clears both gates becomes the champion.
+
+The held-out cases are a separate corpus when `--holdout-corpus` is given,
+which is the stronger test: a policy that learned this company rather than the
+task fails on another. Otherwise a share of the corpus
+(`evalrun.improve.holdout_share`) is held back by a stable hash of each case
+id, and a case that declares its split (`test`, `holdout`, `validation`) keeps
+it. The proposer sees the training brief only; no held-out case id or result
+reaches it.
+
+A round stops early when the champion passes every training case (escalate
+the curriculum instead), when the proposer asks questions (the operator
+answers them), when no proposal lints clean within
+`evalrun.improve.authoring_rounds`, or when the proposal restates the
+champion. Every round writes `rounds/NNN.json` with the champion, the
+candidate, the grader digest, the brief's digest, the clusters, the authoring
+rounds and both gates. Runs already on disk for the same policy, case set and
+grader are reused, so an interrupted loop resumes without paying twice.
+Accepted candidates are stored under `packs/agent/`, so any of them can be
+named with `--agent-pack` afterwards.
 
 ## Trace export
 
-Placeholder: exporting run traces for training and inspection.
+The runs the loop leaves are training data. `worldloom evalrun export` turns a
+run into SFT transcripts, two runs into preference pairs, and any run into
+reward records whose verifiable parts are kept apart from the model-rated
+answer score. It refuses held-out cases unless asked, because a model trained
+on them can no longer be judged on them. See [Trace export](trace-export.md).

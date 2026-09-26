@@ -8,6 +8,10 @@
     "evalrun.agreement.max_mae": 0.1,
     "evalrun.agreement.min_cases": 30,
     "evalrun.export.max_result_chars": 4000,
-    "evals.calibration.reader_share": 0.1
+    "evals.calibration.reader_share": 0.1,
+    "evalrun.improve.rounds": 3,
+    "evalrun.improve.holdout_share": 0.25,
+    "evalrun.improve.min_holdout_delta": 0.0,
+    "evalrun.improve.authoring_rounds": 4
   }
 }

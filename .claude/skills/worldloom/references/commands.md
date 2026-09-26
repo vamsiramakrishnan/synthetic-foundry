@@ -518,6 +518,34 @@ worldloom evalrun import-studio <CORPUS> <RESULTS>
 | `--json` |  |
 | `--out`, `-o` | Run directory to write. |
 
+### `worldloom evalrun improve`
+
+Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
+
+```
+worldloom evalrun improve <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
+| `--harness` | An installed coding harness as the agent under test: codex or claude. |
+| `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
+| `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
+| `--json` | Emit improve.json on stdout. |
+| `--limit` | Use only the first N cases of CORPUS. |
+| `--max-turns` |  |
+| `--out`, `-o` | Directory for rounds/, runs/, packs/ and improve.json. |
+| `--principal` |  |
+| `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
+| `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--rater` | grounded or exec:<command>; pinned for the whole loop. |
+| `--rater-timeout` |  |
+| `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
+| `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--timeout` | Seconds a child (agent turn or proposal) may run. |
+
 ### `worldloom evalrun plan`
 
 Grade the plan axis alone: the planner states each case's DAG and nothing runs.

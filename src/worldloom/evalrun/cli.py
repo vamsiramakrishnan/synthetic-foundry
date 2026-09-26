@@ -778,4 +778,108 @@ def export_command(
     typer.echo(f"{count} {fmt} record(s) written to {out}")
 
 
+@app.command("improve")
+def improve_command(
+    corpus: Path = typer.Argument(..., help="The corpus or case set the agent is improved on."),
+    agent_pack: str = typer.Option(..., "--agent-pack", help="The champion to start from: agent:<name>[@<digest>] or a pack file."),
+    out: Path = typer.Option(..., "--out", "-o", help="Directory for rounds/, runs/, packs/ and improve.json."),
+    exec_command: str | None = typer.Option(None, "--exec", help="The agent under test as an executable (the `evalrun run --exec` seam)."),
+    harness: str | None = typer.Option(None, "--harness", help="An installed coding harness as the agent under test: codex or claude."),
+    proposer_exec: str | None = typer.Option(None, "--proposer-exec", help="The harness that proposes revised policies, over the `pack author` seam."),
+    proposer_harness: str | None = typer.Option(None, "--proposer-harness", help="An installed coding harness as the proposer: codex or claude."),
+    holdout_corpus: Path | None = typer.Option(None, "--holdout-corpus", help="Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back."),
+    holdout_share: float | None = typer.Option(None, "--holdout-share", help="Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`)."),
+    rounds: int | None = typer.Option(None, "--rounds", min=1, help="Rounds to run (default: policy `evalrun.improve.rounds`)."),
+    rater: str | None = typer.Option(None, "--rater", help="grounded or exec:<command>; pinned for the whole loop."),
+    rater_timeout: float = typer.Option(600.0, "--rater-timeout"),
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds a child (agent turn or proposal) may run."),
+    shell: bool = typer.Option(False, "--shell", help="Run --exec and --proposer-exec through the shell."),
+    max_turns: int | None = typer.Option(None, "--max-turns", min=1),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="Use only the first N cases of CORPUS."),
+    principal: str = typer.Option("agent", "--principal"),
+    json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
+) -> None:
+    """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
+
+    Each round runs the champion on the training cases, clusters its failures,
+    asks the proposer for a revised policy (refused with findings until it
+    lints clean), runs the candidate on the same cases, and only if it gains
+    there runs both on the held-out cases the proposer never saw. The grader is
+    pinned by digest for the whole loop. Every round leaves a receipt.
+    """
+    from ..cli import _refuse
+    from ..packkit.authoring import run_exec_exchange
+    from .harness import ExecAgent
+    from .improve import improve
+    from .runner import run_cases, service_for
+
+    exec_command = _harness_exec(harness, exec_command, timeout=timeout)
+    if exec_command is None:
+        _refuse("missing_flag", "the agent under test is an --exec or --harness child; a policy means nothing to the "
+                "reference, lazy or scripted agents")
+    proposer = _harness_exec(proposer_harness, proposer_exec, timeout=timeout)
+    if proposer is None:
+        _refuse("missing_flag", "name the proposer with --proposer-exec or --proposer-harness")
+    champion = _agent_pack(agent_pack, exec_command)
+    grader = _rater_from(rater, timeout=rater_timeout, shell=shell)
+    loaded, cases = _corpus_cases(corpus, limit)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    records = list(loaded.connector_data.records)
+    held: tuple[Any, ...] | None = None
+    if holdout_corpus is not None:
+        held_loaded, held = _corpus_cases(holdout_corpus, None)
+        records += list(held_loaded.connector_data.records)
+    services: dict[str, Any] = {}
+
+    def run(subset: Any, agent: Any) -> Any:
+        from .runner import case_set_digest
+
+        key = case_set_digest(subset)
+        if key not in services:
+            try:
+                services[key] = service_for(subset, records)
+            except Exception as error:  # ServingError and its causes are all refusals here
+                _refuse("service_unbuildable", str(error))
+        return run_cases(services[key], subset, agent, principal=principal, rater=grader)
+
+    def agent_for(pack: Any) -> Any:
+        return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
+
+    try:
+        report = improve(champion, cases, run=run, agent_for=agent_for,
+                         exchange=run_exec_exchange(proposer, timeout=timeout), out=out, rater=grader,
+                         holdout=held, holdout_share=holdout_share, rounds=rounds)
+    except ValueError as error:
+        _refuse("cases_uncompilable", str(error))
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+        return
+    typer.echo(f"{report.train_cases} training and {report.holdout_cases} held-out case(s); grader {report.grader['digest']}")
+    for item in report.rounds:
+        gates = "; ".join(f"{gate.name} {gate.mean_delta:+}" for gate in (item.train, item.holdout) if gate is not None)
+        candidate = f" -> {item.candidate['ref']}@{item.candidate['digest'][:12]}" if item.candidate else ""
+        why = f" ({'; '.join(item.reasons[:2])})" if item.reasons and item.decision != "promoted" else ""
+        typer.echo(f"round {item.round}: {item.decision}{candidate}" + (f" [{gates}]" if gates else "") + why)
+    typer.echo(f"champion: {report.champion['ref']}@{report.champion['digest'][:12]}"
+               f" after {report.promotions} promotion(s); receipts in {out / 'rounds'}")
+
+
+def _rater_from(spec: str | None, *, timeout: float, shell: bool) -> Any:
+    """The rater a `--rater` value names, or None."""
+    from ..cli import _refuse
+
+    if spec is None:
+        return None
+    if spec == "grounded":
+        from .rater import GroundedRater
+
+        return GroundedRater()
+    if spec.startswith("exec:"):
+        from .rater import exec_rater
+
+        return exec_rater(spec.removeprefix("exec:"), timeout=timeout, shell=shell)
+    _refuse("unknown_rater", f"{spec!r}; use grounded or exec:<command>")
+
+
 __all__ = ["app"]
