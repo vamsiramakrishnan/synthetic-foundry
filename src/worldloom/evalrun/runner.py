@@ -81,6 +81,13 @@ class RunReport(Model):
     #: when this matches, whatever else differs.
     case_set: str
     results: tuple[CaseResult, ...]
+    #: The ``agent`` pack the agent ran under (``ref``, ``digest``, ``chain``),
+    #: when one was in force: two runs of one harness under different
+    #: policies are different agents, and this says which.
+    agent_pack: dict[str, Any] | None = None
+    #: What graded the run (rater identity and the grader's digest), so a
+    #: comparison can refuse two runs that were not measured the same way.
+    grader: dict[str, Any] | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 

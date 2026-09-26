@@ -21,6 +21,7 @@ import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -214,8 +215,14 @@ def write_run(directory: Path, report: RunReport) -> RunSummary:
         for result in report.results:
             handle.write(_result_line(result))
     summary = summarize(report)
-    write_json(directory / "run.json", {"schema": RUN_SCHEMA, "agent": report.agent, "principal": report.principal,
-                                        "case_set": report.case_set, "cases": len(report.results)})
+    header: dict[str, Any] = {"schema": RUN_SCHEMA, "agent": report.agent, "principal": report.principal,
+                              "case_set": report.case_set, "cases": len(report.results)}
+    # Written only when present, so a run made without them keeps its bytes.
+    if report.agent_pack is not None:
+        header["agent_pack"] = report.agent_pack
+    if report.grader is not None:
+        header["grader"] = report.grader
+    write_json(directory / "run.json", header)
     write_json(directory / "summary.json", summary.model_dump(mode="json", by_alias=True))
     return summary
 
@@ -233,7 +240,8 @@ def read_run(directory: Path) -> RunReport:
                 except ValueError as error:
                     raise ValueError(f"{directory / 'results.jsonl'}:{number}: invalid result") from error
     return RunReport(agent=str(header["agent"]), principal=str(header.get("principal", "agent")),
-                     case_set=str(header["case_set"]), results=tuple(results))
+                     case_set=str(header["case_set"]), results=tuple(results),
+                     agent_pack=header.get("agent_pack"), grader=header.get("grader"))
 
 
 # -- comparison ---------------------------------------------------------------
