@@ -79,6 +79,7 @@ DOCUMENTS = (
     ".claude/skills/worldloom-evalrun/references/protocol.md",
     "docs/eval-execution.md",
     "docs/self-improvement.md",
+    "docs/trace-export.md",
     "docs/generation-model.md",
     "docs/lore.md",
     # User-facing operator documentation. These pages are intentionally in the

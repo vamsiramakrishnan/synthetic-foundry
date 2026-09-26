@@ -470,6 +470,27 @@ worldloom evalrun curriculum <RUN>
 | `--top` | Autopsy clusters considered. |
 | `--total` | Rows in the new plan; defaults to the base plan's. |
 
+### `worldloom evalrun export`
+
+Export a graded run as training data: SFT transcripts, preference pairs or reward records.
+
+```
+worldloom evalrun export <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--against` | The second run directory for --format pairs, over the same case set. |
+| `--corpus` | The corpus or case set the run was over: personas, splits and the case-set digest come from it. |
+| `--format` | sft (chat demonstrations) \| pairs (preference pairs, needs --against) \| rewards (verifiable reward records). |
+| `--include-failed` | sft: keep cases that scored at least --min-score without passing. |
+| `--include-holdout` | Allow test and holdout splits. A model trained on them has seen the exam, so promotion over them is void. |
+| `--margin` | pairs: the least overall-score lead of chosen over rejected (default: policy `evalrun.delta_band`). |
+| `--max-result-chars` | sft and pairs: characters of one tool result kept before a truncation marker (default: policy `evalrun.export.max_result_chars`). |
+| `--min-score` | sft: the least overall score a demonstration may have. |
+| `--out`, `-o` | JSONL file to write. |
+| `--split` | Keep only this dataset split (repeatable). Default: train, plus any case that carries no split. |
+
 ### `worldloom evalrun import-served`
 
 Bring an external agent's served runs in as a run directory.

@@ -6,6 +6,7 @@
     "evalrun.agreement.min_kappa": 0.6,
     "evalrun.agreement.max_mae": 0.1,
     "evalrun.agreement.min_cases": 30,
+    "evalrun.export.max_result_chars": 4000,
     "evals.calibration.reader_share": 0.1
   }
 }
