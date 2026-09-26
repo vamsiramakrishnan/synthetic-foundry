@@ -454,6 +454,84 @@ session.plan(ExecPlanner("python3 my_planner.py"), label="planner")   # plan axi
 Every run begins its cases on fresh forks of the same records; the session
 holds nothing a run can change. See [eval execution](eval-execution.md).
 
+## Improving an agent
+
+`EvalSession.improver` binds the improvement loop to a session: the champion
+policy (an `agent` pack) runs the training cases, its failures become a brief,
+a proposer revises the pack, and the revision becomes the champion only when it
+wins on the training cases and then on held-out cases the proposer never saw.
+The grader is pinned by digest for the whole loop. The example below runs
+offline: the agent under test is a stand-in that reads its policy, and the
+proposer is a function that answers the pack interview.
+
+```python
+from worldloom import RetailWorld
+from worldloom.enterprise_sdk import EnterpriseEvalHarness
+from worldloom.evalrun import EvalSession, ReferenceAgent, ScriptedAgent
+
+corpus, _ = EnterpriseEvalHarness.from_world(RetailWorld(seed=8128).build()).exhaustive().take(8).build()
+session = EvalSession.open(corpus)          # or EvalSession.open("./cases")
+
+
+def agent_for(pack):
+    # Works through each case only when its policy teaches a `verify` skill.
+    # A real loop passes session.harness("codex") or "exec:python3 my_agent.py".
+    if "verify" in pack.body.skills:
+        return ReferenceAgent(session.cases)
+    return ScriptedAgent([], name="idle")
+
+
+def propose(request):
+    # Answers the pack interview with a revised body. A real loop passes
+    # session.proposer("codex"), whose reply may also ask the operator questions.
+    body = {**request["draft"]["body"], "skills": {"verify": "Walk every step, then read each write back."}}
+    return {"request_id": request["request_id"], "message": "add a verify skill",
+            "proposal": {"name": request["draft"]["name"], "body": body}}
+
+
+loop = session.improver(agent=agent_for, proposer=propose, out="./improve",
+                        holdout_share=0.4, rater="grounded", concurrency=4)
+report = loop.run("agent:baseline", rounds=2)
+
+first = report.rounds[0]
+assert first.decision == "promoted", first.reasons
+print(first.train.mean_delta, first.holdout.mean_delta, report.promotions)
+print(sorted(loop.champion(report).body.skills))     # ['verify']
+```
+
+`improver` takes:
+
+| Argument | Meaning |
+| --- | --- |
+| `agent` | Makes the agent under test for a policy: `session.harness("codex")`, `session.harness(command="python3 my_agent.py")`, a harness name, `"exec:<command>"`, or any callable from a resolved pack to an agent |
+| `proposer` | Revises the policy through the pack interview: `session.proposer("codex")`, a name, `"exec:<command>"`, or any callable from a request to a reply |
+| `out` | Receives `rounds/`, `runs/`, `packs/` and `improve.json`, exactly as `worldloom evalrun improve` writes them; rerunning into it resumes |
+| `holdout` | A second `EvalSession` (a fresh-seed corpus, the stronger test) or held-out cases; otherwise `holdout_share` of the cases is held back by case id |
+| `rater` | `"grounded"`, `"exec:<command>"` or a rater object, pinned for the whole loop |
+| `concurrency` | Cases in flight per run (default: policy `evalrun.concurrency`); results and receipts are identical at any value |
+
+`loop.run(champion, rounds=)` returns the `ImproveReport`: `initial`,
+`champion`, `promotions` and one `RoundReceipt` per round with its `decision`,
+`reasons` and the `train` and `holdout` gates. `loop.champion(report)` resolves
+the winning pack by digest. The low-level `worldloom.evalrun.improve.improve`
+takes the raw callables and is what the session calls.
+
+The loop's parts are one call each over the session's cases, and return what
+the low-level functions return:
+
+```python
+session.autopsy("mine")                        # clusters by finding key (a label, run directory or RunReport)
+session.brief("mine")                          # the text a proposer receives
+session.curriculum("mine", "base-plan.json", round=2)   # fresh cases aimed at the failures
+session.escalate("round-1", "round-2")         # harder slices where the agent saturates
+session.export("mine", "sft", out="sft.jsonl") # also "pairs" (against=) and "rewards"; holdout refused
+session.agreement("eval_results.csv", rater="grounded")  # local grader against Eval Studio's
+```
+
+The procedure, the gates and the rules are in
+[self-improvement](self-improvement.md); the `worldloom-improve` skill is the
+same material for a coding agent.
+
 ## Direct world classes
 
 The top-level package exports the four shipped builders and episodes:

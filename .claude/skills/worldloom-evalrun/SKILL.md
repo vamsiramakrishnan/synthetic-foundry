@@ -82,6 +82,10 @@ outcome score is the share that landed. Run it through the same loop; the
 count is the point, so say how many records the corpus held and how many
 the agent left behind.
 
+**Improving the agent, not only measuring it.** To revise its policy from its
+failures and promote only what wins on held-out cases (`worldloom evalrun
+improve`, `EvalSession.improver`), use the `worldloom-improve` skill.
+
 ## Reading a result
 
 - A case has `plan`, `trajectory` and `outcomes` grades, each with a score
