@@ -756,3 +756,35 @@ proposer=..., builder=plan_or_builder, out=...)` returns a loop whose
 | `evalrun.campaign.patience` | 2 | One round without a promotion is noise; two in a row on the same cases means the proposer has stopped finding anything there. |
 | `evalrun.campaign.max_cases` | 5000 | Cases are the cost: every one is run by the champion, its candidates and the ledger. A ceiling a campaign reaches only on purpose. |
 | `evalrun.campaign.held_ratio` | 0.5 | Half as many held-out rows per stratum as training rows: enough for a pass rate per stage, cheaper than a second training set. |
+
+## Measured: the first live pilot
+
+One pilot has been run against a live coding harness, acting as both the
+agent under test and the proposer, with the grounded rater. The numbers are
+small and are recorded because they size everything after them.
+
+- **Cases.** 20 training cases from a retail corpus (seed 8128) and 12
+  held-out cases from a fresh-seed corpus (seed 4242). The reference agent
+  scores 1.0 on all 20 training cases.
+- **Noise floor.** Two runs of `agent:baseline` on the same 20 cases gave a
+  pooled run-to-run standard deviation of 0.14 per case (plan 0.17,
+  trajectory 0.10, outcomes 0.27). `evalrun noise` puts the minimum
+  detectable effect at 0.124 for one run per side, 0.088 for two and 0.072
+  for three. One run per side cannot see a gain of one delta band (0.1).
+- **Baseline.** Mean overall score 0.54, no case passed outright; about 55
+  `validation_error` connector errors per run, from malformed searches.
+- **Round 1** proposed a skill and was rejected: mean delta -0.016, 95%
+  interval [-0.082, 0.046].
+- **Round 2** proposed a standing instruction and search-tool advice on
+  validation errors. Its training mean rose from 0.54 to 0.63 (delta +0.086,
+  95% interval [-0.005, 0.189]) and its own run-to-run noise fell to 0.093,
+  but the interval's lower bound sat just below zero, so it was rejected
+  before the holdout. Validation errors rose (the agent retried more), which
+  says the advice changed behaviour without teaching the tools' query
+  grammar.
+
+What this says: the loop, the gates and the grader behave as designed live,
+and no promotion has yet cleared them. The next levers are more repeats or
+cases for the candidate that came close, and a brief that carries the
+connectors' own validation messages so a proposer can write advice about the
+exact query grammar rather than about retrying.
