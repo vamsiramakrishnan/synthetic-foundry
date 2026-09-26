@@ -93,6 +93,38 @@ been superseded, with a comment explaining why it was left as written rather
 than corrected. That staleness is deliberate: a reader (or an agent under
 evaluation) has to notice it, not have it silently fixed.
 
+## How the documents are shaped: the realism profile
+
+A corpus is also one of three *realism profiles*, recorded on its recipe as
+`artifact_realism` (`src/worldloom/realism_profiles.py`). A presentation
+profile (next section) decides how a value is shown inside a document; the
+realism profile decides which documents exist and what shape they take.
+
+```bash
+worldloom build --seed 8128 --narrate -f docx -f pdf -f pptx -f markdown -f html --out ./corpus
+worldloom build --seed 8128 --narrate -f docx --realism legacy --out ./corpus-legacy
+worldloom render ./corpus -f docx --realism legacy
+worldloom diversity ./corpus --sizes
+```
+
+| | `enterprise/v1` (default for new builds) | `legacy` |
+|---|---|---|
+| Word, PDF | controlled report: cover, document control, revision history, approvals, review record, contents, numbered sections with a "figures cited" table each, the pack workbook's schedules, appendices (supporting facts, lineage, measures, chronology, related documents), running heads with classification and `Page X of Y`; PDF adds bookmarks and a sign-off form | the compact memo |
+| PowerPoint | a pack deck on the template's layouts (title, agenda, section headers, content, two content, comparison, title only for native charts and tables), speaker notes on every slide, footer, date and slide number | seven slides on the blank layout |
+| Markdown | wiki export: front matter, numbered headings, lineage as a YAML block, related pages, attachments, page history | the plain twin |
+| HTML | intranet page: site navigation, breadcrumbs, page metadata and labels, attachments, related pages, history, comments; plus `artifacts/index.html` | standalone page |
+| extra files | `artifacts/revisions/` (v0.1 draft, v0.2 reviewed, amendments) and `artifacts/families/<pack>/` (pack index, agenda) | none |
+| connector files | `content` (the file's text) and `structure` (pages, slides, sections), revision history | path, size and hash only |
+
+Absent means `legacy`, so every corpus built before the profile existed
+re-renders and replays byte for byte; `--realism legacy` on a new build writes
+nothing to the recipe and reproduces those bytes. The IR, the facts and the
+validation report are identical under every profile. Length comes from
+structure, never from prose: every figure is an IR cell (its own, or the pack
+workbook's, attributed) or a fact spelled the way prose spells it, and a
+revision differs from the approved version only by stating a different fact
+from the store (the one true at its date, or the one that superseded it).
+
 ## Who the documents are for
 
 Every artifact here is two things at once: a **traceability record** (which

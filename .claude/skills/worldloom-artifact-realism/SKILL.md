@@ -36,7 +36,8 @@ The deterministic host decides whether a proposal is accepted. Rejection is a no
 - Lifecycle time comes from simulated world time. Never call `now()` for artifact history.
 - Keep organisation style correlated across surfaces, but derive artifact-local variation from named deterministic streams so a company does not collapse to one template.
 - Do not copy identical prose across surfaces. The same episode should produce different views of the same facts.
-- Legacy recipes remain byte-stable unless they explicitly opt into `artifact_realism=ecology/v1`.
+- A recipe with no `artifact_realism` key is `legacy` and stays byte-stable. New builds default to `artifact_realism=enterprise/v1` (long-form reports, pack decks, intranet pages, revision and pack files, connector files with text); `--realism legacy` or `Blueprint.realism("legacy")` reproduces the old bytes, and `ecology/v1` remains an explicit opt-in. See `worldloom/references/rendering.md`.
+- Under `enterprise/v1`, length comes from structure the world supplies (document control, numbered sections, schedules incorporated from the pack workbook, lineage appendices, revisions dated in world time), never from inflated prose. Measure it with `worldloom diversity ./corpus --sizes` or the `measure_corpus` MCP tool.
 
 ## Review questions
 

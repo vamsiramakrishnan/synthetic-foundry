@@ -35,6 +35,55 @@ first written up, before the waves above it landed.
   `query_language`; GraphQL, Rovo and the system of record keep the historical
   path. With the default, every emulator answer is byte-identical to before.
   `docs/connector-serving.md` has the grammar and the opt-in.
+### Documents the size companies keep them (Generation)
+
+- **New default: `enterprise/v1`.** `worldloom build`, `worldloom mosaic` and
+  `sdk.Blueprint.build` now record `artifact_realism: enterprise/v1` on the
+  recipe and render long-form documents: Word and PDF controlled reports
+  (cover, document control with version, owner, approver, reviewers and
+  classification, revision history, approvals, review record, contents,
+  numbered sections and subsections, a "figures cited" table per section,
+  the pack workbook's schedules and native charts, appendices for supporting
+  facts, lineage, measures, chronology and related documents, running heads
+  and `Page X of Y`); PDFs add bookmarks, a multi-pass contents page with page
+  numbers, tables that repeat their header across pages and a sign-off form.
+  Decks are assembled from the pack on the template's real layouts (title,
+  agenda, section header, content, two content, comparison, title only with
+  native charts and tables), with footer, date and slide number and speaker
+  notes on every slide. Markdown is a wiki export (front matter, numbered
+  headings, lineage as a YAML block, related pages, attachments, page
+  history); HTML is an intranet page (site navigation, breadcrumbs, metadata
+  and labels, attachments, related pages, history, comments) with a site
+  home page. Measured on `--seed 8128 --incident --narrate`: the board paper
+  went from 237 words to about 4,600 and 26 page-equivalents, the variance
+  paper PDF from 6 pages to 37, the deck from 7 blank slides to 52 with 52
+  sets of notes and 4 native charts.
+- **Revisions and packs.** Controlled documents get separate revision files
+  under `artifacts/revisions/`: a v0.1 draft dated inside the window its
+  citations open (figures not yet true are TBC, superseded ones state the
+  predecessor), a v0.2 reviewed version with native Word comments from the
+  author's manager or approver, and a v1.x amendment for each later fact that
+  superseded a cited one, as tracked changes. Packs (month-end close,
+  executive committee, incident) get `artifacts/families/<pack>/index.md`,
+  and the executive committee pack an `agenda.docx`.
+- **Connector files carry their text.** Under `enterprise/v1` a SharePoint or
+  Drive file record carries `content` (so `get_file` returns the document's
+  text), `structure` (pages, slides or sections) and the revision files as
+  `version_history`; Confluence pages carry their page text.
+- **Measured.** `worldloom diversity ./corpus --sizes` (and `measure_corpus`,
+  under `documents`) reports words, pages, slides, notes, sections, tables and
+  revision files per document type and format, read from the files
+  (`worldloom.artifact_text`, standard library only).
+- **`legacy` is byte-identical.** `--realism legacy`, `Blueprint.realism("legacy")`
+  and `Built.render(realism="legacy")` write no key and reproduce the old files
+  byte for byte; a recipe without the key (every existing corpus, the golden
+  `retail-close`) is `legacy`, so re-rendering and replay do not move.
+  `worldloom render --realism` switches an existing corpus without a rebuild.
+  The IR, the facts and the validation report are identical under every
+  profile: length comes from structure, and every figure is a fact spelled
+  as prose spells it or an IR cell, attributed to its source.
+- **Build time.** The same standard build (all six formats) takes about
+  6.5s under `enterprise/v1` against about 2.5s before (and under `legacy`).
 
 ### Closing the loop: agents that improve against the corpus
 

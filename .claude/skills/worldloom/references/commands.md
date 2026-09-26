@@ -114,6 +114,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--policies` | Give the company its standing documents: core or full. These are the papers a company *has* rather than produces (a delegation of authority, an expense policy, a leave policy, an information security policy), as opposed to what a close or an incident emits. Without it an assistant asked what the approval threshold is has nothing to find, because the company has no rules. Money provisions scale off the company's own revenue, so two archetypes do not share a limit. Omit it and every existing corpus is byte-identical. |
 | `--priors` | Build under physics calibrated from data by `worldloom calibrate`: a prior snapshot whose spans replace the engine's ranges and whose receipt records how they were made and what privacy budget it cost. Only ranges cross the boundary: no row of the source is in the snapshot, so none can be in the corpus. Applied before --physics, which then overrides it range by range. |
+| `--realism` | How the world materialises into files. `enterprise` (the default for new builds) writes the documents a company keeps: controlled reports with cover, document control, contents, numbered sections, schedules from the pack's workbook, appendices, revision files and reviewer comments; decks on real layouts with speaker notes and native charts; intranet pages; wiki exports; pack indexes; and connector file records that carry their text. `legacy` reproduces the compact files every corpus built before this flag has, byte for byte. `ecology` is the artifact-ecology annotation. Recorded on the recipe, so a replay and a later `worldloom render` reproduce it; the world, its facts and its validation are the same under all three. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--reviews` | Review this many people per period. Each is a signed performance review countersigned by the manager's own manager, plus the running one-to-one note that fed it, at a lower authority and saying something slightly different. |
 | `--section-omission` | Per-mille chance that any one *optional* section is left out of any one document, so a type emits a subset of its outline rather than all of it every time. This is swarm testing applied to documents: sections compete for a reader's attention exactly as test features compete for room, and a corpus whose every close pack carries the same five headings teaches a retriever the headings. Sections are required unless a type says otherwise, so no required fact can ever be lost to it; an un-annotated corpus has nothing optional and is unaffected at any value. Pass 0 for the historical all-sections shape. |
@@ -229,7 +230,9 @@ worldloom diversity <CORPUS>
 | `--across` | Additional corpora to compare against; repeatable. Reports shape overlap and cross-corpus prose duplicates over the whole set, the failure no single corpus's report can see: five mosaic companies can each look varied while all five hold the same shapes and say the same sentences. |
 | `--check-quotas` | Exit non-zero if the batch fails a declared Quotas threshold (see compiler/diversity.py). For CI: assert the corpus does not get more monotonous over time. |
 | `--effective` | Also report the Vendi score: the *effective* number of distinct shapes, which is what a count of distinct shapes overstates. Thirty shapes that differ by one section each are closer to four documents than to thirty, and only a metric that reads the similarity matrix rather than counting equality classes can say so. |
+| `--json` | With --sizes, emit the reading as JSON. |
 | `--near-duplicates` | Also group passages whose prose is near-identical, and name which artifacts they belong to. Structural sameness and prose sameness are different failures: a batch can carry twenty distinct shapes and still say the same sentences in all of them. |
+| `--sizes` | Report document size and structure instead, read from the rendered files: words, pages (real for PDF, a layout equivalent for Word), slides and speaker notes, sections, tables and revision files per document type and format. The realism reading beside the variety one: twenty distinct shapes of four-page memos are still four-page memos. The `measure_corpus` MCP tool returns the same reading. |
 | `--verbose`, `-v` | Show the per-artifact-type breakdown and every distinct shape within it. |
 
 ### `worldloom docs`
@@ -1095,6 +1098,7 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Consecutive periods per world. |
 | `--probe` | Take the axes from a settled probe instead of this engine's defaults. The probe decides what varies and between which bounds; the algorithm still decides which N. Every parameter the probe bound becomes an axis over the interval it argued for, and axes it said nothing about keep their defaults. |
+| `--realism` | How each world materialises into files: `enterprise` (the default for new builds), `legacy` (byte-identical to earlier mosaics) or `ecology`. See `worldloom build --realism`. |
 | `--resume` | Resume this exact plan from validated worlds and section checkpoints. |
 | `--seed`, `-s` | Base seed. World N uses seed+N-1. |
 | `--shard-count` | Deterministic number of batch shards. |
@@ -1636,6 +1640,7 @@ worldloom render <CORPUS>
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
 | `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
+| `--realism` | Which files the corpus materialises into: `enterprise` (long-form controlled documents, decks, intranet pages, revisions and packs), `legacy` (the compact files, byte-identical to every earlier render) or `ecology`. Omit it to keep what the corpus's recipe records; a corpus that records none is `legacy`. |
 
 ### `worldloom seams`
 

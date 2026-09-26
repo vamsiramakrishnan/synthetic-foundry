@@ -1243,6 +1243,13 @@ def _rebuild(
     # replay proof that passes them is not testing the recording.
     if recipe.get(STRUCTURE_KEY) is not None:
         world = world.extend(recipe={**world.recipe, STRUCTURE_KEY: recipe[STRUCTURE_KEY]})
+    # The realism profile (`realism_profiles`), re-attached for the same
+    # reason: `build_recipe` never writes it, the CLI and the SDK add it after
+    # the build, and a rebuild that dropped it would re-render a corpus built
+    # under `enterprise/v1` as `legacy`. Absent means legacy, so nothing is
+    # attached for a corpus that recorded none.
+    if recipe.get("artifact_realism") is not None:
+        world = world.extend(recipe={**world.recipe, "artifact_realism": recipe["artifact_realism"]})
 
     for step in recipe.get("steps", ()):
         name = step.get("scenario")
