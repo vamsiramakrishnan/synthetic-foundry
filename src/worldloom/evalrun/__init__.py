@@ -19,7 +19,8 @@ corpus can actually support:
 Contracts: ``EvalCase``. Agents: ``AgentUnderTest`` and the three shipped
 ones. Execution: ``run_cases``. Plan-only grading, where a planner states a
 DAG and nothing runs: ``plan_cases``. Ledger and comparison: ``write_run``,
-``summarize``, ``compare``, ``import_studio_results``. Every module's
+``summarize``, ``compare``, ``import_studio_results``. The SDK front door is
+``EvalSession``; ``EvalSession.improver`` binds the improvement loop to it. Every module's
 docstring argues the design; the CLI is ``worldloom evalrun``.
 """
 
@@ -175,6 +176,15 @@ if TYPE_CHECKING:
     from .harness import (
         requests_document as requests_document,
     )
+    from .improve import (
+        Gate as Gate,
+    )
+    from .improve import (
+        ImproveReport as ImproveReport,
+    )
+    from .improve import (
+        RoundReceipt as RoundReceipt,
+    )
     from .plans import (
         PLAN_SCHEMA as PLAN_SCHEMA,
     )
@@ -322,6 +332,12 @@ if TYPE_CHECKING:
     from .session import (
         EvalSession as EvalSession,
     )
+    from .session import (
+        ExecHarness as ExecHarness,
+    )
+    from .session import (
+        ImproveLoop as ImproveLoop,
+    )
 
 # The whole surface is re-exported lazily (PEP 562), for the same reason the
 # package root is: importing `worldloom.evalrun.cli` runs this file first, and
@@ -344,6 +360,11 @@ _EXPORTS: dict[str, str] = {
     'ErrorCode': '.safety',
     'EvalCase': '.contract',
     'EvalSession': '.session',
+    'ExecHarness': '.session',
+    'ImproveLoop': '.session',
+    'Gate': '.improve',
+    'ImproveReport': '.improve',
+    'RoundReceipt': '.improve',
     'ExecAgent': '.harness',
     'ExecPlanner': '.plans',
     'FailurePoint': '.contract',
@@ -555,8 +576,13 @@ __all__ = [
     "plan_request",
     "plan_requests_document",
     "reference_plan",
-    # Session.
+    # Session, and the improvement loop bound to it.
     "EvalSession",
+    "ExecHarness",
+    "ImproveLoop",
+    "Gate",
+    "ImproveReport",
+    "RoundReceipt",
     "seam_contract",
     # Execution.
     "RUN_SCHEMA",
