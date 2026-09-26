@@ -13,6 +13,24 @@ first written up, before the waves above it landed.
 
 ### Closing the loop: agents that improve against the corpus
 
+- **Wide search.** `worldloom evalrun improve --candidates N --screen-cases M
+  --finalists F --parents champion|archive --round-budget B` (SDK keywords
+  of the same names, policies `evalrun.improve.candidates`, `.screen_cases`,
+  `.finalists`, `.parents`, `.round_budget`; `evalrun campaign` takes the
+  flags too) asks for N proposals a round, each told it is candidate i of N
+  and shown the earlier ones by summary and diff size, dedupes identical
+  bodies, and screens the rest on training cases by successive halving:
+  a stratified, seeded order of the training cases, one run each on the
+  first M, the better half advancing by paired mean delta against the
+  champion's existing runs while the prefix doubles, until F finalists go
+  through the unchanged training gate, ablation and holdout. Every policy
+  evaluated in full is archived under `archive/` with per-case and
+  per-failure-cluster scores; `--parents archive` draws each round's parent
+  from the archive's Pareto frontier, weighted toward a high mean and few
+  visits by a seeded draw, so a near miss becomes a stepping stone.
+  Receipts record the parent, every screening stage and the case-runs spent;
+  an interrupted round resumes with its proposals and finished screens. At
+  the defaults receipts and run directories are byte-identical to before.
 - **Noise-aware gates.** `worldloom evalrun improve --repeats K` (SDK
   `repeats=`, policy `evalrun.improve.repeats`, default 1) runs each policy K
   times per case set, each repeat an ordinary pinned run under

@@ -886,6 +886,13 @@ def export_command(
     typer.echo(f"{count} {fmt} record(s) written to {out}")
 
 
+def _check_parents(parents: str | None) -> None:
+    from .search import PARENT_MODES
+
+    if parents is not None and parents not in PARENT_MODES:
+        raise typer.BadParameter(f"--parents is one of {', '.join(PARENT_MODES)}, not {parents!r}")
+
+
 @app.command("improve")
 def improve_command(
     corpus: Path = typer.Argument(..., help="The corpus or case set the agent is improved on."),
@@ -910,6 +917,11 @@ def improve_command(
     value: bool = typer.Option(False, "--value", help="Also require the delta weighted by each case's value at stake to clear every gate."),
     no_ablate: bool = typer.Option(False, "--no-ablate", help="Send the candidate to the holdout whole, without taking out hunks that carry nothing."),
     repeats: int | None = typer.Option(None, "--repeats", min=1, help="Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`."),
+    candidates: int | None = typer.Option(None, "--candidates", min=1, help="Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1)."),
+    screen_cases: int | None = typer.Option(None, "--screen-cases", min=1, help="Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6)."),
+    finalists: int | None = typer.Option(None, "--finalists", min=1, help="Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1)."),
+    parents: str | None = typer.Option(None, "--parents", help="Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion)."),
+    round_budget: int | None = typer.Option(None, "--round-budget", min=1, help="Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit)."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
@@ -927,6 +939,7 @@ def improve_command(
     from .improve import improve
     from .runner import default_concurrency, run_cases, service_for
 
+    _check_parents(parents)
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     if exec_command is None:
         _refuse("missing_flag", "the agent under test is an --exec or --harness child; a policy means nothing to the "
@@ -979,7 +992,8 @@ def improve_command(
                                                     skills_cache=out / "skills-cache"), out=out, rater=grader,
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
                          ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
-                         repeats=repeats)
+                         repeats=repeats, candidates=candidates, screen_cases=screen_cases, finalists=finalists,
+                         parents=parents, round_budget=round_budget)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
@@ -995,6 +1009,16 @@ def improve_command(
         candidate = f" -> {item.candidate['ref']}@{item.candidate['digest'][:12]}" if item.candidate else ""
         why = f" ({'; '.join(item.reasons[:2])})" if item.reasons and item.decision != "promoted" else ""
         typer.echo(f"round {item.round}: {item.decision}{candidate}" + (f" [{gates}]" if gates else "") + why)
+        if item.parent is not None and item.parent.get("mode") == "archive":
+            typer.echo(f"  parent: {item.parent['ref']}@{str(item.parent['digest'])[:12]} (from the archive's frontier)")
+        if item.screening is not None:
+            screen = item.screening
+            typer.echo(f"  {len(screen.candidates)} candidate(s), {len(screen.stages)} screening stage(s) costing "
+                       f"{screen.cost} case-run(s); finalist(s): {', '.join(map(str, screen.finalists)) or 'none'}")
+        if item.spent is not None:
+            typer.echo(f"  spent {item.spent} case-run(s)")
+    if report.spent is not None:
+        typer.echo(f"{report.spent} case-run(s) spent across {len(report.rounds)} round(s)")
     typer.echo(f"champion: {report.champion['ref']}@{report.champion['digest'][:12]}"
                f" after {report.promotions} promotion(s); receipts in {out / 'rounds'}")
 
@@ -1426,6 +1450,11 @@ def campaign_command(
     principal: str = typer.Option("agent", "--principal"),
     concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1)."),
     value: bool = typer.Option(False, "--value", help="Gate every stage on the value-weighted delta too, and weight targeted stages by value."),
+    candidates: int | None = typer.Option(None, "--candidates", min=1, help="Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1)."),
+    screen_cases: int | None = typer.Option(None, "--screen-cases", min=1, help="Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6)."),
+    finalists: int | None = typer.Option(None, "--finalists", min=1, help="Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1)."),
+    parents: str | None = typer.Option(None, "--parents", help="Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion)."),
+    round_budget: int | None = typer.Option(None, "--round-budget", min=1, help="Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit)."),
     json_output: bool = typer.Option(False, "--json", help="Emit campaign.json on stdout."),
 ) -> None:
     """Keep improving an agent across stages of fresh cases, and report how far it moved on cases it never saw.
@@ -1448,6 +1477,7 @@ def campaign_command(
     from .runner import default_concurrency
     from .session import _dataset_plan
 
+    _check_parents(parents)
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     if exec_command is None:
         _refuse("missing_flag", "the agent under test is an --exec or --harness child; a policy means nothing to the "
@@ -1476,7 +1506,9 @@ def campaign_command(
     def agent_for(pack: Any) -> Any:
         return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
 
-    options: dict[str, Any] = {} if rounds is None else {"rounds": rounds}
+    options: dict[str, Any] = {name: setting for name, setting in (
+        ("rounds", rounds), ("candidates", candidates), ("screen_cases", screen_cases), ("finalists", finalists),
+        ("parents", parents), ("round_budget", round_budget)) if setting is not None}
     try:
         report = campaign_module.campaign(
             champion, builder=campaign_module.DatasetStageBuilder(base, principal=principal), agent_for=agent_for,

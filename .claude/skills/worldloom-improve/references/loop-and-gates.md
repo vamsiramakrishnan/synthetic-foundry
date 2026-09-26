@@ -114,6 +114,11 @@ loop reruns only the repeats it lost.
 | none | `improve(resamples=)` | `evalrun.improve.bootstrap_resamples` (2000) |
 | none | `improve(min_train_ci=)` | `evalrun.improve.min_train_ci` (0.0) |
 | `evalrun noise` | `noise.noise(runs)` | power `evalrun.improve.power` (0.8) |
+| `--candidates` | `candidates=` | `evalrun.improve.candidates` (1: one proposal a round, the narrow loop) |
+| `--screen-cases` | `screen_cases=` | `evalrun.improve.screen_cases` (6) |
+| `--finalists` | `finalists=` | `evalrun.improve.finalists` (1) |
+| `--parents` | `parents=` | `evalrun.improve.parents` (`champion`; `archive` draws from the Pareto frontier) |
+| `--round-budget` | `round_budget=` | `evalrun.improve.round_budget` (0: no limit) |
 
 **Sizing repeats.** Run the champion two or three times and read
 `worldloom evalrun noise RUN_DIR... [--cases N] [--repeats K]`: it reports the
@@ -130,3 +135,51 @@ receipt's `value_delta` says by how much.
 The low-level function is `worldloom.evalrun.improve.improve(champion, cases,
 run=, agent_for=, exchange=, out=, ...)`; the session builds those callables
 and calls it unchanged.
+
+## Wide search: many candidates, screening, archive
+
+Turn it on when a round's one proposal is a lottery ticket: several ideas
+are plausible, or a near miss was thrown away. `--candidates N` asks for N
+proposals a round, each told it is candidate i of N and shown the earlier
+ones by summary and diff size only. Duplicates never run.
+
+The screening rules, exactly:
+
+1. The training cases are ordered once per round: each case's stratum is the
+   smallest cluster of the champion's autopsy it belongs to (passing cases
+   last), cases within a stratum by a SHA-256 of a seed from the round
+   number and the training case-set digest, dealt one per stratum in turn.
+2. Stage 1 runs every distinct candidate once on the first `--screen-cases`
+   cases. A candidate's score is its paired mean delta against the
+   champion's existing training runs on those cases (no extra cost).
+3. The better half advances (rounded up, at least `--finalists`; ties to the
+   earlier candidate), the prefix doubles, and survivors run only the new
+   cases.
+4. It stops at `--finalists` survivors, or at the whole training set, where
+   the best `--finalists` go on.
+5. A stage that would take screening so far, plus the stage, plus
+   `finalists * repeats * training cases` past `--round-budget` is not
+   started; the ranking so far decides.
+
+Each finalist runs the full training gate. The best that passes (highest
+training mean delta, then screening rank) is ablated and is the only one the
+holdout ever sees. No held-out case runs before a finalist passes training.
+
+The archive (`archive/<digest>.json`) keeps the champion and every policy
+evaluated in full, with per-case scores and per-cluster means over a cluster
+map fixed per training case set (`archive/clusters.json`). The Pareto
+frontier is every entry no other is at least as good on every cluster and
+better on one. With `--parents archive` a round's parent is drawn from the
+frontier of earlier rounds' entries plus the champion (members that still
+fail a case), weighted `exp(-10 * (best mean - mean)) / (1 + visits)`, by a
+seeded draw; the brief comes from the parent's own training runs. Promotion
+still goes through both gates against the current champion.
+
+Read it in the receipt: `parent` (mode, chosen policy, frontier, weights,
+draw), `screening` (candidates and statuses, seed and order, each stage's
+cases, scores and who advanced, finalists, `stopped`, `cost`), `spent`
+(case-runs executed); `improve.json` adds `search` and `spent`. Screening
+runs live in `runs/<pack>@<digest12>/screen/<case-set12>/`; a wide round's
+proposals wait in `proposals/NNN.json` until its receipt is written, so an
+interrupted round resumes with the same candidates and finished screens.
+With every setting at its default none of this appears.

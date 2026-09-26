@@ -366,6 +366,30 @@ def test_the_campaign_refuses_to_be_handed_what_it_owns(corpus: Any, seed_case: 
         _campaign(corpus, seed_case, tmp_path / "c", holdout=())
 
 
+def test_wide_search_settings_reach_each_stage_and_screen_on_its_training_cases(corpus: Any, seed_case: Any,
+                                                                               tmp_path: Path) -> None:
+    import re
+
+    def exchange(payload: dict[str, Any]) -> dict[str, Any]:
+        # Candidate 2 of each round teaches the skill the slice needs; the others teach nothing useful.
+        found = re.search(r"This is candidate (\d+) of", payload["message"])
+        index = int(found.group(1)) if found else 1
+        body = dict(payload["draft"]["body"])
+        name = "verify" if index == 2 else f"habit-{index}"
+        body["skills"] = {**(body.get("skills") or {}), name: f"Apply {name} to every step."}
+        return {"request_id": payload["request_id"], "message": f"teach {name}",
+                "proposal": {"name": payload["draft"]["name"], "body": body}}
+
+    report = _campaign(corpus, seed_case, tmp_path / "c", exchange=exchange, stages=1, rounds=1, candidates=3,
+                       screen_cases=4)
+    assert report.stages[0].improve.promotions == 1
+    receipt = json.loads((tmp_path / "c" / "stages" / "001" / "improve" / "rounds" / "001.json").read_text())
+    screening = receipt["screening"]
+    assert receipt["decision"] == "promoted" and screening["finalists"] == [2]
+    assert len(screening["stages"][0]["cases"]) == 4
+    assert all("-t" in case_id and "-h" not in case_id for case_id in screening["order"])
+
+
 # -- running over several worlds -------------------------------------------------------------------
 
 

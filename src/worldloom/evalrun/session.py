@@ -173,6 +173,13 @@ class ImproveLoop:
     ablate: bool | None = None
     #: Runs of each policy per case set; ``None`` is the policy ``evalrun.improve.repeats``.
     repeats: int | None = None
+    #: Wide search; ``None`` reads each ``evalrun.improve.*`` policy (``candidates``,
+    #: ``screen_cases``, ``finalists``, ``parents``, ``round_budget``).
+    candidates: int | None = None
+    screen_cases: int | None = None
+    finalists: int | None = None
+    parents: str | None = None
+    round_budget: int | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
@@ -226,7 +233,9 @@ class ImproveLoop:
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
                        max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
-                       holdout_values=holdout_values, repeats=self.repeats)
+                       holdout_values=holdout_values, repeats=self.repeats, candidates=self.candidates,
+                       screen_cases=self.screen_cases, finalists=self.finalists, parents=self.parents,
+                       round_budget=self.round_budget)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -374,6 +383,11 @@ class EvalSession:
         ablate: bool | None = None,
         proposer_pack: str | ResolvedPack | None = None,
         repeats: int | None = None,
+        candidates: int | None = None,
+        screen_cases: int | None = None,
+        finalists: int | None = None,
+        parents: str | None = None,
+        round_budget: int | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -393,6 +407,11 @@ class EvalSession:
         skill tree is materialised under ``out``.
         ``repeats`` runs each policy that many times per case set and gates on
         a paired interval (default: the policy ``evalrun.improve.repeats``, 1).
+        Wide search: ``candidates`` proposals a round, screened by successive
+        halving from ``screen_cases`` training cases down to ``finalists``;
+        ``parents="archive"`` branches each round from the archive's Pareto
+        frontier; ``round_budget`` caps a round's screening and finalist
+        case-runs. Each defaults to its ``evalrun.improve.*`` policy.
         """
         from .runner import default_concurrency
 
@@ -417,7 +436,9 @@ class EvalSession:
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
                            max_axis_regression=max_axis_regression, value=value, ablate=ablate,
-                           repeats=repeats, _records=records, _holdout_records=held_records)
+                           repeats=repeats, candidates=candidates, screen_cases=screen_cases, finalists=finalists,
+                           parents=parents, round_budget=round_budget, _records=records,
+                           _holdout_records=held_records)
 
     def campaign(
         self,

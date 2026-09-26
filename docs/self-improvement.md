@@ -788,3 +788,130 @@ and no promotion has yet cleared them. The next levers are more repeats or
 cases for the candidate that came close, and a brief that carries the
 connectors' own validation messages so a proposer can write advice about the
 exact query grammar rather than about retrying.
+
+## Wide search: many candidates, screening, archive
+
+The loop above hill-climbs one champion with one proposal a round, evaluates
+that proposal in full, and discards it when it fails. The pilot's round 2
+shows the cost: a candidate at +0.086 (interval [-0.005, 0.189]) was thrown
+away, and nothing later could build on it. Recipes that work in the
+literature (GEPA, AlphaEvolve and FunSearch, the Darwin Goedel Machine) ask
+for many candidates, screen them cheaply, pay for a full evaluation only on
+the best, and keep an archive of stepping stones to branch from. Wide search
+adds those three things around the unchanged gates.
+
+```bash
+worldloom evalrun improve ./corpus --agent-pack agent:baseline \
+  --exec ./agent --proposer-exec ./proposer --holdout-corpus ./fresh \
+  --candidates 6 --screen-cases 6 --finalists 1 --parents archive \
+  --round-budget 400 --repeats 3 -o ./improve
+```
+
+**Many candidates.** `--candidates N` (SDK `candidates=`, policy
+`evalrun.improve.candidates`, default 1) asks the proposer N times a round.
+Each request is its own pack interview, refused with findings until it lints
+clean as before, and its message says which candidate of N it is
+(`evalrun.improve.rule.candidates`) and lists the earlier candidates of the
+round by their one-line summary and diff size (files, hunks, lines added and
+removed), never their content, asking for a different approach. The i-th
+candidate is named `<stem>-r<round>-c<i>`. A proposal with the same body as
+an earlier one of the round is a `duplicate` and never runs; one that
+restates its draft or the champion is `unchanged`.
+
+**Screening by successive halving.** The distinct candidates are screened on
+training cases only, once each (one repeat). The order in which training
+cases are spent is fixed per round: each case's stratum is the smallest
+failure cluster of the champion's autopsy it belongs to (cases the champion
+passes are their own stratum, last), cases within a stratum are ordered by a
+SHA-256 of a seed drawn from the round number and the training case-set
+digest, and the order deals one case from each stratum in turn. Then:
+
+1. stage 1 runs every candidate on the first `--screen-cases` cases of that
+   order (policy `evalrun.improve.screen_cases`, 6);
+2. each candidate's score is its paired mean delta against the champion on
+   the stage's cases: the champion's side is its existing training runs
+   restricted to those cases, averaged over its repeats, so it costs nothing;
+3. the better half advances, rounded up and never fewer than `--finalists`
+   (policy `evalrun.improve.finalists`, 1), ties going to the earlier
+   candidate;
+4. the prefix doubles and only the survivors run, on the new cases alone;
+5. screening stops when `--finalists` candidates remain, or when the prefix
+   is the whole training set, where the best `--finalists` go on.
+
+Every finalist then runs the full training gate (K repeats, the noise-aware
+judge) exactly as a single candidate always has. Of the finalists that pass,
+the one with the highest training mean delta (then the better screening
+rank) is ablated and goes to the holdout; if none passes, the round is
+`rejected` with the best of them as its candidate. The holdout is run once a
+round, for one candidate, and only after that candidate passed the training
+gate: screening, finalists and the archive never touch a held-out case.
+
+**Archive.** Every policy the round evaluated in full on the training cases
+(the champion, each finalist, and a reduced candidate after ablation) is
+written to `archive/<digest>.json` with its per-case mean scores, its mean
+over each failure cluster, its failing count and the pack's envelope, so it
+can be branched from even after ablation reused its name. The cluster map
+(`archive/clusters.json`) is fixed the first time the archive meets a
+training case set, from the champion's autopsy then, so every entry's
+cluster means are over the same cases; clusters may overlap. An entry is on
+the **Pareto frontier** when no other entry is at least as good on every
+cluster and better on one.
+
+**Parent selection.** With `--parents champion` (policy
+`evalrun.improve.parents`, the default) every round revises the champion.
+With `--parents archive` each round draws its parent from the frontier of
+what earlier rounds archived plus the current champion, over members that
+still fail a training case. A member's weight is
+`exp(-10 * (best mean - its mean)) / (1 + visits)`, where visits is the
+number of receipted rounds that proposed from it (the champion counts every
+round it was proposed from); the draw is the first 48 bits of a SHA-256 of
+the round number, the training case-set digest and the frontier's digests,
+over 2^48, laid across the members in digest order. The brief is built from
+the parent's own training runs, and the proposer is told when its draft is
+an archived candidate rather than the champion
+(`evalrun.improve.rule.parent`). Promotion is unchanged: the candidate is
+judged against the current champion by the training gate, ablation and the
+holdout gate, so the archive only chooses where to search from and never
+bypasses a gate. A near miss like the pilot's round 2 stays in the archive,
+dominates the champion on the clusters it helped, and becomes a parent.
+
+**Budget.** `--round-budget B` (policy `evalrun.improve.round_budget`, 0
+for none) bounds the case-runs a round's screening plus its finalists' full
+training runs may cost: a screening stage that would take the screening
+spent so far, plus the stage, plus `finalists * repeats * training cases`
+past B is not started, and the ranking so far picks the finalists (with no
+stage run, the first candidates in proposal order). The gates themselves are
+never cut short.
+
+**Receipts.** With any of `--candidates` above 1, `--parents archive` or a
+round budget, each receipt carries `parent` (the mode, the chosen policy
+and, from the archive, the frontier with each member's mean, visits and
+weight, and the draw), `screening` (every candidate with its status:
+`finalist`, `screened_out`, `duplicate`, `unchanged` or `refused`; its
+summary and diff size; the seed and case order; each stage's cases, the
+cases it ran, every candidate's score and who advanced; the finalists; why
+screening stopped; its cost) when more than one candidate was asked for, and
+`spent`, the case-runs the round executed. `improve.json` adds `search` (the
+settings) and `spent` in total. At the defaults none of these fields,
+directories or files appear and a loop writes exactly what it wrote before.
+
+**Resume.** Screening runs are ordinary pinned runs under
+`runs/<pack>@<digest>/screen/<case-set digest>`, read back rather than paid
+for again, and a wide round keeps its proposals in `proposals/NNN.json`
+until its receipt is written, so a round interrupted mid-screening resumes
+with the same candidates and pays only for the screens it had not finished.
+The parent draw only reads what earlier rounds archived and receipted, so a
+resumed round draws the same parent.
+
+**Costs.** A stage costs its survivors times the cases it adds: from N
+candidates and s screening cases, `N * s`, then `ceil(N/2) * s`, then
+`ceil(N/4) * 2s`, and so on, all at one repeat. The finalist adds `K * T`
+for T training cases at K repeats, against `N * K * T` for evaluating every
+candidate in full. In the
+offline test (5 proposals, one a duplicate, 11 training cases, 4 screening
+cases, K = 1) screening cost 24 case-runs and the finalist 11: 35 against
+44 for four full evaluations, a gap that grows with K and T.
+
+`evalrun campaign` takes the same flags and passes them to every stage's
+loop, and `session.improver(...)` takes `candidates=`, `screen_cases=`,
+`finalists=`, `parents=` and `round_budget=`.
