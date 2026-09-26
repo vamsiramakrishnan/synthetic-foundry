@@ -430,7 +430,7 @@ class Improver:
         # fresh seed reuses ids for different requests over a different world,
         # and those are exactly the held-out cases a fresh seed is for.
         train_keys = {_case_key(case): case.id for case in train}
-        overlap = sorted(train_keys[key] for key in {_case_key(case) for case in holdout} if key in train_keys)
+        overlap = sorted({train_keys[key] for key in map(_case_key, holdout) if key in train_keys})
         if overlap:
             raise ValueError(f"{len(overlap)} case(s) are both training and held out, e.g. {overlap[0]}")
         sealed = sorted(case.id for case in train if is_held_out(declared_split(case)))
