@@ -546,3 +546,12 @@ def test_from_tree_takes_a_bare_skills_directory_and_refuses_what_lint_refuses(t
     (tmp_path / "loose" / "run.py").write_text("print(1)\n", encoding="utf-8")
     outside = runner.invoke(app, ["pack", "from-tree", str(tmp_path / "loose"), "--name", "loose"])
     assert outside.exit_code != 0 and "policy.json and skills/ only" in " ".join(outside.output.split())
+
+
+def test_a_tree_written_with_crlf_line_endings_reads_as_the_same_pack(tmp_path: Path) -> None:
+    """A skill saved by a Windows editor is the same skill: the tree reads it back with LF."""
+    from worldloom.evalrun.policy import read_tree
+
+    (tmp_path / "skills" / "verify").mkdir(parents=True)
+    (tmp_path / "skills" / "verify" / "SKILL.md").write_bytes(b"---\r\nname: verify\r\n---\r\n\r\nRead back.\r\n")
+    assert read_tree(tmp_path) == {"skills/verify/SKILL.md": "---\nname: verify\n---\n\nRead back.\n"}

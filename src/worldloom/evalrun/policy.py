@@ -489,7 +489,12 @@ def write_tree(files: Mapping[str, str], directory: Path) -> None:
 
 
 def read_tree(directory: Path) -> dict[str, str]:
-    """Every file under *directory* as ``{relative path: text}``; refuses links and non-text files."""
+    """Every file under *directory* as ``{relative path: text}``; refuses links and non-text files.
+
+    Line endings are read as ``\n`` whatever wrote them: a pack is content
+    addressed, and a skill edited on Windows (where text files are written
+    with CRLF) must be the same pack as the one edited anywhere else.
+    """
     out: dict[str, str] = {}
     for current, dirs, names in os.walk(directory):
         base = Path(current)
@@ -502,7 +507,7 @@ def read_tree(directory: Path) -> dict[str, str]:
                 raise ValueError(f"{path}: not a plain file")
             relative = path.relative_to(directory).as_posix()
             try:
-                out[relative] = path.read_bytes().decode("utf-8")
+                out[relative] = path.read_bytes().decode("utf-8").replace("\r\n", "\n")
             except UnicodeDecodeError:
                 raise ValueError(f"{relative}: not UTF-8 text") from None
     return dict(sorted(out.items()))
