@@ -440,8 +440,12 @@ def test_the_harness_prompt_puts_the_standing_instruction_ahead_of_the_role(monk
     assert prompts[-1].startswith(opening + "[worldloom-policy ")
     invoke("claude", {**turn, "agent": {"ref": "agent:careful", "digest": "d", "system": system}})
     again = fenced.match(prompts[-1])
-    # A fresh nonce every invocation: a policy cannot know the line that closes it.
-    assert again is not None and again.group(1) != first.group(1)
+    # The same policy fences the same prompt (no randomness in what the agent
+    # reads); a different policy gets a different fence.
+    assert again is not None and again.group(1) == first.group(1) and prompts[-1] == prompt
+    invoke("claude", {**turn, "agent": {"ref": "agent:careful", "digest": "e", "system": system}})
+    other = fenced.match(prompts[-1])
+    assert other is not None and other.group(1) != first.group(1)
     # Only the evalrun seams carry a policy.
     invoke("claude", {"schema": "worldloom.evalrun-rating/v1", "agent": {"system": system}})
     assert system not in prompts[-1].split("\n\n{")[0]

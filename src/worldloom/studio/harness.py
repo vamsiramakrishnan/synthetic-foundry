@@ -10,7 +10,6 @@ import argparse
 import hashlib
 import json
 import os
-import secrets
 import shlex
 import subprocess
 import sys
@@ -162,10 +161,16 @@ def marker_phrases() -> tuple[str, ...]:
 
 
 def fence_nonce(payload: Mapping[str, Any]) -> str:
-    """A fresh nonce for one invocation's delimiters: the pack digest and a random token, hashed."""
+    """The nonce on one prompt's delimiters: a digest of the policy block it fences.
+
+    Deterministic, so the same case under the same policy is the same prompt
+    and a champion and a candidate are measured without prompt noise. It
+    cannot be forged either: the lint refuses the marker tag in any policy
+    text, and a policy that tried to predict its own digest would change it.
+    """
     block = payload.get("agent")
-    pack_digest = str(block.get("digest") or "") if isinstance(block, Mapping) else ""
-    return hashlib.sha256(f"{pack_digest}\0{secrets.token_hex(16)}".encode()).hexdigest()[:16]
+    canonical = json.dumps(block if isinstance(block, Mapping) else {}, sort_keys=True, default=str)
+    return hashlib.sha256(f"fence\0{canonical}".encode()).hexdigest()[:16]
 
 
 def _fenced(opening: str, text: str, closing: str, nonce: str) -> str:
@@ -179,7 +184,7 @@ def standing_instruction(payload: Mapping[str, Any], nonce: str | None = None) -
     `agent` block. A harness reading only the JSON would see the standing
     instruction as one field among many, so it goes ahead of the role, where
     a harness takes its instructions, between markers naming the policy and
-    lines carrying *nonce* (fresh per invocation unless given), which the
+    lines carrying *nonce* (a digest of the policy block unless given), which the
     policy's text cannot forge.
     Only the evalrun seams carry it: a pack interview or a narration request
     with an `agent` key is not running an agent under test.
