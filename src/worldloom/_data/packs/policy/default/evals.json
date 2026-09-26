@@ -2,6 +2,7 @@
   "values": {
     "evalrun.agent_pack.max_chars": 24000,
     "evalrun.max_turns": 64,
+    "evalrun.concurrency": 1,
     "evalrun.delta_band": 0.1,
     "evalrun.answer_pass_score": 0.8,
     "evalrun.agreement.min_kappa": 0.6,

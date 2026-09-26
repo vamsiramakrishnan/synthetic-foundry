@@ -351,12 +351,13 @@ worldloom enterprise-evals serve <CORPUS_PATH>
 | `--allowed-host` | Trusted external Host header; repeat for multiple proxy names. |
 | `--check` | Validate the server configuration and exit without listening. |
 | `--host` |  |
-| `--max-calls` |  |
-| `--max-runs` |  |
+| `--max-calls` | Calls one run may make (default: policy `connectors.serving.max_calls_per_run`). |
+| `--max-runs` | Runs open at once (default: policy `connectors.serving.max_runs`). |
 | `--port` |  |
 | `--query-id` | Serve only these query IDs; repeat to select more. |
 | `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
 | `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
+| `--worker-id` | Prefix every run id with this worker's name (w3 mints w3-run-1), so ids from several server processes never collide. Each process keeps its own runs: route every call for a run id to the process that began it. |
 
 ### `worldloom enterprise-evals simulate`
 
@@ -546,6 +547,18 @@ worldloom evalrun improve <CORPUS>
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
 
+### `worldloom evalrun merge`
+
+Join the shard directories of one sharded run into one run, in case order.
+
+```
+worldloom evalrun merge <OUT> <SHARDS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the summary as JSON. |
+
 ### `worldloom evalrun plan`
 
 Grade the plan axis alone: the planner states each case's DAG and nothing runs.
@@ -594,6 +607,7 @@ worldloom evalrun run <CORPUS>
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
 | `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
+| `--concurrency` | Cases in flight at once, each on its own fork (default: policy `evalrun.concurrency`, 1). The ledger is in case order whatever order they finish in. |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
@@ -604,6 +618,8 @@ worldloom evalrun run <CORPUS>
 | `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |
 | `--rater` | grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam). |
 | `--rater-timeout` | Seconds an exec: rater child may run per answer. |
+| `--resume` | Keep the ledger already in --out when its run.json names this agent, principal and case set (and shard); grade only the cases it lacks. |
+| `--shard` | Run only shard i of n (1-based, e.g. 2/4), a partition by a stable hash of case id; `evalrun merge` joins the shard directories. |
 | `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
 | `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
 | `--timeout` | Seconds the --exec child may run per turn before it is killed. |

@@ -9,7 +9,8 @@ from __future__ import annotations
 import copy
 import hmac
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from threading import RLock
 from typing import Any
@@ -80,6 +81,15 @@ class _Run:
     #: number of spans recorded before it and the reply it was given. A
     #: question is a turn: recorded here, never claimed by the agent.
     questions: list[dict[str, Any]] = field(default_factory=list)
+    #: Serialises everything that reads or changes this run. Runs share
+    #: nothing but the read-only rows, definitions and base emulators, so each
+    #: takes its own lock and a slow agent on one run never waits on a call
+    #: made in another.
+    lock: RLock = field(default_factory=RLock, repr=False, compare=False)
+    #: Set by `end` under the run's lock. A call that looked the run up before
+    #: `end` released it, and waited on the lock meanwhile, is refused rather
+    #: than acting on a released fork.
+    ended: bool = False
 
 
 class ConnectorEvaluationService:
@@ -88,6 +98,14 @@ class ConnectorEvaluationService:
     A principal is supplied by a trusted host, never by a tool argument. Run IDs
     are local monotonic handles, not credentials. HTTP binds them to the
     authenticated principal on every call, including trace and grade reads.
+
+    Safe to share between threads, and concurrent across runs. The registry
+    (begin, end, the ordinal, the lazily built bases) is guarded by the
+    service lock; every read of a run and every call into it by that run's own
+    lock. Two runs proceed in parallel; one run's calls stay strictly ordered.
+    ``run_prefix`` is prepended to every run id (``w3-run-1``) so ids minted
+    by different processes serving the same rows never collide; without one
+    the ids are the plain ``run-<n>`` they always were.
     """
 
     def __init__(
@@ -98,7 +116,11 @@ class ConnectorEvaluationService:
         definitions: Mapping[str, ConnectorDefinition] | None = None,
         allowed_tools: Iterable[str] | None = None,
         limits: ServingLimits | None = None,
+        run_prefix: str = "",
     ) -> None:
+        if run_prefix and not all(char.isalnum() or char in "-_." for char in run_prefix):
+            raise ServingError("run_prefix: letters, digits, '-', '_' and '.' only")
+        self.run_prefix = run_prefix
         limits = limits or ServingLimits()
         self.limits = limits
         materialized_rows = tuple(copy.deepcopy(dict(row)) for row in rows)
@@ -180,51 +202,81 @@ class ConnectorEvaluationService:
         with self._lock:
             if query_id not in self.rows:
                 raise ServingError(f"unknown_query: {query_id}")
-            if len(self._runs) >= self.limits.max_runs:
-                raise ServingError("run_limit: end a run before starting another")
-            if sum(run.principal == principal for run in self._runs.values()) >= self.limits.max_runs_per_principal:
-                raise ServingError("principal_run_limit: end a run before starting another")
+            self._admit(principal)
             row = self.rows[query_id]
             servers = sorted({str(node["server"]) for node in row["expected_dag"]["nodes"] if node.get("node_kind") != "transform"})
-            emulators = {server: self._emulator(server, row, principal) for server in servers}
+            # The shared inputs are built once, under the registry lock; the
+            # fork each run takes of them is built outside it, so a begin
+            # that copies a large corpus does not stall every other run.
+            sources = {server: self._source(server, row) for server in servers}
+        emulators = {server: self._fork(server, sources[server], row, principal) for server in servers}
+        before = {fid: dict(record) for server in sorted(emulators)
+                  for fid, record in sorted(emulators[server].records.items())}
+        with self._lock:
+            # Checked again: another begin may have taken the last slot while
+            # this one was forking.
+            self._admit(principal)
             self._ordinal += 1
-            run_id = f"run-{self._ordinal}"
-            before = {fid: dict(record) for server in sorted(emulators)
-                      for fid, record in sorted(emulators[server].records.items())}
+            run_id = f"{self.run_prefix}run-{self._ordinal}"
             self._runs[run_id] = _Run(principal, query_id, emulators, before=before)
-            return {"run_id": run_id, "query_id": query_id, "query": row.get("query", ""),
-                    "max_calls": self.limits.max_calls_per_run}
+        return {"run_id": run_id, "query_id": query_id, "query": row.get("query", ""),
+                "max_calls": self.limits.max_calls_per_run}
 
-    def _emulator(self, server: str, row: Mapping[str, Any], principal: str) -> ConnectorEmulator:
+    def _admit(self, principal: str) -> None:
+        """Refuse a begin the limits do not admit. The caller holds the service lock."""
+        if len(self._runs) >= self.limits.max_runs:
+            raise ServingError("run_limit: end a run before starting another")
+        if sum(run.principal == principal for run in self._runs.values()) >= self.limits.max_runs_per_principal:
+            raise ServingError("principal_run_limit: end a run before starting another")
+
+    def _source(self, server: str, row: Mapping[str, Any]) -> Any:
+        """What a run's emulator for *server* forks from, built once. The caller holds the service lock."""
         if row.get("state_overrides"):
-            from ..enterprise_failures import build_query_emulator
             from ..enterprise_rows import runtime_records
 
             # Converted once: the query emulator neither keeps nor changes
             # its input records, it copies the ones it holds.
             if self._runtime_records is None:
                 self._runtime_records = tuple(runtime_records(self.records))
-            emulator = build_query_emulator(self.definitions[server], self._runtime_records,
-                                        overrides=row["state_overrides"],
-                                        mutation_nodes=row["expected_dag"]["nodes"],
-                                        query_id=str(row["id"]))
-            emulator.actor = principal
-            return emulator
+            return self._runtime_records
         # One canonical emulator per connector, built once; each run starts
         # from a fresh transaction over it rather than re-copying every record.
         base = self._bases.get(server)
         if base is None:
             base = self._bases[server] = ConnectorEmulator(self.definitions[server], self.records)
-        emulator = base.transaction(fresh=True)
+        return base
+
+    def _fork(self, server: str, source: Any, row: Mapping[str, Any], principal: str) -> ConnectorEmulator:
+        """A run's own emulator over *source*: reads the shared source, never changes it."""
+        if row.get("state_overrides"):
+            from ..enterprise_failures import build_query_emulator
+
+            emulator = build_query_emulator(self.definitions[server], source,
+                                            overrides=row["state_overrides"],
+                                            mutation_nodes=row["expected_dag"]["nodes"],
+                                            query_id=str(row["id"]))
+        else:
+            emulator = source.transaction(fresh=True)
         emulator.actor = principal
         return emulator
 
     def _run(self, principal: str, run_id: str) -> _Run:
-        run = self._runs.get(run_id)
+        """The run, looked up under the registry lock. Read or change it only inside `_held`."""
+        with self._lock:
+            run = self._runs.get(run_id)
         if run is None or run.principal != principal:
             # Do not disclose whether another principal owns this handle.
             raise ServingError("unknown_run: start a run with eval_begin")
         return run
+
+    @contextmanager
+    def _held(self, principal: str, run_id: str) -> Iterator[_Run]:
+        """The run with its own lock held; refused if `end` released it while this waited."""
+        run = self._run(principal, run_id)
+        with run.lock:
+            if run.ended:
+                raise ServingError("unknown_run: start a run with eval_begin")
+            yield run
 
     def _node(self, run: _Run, name: str, args: Mapping[str, Any]) -> str | None:
         """Attribute observed tools/targets; never accept an agent's node label."""
@@ -442,11 +494,13 @@ class ConnectorEvaluationService:
         return tuple(reversed(consumed))
 
     def call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
-        with self._lock:
-            run = self._run(principal, run_id)
+        with self._held(principal, run_id) as run:
 
             def refuse(message: str) -> ServingError:
-                run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message})
+                run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message,
+                                     # Where it happened: the span count at the refusal, so an
+                                     # exported trace can place it among the spans.
+                                     "index": len(run.spans)})
                 return ServingError(message)
 
             if name not in self.tools:
@@ -522,8 +576,7 @@ class ConnectorEvaluationService:
     def trace(self, principal: str, run_id: str, *, offset: int = 0, limit: int = 100) -> dict[str, Any]:
         if offset < 0 or not 1 <= limit <= 100:
             raise ServingError("trace_page: offset >= 0 and 1 <= limit <= 100 required")
-        with self._lock:
-            run = self._run(principal, run_id)
+        with self._held(principal, run_id) as run:
             # One receipt can contain a full bounded result plus its bounded
             # request. Reserve framing room, and stop the page before a second
             # receipt would turn a 100-span page into a 100 MiB response.
@@ -553,13 +606,13 @@ class ConnectorEvaluationService:
         whole thing once, and paging it back through the wire budget only
         adds a place to lose a span.
         """
-        with self._lock:
-            return tuple(self._run(principal, run_id).spans)
+        with self._held(principal, run_id) as run:
+            return tuple(run.spans)
 
     def refusals(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
         """Every call this run refused before a span could exist, in order."""
-        with self._lock:
-            return tuple(dict(item) for item in self._run(principal, run_id).refusals)
+        with self._held(principal, run_id) as run:
+            return tuple(dict(item) for item in run.refusals)
 
     def ask(self, principal: str, run_id: str, question: str, about: tuple[str, ...] = ()) -> str:
         """Record a question to the user and answer it from the case.
@@ -577,8 +630,7 @@ class ConnectorEvaluationService:
             raise ServingError("ask: a question needs text")
         if len(text) > 2000:
             raise ServingError("ask: a question is at most 2000 characters")
-        with self._lock:
-            run = self._run(principal, run_id)
+        with self._held(principal, run_id) as run:
             if len(run.questions) >= 32:
                 raise ServingError("ask: at most 32 questions per run")
             row = self.rows[run.query_id]
@@ -600,9 +652,9 @@ class ConnectorEvaluationService:
         agent's, and is stripped here: the surface tells an agent what the
         user said, never whether the question was expected.
         """
-        with self._lock:
+        with self._held(principal, run_id) as run:
             return tuple({key: value for key, value in item.items() if key != "point"}
-                         for item in self._run(principal, run_id).questions)
+                         for item in run.questions)
 
     def _question_behaviours(self, run: _Run) -> set[str]:
         behaviours: set[str] = set()
@@ -625,8 +677,7 @@ class ConnectorEvaluationService:
         writes rather than changing it in place, so the nested values a copy
         shares are never written. A caller must not write them either.
         """
-        with self._lock:
-            run = self._run(principal, run_id)
+        with self._held(principal, run_id) as run:
             return {fid: dict(record) for server in sorted(run.emulators)
                     for fid, record in sorted(run.emulators[server].records.items())}
 
@@ -639,8 +690,7 @@ class ConnectorEvaluationService:
         """
         from ..evalrun.safety import classify_tool, tool_annotations
 
-        with self._lock:
-            run = self._run(principal, run_id)
+        with self._held(principal, run_id) as run:
             out = []
             for name in sorted(self.tools):
                 connector, tool = self.tools[name]
@@ -684,8 +734,7 @@ class ConnectorEvaluationService:
         from ..evalrun.contract import case_from_row
         from ..evalrun.runner import CaseResult, grade_run, safety_for
 
-        with self._lock:
-            run = self._run(principal, run_id)
+        with self._held(principal, run_id) as run:
             row = self.rows[run.query_id]
             case = case_from_row(row, query=str(row.get("query") or f"case {row['id']}"), principal=principal)
             produced = tuple(
@@ -714,8 +763,7 @@ class ConnectorEvaluationService:
             return result.model_dump(mode="json")
 
     def grade(self, principal: str, run_id: str) -> dict[str, Any]:
-        with self._lock:
-            run = self._run(principal, run_id)
+        with self._held(principal, run_id) as run:
             post_state = {fid: record for server in sorted(run.emulators)
                           for fid, record in sorted(run.emulators[server].records.items())}
             behaviors = set()
@@ -734,10 +782,14 @@ class ConnectorEvaluationService:
                                    behaviors=sorted(behaviors)))
 
     def end(self, principal: str, run_id: str) -> dict[str, Any]:
-        with self._lock:
+        # The run's lock, then the registry's: the one order every path takes
+        # them in, so an end racing a call on the same run waits for it.
+        with self._held(principal, run_id) as run:
             grade = self.grade(principal, run_id)
-            del self._runs[run_id]
-            return {"run_id": run_id, "ended": True, "grade": grade}
+            run.ended = True
+            with self._lock:
+                del self._runs[run_id]
+        return {"run_id": run_id, "ended": True, "grade": grade}
 
 
 def _recorded_aliases(outputs: Mapping[str, Sequence[Any]]) -> dict[str, str]:

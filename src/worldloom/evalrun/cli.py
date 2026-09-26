@@ -248,12 +248,18 @@ def run_command(
     timed: bool = typer.Option(False, "--timed", help="Record wall-clock latency per case. Off by default so a run is byte-reproducible."),
     progress: bool = typer.Option(False, "--progress", help="Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed."),
     json_output: bool = typer.Option(False, "--json", help="Emit the summary as JSON."),
+    concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once, each on its own fork (default: policy `evalrun.concurrency`, 1). The ledger is in case order whatever order they finish in."),
+    resume: bool = typer.Option(False, "--resume", help="Keep the ledger already in --out when its run.json names this agent, principal and case set (and shard); grade only the cases it lacks."),
+    shard: str | None = typer.Option(None, "--shard", help="Run only shard i of n (1-based, e.g. 2/4), a partition by a stable hash of case id; `evalrun merge` joins the shard directories."),
 ) -> None:
     """Run one agent over the case set, one isolated connector state per case, and grade.
 
     Every graded case is appended to `results.jsonl` as it lands, so a run
     killed by its wall clock leaves every case that finished; a run that
     completes rewrites the same lines and is byte-identical either way.
+    `--resume` picks such a run up where it stopped. `--concurrency N` runs N
+    cases at once; `--shard i/n` runs one partition of the set, so n processes
+    or machines can share it and `evalrun merge` can join what they wrote.
 
     The reference agent walks each expected DAG through the same tool surface
     an external agent gets; its run is the executable ceiling for the set.
@@ -263,16 +269,32 @@ def run_command(
     every mean and carrying the child's stderr tail.
     """
     from ..cli import _refuse
+    from ..connectors.serving import ServingError
     from .rater import GroundedRater
-    from .results import append_result, write_run
-    from .runner import run_cases, service_for
+    from .results import (
+        append_result,
+        begin_ledger,
+        resume_ledger,
+        shard_document,
+        shard_of,
+        write_run,
+        write_shard,
+    )
+    from .runner import case_set_digest, default_concurrency, run_cases, service_for
 
     # Before the corpus: a typo in --harness should not wait on a build.
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     policy = _agent_pack(agent_pack, exec_command)
+    shard_at: tuple[int, int] | None = None
+    if shard is not None:
+        index_text, _, count_text = shard.partition("/")
+        if not (index_text.isdigit() and count_text.isdigit() and 1 <= int(index_text) <= int(count_text)):
+            _refuse("evalrun_shard_invalid", f"--shard {shard!r}: give i/n with 1 <= i <= n, e.g. 2/4")
+        shard_at = (int(index_text), int(count_text))
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
+    workers = concurrency if concurrency is not None else default_concurrency()
     if exec_command is not None:
         if agent != "reference":
             _refuse("cannot_combine", "--exec and --agent both name the agent under test; give one")
@@ -296,13 +318,41 @@ def run_command(
 
         clock = time.perf_counter
     try:
-        service = service_for(cases, loaded.connector_data.records)
+        # Over the whole set even for one shard: the service a case runs in
+        # is then the one a single process would have given it.
+        service = service_for(cases, loaded.connector_data.records, concurrency=workers)
     except Exception as error:  # ServingError and its causes are all refusals here
         _refuse("service_unbuildable", str(error))
-    # A fresh ledger: the checkpoint appends, and a stale file from an earlier
-    # run into the same directory would otherwise sit above this run's lines.
-    (out / "results.jsonl").unlink(missing_ok=True)
-    total = len(cases)
+    selected = list(cases)
+    shard_doc = None
+    if shard_at is not None:
+        selected = [case for case in cases if shard_of(case.id, shard_at[1]) == shard_at[0] - 1]
+        shard_doc = shard_document(shard_at[0], shard_at[1], cases)
+    # The identity this run will write (agent, principal, grader, agent pack),
+    # read off an empty run so it is whatever `run_cases` itself records.
+    identity = run_cases(service, (), under_test, principal=principal, clock=clock, rater=grader)
+    identity = identity.model_copy(update={"case_set": case_set_digest(selected)})
+    prior: list[Any] = []
+    if resume:
+        try:
+            prior, note = resume_ledger(out, identity, shard=shard_doc)
+        except ValueError as error:
+            _refuse("resume_mismatch", str(error), fix="point --out at a fresh directory, or run without --resume to start over")
+        if note is not None:
+            typer.echo(note, err=True)
+    else:
+        # A fresh ledger: the checkpoint appends, and a stale file from an earlier
+        # run into the same directory would otherwise sit above this run's lines.
+        (out / "results.jsonl").unlink(missing_ok=True)
+        # Likewise a stale shard.json, which would make an unsharded run
+        # look like a shard to `evalrun merge`.
+        (out / "shard.json").unlink(missing_ok=True)
+    begin_ledger(out, identity, len(selected))
+    if shard_doc is not None:
+        write_shard(out, shard_doc)
+    done_ids = {result.case_id for result in prior}
+    pending = [case for case in selected if case.id not in done_ids]
+    total = len(selected)
 
     def _checkpoint(result: Any) -> None:
         append_result(out, result)
@@ -313,7 +363,41 @@ def run_command(
         seconds = f" {result.latency.ttlt}s" if result.latency is not None and result.latency.ttlt is not None else ""
         typer.echo(f"[{done}/{total}] {result.case_id[:8]} {result.status} {score} {result.calls} call(s){seconds}", err=True)
 
-    report = run_cases(service, cases, under_test, principal=principal, clock=clock, rater=grader, on_result=_checkpoint)
+    try:
+        report = run_cases(service, pending, under_test, principal=principal, clock=clock, rater=grader,
+                           on_result=_checkpoint, concurrency=workers)
+    except ServingError as error:
+        _refuse("concurrency_refused", str(error))
+    if prior or shard_doc is not None:
+        # Resumed or sharded: the prior results and this process's, in the
+        # set's order, under the identity the whole run carries.
+        graded = {result.case_id: result for result in (*prior, *report.results)}
+        report = report.model_copy(update={"case_set": identity.case_set,
+                                           "results": tuple(graded[case.id] for case in selected)})
+    summary = write_run(out, report)
+    _print_summary(summary, json_output)
+
+
+@app.command("merge")
+def merge_command(
+    out: Path = typer.Argument(..., help="Run directory to write the merged run into."),
+    shards: list[Path] = typer.Argument(..., help="Shard directories written by `evalrun run --shard i/n`, one per shard."),
+    json_output: bool = typer.Option(False, "--json", help="Emit the summary as JSON."),
+) -> None:
+    """Join the shard directories of one sharded run into one run, in case order.
+
+    Refuses shards that differ in agent, principal, grader, agent pack, case
+    set or shard count, a shard given twice, a case two shards graded, an
+    unfinished shard and a missing one. The merged directory is
+    byte-identical to what one process running the whole set would write.
+    """
+    from ..cli import _refuse
+    from .results import merge_shards, write_run
+
+    try:
+        report = merge_shards(shards)
+    except (OSError, ValueError, KeyError) as error:
+        _refuse("shards_unmergeable", str(error))
     summary = write_run(out, report)
     _print_summary(summary, json_output)
 

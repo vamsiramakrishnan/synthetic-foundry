@@ -178,7 +178,8 @@ format.
   objects, pydantic `Model` for serialized entities; `__all__` grouped
   semantically; `TYPE_CHECKING` blocks for import-only types.
 - No async anywhere in `src/`; the only concurrency is `narrative/compiler.py`'s
-  thread pool.
+  thread pool and `evalrun.runner.run_cases(concurrency=N)`'s, which returns
+  results in case order so the ledger never shows it.
 
 ## Important Files
 

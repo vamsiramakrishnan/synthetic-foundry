@@ -197,7 +197,14 @@ measured separately, with `worldloom evalrun agreement` (see
 
 ## Running at scale
 
-Placeholder: running baseline and candidate agents over large case sets.
+Each round runs two agents over the training cases and, when the candidate
+passes, two more over the held-out cases, so the loop is as fast as a run.
+`evalrun run --concurrency N` keeps N cases in flight on one per-run-locked
+service, with the ledger in case order either way; `--shard i/n` splits one
+set across processes or machines and `evalrun merge` joins them byte-for-byte;
+`--resume` picks up a killed run. The policy key `evalrun.concurrency` sets
+the default for the CLI and Studio. See
+[Eval execution](eval-execution.md#running-at-scale).
 
 ## Improve loop
 

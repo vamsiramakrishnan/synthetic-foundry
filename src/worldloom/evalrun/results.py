@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import warnings
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -27,6 +29,7 @@ from pydantic import ConfigDict, Field
 
 from .. import packkit
 from ..corpus import write_json
+from ..ids import content_key
 from ..models import Model
 from .contract import EvalCase
 from .grading import CaseScore
@@ -203,8 +206,28 @@ def append_result(directory: Path, result: CaseResult) -> None:
     """
 
     directory.mkdir(parents=True, exist_ok=True)
+    # Flushed and synced before the next case starts: a checkpoint the OS
+    # still holds in a buffer is not one a killed machine leaves behind.
     with (directory / "results.jsonl").open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(_result_line(result))
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+#: The identity fields two ledgers must share to be one run: a resume refuses
+#: a ledger that differs in any, and a merge refuses shards that do.
+IDENTITY_FIELDS = ("agent", "principal", "case_set", "agent_pack", "grader")
+
+
+def _header(report: RunReport, cases: int) -> dict[str, Any]:
+    header: dict[str, Any] = {"schema": RUN_SCHEMA, "agent": report.agent, "principal": report.principal,
+                              "case_set": report.case_set, "cases": cases}
+    # Written only when present, so a run made without them keeps its bytes.
+    if report.agent_pack is not None:
+        header["agent_pack"] = report.agent_pack
+    if report.grader is not None:
+        header["grader"] = report.grader
+    return header
 
 
 def write_run(directory: Path, report: RunReport) -> RunSummary:
@@ -215,33 +238,236 @@ def write_run(directory: Path, report: RunReport) -> RunSummary:
         for result in report.results:
             handle.write(_result_line(result))
     summary = summarize(report)
-    header: dict[str, Any] = {"schema": RUN_SCHEMA, "agent": report.agent, "principal": report.principal,
-                              "case_set": report.case_set, "cases": len(report.results)}
-    # Written only when present, so a run made without them keeps its bytes.
-    if report.agent_pack is not None:
-        header["agent_pack"] = report.agent_pack
-    if report.grader is not None:
-        header["grader"] = report.grader
-    write_json(directory / "run.json", header)
+    write_json(directory / "run.json", _header(report, len(report.results)))
     write_json(directory / "summary.json", summary.model_dump(mode="json", by_alias=True))
     return summary
+
+
+def begin_ledger(directory: Path, identity: RunReport, planned: int) -> None:
+    """``run.json`` before the first case, marked ``partial``, so a killed run can be resumed.
+
+    ``identity`` is the run's report with no results yet. ``write_run``
+    replaces the header when the run completes, so a finished run's bytes are
+    the same whether or not it began this way.
+    """
+
+    directory.mkdir(parents=True, exist_ok=True)
+    write_json(directory / "run.json", {**_header(identity, planned), "partial": True})
+
+
+class LedgerWarning(UserWarning):
+    """A ledger was read with its torn final line dropped."""
+
+
+def read_results(path: Path) -> tuple[list[CaseResult], str | None]:
+    """Every result in a ``results.jsonl``, and a note when a torn final line was dropped.
+
+    A process killed mid-append leaves a last line with no newline and
+    only part of its JSON. That line is the case that did not finish, and
+    dropping it loses nothing a resume will not redo. Any other line that does
+    not parse (one in the middle, or a last line that was terminated) is
+    corruption, not a crash, and is refused with its line number.
+    """
+
+    data = path.read_bytes()
+    *complete, tail = data.split(b"\n")
+    results: list[CaseResult] = []
+    for number, line in enumerate(complete, start=1):
+        if line.strip():
+            try:
+                results.append(CaseResult.model_validate_json(line))
+            except ValueError as error:
+                raise ValueError(f"{path}:{number}: invalid result") from error
+    note = None
+    if tail.strip():
+        try:
+            results.append(CaseResult.model_validate_json(tail))
+        except ValueError:
+            note = (f"{path}:{len(complete) + 1}: dropped a torn final line ({len(tail)} bytes), "
+                    "the case that was being written when the run stopped")
+    return results, note
 
 
 def read_run(directory: Path) -> RunReport:
     header = json.loads((directory / "run.json").read_text(encoding="utf-8"))
     if header.get("schema") != RUN_SCHEMA:
         raise ValueError(f"{directory}: not an eval run ({header.get('schema')!r})")
-    results = []
-    with (directory / "results.jsonl").open(encoding="utf-8") as handle:
-        for number, line in enumerate(handle, start=1):
-            if line.strip():
-                try:
-                    results.append(CaseResult.model_validate_json(line))
-                except ValueError as error:
-                    raise ValueError(f"{directory / 'results.jsonl'}:{number}: invalid result") from error
+    results, note = read_results(directory / "results.jsonl")
+    if note is not None:
+        warnings.warn(note, LedgerWarning, stacklevel=2)
     return RunReport(agent=str(header["agent"]), principal=str(header.get("principal", "agent")),
                      case_set=str(header["case_set"]), results=tuple(results),
                      agent_pack=header.get("agent_pack"), grader=header.get("grader"))
+
+
+def _mismatches(header: Mapping[str, Any], identity: RunReport) -> list[str]:
+    wanted = _header(identity, 0)
+    return [f"{key} (ledger {header.get(key)!r}, this run {wanted.get(key)!r})"
+            for key in IDENTITY_FIELDS if header.get(key) != wanted.get(key)]
+
+
+def resume_ledger(directory: Path, identity: RunReport, *, shard: Mapping[str, Any] | None = None) -> tuple[list[CaseResult], str | None]:
+    """The results an interrupted run already graded, after proving it is this run.
+
+    Refuses, naming each field, when ``run.json`` records a different agent,
+    principal, case set, agent pack or grader, or a different shard; refuses
+    a ledger without a ``run.json`` to prove it against, and one that grades
+    a case twice. A torn final line is dropped (and the note returned), and
+    ``results.jsonl`` is rewritten without it so the appends that follow
+    start on a line of their own. An empty directory resumes from nothing.
+    """
+
+    ledger = directory / "results.jsonl"
+    header_path = directory / "run.json"
+    if not header_path.exists():
+        if ledger.exists() and ledger.stat().st_size:
+            raise ValueError(f"{directory}: results.jsonl has no run.json to match against; run again without --resume")
+        return [], None
+    header = json.loads(header_path.read_text(encoding="utf-8"))
+    if header.get("schema") != RUN_SCHEMA:
+        raise ValueError(f"{directory}: not an eval run ({header.get('schema')!r})")
+    mismatched = _mismatches(header, identity)
+    recorded_shard = read_shard(directory)
+    if (recorded_shard is None) != (shard is None) or (shard is not None and recorded_shard != dict(shard)):
+        mismatched.append("shard (ledger "
+                          f"{_shard_label(recorded_shard)}, this run {_shard_label(shard)})")
+    if mismatched:
+        raise ValueError(f"{directory}: cannot resume a different run: " + "; ".join(mismatched))
+    if not ledger.exists():
+        return [], None
+    results, note = repair_ledger(ledger)
+    seen: set[str] = set()
+    for result in results:
+        if result.case_id in seen:
+            raise ValueError(f"{ledger}: case {result.case_id} is graded twice; the ledger is not one run")
+        seen.add(result.case_id)
+    return results, note
+
+
+def repair_ledger(path: Path) -> tuple[list[CaseResult], str | None]:
+    """`read_results`, then drop a torn final line from the file itself.
+
+    Appending after a torn line would glue the next result onto it and turn
+    a crash's harmless tail into corruption in the middle. The file is
+    rewritten (atomically, synced) only when there was something to drop.
+    """
+
+    results, note = read_results(path)
+    # An unterminated last line that parsed is kept, but still rewritten, so
+    # the next append starts a line of its own.
+    if note is not None or path.read_bytes()[-1:] not in (b"", b"\n"):
+        tmp = path.with_name(path.name + ".tmp")
+        with tmp.open("w", encoding="utf-8", newline="\n") as handle:
+            for result in results:
+                handle.write(_result_line(result))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    return results, note
+
+
+# -- shards -------------------------------------------------------------------
+
+
+SHARD_SCHEMA = "worldloom.eval-run-shard/v1"
+
+
+def shard_of(case_id: str, count: int) -> int:
+    """The shard (0-based) a case belongs to among *count*: a stable hash of its id.
+
+    By id, never by position, so a case keeps its shard when the set is
+    filtered or reordered, and every machine computes the same partition.
+    """
+    return int(content_key("evalrun-shard", case_id), 16) % count
+
+
+def shard_document(index: int, count: int, cases: Sequence[EvalCase]) -> dict[str, Any]:
+    """``shard.json`` for shard *index* (1-based) of *count* over the whole ordered case set."""
+    return {"schema": SHARD_SCHEMA, "index": index, "count": count,
+            "case_set": case_set_digest(cases), "order": [case.id for case in cases]}
+
+
+def write_shard(directory: Path, document: Mapping[str, Any]) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    write_json(directory / "shard.json", dict(document))
+
+
+def read_shard(directory: Path) -> dict[str, Any] | None:
+    path = directory / "shard.json"
+    if not path.exists():
+        return None
+    document: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    if document.get("schema") != SHARD_SCHEMA:
+        raise ValueError(f"{path}: not an eval-run shard ({document.get('schema')!r})")
+    return document
+
+
+def _shard_label(document: Mapping[str, Any] | None) -> str:
+    if document is None:
+        return "unsharded"
+    return f"{document.get('index')}/{document.get('count')} of {str(document.get('case_set'))[:12]}"
+
+
+def merge_shards(directories: Sequence[Path]) -> RunReport:
+    """One run from the shard directories of one sharded run, in case order.
+
+    Refuses shards that are not one run (a different agent, principal, agent
+    pack, grader, whole case set or shard count), a shard given twice, a case
+    graded by two shards or in the wrong one, an unfinished shard, and a
+    missing shard. What it returns is what a single process would have
+    written, so ``write_run`` of it is byte-identical to that run's ledger.
+    """
+
+    if not directories:
+        raise ValueError("merge needs at least one shard directory")
+    loaded: list[tuple[Path, dict[str, Any], dict[str, Any], RunReport]] = []
+    for directory in directories:
+        shard = read_shard(directory)
+        if shard is None:
+            raise ValueError(f"{directory}: no shard.json; write shards with `evalrun run --shard i/n`")
+        header = json.loads((directory / "run.json").read_text(encoding="utf-8"))
+        if header.get("partial"):
+            raise ValueError(f"{directory}: shard {shard['index']}/{shard['count']} did not finish; "
+                             "finish it with `evalrun run --shard ... --resume`")
+        loaded.append((directory, shard, header, read_run(directory)))
+    first_dir, first_shard, first_header, first = loaded[0]
+    for directory, shard, header, _report in loaded[1:]:
+        differs = [key for key in ("agent", "principal", "agent_pack", "grader") if header.get(key) != first_header.get(key)]
+        differs += [key for key in ("count", "case_set", "order") if shard.get(key) != first_shard.get(key)]
+        if differs:
+            raise ValueError(f"{directory}: not a shard of the same run as {first_dir}: differs in "
+                             + ", ".join(differs))
+    count = int(first_shard["count"])
+    order = [str(case_id) for case_id in first_shard["order"]]
+    by_index: dict[int, Path] = {}
+    owner: dict[str, Path] = {}
+    results: dict[str, CaseResult] = {}
+    for directory, shard, _header_doc, report in loaded:
+        index = int(shard["index"])
+        if index in by_index:
+            raise ValueError(f"shard {index}/{count} given twice: {by_index[index]} and {directory}")
+        by_index[index] = directory
+        for result in report.results:
+            if result.case_id in owner:
+                where = (f"twice in {directory}" if owner[result.case_id] == directory
+                         else f"in two shards: {owner[result.case_id]} and {directory}")
+                raise ValueError(f"case {result.case_id} is graded {where}")
+            if shard_of(result.case_id, count) != index - 1:
+                raise ValueError(f"{directory}: case {result.case_id} does not belong to shard {index}/{count}")
+            owner[result.case_id] = directory
+            results[result.case_id] = result
+    missing_shards = sorted(set(range(1, count + 1)) - set(by_index))
+    if missing_shards:
+        raise ValueError(f"missing shard(s) {', '.join(f'{index}/{count}' for index in missing_shards)}")
+    missing = [case_id for case_id in order if case_id not in results]
+    if missing:
+        raise ValueError(f"{len(missing)} case(s) graded by no shard (first {missing[0]}); resume the shard that owns it")
+    unknown = sorted(set(results) - set(order))
+    if unknown:
+        raise ValueError(f"{len(unknown)} result(s) for cases outside the case set (first {unknown[0]})")
+    return RunReport(agent=first.agent, principal=first.principal, case_set=str(first_shard["case_set"]),
+                     results=tuple(results[case_id] for case_id in order),
+                     agent_pack=first.agent_pack, grader=first.grader)
 
 
 # -- comparison ---------------------------------------------------------------
@@ -512,20 +738,32 @@ def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str =
 
 
 __all__ = [
+    "IDENTITY_FIELDS",
+    "SHARD_SCHEMA",
     "STUDIO_COLUMNS",
     "AxisMeans",
     "CaseDelta",
     "Comparison",
+    "LedgerWarning",
     "RunSlice",
     "RunSummary",
     "append_result",
+    "begin_ledger",
     "compare",
     "delta_band",
     "import_served",
     "import_studio_results",
+    "merge_shards",
+    "read_results",
     "read_run",
+    "read_shard",
+    "repair_ledger",
+    "resume_ledger",
+    "shard_document",
+    "shard_of",
     "summarize",
     "to_studio_rows",
     "write_run",
+    "write_shard",
     "write_studio_csv",
 ]

@@ -211,7 +211,7 @@ def test_demonstrations_are_the_passing_cases_by_default() -> None:
     assert metadata["scores"] == {"overall": 1.0, "plan": 1.0, "trajectory": 1.0, "outcomes": 1.0}
     assert metadata["agent"] == "reference" and metadata["case_set"] == reference.case_set
     assert metadata["dimensions"] == {"split": "train"} and metadata["passed"] is True
-    assert metadata["agent_pack"] is None and metadata["grader"] is None
+    assert metadata["agent_pack"] is None and metadata["grader"] == reference.grader["digest"]
 
 
 def test_the_agent_packs_system_text_is_used_only_when_it_resolves() -> None:
@@ -278,8 +278,10 @@ def test_pairs_refuse_different_case_sets_different_graders_and_one_run_twice() 
     graded_b = lazy.model_copy(update={"grader": {"digest": "b" * 32}})
     with pytest.raises(ExportRefused, match="different graders"):
         preference_pairs(graded_a, graded_b, cases)
-    # One side unrecorded is not a mismatch; the recorded one is carried.
-    assert preference_pairs(graded_a, lazy, cases)[0]["metadata"]["grader"] == "a" * 32
+    # One side unrecorded (a run written before graders were recorded) is not
+    # a mismatch; the recorded one is carried.
+    unrecorded = lazy.model_copy(update={"grader": None})
+    assert preference_pairs(graded_a, unrecorded, cases)[0]["metadata"]["grader"] == "a" * 32
 
 
 def test_errored_cases_are_never_paired() -> None:

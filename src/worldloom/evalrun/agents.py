@@ -20,6 +20,7 @@ ceiling every other agent is compared against, not a claim about any model.
 from __future__ import annotations
 
 import copy
+import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, Protocol
 
@@ -203,7 +204,18 @@ class ReferenceAgent:
 
     def __init__(self, cases: Iterable[EvalCase]) -> None:
         self._rows = {case.id: case.row for case in cases}
-        self._params: dict[str, set[str]] = {}
+        # Per thread: `run_cases(concurrency=n)` calls one agent on several
+        # cases at once, and each case's tool list is its own.
+        self._local = threading.local()
+
+    @property
+    def _params(self) -> dict[str, set[str]]:
+        params: dict[str, set[str]] = getattr(self._local, "params", {})
+        return params
+
+    @_params.setter
+    def _params(self, value: dict[str, set[str]]) -> None:
+        self._local.params = value
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         row = self._rows.get(task.case_id)
