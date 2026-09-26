@@ -1,0 +1,15 @@
+{
+  "schema": "worldloom.pack/v1",
+  "kind": "agent",
+  "name": "baseline",
+  "title": "Baseline agent policy",
+  "description": "Today's behaviour stated as a policy: the shipped turn and plan rules unchanged, no tool advice, no skills, the policy's turn budget. A variant extends it and states only what it changes.",
+  "body": {
+    "system": "Complete the request with the tools provided, then answer.",
+    "turn_rules": {},
+    "plan_rules": {},
+    "tools": {},
+    "planning": "",
+    "skills": {}
+  }
+}

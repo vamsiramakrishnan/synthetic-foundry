@@ -132,6 +132,27 @@ def role_for(payload: dict[str, Any]) -> str:
     return packkit.text("studio.harness.authoring")
 
 
+def standing_instruction(payload: Mapping[str, Any]) -> str:
+    """The agent policy's `system` text, delimited, for the front of the prompt; empty without one.
+
+    An evalrun document run under an `agent` pack carries the policy in its
+    `agent` block. A harness reading only the JSON would see the standing
+    instruction as one field among many, so it goes ahead of the role, where
+    a harness takes its instructions, between markers naming the policy.
+    Only the evalrun seams carry it: a pack interview or a narration request
+    with an `agent` key is not running an agent under test.
+    """
+    from .. import packkit
+
+    block = payload.get("agent")
+    if payload.get("schema") not in {"worldloom.evalrun-turn/v2", "worldloom.evalrun-plan/v1"}:
+        return ""
+    if not isinstance(block, Mapping) or not isinstance(block.get("system"), str) or not block["system"].strip():
+        return ""
+    return (packkit.text("studio.harness.agent_policy.open", ref=str(block.get("ref") or "agent"))
+            + block["system"].strip() + "\n" + packkit.text("studio.harness.agent_policy.close"))
+
+
 def adapter_command(name: str, *, timeout: float = 590, allow_native_writes: bool = False) -> str:
     """This module as an `--exec` child, ready to pass wherever one is taken.
 
@@ -221,7 +242,8 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
     structured = None if command_tools else reply_schema(payload)
     closing = packkit.text(_CLOSINGS.get(str(payload.get("schema")), "studio.harness.closing.structured")
                            if structured else "studio.harness.closing.object")
-    prompt = role + closing + "\n\n" + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False)
+    prompt = (standing_instruction(payload) + role + closing + "\n\n"
+              + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False))
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"
         asked = prompt

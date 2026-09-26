@@ -232,7 +232,7 @@ def run_cases(
         if on_result is not None:
             on_result(result)
     return RunReport(agent=agent.name, principal=principal or (listed[0].principal if listed else "agent"),
-                     case_set=case_set_digest(listed), results=tuple(results))
+                     case_set=case_set_digest(listed), results=tuple(results), agent_pack=getattr(agent, "pack_record", None))
 
 
 __all__ = ["RUN_SCHEMA", "CaseResult", "Clock", "Latency", "RunReport", "case_set_digest", "grade_run", "run_case", "run_cases", "safety_for", "service_for"]
