@@ -1194,4 +1194,103 @@ def value_command(
             typer.echo(f"note: {note}")
 
 
+@app.command("campaign")
+def campaign_command(
+    corpus: Path = typer.Argument(..., help="The corpus or case set the champion is measured on first; its failures decide the first stage."),
+    agent_pack: str = typer.Option(..., "--agent-pack", help="The champion to start from: agent:<name>[@<digest>] or a pack file."),
+    plan: Path = typer.Option(..., "--plan", help="The base DatasetPlan (JSON) every stage's case sets are compiled from, under fresh seeds."),
+    out: Path = typer.Option(..., "--out", "-o", help="Directory for campaign.json and stages/NNN/."),
+    exec_command: str | None = typer.Option(None, "--exec", help="The agent under test as an executable (the `evalrun run --exec` seam)."),
+    harness: str | None = typer.Option(None, "--harness", help="An installed coding harness as the agent under test: codex or claude."),
+    proposer_exec: str | None = typer.Option(None, "--proposer-exec", help="The harness that proposes revised policies, over the `pack author` seam."),
+    proposer_harness: str | None = typer.Option(None, "--proposer-harness", help="An installed coding harness as the proposer: codex or claude."),
+    stages: int | None = typer.Option(None, "--stages", min=1, help="Stages to run at most (default: policy `evalrun.campaign.max_stages`)."),
+    seed: int = typer.Option(0, "--seed", help="The campaign seed every stage's seeds derive from."),
+    rounds: int | None = typer.Option(None, "--rounds", min=1, help="Improve rounds per stage (default: policy `evalrun.improve.rounds`)."),
+    max_cases: int | None = typer.Option(None, "--max-cases", min=1, help="Training plus held-out cases the campaign may spend (default: policy `evalrun.campaign.max_cases`)."),
+    rater: str | None = typer.Option(None, "--rater", help="grounded or exec:<command>; pinned for the whole campaign."),
+    rater_timeout: float = typer.Option(600.0, "--rater-timeout"),
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds a child (agent turn or proposal) may run."),
+    shell: bool = typer.Option(False, "--shell", help="Run --exec and --proposer-exec through the shell."),
+    max_turns: int | None = typer.Option(None, "--max-turns", min=1),
+    principal: str = typer.Option("agent", "--principal"),
+    concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1)."),
+    value: bool = typer.Option(False, "--value", help="Gate every stage on the value-weighted delta too, and weight targeted stages by value."),
+    json_output: bool = typer.Option(False, "--json", help="Emit campaign.json on stdout."),
+) -> None:
+    """Keep improving an agent across stages of fresh cases, and report how far it moved on cases it never saw.
+
+    The champion runs CORPUS first. Each stage then compiles a training and a
+    sealed held-out case set from the base plan under seeds the campaign has
+    never used, and runs the improve loop over them until it stops. A
+    champion that saturates or plateaus escalates to harder slices; one that
+    still fails gets fresh cases aimed at its failures. After every stage the
+    original and the current champion both run that stage's held-out cases:
+    the ledger is the improvement over the starting policy, stage by stage.
+    A completed stage is read back, never run again.
+    """
+    from ..cli import _refuse
+    from ..connectors.serving import ServingError
+    from ..packkit.authoring import run_exec_exchange
+    from . import campaign as campaign_module
+    from .grader import GraderDrift
+    from .harness import ExecAgent
+    from .runner import default_concurrency
+    from .session import _dataset_plan
+
+    exec_command = _harness_exec(harness, exec_command, timeout=timeout)
+    if exec_command is None:
+        _refuse("missing_flag", "the agent under test is an --exec or --harness child; a policy means nothing to the "
+                "reference, lazy or scripted agents")
+    proposer = _harness_exec(proposer_harness, proposer_exec, timeout=timeout)
+    if proposer is None:
+        _refuse("missing_flag", "name the proposer with --proposer-exec or --proposer-harness")
+    champion = _agent_pack(agent_pack, exec_command)
+    grader = _rater_from(rater, timeout=rater_timeout, shell=shell)
+    try:
+        base = _dataset_plan(plan)
+    except (OSError, ValueError) as error:
+        _refuse("dataset_rejected", f"{plan}: {error}")
+    loaded, cases = _corpus_cases(corpus, None)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    workers = default_concurrency() if concurrency is None else concurrency
+
+    def run(subset: Any, records: Any, agent: Any) -> Any:
+        try:
+            return campaign_module.run_grouped(subset, records, agent, rater=grader, concurrency=workers,
+                                               principal=principal)
+        except ServingError as error:
+            _refuse("service_unbuildable", str(error))
+
+    def agent_for(pack: Any) -> Any:
+        return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
+
+    options: dict[str, Any] = {} if rounds is None else {"rounds": rounds}
+    try:
+        report = campaign_module.campaign(
+            champion, builder=campaign_module.DatasetStageBuilder(base, principal=principal), agent_for=agent_for,
+            exchange=run_exec_exchange(proposer, timeout=timeout), out=out, stages=stages, seed=seed, run=run,
+            rater=grader, baseline=(cases, tuple(loaded.connector_data.records)), max_cases=max_cases, value=value,
+            **options)
+    except GraderDrift as error:
+        _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
+    except ValueError as error:
+        _refuse("cases_uncompilable", str(error))
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+        return
+    if report.baseline is not None:
+        typer.echo(f"baseline: {report.baseline['passed']}/{report.baseline['cases']} passed on {corpus}")
+    for record in report.stages:
+        entry = record.ledger
+        typer.echo(f"stage {record.stage} ({record.mode}): {record.train_cases} training, {record.held_cases} held-out;"
+                   f" {record.improve.promotions} promotion(s) in {record.improve.rounds} round(s); {record.status}")
+        typer.echo(f"  held out: original {entry.original.passed}/{entry.original.cases}"
+                   f" (mean {entry.original.mean:.3f}), current {entry.current.passed}/{entry.current.cases}"
+                   f" (mean {entry.current.mean:.3f}), {entry.mean_delta:+.3f}")
+    typer.echo(f"stopped: {report.stopped}" + (f" ({report.reasons[0]})" if report.reasons else ""))
+    typer.echo(f"champion: {report.champion['ref']}@{report.champion['digest'][:12]}; campaign.json in {out}")
+
+
 __all__ = ["app"]

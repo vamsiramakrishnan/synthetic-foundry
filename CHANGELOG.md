@@ -64,6 +64,18 @@ first written up, before the waves above it landed.
 - **Recorded, not generated.** A run's `run.json` now names its grader, and
   refused calls in a case's ledger carry the position where they fell. What a
   seed generates is unchanged.
+- **Campaigns.** `worldloom evalrun campaign` keeps improving past
+  `no_failures`: a sequence of stages, each a fresh training set and a sealed
+  held-out set from seeds the campaign never used, each running the improve
+  loop until it stops. A saturated or plateaued stage escalates to harder
+  slices (`escalate`, or the corner frontier); a failing one gets a curriculum
+  aimed at its autopsy. A held-out case never reaches a later training set
+  (refused as `held_out_overlap`), and after every stage the original and the
+  current champion both run its held-out cases, so `campaign.json` reports the
+  gain over the starting policy stage by stage on cases neither trained on.
+  Stage builders are injectable (`StageBuilder`; `DatasetStageBuilder`,
+  `CornerStageBuilder`), completed stages are read back rather than rerun, and
+  the SDK form is `EvalSession.campaign(...)`.
 
 ### Scale, live harnesses, and the last literals
 

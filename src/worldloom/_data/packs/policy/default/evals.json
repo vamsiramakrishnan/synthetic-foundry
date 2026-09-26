@@ -27,6 +27,10 @@
     "evalrun.curriculum.max_mix_tvd": 0.3,
     "evalrun.improve.ablate": true,
     "evalrun.improve.ablation_max_hunks": 8,
-    "evalrun.improve.ablation_tolerance": 0.05
+    "evalrun.improve.ablation_tolerance": 0.05,
+    "evalrun.campaign.max_stages": 3,
+    "evalrun.campaign.patience": 2,
+    "evalrun.campaign.max_cases": 5000,
+    "evalrun.campaign.held_ratio": 0.5
   }
 }

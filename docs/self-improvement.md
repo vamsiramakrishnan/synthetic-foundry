@@ -532,3 +532,99 @@ curriculum is representative of the simulated company, not of any real one.
 The operational simulators also run one workflow per vertical today, so their
 workflow mix is a single slice; the process-binding volumes are the reference
 with more than one value.
+
+## Campaigns: closing the outer loop
+
+`improve` works one case set until it stops, and the most common stop is
+the best news: `no_failures`, the champion passes every training case. At
+that point the set is spent, not the agent. A campaign keeps going. It is a
+sequence of stages, and each stage is a fresh training set and a fresh
+sealed held-out set, built from seeds the campaign has never used, over
+which `improve` runs until it stops. Then the campaign reads how the stage
+ended and decides what the next one is made of.
+
+```bash
+worldloom evalrun campaign ./cases --agent-pack agent:baseline --harness codex \
+  --proposer-harness codex --plan base-plan.json --stages 4 --seed 11 --rounds 3 -o ./campaign
+```
+
+The champion first runs CORPUS (`./cases` above), so the first stage is
+already decided by its failures there. The decision rules, in order:
+
+| The stage ended | Next stage | Built from |
+| --- | --- | --- |
+| `no_failures` (saturated) | escalate | `escalate` over the champion's final training run: the harder shapes and designed failures beside every slice it mastered |
+| `evalrun.campaign.patience` rounds in a row without a promotion (plateaued) | escalate | the same, since more rounds of the same cases taught nothing |
+| still failing training cases | target | `design_curriculum` over the champion's autopsy, value-weighted with `--value`, with the representative share the mix guard keeps when a reference mix can be counted from the stage's records |
+| `questions` or `proposer_error` | stop | the operator has to answer or fix the proposer; run the same command again afterwards |
+
+A campaign also stops when the stage budget (`--stages`, default policy
+`evalrun.campaign.max_stages`) or the case budget (`--max-cases`, policy
+`evalrun.campaign.max_cases`, training plus held-out cases over every
+stage) is spent, when the builder cannot produce new cases for a stage
+(`no_new_cases`, with its reason), and when escalation proposes nothing
+harder (`nothing_harder`). An escalation needs a slice whose whole Wilson
+interval clears the band, so a stage of a handful of cases can saturate
+without escalating: the campaign says so rather than guess at a harder
+slice.
+
+**What a stage is made of** is a builder's business: the `StageBuilder`
+protocol takes the campaign's request (the mode, the stage's seeds, the
+champion, the previous stage's outcome with its autopsy and escalations)
+and returns the training cases, the held-out cases, the records of each
+and a description. `DatasetStageBuilder` compiles `DatasetPlan`s with
+`compile_dataset`: the base plan's strata for a first stage, the targeted
+curriculum's strata, or one stratum per escalation proposal on the closest
+base stratum. The held-out plan has the same strata scaled by
+`evalrun.campaign.held_ratio` under its own seed, so the two sets share no
+seed and no batch. `CornerStageBuilder` draws corner cases from seeded
+worlds, and when escalating searches the frontier (the reference solves,
+the champion fails) with the held-out seeds refused to the search. Cases
+compiled from several worlds keep their records apart (`RecordGroups`):
+two worlds reuse external keys.
+
+**The seal.** A case is its content: id, request and row. A stage whose
+training set holds any earlier stage's held-out case, or whose held-out set
+holds a case some stage trained on, is refused before anything runs, and
+the campaign stops with `held_out_overlap` and writes `refused.json` in
+the stage's directory. Escalation reads the champion's training run only;
+held-out results judge and nothing else. Each stage's seeds derive from the
+campaign seed, the stage number and the role by content address, skipping
+every seed already used and every seed the builder reserves (a dataset
+builder reserves its base plan's), and every stage records them.
+
+**The ledger** is the number the campaign exists for. After every stage the
+campaign's original champion and its current champion both run that
+stage's held-out cases, which no proposer and no training set ever saw.
+`campaign.json` carries the entries stage by stage: each side's passes,
+pass rate and mean score, and the current minus the original. A policy
+that learned a skill in stage 1 and another in stage 2 shows it twice, on
+two sets of never-seen cases; a policy that learned the case set shows
+nothing.
+
+```text
+campaign/
+  campaign.json            seed, grader, original and final champion, stages, ledger, why it stopped
+  baseline/                the champion's run over CORPUS
+  stages/001/stage.json    mode, builder, seeds, case-set digests, the improve summary, the ledger entry
+  stages/001/cases/        train/ and held/: the cases and their record groups, exactly as run
+  stages/001/build/        what the builder compiled
+  stages/001/improve/      the stage's improve loop: rounds/, runs/, packs/, improve.json
+  stages/001/ledger/       original/ and current/ over the held-out cases
+```
+
+A stage with a `stage.json` is complete: running the campaign again reads it
+back and builds, proposes and runs nothing for it, and a larger `--stages`
+continues from its champion. Runs already on disk are reused as `improve`
+reuses them. A directory holding another seed's or another champion's
+campaign is refused. From Python, `EvalSession.campaign(agent=...,
+proposer=..., builder=plan_or_builder, out=...)` returns a loop whose
+`run(champion)` is the same campaign, and `campaign()` in
+`worldloom.evalrun.campaign` takes any builder and any runner.
+
+| Key | Default | Why |
+| --- | --- | --- |
+| `evalrun.campaign.max_stages` | 3 | Each stage runs a whole improve loop over two fresh case sets; three stages is one first stage and two decisions, enough to see whether escalation or targeting pays before spending more. |
+| `evalrun.campaign.patience` | 2 | One round without a promotion is noise; two in a row on the same cases means the proposer has stopped finding anything there. |
+| `evalrun.campaign.max_cases` | 5000 | Cases are the cost: every one is run by the champion, its candidates and the ledger. A ceiling a campaign reaches only on purpose. |
+| `evalrun.campaign.held_ratio` | 0.5 | Half as many held-out rows per stratum as training rows: enough for a pass rate per stage, cheaper than a second training set. |
