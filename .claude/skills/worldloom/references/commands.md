@@ -391,6 +391,23 @@ worldloom enterprise-evals validate <PATH>
 
 Execute an agent against a compiled case set and grade plan, trajectory and outcomes.
 
+### `worldloom evalrun agreement`
+
+Measure how well the local grader agrees with Eval Studio's, answer by answer.
+
+```
+worldloom evalrun agreement <CORPUS> <RESULTS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the whole report as JSON. |
+| `--out`, `-o` | Directory to write agreement.json into. |
+| `--rater` | The local grader to measure: grounded (no model) or exec:<command> (a judge over the --exec seam). |
+| `--rater-timeout` | Seconds an exec: rater child may run per answer. |
+| `--shell` | Run the exec: rater through the shell (the opt-in for pipelines). |
+| `--studio-instruction` | The auto-rater instruction the Studio run was configured with; recorded, not used. |
+
 ### `worldloom evalrun cases`
 
 Compile the corpus into three-axis cases and report what the set can grade.

@@ -3,6 +3,9 @@
     "evalrun.max_turns": 64,
     "evalrun.delta_band": 0.1,
     "evalrun.answer_pass_score": 0.8,
+    "evalrun.agreement.min_kappa": 0.6,
+    "evalrun.agreement.max_mae": 0.1,
+    "evalrun.agreement.min_cases": 30,
     "evals.calibration.reader_share": 0.1
   }
 }

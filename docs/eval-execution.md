@@ -12,6 +12,7 @@ worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
 worldloom evalrun compare ./runs/reference ./runs/mine
 worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py"   # querying alone
 worldloom evalrun import-studio ./cases eval_results.csv -o ./runs/studio
+worldloom evalrun agreement ./cases eval_results.csv -o ./runs/agreement   # does the local grader agree with Studio's?
 worldloom evalrun summarize ./runs/mine --json
 ```
 
@@ -222,6 +223,13 @@ as they grade any other row.
   two cases ask the same words. The summary reports plan and trajectory as
   unobserved because Eval Studio's parser keeps
   `groundedContent.content.text` and drops everything else.
+- **A check on the local grader.** `evalrun agreement` rates each Studio
+  row's own answer again with the local rater and reports how far the two
+  graders agree (kappa, mean absolute error, correlations, per shape). The
+  grader is named by a digest (`evalrun.grader.grader_identity`), and
+  `evalrun compare` calls two runs graded under different digests
+  `incomparable` rather than judging them. See [Measuring the grader against
+  Eval Studio](gemini-enterprise.md#measuring-the-grader-against-eval-studio).
 
 What it could not contribute is the rest: it observes no tool call, caps an
 upload at a hundred rows by truncation, computes no mean, and applies one

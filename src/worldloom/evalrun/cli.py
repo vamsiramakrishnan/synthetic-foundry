@@ -482,4 +482,81 @@ def import_studio_command(
     _print_summary(summary, json_output)
 
 
+@app.command("agreement")
+def agreement_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set."),
+    results: Path = typer.Argument(..., help="A results CSV exported by Gemini Enterprise Eval Studio."),
+    rater: str = typer.Option("grounded", "--rater", help="The local grader to measure: grounded (no model) or exec:<command> (a judge over the --exec seam)."),
+    rater_timeout: float = typer.Option(600.0, "--rater-timeout", help="Seconds an exec: rater child may run per answer."),
+    shell: bool = typer.Option(False, "--shell", help="Run the exec: rater through the shell (the opt-in for pipelines)."),
+    instruction: str | None = typer.Option(None, "--studio-instruction", help="The auto-rater instruction the Studio run was configured with; recorded, not used."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Directory to write agreement.json into."),
+    json_output: bool = typer.Option(False, "--json", help="Emit the whole report as JSON."),
+) -> None:
+    """Measure how well the local grader agrees with Eval Studio's, answer by answer.
+
+    Each Studio row's own fetched answer is rated again locally, so the only
+    thing that differs is the grader. Reports mean absolute error, Pearson
+    and Spearman correlation, the share within the comparison band, Cohen's
+    kappa of pass/fail at the pass mark, per-shape slices and the cases the
+    two disagree on most, then a verdict against the `evalrun.agreement.*`
+    policies. Only the answer axis is comparable: Eval Studio observes no
+    tool call.
+    """
+    from ..cli import _refuse
+    from ..corpus import write_json
+    from .agreement import agreement
+    from .rater import GroundedRater, exec_rater
+    from .results import import_studio_results
+
+    grader: Any
+    if rater == "grounded":
+        grader = GroundedRater()
+    elif rater.startswith("exec:") and rater.removeprefix("exec:").strip():
+        grader = exec_rater(rater.removeprefix("exec:"), timeout=rater_timeout, shell=shell)
+    else:
+        _refuse("unknown_rater", f"{rater!r}; use grounded or exec:<command>")
+    _, cases = _corpus_cases(corpus, None)
+    try:
+        studio = import_studio_results(results, cases)
+    except (OSError, ValueError) as error:
+        _refuse("results_unjoinable", f"{results}: {error}")
+    if not studio.results:
+        _refuse("results_unjoinable", f"{results}: no row's query text matches a case in {corpus}")
+    report = agreement(studio, cases, grader, instruction=instruction)
+    payload = report.model_dump(mode="json", by_alias=True)
+    if out is not None:
+        out.mkdir(parents=True, exist_ok=True)
+        write_json(out / "agreement.json", payload)
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    def _cell(value: Any) -> str:
+        return "n/a" if value is None else str(value)
+
+    stats = report.stats
+    typer.echo(f"grader {report.local['rater']['name']} ({report.local['digest']}) vs {report.studio['agent']}:"
+               f" {stats.n} rated pair(s) of {report.studio_rows} Studio row(s)")
+    typer.echo(f"  {'shape':<24} {'n':>4} {'mae':>7} {'pearson':>8} {'spearman':>9} {'in band':>8} {'kappa':>7}")
+    for key, row in (("all", stats), *((entry.key, entry.stats) for entry in report.by_shape)):
+        typer.echo(f"  {key:<24} {row.n:>4} {_cell(row.mae):>7} {_cell(row.pearson):>8} {_cell(row.spearman):>9}"
+                   f" {_cell(row.within_band):>8} {_cell(row.kappa):>7}")
+    confusion = stats.confusion
+    typer.echo(f"pass at {report.threshold}: both pass {confusion.both_pass}, both fail {confusion.both_fail},"
+               f" Studio only {confusion.studio_pass_local_fail}, local only {confusion.studio_fail_local_pass}")
+    excluded = report.excluded
+    typer.echo(f"excluded: {excluded.studio_errors} Studio error(s), {excluded.local_errors} local error(s),"
+               f" {excluded.no_answer_contract} without an answer contract;"
+               f" {report.abstained.cases} judge-only case(s) the local rater abstains on")
+    for name, reason in sorted(stats.undefined.items()):
+        typer.echo(f"  {name} undefined: {reason}")
+    for item in report.worst[:5]:
+        if item.difference:
+            typer.echo(f"  worst {item.case_id}: Studio {item.studio}, local {item.local} ({item.rubric})")
+    typer.echo(f"verdict: {report.verdict} ({'; '.join(report.reasons)})")
+    if out is not None:
+        typer.echo(f"written to {out / 'agreement.json'}", err=True)
+
+
 __all__ = ["app"]

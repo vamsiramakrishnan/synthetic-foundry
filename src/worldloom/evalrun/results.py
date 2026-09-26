@@ -275,14 +275,33 @@ class Comparison(Model):
     mean_delta: float
     axis_deltas: AxisMeans
     deltas: tuple[CaseDelta, ...]
+    #: True when both runs name their grader and the digests differ. Then no
+    #: case is called an improvement or a regression (each graded case is
+    #: ``incomparable``): the two numbers were not measured the same way.
+    grader_mismatch: bool = False
+    notes: tuple[str, ...] = ()
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+def _grader_digest(report: RunReport) -> str | None:
+    grader = report.grader
+    if not isinstance(grader, Mapping):
+        return None
+    value = grader.get("digest")
+    return str(value) if value else None
 
 
 def compare(baseline: RunReport, recent: RunReport) -> Comparison:
     """Per-case deltas by case id, within the `delta_band` (Eval Studio's ±0.10), plus what it lacks."""
 
     band = delta_band()
+    # Two runs that each name their grader, differently, were measured with
+    # different sticks: their deltas are reported, never judged. A run that
+    # names none (every run written before graders were recorded) compares
+    # exactly as it always did.
+    left_grader, right_grader = _grader_digest(baseline), _grader_digest(recent)
+    mismatch = left_grader is not None and right_grader is not None and left_grader != right_grader
 
     left = {row.case_id: row for row in baseline.results}
     right = {row.case_id: row for row in recent.results}
@@ -321,7 +340,9 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
             continue
         same_axes = set(a.score.observed) == set(b.score.observed)
         delta = round(b.score.score - a.score.score, 4) if same_axes else _mean(list(axes.values()))
-        if delta > band:
+        if mismatch:
+            verdict = "incomparable"
+        elif delta > band:
             verdict = "improvement"
             improvements.append(case_id)
         elif delta < -band:
@@ -346,6 +367,9 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
                               outcomes=_mean(axis_totals["outcomes"]) if axis_totals["outcomes"] else None,
                               overall=_mean(graded_deltas)),
         deltas=tuple(deltas),
+        grader_mismatch=mismatch,
+        notes=(f"the runs were graded differently (grader {left_grader} vs {right_grader}); deltas are"
+               " reported but no case is judged an improvement or a regression",) if mismatch else (),
     )
 
 
