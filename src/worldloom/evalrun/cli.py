@@ -559,4 +559,108 @@ def agreement_command(
         typer.echo(f"written to {out / 'agreement.json'}", err=True)
 
 
+@app.command("autopsy")
+def autopsy_command(
+    run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
+    top: int = typer.Option(12, "--top", min=1, help="Clusters to report in full; the rest are counted."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write the autopsy as JSON here."),
+    json_output: bool = typer.Option(False, "--json", help="Print the autopsy as JSON instead of the brief."),
+) -> None:
+    """Cluster a run's failing cases by finding and print a brief an improver can act on.
+
+    Each failing case is named by stable finding keys (a safety law, a
+    missing plan node kind, an unmet outcome kind, an error code). Clusters
+    report their share of the failures, the dimensions they concentrate in
+    with lift against the whole run, and bounded evidence from one or two
+    example cases. The brief is plain text, ready to hand an improving harness.
+    """
+    from ..cli import _refuse
+    from ..corpus import write_json
+    from .autopsy import autopsy, render_brief
+    from .results import read_run
+
+    try:
+        report = read_run(run)
+    except (OSError, ValueError) as error:
+        _refuse("run_unreadable", f"{run}: {error}")
+    result = autopsy(report, top=top)
+    payload = result.model_dump(mode="json", by_alias=True)
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        write_json(out, payload)
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    typer.echo(render_brief(result), nl=False)
+
+
+@app.command("curriculum")
+def curriculum_command(
+    run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
+    plan: Path = typer.Option(..., "--plan", help="The base dataset plan (JSON) the run's cases came from."),
+    out: Path = typer.Option(..., "--out", "-o", help="Write the targeted dataset plan here."),
+    round_number: int = typer.Option(1, "--round", min=1, help="Improvement round; seeds the new plan so rounds never repeat cases."),
+    total: int | None = typer.Option(None, "--total", min=1, help="Rows in the new plan; defaults to the base plan's."),
+    min_per_cluster: int = typer.Option(4, "--min-per-cluster", min=1, help="Floor on each targeted stratum's rows."),
+    max_share: float = typer.Option(0.5, "--max-share", min=0.01, max=1.0, help="Cap on one stratum's share of the rows."),
+    holdout_share: float = typer.Option(0.2, "--holdout-share", min=0.01, max=0.99, help="Weight of the held-out `test` split."),
+    top: int = typer.Option(12, "--top", min=1, help="Autopsy clusters considered."),
+    history: list[Path] = typer.Option([], "--history", help="Earlier run directories pooled with RUN for escalation; repeatable."),
+    target_band: tuple[float, float] = typer.Option((0.3, 0.8), "--band", help="Target pass-rate band; a slice whose interval lies above it is saturated."),
+    json_output: bool = typer.Option(False, "--json", help="Print the curriculum and escalations as JSON."),
+) -> None:
+    """Write a dataset plan of fresh cases aimed at a run's failures, and name saturated slices.
+
+    Every actionable autopsy cluster becomes a stratum filtered to the
+    dimensions it concentrates in (failure, DAG shape, operation), sized by
+    its share of the failures, under a seed derived from the base seed and
+    the round, with a held-out split. Clusters no dataset filter can express
+    are listed, not dropped. Slices the agent has saturated are reported with
+    harder shapes and designed failures to generate instead. Compile the
+    written plan with `worldloom evals dataset compile`.
+    """
+    from ..cli import _refuse
+    from ..corpus import write_json
+    from ..evals.company_dataset import load_dataset_plan
+    from .autopsy import autopsy
+    from .curriculum import design_curriculum, escalate
+    from .results import read_run
+
+    try:
+        report = read_run(run)
+        earlier = [read_run(path) for path in history]
+    except (OSError, ValueError) as error:
+        _refuse("run_unreadable", str(error))
+    try:
+        base = load_dataset_plan(json.loads(plan.read_text(encoding="utf-8")))
+    except (OSError, ValueError) as error:
+        _refuse("dataset_rejected", f"{plan}: {error}")
+    try:
+        curriculum = design_curriculum(autopsy(report, top=top), base, round=round_number, total=total,
+                                       min_per_cluster=min_per_cluster, max_share=max_share,
+                                       holdout_share=holdout_share)
+        escalations = escalate([*earlier, report], target_band=target_band)
+    except ValueError as error:
+        _refuse("dataset_rejected", str(error))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    write_json(out, curriculum.plan)
+    if json_output:
+        typer.echo(json.dumps({"curriculum": curriculum.model_dump(mode="json", by_alias=True, exclude={"plan"}),
+                               "plan": str(out), "escalations": [item.model_dump(mode="json") for item in escalations]},
+                              indent=2, sort_keys=True))
+        return
+    rows = sum(target.count for target in curriculum.targets)
+    typer.echo(f"round {curriculum.round}: {len(curriculum.targets)} stratum(s), {rows} row(s), seed {curriculum.seed} -> {out}")
+    for target in curriculum.targets:
+        where = ", ".join(f"{key}={value}" for key, value in target.where.items())
+        typer.echo(f"  {target.stratum}: {target.count} row(s) where {where} ({', '.join(target.keys)})")
+    for item in curriculum.unmappable:
+        typer.echo(f"  unmappable {item.key} ({item.cases} case(s)): {item.reason}")
+    for escalation in escalations:
+        slice_text = ", ".join(f"{key}={value}" for key, value in escalation.slice.items())
+        proposals = "; ".join(", ".join(f"{key}={value}" for key, value in proposal.items()) for proposal in escalation.proposals)
+        typer.echo(f"  saturated {slice_text}: {escalation.reason}; propose {proposals or 'nothing harder'};"
+                   f" {len(escalation.retire)} case(s) no longer discriminate")
+
+
 __all__ = ["app"]

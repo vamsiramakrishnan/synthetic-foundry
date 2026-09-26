@@ -408,6 +408,20 @@ worldloom evalrun agreement <CORPUS> <RESULTS>
 | `--shell` | Run the exec: rater through the shell (the opt-in for pipelines). |
 | `--studio-instruction` | The auto-rater instruction the Studio run was configured with; recorded, not used. |
 
+### `worldloom evalrun autopsy`
+
+Cluster a run's failing cases by finding and print a brief an improver can act on.
+
+```
+worldloom evalrun autopsy <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the autopsy as JSON instead of the brief. |
+| `--out`, `-o` | Write the autopsy as JSON here. |
+| `--top` | Clusters to report in full; the rest are counted. |
+
 ### `worldloom evalrun cases`
 
 Compile the corpus into three-axis cases and report what the set can grade.
@@ -433,6 +447,28 @@ worldloom evalrun compare <BASELINE> <RECENT>
 | Option | Purpose |
 | --- | --- |
 | `--json` |  |
+
+### `worldloom evalrun curriculum`
+
+Write a dataset plan of fresh cases aimed at a run's failures, and name saturated slices.
+
+```
+worldloom evalrun curriculum <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--band` | Target pass-rate band; a slice whose interval lies above it is saturated. |
+| `--history` | Earlier run directories pooled with RUN for escalation; repeatable. |
+| `--holdout-share` | Weight of the held-out `test` split. |
+| `--json` | Print the curriculum and escalations as JSON. |
+| `--max-share` | Cap on one stratum's share of the rows. |
+| `--min-per-cluster` | Floor on each targeted stratum's rows. |
+| `--out`, `-o` | Write the targeted dataset plan here. |
+| `--plan` | The base dataset plan (JSON) the run's cases came from. |
+| `--round` | Improvement round; seeds the new plan so rounds never repeat cases. |
+| `--top` | Autopsy clusters considered. |
+| `--total` | Rows in the new plan; defaults to the base plan's. |
 
 ### `worldloom evalrun import-served`
 
