@@ -86,3 +86,4 @@ interview request to a reply), which is how a test drives the loop offline.
 - `references/grader-and-agreement.md`: grader identity, drift, agreement with Eval Studio.
 - `references/scale.md`: concurrency, shards, merge and resume for the runs a loop pays for.
 - `references/training-data.md`: exporting runs as SFT, pairs or rewards; the holdout guard.
+- `references/recursion.md`: the proposer's own policy pack and `evalrun improve-proposer`, which improves the improver.

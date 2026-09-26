@@ -325,6 +325,72 @@ an earlier loop's champion always resolves by its pinned digest. The loop writes
 output directory and that pack root: a candidate's skill tree is
 materialised under `skills-cache/` there, not in the user's cache.
 
+## Recursion: improving the improver
+
+The improve loop revises the agent's policy, but the proposer that writes
+each diff used to run under fixed instructions. Now it runs under a policy
+too, held in the same kind of pack as the agent it improves: an `agent`
+pack, so the lint, the tree codec, the diff interview and the content
+address all apply unchanged. `agent:proposer-baseline` ships and restates
+today's proposer. A proposer reads four of the pack's fields (`system`,
+`planning`, `skills` and the `skills/` tree); the meta loop refuses a
+proposer that sets the others, since nothing on the interview seam reads
+them.
+
+```bash
+worldloom evalrun improve ./corpus --agent-pack agent:baseline --harness codex \
+  --proposer-harness codex --proposer-pack agent:proposer-baseline \
+  --holdout-corpus ./fresh-seed-corpus -o ./improve
+```
+
+Under `--proposer-pack` each interview request carries an `agent` block for
+the proposer, the same block an evalrun turn carries, and its id covers the
+policy's digest. The bundled adapters put the standing instruction and the
+skill index ahead of the interview role, inside the fence whose nonce is a
+digest of that block. Each authoring round in a receipt records the
+proposer's `ref` and `digest`. Without the flag the request, the prompt and
+the receipt are byte-identical to before.
+
+The meta loop improves that pack:
+
+```bash
+worldloom evalrun improve-proposer --tasks tasks.json \
+  --proposer-pack agent:proposer-baseline --proposer-harness codex \
+  --meta-rounds 2 --rounds 1 -o ./meta-run
+```
+
+`tasks.json` lists training `tasks` and meta-held-out `holdout_tasks`, each
+naming a `corpus`, a `holdout_corpus`, an `agent_pack` and the agent's `exec`
+or `harness`. A proposer policy is scored by the held-out gain it produces:
+for each task `improve` runs with the proposer under that policy, and the
+task's score is the mean held-out delta of the agent champion the loop ended
+with over the one it started from, measured by running both on the task's
+held-out cases (0 when nothing was promoted). The proposer's score is the
+mean over tasks; its promotion rate and refused proposals are recorded
+beside it and decide nothing.
+
+Each meta round scores the proposer champion on the training tasks, turns
+their inner rounds into a brief (rejections and their reasons, refused lint
+findings, questions asked, earlier meta rounds), and asks a meta-proposer
+for a diff to the proposer pack through the pack interview
+(`evalrun.meta.message`). By default the meta-proposer is the same harness
+running under the current proposer champion: the improver revises itself.
+The candidate is scored on the same training tasks, compared task by task
+(`compare_scores`: the mean delta must reach the delta band and no task may
+fall by more than the band), and only then on the meta-held-out tasks,
+which no brief ever names, where it must gain strictly. Receipts are
+written to `meta/rounds/NNN.json` with the proposer diff beside them, and
+candidates to `meta/packs/agent/`.
+
+The meta loop changes the proposer pack and nothing else. Every task's
+grader and case sets are pinned by digest before the first score and
+checked around each one, the inner loops write only under `meta/tasks/`,
+and a held-out task may not share a case set with a training task. From
+Python, `evalrun.meta.improve_proposer(pack, tasks=..., holdout_tasks=...,
+proposer=..., out=...)` runs the same loop, passing any other keyword to
+every inner `improve` call, and `EvalSession.improver(...,
+proposer_pack=...)` runs an ordinary loop under a promoted proposer.
+
 ## Trace export
 
 The runs the loop leaves are training data. `worldloom evalrun export` turns a

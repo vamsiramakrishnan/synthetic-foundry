@@ -33,6 +33,19 @@ first written up, before the waves above it landed.
   the holdout. Generated code lives only in the pack's `skills/` tree.
   `worldloom pack tree`, `pack from-tree` and `pack diff` move a pack between
   JSON and a directory.
+- **The improver is improvable.** The proposing harness runs under an
+  `agent` pack of its own (`agent:proposer-baseline` ships, restating
+  today's proposer): `evalrun improve --proposer-pack` puts its standing
+  instruction and skills ahead of the pack interview inside the same
+  digest-derived fence the agent under test gets, and each round's authoring
+  log records its reference and digest. `worldloom evalrun improve-proposer`
+  scores a proposer policy by the held-out gain of the agents it improves
+  across a set of tasks, has the proposer revise its own pack by diff, and
+  promotes a revision only when it gains on the training tasks and then on
+  meta-held-out tasks the brief never describes; receipts land in
+  `meta/rounds/`. The SDK form is `evalrun.meta.improve_proposer` and
+  `EvalSession.improver(..., proposer_pack=...)`. Without a proposer pack
+  every request, prompt and receipt is byte-identical to before.
 - **The grader is frozen by digest.** Every run records the rater, the
   `rater.*` prompts, the rubrics and the grading policy as one digest;
   `evalrun compare` calls nothing an improvement across two graders, and the

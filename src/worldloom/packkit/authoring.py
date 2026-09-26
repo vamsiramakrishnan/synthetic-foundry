@@ -19,11 +19,24 @@ against that tree instead of a whole ``body``. ``accept`` applies the diff
 strictly (``packkit.diffs``), reads the tree back into a body and judges it
 like any other proposal, so a patch that does not apply, or applies to
 something the lint refuses, comes back as findings through the same loop.
+
+**The proposer's own policy.** The harness answering an interview can itself
+run under an ``agent`` pack (a *proposer policy*): ``request(...,
+proposer=pack)`` adds an ``agent`` block (``ref``, ``digest``, ``system``,
+``planning``, ``skills`` and, for a policy with a skill tree, ``skills_dir``
+and ``skill_index``), exactly the block an evalrun turn carries, and the
+bundled harness adapters put its standing instruction and skills ahead of the
+interview role inside the same digest-derived fence. ``with_proposer`` wraps
+any exchange so every request it answers carries that block, which is how a
+caller that builds its requests elsewhere (the improvement loop) runs its
+proposer under a policy without knowing about one. ``author`` records the
+proposer's ``ref`` and ``digest`` in each round it logs. Without a proposer
+policy the request, its id and the round log are what they always were.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -135,8 +148,14 @@ def _response_schema(kind_name: str) -> dict[str, Any]:
 
 def request(kind_name: str, message: str, *, name: str = "", draft: dict[str, Any] | None = None,
             findings: Sequence[Finding] = (), conversation: Sequence[dict[str, str]] = (),
-            roots: Sequence[str | Path] = ()) -> dict[str, Any]:
-    """The bounded request a harness answers to author one pack of *kind_name*."""
+            roots: Sequence[str | Path] = (), proposer: ResolvedPack | Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """The bounded request a harness answers to author one pack of *kind_name*.
+
+    *proposer* is the policy the answering harness runs under: a resolved
+    ``agent`` pack, or the block ``proposer_block`` made from one. With it the
+    request carries that block as ``agent`` and its id covers the policy's
+    identity; without it the request is unchanged.
+    """
     pack_kind = kind(kind_name)
     if not message.strip() or len(message) > 8000:
         raise ValueError("an interview message must contain 1 to 8000 characters")
@@ -165,8 +184,71 @@ def request(kind_name: str, message: str, *, name: str = "", draft: dict[str, An
                          *pack_kind.asks, *tree_asks],
         "response_schema": _response_schema(kind_name), **tree_keys,
     }
-    payload["request_id"] = digest([INTERVIEW_SCHEMA, kind_name, name, message, draft, list(findings),
-                                    list(conversation)[-8:]])
+    if proposer is not None:
+        payload["agent"] = dict(proposer) if isinstance(proposer, Mapping) else proposer_block(proposer)
+    payload["request_id"] = _request_id(payload)
+    return payload
+
+
+def _request_id(payload: Mapping[str, Any]) -> str:
+    """A request's id: what it asks, and the proposer policy's identity when one answers it.
+
+    Computed from the payload, so ``attach_proposer`` can re-derive it after
+    adding a block to a request built without one. The proposer is keyed by
+    its ``ref`` and ``digest``, not by where its skill tree happens to be
+    materialised.
+    """
+    parts: list[Any] = [INTERVIEW_SCHEMA, payload["kind"], payload["name"], payload["message"], payload["draft"],
+                        list(payload["findings"]), list(payload["conversation"])[-8:]]
+    identity = proposer_identity(payload)
+    if identity is not None:
+        parts.append({"proposer": identity})
+    return digest(parts)
+
+
+def proposer_block(policy: ResolvedPack, *, skills_cache: Path | None = None) -> dict[str, Any]:
+    """The ``agent`` block a pack interview carries when its proposer runs under *policy*.
+
+    The same block an evalrun turn carries for the agent under test
+    (``evalrun.policy.agent_block``), with ``skills_dir`` and
+    ``skill_index`` when the policy has a skill tree, materialised once under
+    *skills_cache* (the evalrun default when ``None``).
+    """
+    from ..evalrun.harness import default_skills_cache
+    from ..evalrun.policy import agent_block, materialise, require, skill_index
+
+    pack = require(policy)
+    block = agent_block(pack)
+    if pack.body.files:
+        directory = materialise(pack.body.files, skills_cache if skills_cache is not None
+                                else default_skills_cache()).resolve()
+        block["skills_dir"] = str(directory)
+        block["skill_index"] = skill_index(pack.body.files, directory)
+    return block
+
+
+def proposer_identity(payload: Mapping[str, Any]) -> dict[str, str] | None:
+    """``{ref, digest}`` of the proposer policy an interview request carries, or ``None``."""
+    if payload.get("schema") != INTERVIEW_SCHEMA:
+        return None
+    block = payload.get("agent")
+    if not isinstance(block, Mapping) or not isinstance(block.get("ref"), str) or not isinstance(block.get("digest"), str):
+        return None
+    return {"ref": block["ref"], "digest": block["digest"]}
+
+
+def attach_proposer(payload: dict[str, Any], block: Mapping[str, Any]) -> dict[str, Any]:
+    """*payload* carrying *block* as its proposer policy, its id re-derived; changed in place.
+
+    In place because the caller that built the request (``author``) judges
+    the reply against that same dict: a copy would carry the new id to the
+    harness while the judge still held the old one. A request already
+    carrying *block*, or one that is not a pack interview, is left as it is.
+    """
+    if payload.get("schema") != INTERVIEW_SCHEMA or payload.get("agent") == dict(block):
+        return payload
+    payload["agent"] = dict(block)
+    payload["request_id"] = _request_id(payload)
     return payload
 
 
@@ -266,6 +348,36 @@ def _body_from_diff(request_payload: dict[str, Any], proposal: Proposal) -> tupl
 
 
 Exchange = Callable[[dict[str, Any]], dict[str, Any]]
+#: The caller's own findings about an accepted pack, beyond its kind's lint.
+Review = Callable[[ResolvedPack], Sequence[Finding]]
+
+
+class ProposerExchange:
+    """An exchange whose harness runs under a proposer policy: every request it answers carries the policy.
+
+    The block is built once, so a policy's skill tree is materialised once
+    however many requests the exchange answers.
+    """
+
+    def __init__(self, exchange: Exchange, policy: ResolvedPack, *, skills_cache: Path | None = None) -> None:
+        inner: Exchange = exchange.exchange if isinstance(exchange, ProposerExchange) else exchange
+        self.exchange: Exchange = inner
+        self.policy = policy
+        self.block = proposer_block(policy, skills_cache=skills_cache)
+
+    def __call__(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.exchange(attach_proposer(payload, self.block))
+
+
+def with_proposer(exchange: Exchange, policy: ResolvedPack | None, *, skills_cache: Path | None = None) -> Exchange:
+    """*exchange* running under *policy*; *exchange* itself when *policy* is ``None``.
+
+    Wrapping a ``ProposerExchange`` replaces its policy rather than stacking
+    a second one.
+    """
+    if policy is None:
+        return exchange
+    return ProposerExchange(exchange, policy, skills_cache=skills_cache)
 
 
 @dataclass
@@ -279,24 +391,43 @@ class Authored:
 
 def author(kind_name: str, message: str, exchange: Exchange, *, name: str = "", max_rounds: int = 4,
            root: str | Path | None = None, roots: Sequence[str | Path] = (), replace: bool = False,
-           draft: dict[str, Any] | None = None, allow_default: bool = True) -> Authored:
+           draft: dict[str, Any] | None = None, allow_default: bool = True,
+           review: Review | None = None) -> Authored:
     """Interview a harness until it proposes a pack the lint accepts, then store it.
 
     Stops early on questions: the operator answers them, not this loop, and a
     loop that invented answers would be a harness talking to itself. With
     *root* ``None`` an accepted pack is returned but not stored.
+
+    Each round logged names the proposer policy its request carried
+    (``proposer``: ``ref`` and ``digest``), when one did: a
+    ``ProposerExchange`` puts one on every request, including requests built
+    by a caller that wraps it in a function of its own. *review* adds the
+    caller's findings to the kind's lint: a pack it finds fault with is
+    refused, and the findings go back to the harness like any other refusal.
     """
     search = ((Path(root),) if root is not None else ()) + tuple(Path(r) for r in roots)
     findings: tuple[Finding, ...] = ()
     conversation: list[dict[str, str]] = []
     result = Authored(Verdict("refused", findings=("no round ran",)))
+    held = exchange.block if isinstance(exchange, ProposerExchange) else None
     for _ in range(max_rounds):
         payload = request(kind_name, message, name=name, draft=draft, findings=findings,
-                          conversation=conversation, roots=search)
+                          conversation=conversation, roots=search, proposer=held)
         reply = exchange(payload)
         verdict = accept(payload, reply, roots=search)
-        result.rounds.append({"request_id": payload["request_id"], "status": verdict.status,
-                              "findings": list(verdict.findings)})
+        if verdict.status == "accepted" and review is not None and verdict.resolved is not None:
+            extra = tuple(review(verdict.resolved))
+            if extra:
+                verdict = Verdict("refused", envelope=verdict.envelope, findings=extra, message=verdict.message)
+        logged: dict[str, Any] = {"request_id": payload["request_id"], "status": verdict.status,
+                                  "findings": list(verdict.findings)}
+        # Read after the exchange: a wrapped exchange adds the block to this
+        # very payload, so the log names the policy the harness actually ran.
+        identity = proposer_identity(payload)
+        if identity is not None:
+            logged["proposer"] = identity
+        result.rounds.append(logged)
         result.verdict = verdict
         if verdict.status != "refused":
             break
@@ -310,11 +441,19 @@ def author(kind_name: str, message: str, exchange: Exchange, *, name: str = "", 
     return result
 
 
-def run_exec_exchange(command: str, *, timeout: float = 600) -> Exchange:
-    """An exchange over the exec seam: one JSON request on stdin, one reply on stdout."""
+def run_exec_exchange(command: str, *, timeout: float = 600, proposer: ResolvedPack | None = None,
+                      skills_cache: Path | None = None) -> Exchange:
+    """An exchange over the exec seam: one JSON request on stdin, one reply on stdout.
+
+    With *proposer*, the child answers under that policy (``with_proposer``);
+    its skill tree is materialised under *skills_cache* when one is given.
+    """
     from ..execseam import run_exec
 
-    return lambda payload: run_exec(command, payload, timeout=timeout).document
+    def exchange(payload: dict[str, Any]) -> dict[str, Any]:
+        return run_exec(command, payload, timeout=timeout).document
+
+    return with_proposer(exchange, proposer, skills_cache=skills_cache)
 
 
 def show(ref: str, *, roots: Sequence[str | Path] = ()) -> dict[str, Any]:
@@ -326,5 +465,6 @@ def show(ref: str, *, roots: Sequence[str | Path] = ()) -> dict[str, Any]:
             "findings": lint(resolved, roots=roots)}
 
 
-__all__ = ["INTERVIEW_SCHEMA", "Authored", "InterviewReply", "Proposal", "Verdict", "accept", "author", "check",
-           "install", "request", "run_exec_exchange", "show"]
+__all__ = ["INTERVIEW_SCHEMA", "Authored", "Exchange", "InterviewReply", "Proposal", "ProposerExchange", "Review",
+           "Verdict", "accept", "attach_proposer", "author", "check", "install", "proposer_block", "proposer_identity",
+           "request", "run_exec_exchange", "show", "with_proposer"]

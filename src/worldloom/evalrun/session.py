@@ -369,6 +369,7 @@ class EvalSession:
         max_axis_regression: float | None = None,
         value: bool = False,
         ablate: bool | None = None,
+        proposer_pack: str | ResolvedPack | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -383,6 +384,9 @@ class EvalSession:
         ``concurrency`` defaults to the policy ``evalrun.concurrency``.
         ``value=True`` also gates on the delta weighted by each case's value at
         stake; ``ablate`` overrides the policy ``evalrun.improve.ablate``.
+        ``proposer_pack`` is the policy the proposer runs under (an ``agent``
+        pack, such as one ``evalrun.meta.improve_proposer`` promoted); its
+        skill tree is materialised under ``out``.
         """
         from .runner import default_concurrency
 
@@ -397,7 +401,12 @@ class EvalSession:
         workers = default_concurrency() if concurrency is None else concurrency
         if workers < 1:
             raise ValueError("concurrency must be at least 1")
-        return ImproveLoop(session=self, agent=_agent_factory(agent), exchange=_exchange(proposer), out=Path(out),
+        from ..packkit.authoring import with_proposer
+
+        exchange = with_proposer(_exchange(proposer), None if proposer_pack is None
+                                 else self.agent_pack(proposer_pack, roots=pack_roots),
+                                 skills_cache=Path(out) / "skills-cache")
+        return ImproveLoop(session=self, agent=_agent_factory(agent), exchange=exchange, out=Path(out),
                            holdout=held, holdout_share=holdout_share, rater=rater_for(rater),
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
