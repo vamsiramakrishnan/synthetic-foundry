@@ -11,6 +11,31 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Connector searches in the vendor's own language
+
+- **One query evaluator for every connector language.**
+  `worldloom.connectors.query` parses JQL, SOQL, ServiceNow encoded queries,
+  OData (`$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$search`), CQL,
+  KQL, Drive `q` and Slack search modifiers into one frozen filter tree,
+  resolves every relative date against the corpus clock (never the wall
+  clock), binds vendor field names to record keys from the connector
+  definition's `query_fields` and field manifests plus the per-language
+  vendor names in `_data/connectors/_query.json`, and ranks free text with the
+  repository's BM25, ties by record id. Anything outside the supported grammar
+  gets the vendor's own status, message and response body (Jira's `Field 'x'
+  does not exist or you do not have permission to view it.`, Salesforce's
+  `INVALID_FIELD` with its row and column, Graph's `Invalid filter clause`,
+  Drive's `Invalid Value`); ServiceNow drops an unknown field and SharePoint
+  searches an unknown property as text, as those products do. The same
+  `parse`, `QueryTarget` and `execute` serve an out-of-process provider.
+- **Opt-in in the emulator.** The policy `connectors.query.engine` (default
+  `predicate`) or `ConnectorEmulator(query_engine="native")` makes a search
+  tool's `query` string run through the evaluator: SharePoint's and
+  OneDrive's search tools read KQL, the rest their connector's
+  `query_language`; GraphQL, Rovo and the system of record keep the historical
+  path. With the default, every emulator answer is byte-identical to before.
+  `docs/connector-serving.md` has the grammar and the opt-in.
+
 ### Closing the loop: agents that improve against the corpus
 
 - **Query, plan-node and output stages.** `worldloom evalrun` now grades the
