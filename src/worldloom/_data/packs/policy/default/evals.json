@@ -3,6 +3,7 @@
     "evalrun.max_turns": 64,
     "evalrun.delta_band": 0.1,
     "evalrun.answer_pass_score": 0.8,
+    "evalrun.export.max_result_chars": 4000,
     "evals.calibration.reader_share": 0.1
   }
 }

@@ -482,4 +482,88 @@ def import_studio_command(
     _print_summary(summary, json_output)
 
 
+@app.command("export")
+def export_command(
+    run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
+    corpus: Path = typer.Option(..., "--corpus", help="The corpus or case set the run was over: personas, splits and the case-set digest come from it."),
+    fmt: str = typer.Option(..., "--format", help="sft (chat demonstrations) | pairs (preference pairs, needs --against) | rewards (verifiable reward records)."),
+    out: Path = typer.Option(..., "--out", "-o", help="JSONL file to write."),
+    against: Path | None = typer.Option(None, "--against", help="The second run directory for --format pairs, over the same case set."),
+    min_score: float = typer.Option(0.0, "--min-score", min=0.0, max=1.0, help="sft: the least overall score a demonstration may have."),
+    include_failed: bool = typer.Option(False, "--include-failed", help="sft: keep cases that scored at least --min-score without passing."),
+    margin: float | None = typer.Option(None, "--margin", min=0.0, help="pairs: the least overall-score lead of chosen over rejected (default: policy `evalrun.delta_band`)."),
+    split: list[str] | None = typer.Option(None, "--split", help="Keep only this dataset split (repeatable). Default: train, plus any case that carries no split."),
+    include_holdout: bool = typer.Option(False, "--include-holdout", help="Allow test and holdout splits. A model trained on them has seen the exam, so promotion over them is void."),
+    max_result_chars: int | None = typer.Option(None, "--max-result-chars", min=16, help="sft and pairs: characters of one tool result kept before a truncation marker (default: policy `evalrun.export.max_result_chars`)."),
+) -> None:
+    """Export a graded run as training data: SFT transcripts, preference pairs or reward records.
+
+    A transcript is rebuilt from the ledger in recorded order: each call
+    and its result, each question and the user's reply where it was asked,
+    each refused call as a tool error, then the answer. Pairs join two runs
+    of one case set on case id and refuse runs graded by different graders.
+    Reward records keep the deterministic parts apart from the rated
+    answer. Test and holdout splits are withheld unless --include-holdout.
+    """
+    from ..cli import _refuse
+    from .export import (
+        FORMATS,
+        ExportRefused,
+        HoldoutRefused,
+        SplitFilter,
+        preference_pairs,
+        reward_records,
+        sft_records,
+        write_records,
+    )
+    from .results import read_run
+
+    if fmt not in FORMATS:
+        _refuse("exactly_one", f"--format takes exactly one of {', '.join(FORMATS)}; got {fmt!r}")
+    if fmt == "pairs" and against is None:
+        _refuse("missing_flag", "--format pairs needs --against RUN_DIR: a pair is two runs of one case")
+    if fmt != "pairs" and against is not None:
+        _refuse("cannot_combine", f"--against pairs two runs; --format {fmt} reads one")
+    try:
+        guard = SplitFilter(tuple(split) if split else None, include_holdout)
+    except HoldoutRefused as error:
+        _refuse("dataset_rejected", str(error))
+    try:
+        report = read_run(run)
+        other = read_run(against) if against is not None else None
+    except (OSError, ValueError) as error:
+        _refuse("run_unreadable", str(error))
+    loaded, cases = _corpus_cases(corpus, None)
+    try:
+        if fmt == "sft":
+            tools: dict[str, Any] | None = None
+            try:
+                from .harness import requests_document
+                from .runner import service_for
+
+                ran = {result.case_id for result in report.results}
+                document = requests_document(service_for(cases, loaded.connector_data.records),
+                                             [case for case in cases if case.id in ran], principal=report.principal)
+                tools = {entry["case_id"]: entry["tools"] for entry in document["cases"]}
+            except Exception as error:  # a catalog is an addition to the record, never a reason to lose it
+                typer.echo(f"warning: tool catalogs unavailable ({error}); records carry no `tools`", err=True)
+            records = sft_records(report, cases, min_score=min_score, require_passed=not include_failed,
+                                  tools=tools, max_chars=max_result_chars, split_filter=guard)
+        elif fmt == "pairs":
+            assert other is not None
+            records = preference_pairs(report, other, cases, margin=margin, max_chars=max_result_chars,
+                                       split_filter=guard)
+        else:
+            records = reward_records(report, cases, split_filter=guard)
+    except HoldoutRefused as error:
+        _refuse("dataset_rejected", str(error))
+    except ExportRefused as error:
+        _refuse("results_unjoinable", str(error))
+    count = write_records(out, records)
+    explained = guard.explain()
+    if explained:
+        typer.echo(explained, err=True)
+    typer.echo(f"{count} {fmt} record(s) written to {out}")
+
+
 __all__ = ["app"]
