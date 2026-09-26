@@ -764,6 +764,7 @@ _REFUSALS: dict[str, str] = {
     "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",
     "service_unbuildable": "the connector evaluation service refused the case set; the message is the serving error",
     "run_unreadable": "the run directory is missing run.json or results.jsonl, or is not an eval run",
+    "run_partial": "the run directory holds an unfinished run (run.json is still partial); finish it with evalrun run --resume",
     "evalrun_shard_invalid": "--shard is not i/n with 1 <= i <= n",
     "resume_mismatch": "--resume found a ledger for a different run; the message names each identity field that differs",
     "concurrency_refused": "the connector service does not admit the requested --concurrency",

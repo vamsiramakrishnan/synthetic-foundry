@@ -28,7 +28,6 @@ from typing import Any
 from pydantic import ConfigDict, Field
 
 from .. import packkit
-from ..corpus import write_json
 from ..ids import content_key
 from ..models import Model
 from .contract import EvalCase
@@ -234,16 +233,48 @@ def _header(report: RunReport, cases: int) -> dict[str, Any]:
     return header
 
 
+def _replace(path: Path, lines: Iterable[str]) -> None:
+    """*path* rewritten whole or not at all: a synced sibling, then ``os.replace``.
+
+    Truncating in place and writing again leaves, when the process is
+    killed between the two, a file with fewer lines than either version. A
+    rename within one directory is atomic, so a reader sees the old bytes
+    or the new ones; the sibling is synced first so the new ones are on
+    disk when the rename is.
+    """
+
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8", newline="\n") as handle:
+            for line in lines:
+                handle.write(line)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def _replace_json(path: Path, payload: Mapping[str, Any]) -> None:
+    # The bytes ``corpus.write_json`` writes, written atomically.
+    _replace(path, [json.dumps(payload, indent=2, sort_keys=True) + "\n"])
+
+
 def write_run(directory: Path, report: RunReport) -> RunSummary:
-    """``run.json`` (identity), ``results.jsonl`` (one case per line), ``summary.json``."""
+    """``run.json`` (identity), ``results.jsonl`` (one case per line), ``summary.json``.
+
+    Each file is replaced atomically, and ``run.json`` last: until it is
+    replaced, a partial header from ``begin_ledger`` still says the run is
+    unfinished, so a kill anywhere in here leaves a ledger ``--resume``
+    finishes rather than one that claims to be complete.
+    """
 
     directory.mkdir(parents=True, exist_ok=True)
-    with (directory / "results.jsonl").open("w", encoding="utf-8", newline="\n") as handle:
-        for result in report.results:
-            handle.write(_result_line(result))
+    _replace(directory / "results.jsonl", (_result_line(result) for result in report.results))
     summary = summarize(report)
-    write_json(directory / "run.json", _header(report, len(report.results)))
-    write_json(directory / "summary.json", summary.model_dump(mode="json", by_alias=True))
+    _replace_json(directory / "summary.json", summary.model_dump(mode="json", by_alias=True))
+    _replace_json(directory / "run.json", _header(report, len(report.results)))
     return summary
 
 
@@ -256,7 +287,7 @@ def begin_ledger(directory: Path, identity: RunReport, planned: int) -> None:
     """
 
     directory.mkdir(parents=True, exist_ok=True)
-    write_json(directory / "run.json", {**_header(identity, planned), "partial": True})
+    _replace_json(directory / "run.json", {**_header(identity, planned), "partial": True})
 
 
 class LedgerWarning(UserWarning):
@@ -292,11 +323,43 @@ def read_results(path: Path) -> tuple[list[CaseResult], str | None]:
     return results, note
 
 
-def read_run(directory: Path) -> RunReport:
-    header = json.loads((directory / "run.json").read_text(encoding="utf-8"))
+class PartialRun(ValueError):
+    """A run directory whose ``run.json`` still says ``partial``: its ledger is not the whole run."""
+
+
+def _read_header(directory: Path) -> dict[str, Any]:
+    """``run.json``, refused precisely when it is torn or is not an eval run's header."""
+
+    path = directory / "run.json"
+    text = path.read_text(encoding="utf-8")
+    try:
+        header = json.loads(text)
+    except ValueError as error:
+        raise ValueError(f"{path}: run.json is torn or not JSON ({error}); a write of it was interrupted, "
+                         "so the ledger cannot be proven to be any run: run again without --resume") from error
+    if not isinstance(header, dict):
+        raise ValueError(f"{path}: run.json is not a JSON object; run again without --resume")
     if header.get("schema") != RUN_SCHEMA:
         raise ValueError(f"{directory}: not an eval run ({header.get('schema')!r})")
+    return header
+
+
+def read_run(directory: Path, *, allow_partial: bool = False) -> RunReport:
+    """The run in *directory*; refused (``PartialRun``) when it did not finish.
+
+    ``begin_ledger`` marks ``run.json`` partial before the first case and
+    ``write_run`` clears it when the last lands, so a partial header means
+    ``results.jsonl`` holds only the cases that finished. Summarising,
+    comparing or exporting those as the run would report a subset as the
+    whole. ``allow_partial`` is for a reader that wants exactly the finished
+    cases and knows they are not the run.
+    """
+
+    header = _read_header(directory)
     results, note = read_results(directory / "results.jsonl")
+    if header.get("partial") and not allow_partial:
+        raise PartialRun(f"{directory}: the run is unfinished: {len(results)} of {header.get('cases')} planned "
+                         "case(s) finished; finish it with `worldloom evalrun run ... --resume` into this directory")
     if note is not None:
         warnings.warn(note, LedgerWarning, stacklevel=2)
     return RunReport(agent=str(header["agent"]), principal=str(header.get("principal", "agent")),
@@ -328,9 +391,7 @@ def resume_ledger(directory: Path, identity: RunReport, *, shard: Mapping[str, A
         if ledger.exists() and ledger.stat().st_size:
             raise ValueError(f"{directory}: results.jsonl has no run.json to match against; run again without --resume")
         return [], None
-    header = json.loads(header_path.read_text(encoding="utf-8"))
-    if header.get("schema") != RUN_SCHEMA:
-        raise ValueError(f"{directory}: not an eval run ({header.get('schema')!r})")
+    header = _read_header(directory)
     mismatched = _mismatches(header, identity)
     recorded_shard = read_shard(directory)
     if (recorded_shard is None) != (shard is None) or (shard is not None and recorded_shard != dict(shard)):
@@ -361,13 +422,7 @@ def repair_ledger(path: Path) -> tuple[list[CaseResult], str | None]:
     # An unterminated last line that parsed is kept, but still rewritten, so
     # the next append starts a line of its own.
     if note is not None or path.read_bytes()[-1:] not in (b"", b"\n"):
-        tmp = path.with_name(path.name + ".tmp")
-        with tmp.open("w", encoding="utf-8", newline="\n") as handle:
-            for result in results:
-                handle.write(_result_line(result))
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, path)
+        _replace(path, (_result_line(result) for result in results))
     return results, note
 
 
@@ -394,7 +449,7 @@ def shard_document(index: int, count: int, cases: Sequence[EvalCase]) -> dict[st
 
 def write_shard(directory: Path, document: Mapping[str, Any]) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    write_json(directory / "shard.json", dict(document))
+    _replace_json(directory / "shard.json", document)
 
 
 def read_shard(directory: Path) -> dict[str, Any] | None:
@@ -430,7 +485,7 @@ def merge_shards(directories: Sequence[Path]) -> RunReport:
         shard = read_shard(directory)
         if shard is None:
             raise ValueError(f"{directory}: no shard.json; write shards with `evalrun run --shard i/n`")
-        header = json.loads((directory / "run.json").read_text(encoding="utf-8"))
+        header = _read_header(directory)
         if header.get("partial"):
             raise ValueError(f"{directory}: shard {shard['index']}/{shard['count']} did not finish; "
                              "finish it with `evalrun run --shard ... --resume`")
@@ -752,6 +807,7 @@ __all__ = [
     "Comparison",
     "LedgerWarning",
     "RunSlice",
+    "PartialRun",
     "RunSummary",
     "append_result",
     "begin_ledger",
