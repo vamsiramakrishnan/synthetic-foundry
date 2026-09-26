@@ -29,13 +29,14 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_serializer
 
 from .. import packkit
 from ..models import Model
 from .agents import AgentResponse
 from .contract import EvalCase, FailurePoint, StructuredOutcome
 from .safety import ErrorCode, OperationSafety, error_code_for, is_retryable
+from .stages import OutputGrade, PlanNodeGrade, QueryGrade, _omit_none
 
 Spans = Sequence[Any]
 
@@ -79,6 +80,15 @@ class PlanGrade(Model):
     planned_agreement: float | None = None
     score: float
     passed: bool
+    #: The node-level breakdown (``stages.grade_plan_nodes``): the agent's
+    #: DAG, declared or implied, matched to the gold DAG node by node. Never
+    #: moves ``score`` or ``passed``; absent from the wire when not graded,
+    #: so a ledger graded without it keeps its bytes.
+    nodes: PlanNodeGrade | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_stage(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("nodes",))
 
 
 def skipped_nodes(case: EvalCase, spans: Spans) -> frozenset[str]:
@@ -244,6 +254,14 @@ class TrajectoryGrade(Model):
     question_findings: tuple[QuestionFinding, ...] = ()
     score: float
     passed: bool
+    #: Query quality per search call (``stages.grade_queries``), graded by
+    #: what the emulator returned against the gold evidence at each node.
+    #: Additive like ``PlanGrade.nodes``: absent when not graded.
+    queries: QueryGrade | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_stage(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("queries",))
 
 
 def _reference_tools(case: EvalCase, skipped: frozenset[str] = frozenset()) -> tuple[str, ...]:
@@ -483,6 +501,13 @@ class OutcomeGrade(Model):
     answer_error: str | None = None
     score: float
     passed: bool
+    #: Field values, format, sections and grounded facts of what the run
+    #: produced (``stages.grade_output``). Additive: absent when not graded.
+    output: OutputGrade | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_stage(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("output",))
 
 
 Rater = Callable[[EvalCase, str], tuple[float | None, str | None]]

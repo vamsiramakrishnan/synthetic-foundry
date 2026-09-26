@@ -32,6 +32,7 @@ from .contract import EvalCase
 from .grader import grader_identity
 from .grading import CaseScore, grade_outcomes, grade_plan, grade_trajectory, score_case
 from .safety import OperationSafety, classify_definition
+from .stages import attach_stages
 
 RUN_SCHEMA = "worldloom.eval-run/v1"
 
@@ -171,6 +172,10 @@ def grade_run(
     plan = grade_plan(case, spans, response)
     trajectory = grade_trajectory(case, spans, safety=safety, refusals=refusals, questions=questions)
     outcomes = grade_outcomes(case, before, after, response, definitions=definitions, rater=rater, spans=spans)
+    # The stages (queries, plan nodes, output) refine the axes without
+    # moving them: attached as breakdowns, off the score and the pass.
+    plan, trajectory, outcomes = attach_stages(case, spans, before, after, response, plan, trajectory, outcomes,
+                                               definitions=definitions, refusals=refusals)
     return score_case(plan, trajectory, outcomes, assertions)
 
 

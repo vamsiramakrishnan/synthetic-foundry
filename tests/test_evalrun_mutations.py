@@ -318,3 +318,54 @@ def test_probing_the_surface_with_malformed_calls_costs_precision(grammar: dict[
     assert mutated.score.trajectory.exact_match, "the connector saw exactly the reference trajectory"
     assert mutated.score.plan == subject.reference.score.plan, "the plan axis reads only what reached a connector"
 
+
+# -- the stages inside the axes ------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def searched() -> Subject:
+    corpus = _build(("map_read",))
+    cases = cases_from_corpus(corpus)
+    case = next(case for case in cases if not case.trajectory.failures and case.plan.of_kind("search"))
+    return Subject(cases, corpus.connector_data.records, case)
+
+
+def test_the_reference_scores_the_ceiling_on_every_stage(searched: Subject) -> None:
+    score = searched.reference.score
+    assert score is not None and score.plan.nodes is not None and score.trajectory.queries is not None
+    assert score.plan.nodes.score == 1.0 and score.trajectory.queries.score == 1.0
+    assert score.outcomes.output is not None and score.outcomes.output.score == 1.0
+
+
+def test_broadening_the_search_drops_the_query_stage_not_the_evidence(searched: Subject) -> None:
+    calls = []
+    for node, call in searched.calls:
+        if node.startswith("read") and "predicate" in call.arguments:
+            call = ToolCall(tool=call.tool, arguments={key: value for key, value in call.arguments.items()
+                                                       if key not in {"predicate", "max_results"}})
+        calls.append((node, call))
+    mutated = searched.replay(calls, name="broad-search")
+    reference = searched.reference.score.trajectory.queries
+    queries = mutated.score.trajectory.queries
+    assert reference is not None and queries is not None and reference.score is not None
+    assert queries.recall == reference.recall == 1.0, "the same evidence came back"
+    node = queries.nodes[0]
+    assert node.returned > node.needed and node.precision is not None and node.precision < 1.0
+    assert queries.score is not None and queries.score < reference.score
+    # The gold step constrains only record identity, so no field filter is
+    # named as missing: the finding is the volume.
+    assert "query.overfetch" in queries.findings and "query.missing_filter" not in queries.findings
+
+
+def test_writing_the_wrong_evidence_count_is_a_field_mismatch(searched: Subject) -> None:
+    calls = []
+    for node, call in searched.calls:
+        if node == "write":
+            fields = {**call.arguments["fields"], "evidence_count": 0}
+            call = ToolCall(tool=call.tool, arguments={**call.arguments, "fields": fields})
+        calls.append((node, call))
+    mutated = searched.replay(calls, name="miscounted")
+    output, reference = mutated.score.outcomes.output, searched.reference.score.outcomes.output
+    assert output is not None and reference is not None and output.score is not None and reference.score is not None
+    assert "output.field_mismatch" in output.findings and output.score < reference.score
+

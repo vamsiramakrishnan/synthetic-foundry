@@ -27,6 +27,11 @@ three sections to the brief:
    case turn by turn (call, arguments, error or a clipped result, refusals
    and questions where they happened, the answer), and the reference
    agent's calls on the same case beside it.
+4. **Queries.** When the run graded its queries (``stages.grade_queries``),
+   the searches that missed evidence, over-fetched, filtered on the wrong
+   window or went to the wrong scope, each with the arguments the agent
+   sent and what it missed, as counts and field names: how many gold
+   records the step needed and how many came back, never which ones.
 
 What the reference side shows, and why. The reference agent solves every
 case by walking the expected plan, so its raw calls carry graded material:
@@ -58,7 +63,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_serializer
 
 from .. import packkit
 from ..models import Model
@@ -219,6 +224,28 @@ class Trajectory(Model):
     reference: tuple[str, ...] | None = None
 
 
+class QueryIssue(Model):
+    """One search that fell short, with what it sent and what it missed, in counts and field names."""
+
+    case_id: str
+    tool: str
+    node: str | None = None
+    findings: tuple[str, ...]
+    #: Gold records the step needed, how many the run found, how many it
+    #: returned (repeats included), and pages pulled against the fewest needed.
+    needed: int = 0
+    found: int = 0
+    returned: int = 0
+    pages: int = 0
+    min_pages: int = 0
+    #: The arguments of one call at the step, as ``shape_args`` shows them.
+    example: str = ""
+    filtered_on: tuple[str, ...] | None = None
+    missing_filters: tuple[str, ...] = ()
+    wrong_window: tuple[str, ...] = ()
+    weight: float = 1.0
+
+
 class TraceEvidence(Model):
     schema_version: str = Field(default=EVIDENCE_SCHEMA, alias="schema")
     agent: str
@@ -228,8 +255,18 @@ class TraceEvidence(Model):
     trajectories: tuple[Trajectory, ...]
     #: Training cases the admitted reference run covered.
     reference_cases: int = 0
+    #: Searches that fell short, when the run graded its queries; empty
+    #: (and absent from the wire) otherwise.
+    queries: tuple[QueryIssue, ...] = ()
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_queries(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("queries", True):
+            data.pop("queries")
+        return data
 
 
 # -- the held-out guard -----------------------------------------------------------
@@ -481,6 +518,59 @@ def _trajectories(report: RunReport, found: Autopsy | None, reference: RunReport
     return tuple(chosen)
 
 
+#: What a query issue is ranked by: missed evidence first, then structure, then volume.
+_QUERY_SEVERITY = {"query.missed_evidence": 0, "query.wrong_window": 1, "query.wrong_scope": 2, "query.malformed": 3,
+                   "query.zero_result": 4, "query.overfetch": 5, "query.missing_filter": 6, "query.error": 7}
+_QUERY_ISSUES = 8
+
+
+def _query_issues(report: RunReport, values: Mapping[str, Any] | None,
+                  limit: int = _QUERY_ISSUES) -> tuple[QueryIssue, ...]:
+    """The run's searches that fell short, most severe and most valuable first: one per (case, step), or per stray call."""
+
+    weight_of = _weigher(values)
+    issues: list[QueryIssue] = []
+    for result in sorted(report.results, key=lambda row: row.case_id):
+        score = result.score
+        queries = getattr(score.trajectory, "queries", None) if score is not None else None
+        if queries is None:
+            continue
+        spans = {str(span.get("id")): span for span in result.spans}
+
+        def example(span_id: str, spans: Mapping[str, Mapping[str, Any]] = spans) -> str:
+            span = spans.get(span_id)
+            return shape_args(span.get("args") or {}, write=False, mask=False) if span is not None else ""
+
+        for node in queries.nodes:
+            if not node.findings:
+                continue
+            calls = [call for call in queries.calls if call.node == node.node and not call.designed]
+            first = calls[0] if calls else None
+            issues.append(QueryIssue(
+                case_id=result.case_id, tool=first.tool if first else f"{node.connector}.(not searched)", node=node.node,
+                findings=node.findings, needed=node.needed, found=node.found, returned=node.returned, pages=node.pages,
+                min_pages=node.min_pages, example=example(first.span_id) if first else "",
+                filtered_on=first.constrained if first else None,
+                missing_filters=tuple(sorted({field for call in calls for field in call.missing_filters})),
+                wrong_window=tuple(sorted({field for call in calls for field in call.wrong_window})),
+                weight=weight_of(result.case_id)))
+        for call in queries.calls:
+            if call.designed or not (call.wrong_scope or call.malformed or call.wrong_window):
+                continue
+            if call.node is not None and any(item.case_id == result.case_id and item.node == call.node for item in issues):
+                continue
+            findings = tuple(sorted({*(("query.wrong_scope",) if call.wrong_scope else ()),
+                                     *(("query.malformed",) if call.malformed else ()),
+                                     *(("query.wrong_window",) if call.wrong_window else ())}))
+            issues.append(QueryIssue(case_id=result.case_id, tool=call.tool, node=call.node, findings=findings,
+                                     returned=call.returned, example=example(call.span_id),
+                                     filtered_on=call.constrained, wrong_window=call.wrong_window,
+                                     weight=weight_of(result.case_id)))
+    issues.sort(key=lambda item: (min(_QUERY_SEVERITY.get(key, 9) for key in item.findings), -item.weight,
+                                  -(item.needed - item.found), item.case_id, item.tool, item.node or ""))
+    return tuple(issues[:limit])
+
+
 def collect(report: RunReport, *, cases: Iterable[EvalCase] = (), found: Autopsy | None = None,
             reference: RunReport | None = None, definitions: Mapping[str, Any] | None = None,
             values: Mapping[str, Any] | None = None, trajectories: int = 3) -> TraceEvidence:
@@ -507,7 +597,8 @@ def collect(report: RunReport, *, cases: Iterable[EvalCase] = (), found: Autopsy
             contracts.append(contract)
     return TraceEvidence(agent=report.agent, case_set=report.case_set, errors=errors, contracts=tuple(contracts),
                          trajectories=_trajectories(report, found, reference, known, trajectories),
-                         reference_cases=len(reference.results) if reference is not None else 0)
+                         reference_cases=len(reference.results) if reference is not None else 0,
+                         queries=_query_issues(report, values))
 
 
 # -- rendering --------------------------------------------------------------------
@@ -528,6 +619,25 @@ def _render_group(number: int, group: ErrorGroup) -> str:
         lines.append(f"   {who} ({shape.calls} call(s)): {shape.example}")
     if not group.accepted:
         lines.append("   no accepted call of this tool in the run")
+    return "\n".join(lines)
+
+
+def _render_query(number: int, issue: QueryIssue) -> str:
+    where = f" at {issue.node}" if issue.node else ""
+    lines = [f"Q{number}. {issue.tool}{where} (case {issue.case_id}): {', '.join(issue.findings)}"]
+    if issue.needed:
+        lines.append(f"   found {issue.found} of {issue.needed} record(s) the step needs; {issue.returned} returned"
+                     f" over {issue.pages} page(s), {issue.min_pages} would do")
+    elif issue.returned:
+        lines.append(f"   {issue.returned} record(s) returned")
+    if issue.example:
+        lines.append(f"   sent: {issue.example}")
+    if issue.filtered_on is not None:
+        lines.append(f"   filtered on: {', '.join(issue.filtered_on) or 'nothing'}")
+    if issue.missing_filters:
+        lines.append(f"   the step also constrains: {', '.join(issue.missing_filters)}")
+    if issue.wrong_window:
+        lines.append(f"   window on {', '.join(issue.wrong_window)} excludes evidence or starts after the as-of clock")
     return "\n".join(lines)
 
 
@@ -560,17 +670,19 @@ def _render_trajectory(trajectory: Trajectory) -> str:
 _PREAMBLE = "Trace evidence from the same training run: the connectors' own messages and the calls behind them."
 _HEADERS = {
     "errors": "Connector errors, most costly first, with accepted calls of the same tool beside them:",
+    "queries": "Searches that fell short (what they sent, and how much of the step's evidence came back):",
     "contracts": "Tool contracts as served (a trailing ? marks an optional parameter):",
     "trajectories": "Failing trajectories, turn by turn:",
 }
 _CLOSING = "Teach the tools' grammar these pairs show; do not copy record ids or case-specific values."
-_NOUNS = {"errors": "error group(s)", "contracts": "tool contract(s)", "trajectories": "trajectory(ies)"}
+_NOUNS = {"errors": "error group(s)", "queries": "query issue(s)", "contracts": "tool contract(s)",
+          "trajectories": "trajectory(ies)"}
 
 
 def render_evidence(evidence: TraceEvidence, room: int) -> str:
     """The evidence as plain text in at most *room* characters, dropping whole items from the back.
 
-    Sections go in priority order (errors, contracts, trajectories) and
+    Sections go in priority order (errors, queries, contracts, trajectories) and
     each section's items in its own order. An item that does not fit is
     dropped and counted, and a final line says what was left out. A
     contract is shown only for a tool whose error group is shown. Empty
@@ -579,6 +691,7 @@ def render_evidence(evidence: TraceEvidence, room: int) -> str:
 
     sections: list[tuple[str, list[tuple[str, str]]]] = [
         ("errors", [(group.tool, _render_group(number, group)) for number, group in enumerate(evidence.errors, 1)]),
+        ("queries", [(issue.tool, _render_query(number, issue)) for number, issue in enumerate(evidence.queries, 1)]),
         ("contracts", [(contract.tool, _render_contract(contract)) for contract in evidence.contracts]),
         ("trajectories", [("", _render_trajectory(item)) for item in evidence.trajectories]),
     ]
@@ -680,6 +793,7 @@ __all__ = [
     "SUMMARY_SHARE",
     "AcceptedShape",
     "ErrorGroup",
+    "QueryIssue",
     "ToolContract",
     "TraceEvidence",
     "Trajectory",

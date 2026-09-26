@@ -76,6 +76,9 @@ runs over different case sets produce clusters that can be compared.
 | `assertion.fail` | The row's own assertion verdict failed and no other key explains it |
 | `run.errored` | The agent raised or the case could not be graded |
 | `unclassified` | The case failed and no key explains it; report it, it is a gap |
+| `query.<finding>` | A search fell short: `missed_evidence`, `overfetch`, `missing_filter`, `wrong_window`, `malformed`, `wrong_scope`, `zero_result`, `error` (the query stage, `docs/eval-execution.md`) |
+| `plan.node_missing:<kind>`, `plan.node_extra:<kind>`, `plan.node_misordered` | The agent's DAG against the gold DAG node by node; kind is `search`, `read`, `create`, `update` or `delete` |
+| `output.<finding>` | The output: `field_mismatch`, `wrong_format`, `missing_section`, `ungrounded_fact` |
 
 Only axes the score observed contribute, so a plan-only run yields plan keys
 and an Eval Studio import yields answer keys. A missing node's kind comes from

@@ -105,6 +105,17 @@ improve`, `EvalSession.improver`), use the `worldloom-improve` skill.
 - A designed failure (`failures_expected`) is honoured when the agent met the
   error at the node and wrote nothing on the nodes it blocks. Writing past a
   refusal is what those cases exist to catch.
+- Three **stages** refine the axes without moving them. `trajectory.queries`
+  grades each search by what came back against the gold evidence at its
+  node (recall, precision, over-fetch, pages, and scope, language and time
+  window as structural checks), so two differently written searches that
+  return the same records score the same. `plan.nodes` matches the agent's
+  declared DAG (or the one its calls imply) to the gold DAG node by node,
+  with dependency order. `outcomes.output` checks the written field values,
+  the document's format and sections, and that its figures and ids trace to
+  evidence. Their keys (`query.*`, `plan.node_*`, `output.*`) show in the
+  autopsy; `summarize` reports `stages`, `compare` reports `stage_deltas`.
+  Policies `evalrun.grade.queries|plan_nodes|output` switch them.
 
 ## From Python
 

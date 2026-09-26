@@ -30,6 +30,7 @@ carry an id or free text, so clusters compare across case sets:
 | Trajectory | `trajectory.safety:<law>`, `trajectory.question:<law>`, `trajectory.failure_leaked`, `trajectory.failure_not_reached`, `trajectory.budget_exceeded`, `trajectory.retry_storm`, `trajectory.refused_call` |
 | Plan | `plan.missing:<read/write/verify>`, `plan.extra_write`, `plan.order` |
 | Outcomes | `outcomes.unmet:<create/update/delete>`, `outcomes.collateral`, `outcomes.ungrounded`, `outcomes.answer_below_threshold`, `outcomes.answer_unrated` |
+| Stages | `query.missed_evidence`, `query.overfetch`, `query.missing_filter`, `query.wrong_window`, `query.malformed`, `query.wrong_scope`, `query.zero_result`, `query.error`, `plan.node_missing:<kind>`, `plan.node_extra:<kind>`, `plan.node_misordered`, `output.field_mismatch`, `output.wrong_format`, `output.missing_section`, `output.ungrounded_fact` |
 | Other | `error:<code>`, `assertion.fail`, `run.errored`, `unclassified` (a gap: report it) |
 
 A cluster reports its case count, share of failing cases (shares can sum past
