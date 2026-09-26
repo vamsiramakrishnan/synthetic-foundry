@@ -586,6 +586,7 @@ worldloom evalrun improve <CORPUS>
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
 | `--rater` | grounded or exec:<command>; pinned for the whole loop. |
 | `--rater-timeout` |  |
+| `--repeats` | Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`. |
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
@@ -602,6 +603,21 @@ worldloom evalrun merge <OUT> <SHARDS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the summary as JSON. |
+
+### `worldloom evalrun noise`
+
+Measure one policy's run-to-run noise, and the smallest effect a comparison could detect through it.
+
+```
+worldloom evalrun noise <RUNS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--cases` | Size the experiment for this many cases (default: the cases the runs graded). |
+| `--confidence` | Confidence of the interval (default: policy `evalrun.improve.confidence`, 0.95). |
+| `--json` |  |
+| `--repeats` | Size the experiment for this many repeats a side (default: the number of runs given). |
 
 ### `worldloom evalrun plan`
 

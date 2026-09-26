@@ -170,6 +170,8 @@ class ImproveLoop:
     #: training and held-out cases and their records).
     value: bool = False
     ablate: bool | None = None
+    #: Runs of each policy per case set; ``None`` is the policy ``evalrun.improve.repeats``.
+    repeats: int | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
@@ -223,7 +225,7 @@ class ImproveLoop:
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
                        max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
-                       holdout_values=holdout_values)
+                       holdout_values=holdout_values, repeats=self.repeats)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -369,6 +371,7 @@ class EvalSession:
         max_axis_regression: float | None = None,
         value: bool = False,
         ablate: bool | None = None,
+        repeats: int | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -383,6 +386,8 @@ class EvalSession:
         ``concurrency`` defaults to the policy ``evalrun.concurrency``.
         ``value=True`` also gates on the delta weighted by each case's value at
         stake; ``ablate`` overrides the policy ``evalrun.improve.ablate``.
+        ``repeats`` runs each policy that many times per case set and gates on
+        a paired interval (default: the policy ``evalrun.improve.repeats``, 1).
         """
         from .runner import default_concurrency
 
@@ -402,7 +407,7 @@ class EvalSession:
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
                            max_axis_regression=max_axis_regression, value=value, ablate=ablate,
-                           _records=records, _holdout_records=held_records)
+                           repeats=repeats, _records=records, _holdout_records=held_records)
 
     # -- the loop's parts, one call each ------------------------------------------------
 

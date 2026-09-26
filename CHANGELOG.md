@@ -13,6 +13,26 @@ first written up, before the waves above it landed.
 
 ### Closing the loop: agents that improve against the corpus
 
+- **Noise-aware gates.** `worldloom evalrun improve --repeats K` (SDK
+  `repeats=`, policy `evalrun.improve.repeats`, default 1) runs each policy K
+  times per case set, each repeat an ordinary pinned run under
+  `runs/<pack>@<digest>/<label>/rep-<i>`, cached and resumed on its own. The
+  gates then judge a paired comparison over per-case means: a deterministic
+  paired bootstrap interval (seeded from the case-set digest and the two
+  policies' digests; `evalrun.improve.confidence` 0.95,
+  `evalrun.improve.bootstrap_resamples` 2000) with the t interval beside it.
+  Training passes when the mean reaches the delta band and the lower bound
+  reaches `evalrun.improve.min_train_ci` (0.0); the holdout when the lower
+  bound is above `evalrun.improve.min_holdout_delta`; an axis fails only when
+  its upper bound is below minus the band; a case is newly errored only when
+  it errored in most candidate repeats and no champion repeat. Receipts record
+  the interval, the standard error and each side's noise floor, and ablation
+  drops a hunk only when its contribution's upper bound is below the
+  tolerance. At K = 1 every rule, receipt and run directory is byte-identical
+  to before. **`worldloom evalrun noise RUN_DIR...`** (`evalrun.noise.noise`)
+  reports one policy's run-to-run spread and the minimum detectable effect
+  for N cases at K repeats (power `evalrun.improve.power`, 0.8), so an
+  experiment can be sized before it is paid for.
 - **`worldloom evalrun improve`** runs a champion `agent` pack over the
   training cases, clusters its failures, and asks a proposing harness for a
   revision through the pack interview. The candidate is kept only if it gains
