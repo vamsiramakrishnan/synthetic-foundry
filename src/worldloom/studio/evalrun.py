@@ -46,7 +46,8 @@ from ..evalrun import (
     service_for,
     write_run,
 )
-from ..evalrun.runner import case_set_digest
+from ..evalrun.results import append_result, repair_ledger
+from ..evalrun.runner import case_set_digest, default_concurrency
 from ..evals.dataset import _files, _read, verify_dataset
 from ..providers import digest
 from .checkpoints import atomic_json, document
@@ -190,11 +191,12 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
     ledger = root / "results.jsonl"
     results: dict[str, CaseResult] = {}
     if ledger.exists():
-        with ledger.open(encoding="utf-8") as handle:
-            for line in handle:
-                if line.strip():
-                    prior = CaseResult.model_validate_json(line)
-                    results[prior.case_id] = prior
+        # A worker killed mid-append leaves a torn last line: that case is
+        # dropped (and run again), and the file is cut back to whole lines so
+        # this run's appends do not glue onto it. A bad line anywhere else
+        # still refuses.
+        for prior in repair_ledger(ledger)[0]:
+            results[prior.case_id] = prior
     wanted = {case.id for cases, _ in groups for case in cases}
     results = {case_id: result for case_id, result in results.items() if case_id in wanted}
     state: dict[str, Any] = {"status": "running", "total": len(wanted), "graded": 0, "errors": 0, "passed": 0,
@@ -207,17 +209,23 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
         atomic_json(root / "progress.json", state)
 
     def record(result: CaseResult) -> None:
+        # `run_cases` calls this one result at a time, whatever its concurrency.
         results[result.case_id] = result
-        with ledger.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(json.dumps(result.model_dump(mode="json"), sort_keys=True, default=str) + "\n")
+        append_result(root, result)
         account()
 
+    # Cases within a group run this many at a time (the policy
+    # `evalrun.concurrency`); groups still run one after another, since each
+    # has its own corpus and service. The ledger is appended as cases land
+    # and the report is assembled in case order, so resume and the final run
+    # are the same whatever the concurrency.
+    workers = default_concurrency()
     account()
     for cases, records in groups:
         pending = [case for case in cases if case.id not in results]
         if not pending:
             continue
-        service = service_for(pending, records)
+        service = service_for(pending, records, concurrency=workers)
         if options.evalrun_mode == "plan":
             planner: Any = (ReferencePlanner(pending) if options.evalrun_agent == "reference"
                             else ExecPlanner(str(harness_command), timeout=timeout, name="plan:harness"))
@@ -226,7 +234,7 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
         else:
             agent: Any = (ReferenceAgent(pending) if options.evalrun_agent == "reference"
                           else ExecAgent(str(harness_command), timeout=timeout, max_turns=options.evalrun_max_turns, name="run:harness"))
-            run_cases(service, pending, agent, principal=_PRINCIPAL, on_result=record)
+            run_cases(service, pending, agent, principal=_PRINCIPAL, on_result=record, concurrency=workers)
     ordered = tuple(results[case.id] for cases, _ in groups for case in cases)
     report = RunReport(agent=_agent_name(options), principal=_PRINCIPAL,
                        case_set=case_set_digest(case for cases, _ in groups for case in cases), results=ordered)
