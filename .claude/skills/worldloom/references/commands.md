@@ -584,12 +584,36 @@ worldloom evalrun improve <CORPUS>
 | `--principal` |  |
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--proposer-pack` | The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest. |
 | `--rater` | grounded or exec:<command>; pinned for the whole loop. |
 | `--rater-timeout` |  |
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
+
+### `worldloom evalrun improve-proposer`
+
+Improve the proposer: revise its policy and keep a revision only if the agents it improves gain more.
+
+| Option | Purpose |
+| --- | --- |
+| `--concurrency` | Cases in flight at once in every run. |
+| `--json` | Emit meta.json on stdout. |
+| `--max-turns` |  |
+| `--meta-rounds` | Meta rounds: each proposes one revision of the proposer policy. |
+| `--no-ablate` | Skip ablation in every inner loop. |
+| `--out`, `-o` | Directory for meta/rounds, meta/tasks, meta/packs and meta/meta.json. |
+| `--principal` |  |
+| `--proposer-exec` | The proposing harness, over the `pack author` seam; it also revises its own policy. |
+| `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--proposer-pack` | The proposer policy to start from: agent:<name>[@<digest>] or a pack file (agent:proposer-baseline ships). |
+| `--rater` | grounded or exec:<command>; pinned for every task. |
+| `--rater-timeout` |  |
+| `--rounds` | Rounds of each inner `improve` loop (default: policy `evalrun.improve.rounds`). |
+| `--shell` | Run the agents' exec commands through the shell. |
+| `--tasks` | TASKS.json: {"tasks": [...], "holdout_tasks": [...]}, each task {name, corpus, holdout_corpus?, agent_pack, exec \| harness, limit?}; paths relative to the file. |
+| `--timeout` | Seconds a child (agent turn or proposal) may run. |
 
 ### `worldloom evalrun merge`
 

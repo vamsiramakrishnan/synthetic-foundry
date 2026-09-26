@@ -273,6 +273,17 @@ A harness proposes a policy through the same interview as any other pack:
 lints clean. `agent:baseline` ships as the example: today's rules, no advice,
 and a neutral standing instruction.
 
+**Proposer policies.** The harness that proposes revisions in `worldloom
+evalrun improve` is itself governed by an `agent` pack, named with
+`--proposer-pack`; `agent:proposer-baseline` ships and restates the
+proposer's current instructions. A proposer reads only `system`, `planning`,
+`skills` and the skill tree: its interview request gains the same `agent`
+block a turn document does, the bundled adapters fence it ahead of the
+interview role, and each authoring round records its reference and digest.
+`worldloom evalrun improve-proposer` revises such a pack and keeps a revision
+only when the agents it improves gain more on held-out cases (see
+[Self-improvement](self-improvement.md#recursion-improving-the-improver)).
+
 ## Replay
 
 A pack that changes what a seed generates must replay without its file.
