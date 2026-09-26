@@ -966,4 +966,115 @@ def _rater_from(spec: str | None, *, timeout: float, shell: bool) -> Any:
     _refuse("unknown_rater", f"{spec!r}; use grounded or exec:<command>")
 
 
+@app.command("corners")
+def corners_command(
+    corpus: Path = typer.Argument(..., help="A world corpus directory (`worldloom build --out`), whose events the cases rest on."),
+    out: Path = typer.Option(..., "--out", "-o", help="Case set directory to write (evalrun-cases.jsonl, records.jsonl, corners.json)."),
+    templates: list[str] | None = typer.Option(None, "--templates", help="Corner templates to draw from (repeat, or comma-separate); default every template."),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="Keep only the first N solvable cases."),
+    json_output: bool = typer.Option(False, "--json", help="Emit corners.json on stdout."),
+) -> None:
+    """Draw corner cases from the world's own events, keep the ones the reference agent solves.
+
+    Each template maps a real event in the world (a confirmed cause that
+    superseded a hypothesis, a restated return, an escalated exception, a
+    departure) to the activity it belongs to and a case whose difficulty is
+    that event. A template the world has no event for yields nothing. Every
+    case is run by the reference agent with its full expected outcome; one it
+    cannot solve is dropped and the reason printed. The output is a case set
+    `worldloom evalrun run` reads.
+    """
+    from ..cli import _refuse
+    from ..world import World
+    from .corners import TEMPLATE_IDS, corner_cases, write_corner_set
+
+    names = [name.strip() for value in (templates or ()) for name in value.split(",") if name.strip()]
+    unknown = sorted(set(names) - set(TEMPLATE_IDS))
+    if unknown:
+        _refuse("unknown_corner_template", f"{', '.join(unknown)}; known templates: {', '.join(TEMPLATE_IDS)}")
+    try:
+        world = World.load(str(corpus))
+    except Exception as error:  # a corpus that will not load is a refusal, whatever the cause
+        _refuse("corpus_unloadable", f"{corpus}: {error}", fix="point at a directory written by `worldloom build --out`")
+    batch = corner_cases(world, templates=names or None, limit=limit)
+    write_corner_set(batch, out)
+    summary = batch.summary()
+    if json_output:
+        typer.echo(json.dumps(summary, indent=2, sort_keys=True))
+        return
+    for item in batch.yields:
+        typer.echo(f"{item.template}: {item.generated} generated, {item.solvable} solvable, {item.dropped} dropped"
+                   + (f", {item.unmatched} event(s) with no case" if item.unmatched else ""))
+    for drop in batch.drops:
+        typer.echo(f"dropped {drop.case_id} ({drop.template}, {drop.event}): {drop.reason}", err=True)
+    if not batch.cases:
+        typer.echo("gap: this world holds no event any selected template rests on, or none was solvable", err=True)
+    typer.echo(f"{len(batch.cases)} corner case(s) written to {out}")
+
+
+@app.command("frontier")
+def frontier_command(
+    case_set: Path = typer.Argument(..., help="A case set (evalrun-cases.jsonl beside records.jsonl), e.g. from `evalrun corners`."),
+    out: Path = typer.Option(..., "--out", "-o", help="Case set directory for the frontier (frontier.json beside it)."),
+    budget: int = typer.Option(..., "--budget", min=1, help="Champion case runs to spend."),
+    champion_exec: str | None = typer.Option(None, "--champion-exec", help="The champion as an executable (the `evalrun run --exec` seam)."),
+    champion_harness: str | None = typer.Option(None, "--champion-harness", help="An installed coding harness as the champion: codex or claude."),
+    agent_pack: str | None = typer.Option(None, "--agent-pack", help=_AGENT_PACK_HELP),
+    seeds: list[int] | None = typer.Option(None, "--seed", help="Seed(s) ordering the search (repeat); default 0."),
+    holdout: list[Path] | None = typer.Option(None, "--holdout", help="Held-out cases: a case set directory, a cases JSONL file or a file of ids (repeat)."),
+    holdout_ids: list[str] | None = typer.Option(None, "--holdout-id", help="A held-out case id (repeat)."),
+    holdout_seeds: list[int] | None = typer.Option(None, "--holdout-seed", help="A seed held out for judging (repeat); searching it is refused."),
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds the champion child may run per turn."),
+    shell: bool = typer.Option(False, "--shell", help="Run --champion-exec through the shell."),
+    max_turns: int | None = typer.Option(None, "--max-turns", min=1),
+    json_output: bool = typer.Option(False, "--json", help="Emit frontier.json on stdout."),
+) -> None:
+    """Keep the cases the reference agent solves and the champion fails: the frontier.
+
+    Cases are offered in a seeded order until `--budget` champion runs are
+    spent; each is first run by the reference agent and kept only if it is
+    solved there, so a frontier case is one a better agent can pass. Seeds
+    or case ids held out for judging (`--holdout`, `--holdout-id`,
+    `--holdout-seed`) are refused, never skipped: a search that touched them
+    has already learned from them.
+    """
+    from ..cli import _refuse
+    from .corners import (
+        HoldoutOverlap,
+        frontier,
+        read_corner_set,
+        read_holdout_ids,
+        write_frontier,
+    )
+    from .harness import ExecAgent
+
+    exec_command = _harness_exec(champion_harness, champion_exec, timeout=timeout)
+    if exec_command is None:
+        _refuse("missing_flag", "name the champion with --champion-exec or --champion-harness")
+    policy = _agent_pack(agent_pack, exec_command)
+    try:
+        batch = read_corner_set(case_set)
+        held = read_holdout_ids(holdout or ())
+    except (OSError, ValueError, KeyError) as error:
+        _refuse("case_set_unreadable", f"{case_set}: {error}")
+    if not batch.cases:
+        _refuse("no_cases", f"{case_set} holds no cases")
+    champion = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=policy)
+    try:
+        report = frontier(batch, champion, budget=budget, seeds=seeds or (0,),
+                          holdout_ids=(*held, *(holdout_ids or ())), holdout_seeds=holdout_seeds or ())
+    except HoldoutOverlap as error:
+        _refuse("holdout_overlap", str(error))
+    write_frontier(report, out)
+    summary = report.summary()
+    if json_output:
+        typer.echo(json.dumps(summary, indent=2, sort_keys=True))
+        return
+    for item in report.yields:
+        typer.echo(f"{item.template}: {item.offered} offered, {item.solved} solved by the reference, "
+                   f"{item.evaluated} run by the champion, {item.frontier} on the frontier")
+    typer.echo(f"{len(report.frontier_ids)} frontier case(s) from {report.spent} champion run(s) of {report.budget}; "
+               f"written to {out}")
+
+
 __all__ = ["app"]

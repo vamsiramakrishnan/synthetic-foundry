@@ -255,3 +255,76 @@ run into SFT transcripts, two runs into preference pairs, and any run into
 reward records whose verifiable parts are kept apart from the model-rated
 answer score. It refuses held-out cases unless asked, because a model trained
 on them can no longer be judged on them. See [Trace export](trace-export.md).
+
+## Corner cases from the world's events
+
+The curriculum makes a case harder by its DAG shape or by a designed failure
+drawn at random, which makes it hard without making it representative: nothing
+in the world said that write should be refused or that record was out of date.
+A built world already holds the events that make real work hard, projected into
+the records an agent reads (one Jira issue per event, a ServiceNow record per
+incident or change). `worldloom.evalrun.corners` turns such an event into a case
+whose difficulty is the event, expressed through the grading that already
+exists (`reads_contain`, `state_equals`, `failure_at`, `question_required`,
+the as-of), with no new executor.
+
+| Template | Events it rests on | Activity | Where the difficulty comes from |
+| --- | --- | --- | --- |
+| `confirmed_cause` | `root_cause_confirmed`, superseding a `hypothesis_recorded` cause (`ops.cause`) | `i2r.09` Post-incident review | The hypothesis record is older and also names a cause. It is the true stale source: linking it fails the state post-condition. |
+| `restated_figure` | `return_restated` (banking), `reserves_strengthened` (insurance), superseding figures on the record | `r2c.06` Regulatory filing, `r2r.02` Post accruals | Two records hold the figures. The as-of decides which: one variant asks for the original, one for the current, one names neither and requires the agent to ask. |
+| `escalated_exception` | `exception_escalated` after a failed `match_run` (`p2p.exception_status`) | `p2p.10` Resolve invoice exception | The escalation took the exception out of the buyer's authority, so the buyer's clearing write is refused (`failure_at`, `denied`). The refusal is the world's delegation, not a draw. |
+| `approver_handover` | `person_departed` (and `leadership_changed` where the outgoing holder carried work) | `h2r.09` Offboard, `r2r.08` Prepare management pack | The item's history names the outgoing holder; the current one is only in the handover record, so resolving the approver is a real lookup. |
+
+A template that finds no event of its kind yields nothing: an event the world
+does not contain is never invented. An occurrence it cannot use (a leadership
+change whose outgoing leader carried no work item) is counted as unmatched,
+with the reason. Every case carries `dimensions` naming `corner` (the
+template), `event`, `evidence` (the event ids it cites, also the row's
+`expected_evidence_ids`, with the superseded and superseding facts in
+`expected_fact_ids`), `activity`, `workflow`, `value_stream`, `pcf_id`,
+`as_of`, `failure` and `question`, so an autopsy slices by them like any
+other dimension.
+
+**Solvability.** Every generated case is run by the reference agent through
+`run_cases` with its full expected outcome. A case the reference cannot solve is
+dropped and the reason recorded; `corners.json` reports generated, solvable,
+dropped and unmatched per template. Over seeds 1 to 10 of the four seeded
+worlds (`seeded_world`), every generated case was solvable: 20
+`confirmed_cause`, 60 `restated_figure`, 10 `escalated_exception` and 10
+`approver_handover`, with 10 leadership changes unmatched.
+
+**Frontier search.** `frontier(cases_or_generator, champion, *, reference_agent,
+budget, seeds, holdout_ids, holdout_seeds)` keeps the cases the reference
+solves and the champion fails. A generator (`corner_generator(engine)`) is
+called once per seed in order; a fixed case set is offered in a seeded,
+content-addressed order. It stops when `budget` champion runs are spent and
+reports per template how many cases were offered, solved by the reference, run
+by the champion and left on the frontier. It never touches the holdout: a seed
+in `holdout_seeds` or a case id in `holdout_ids` is refused with
+`HoldoutOverlap`, not skipped, because a search that looked at the held-out
+cases has already learned from them. The same inputs give the same report.
+
+```bash
+worldloom evalrun corners ./corpus --out ./corners --templates confirmed_cause,restated_figure --limit 50
+worldloom evalrun run ./corners -o ./runs/corners-reference
+worldloom evalrun frontier ./corners --champion-harness claude --agent-pack agent:baseline --budget 40 --out ./frontier --holdout ./held-out --seed 1
+worldloom evalrun run ./frontier -o ./runs/frontier-candidate --harness claude --agent-pack agent:baseline
+```
+
+`evalrun corners` reads a world corpus (`worldloom build --out`) and writes a
+case set (`evalrun-cases.jsonl`, `records.jsonl`, `corners.json`) that
+`evalrun run` takes. `evalrun frontier` reads a case set, runs the champion
+given by `--champion-exec` or `--champion-harness` under `--agent-pack`, and
+writes the frontier as a case set with `frontier.json` beside it. `--holdout`
+takes a case set directory, a cases JSONL file or a file of ids;
+`--holdout-id` and `--holdout-seed` name them one at a time.
+
+**The honest limit.** These events are the simulated company's. The templates
+make a case representative of the flows this world models (a close with its
+incident, a filed and restated return, a reserving round, a purchase-to-pay
+cycle, a departure), and the process catalogue ties each to a real activity.
+Whether the mix of corners matches the mix a real enterprise meets, and so
+whether a frontier gain lands the value it suggests, needs an empirical
+reference: traces or incident logs from real work to weight the templates
+against. Until then the frontier says where an agent fails on flows that are
+real in kind, not how often a business would meet them.
