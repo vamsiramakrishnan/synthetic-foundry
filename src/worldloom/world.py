@@ -916,9 +916,23 @@ class World:
             staged = enrich_world(staged)
         irs = staged._artifact_irs
 
+        # The realism profile decides which renderer family runs. Legacy (no
+        # key on the recipe, which is every corpus built before profiles) takes
+        # exactly the loop it always took, so its bytes cannot move.
+        from . import realism_profiles
+
+        enterprise_ctx = None
         rendered: list[render_module.Rendered] = []
-        for name in formats:
-            rendered.extend(render_module.renderer(name)(staged))
+        if realism_profiles.of(staged) == realism_profiles.ENTERPRISE:
+            from .render import enterprise
+
+            for name in formats:
+                render_module.renderer(name)  # the unknown-format refusal, unchanged
+            enterprise_ctx = enterprise.context(staged, formats)
+            rendered.extend(enterprise.render_formats(enterprise_ctx))
+        else:
+            for name in formats:
+                rendered.extend(render_module.renderer(name)(staged))
 
         # The markdown catch-all. Markdown defers a type to the format that
         # owns it — a workbook to its sheet, a ticket to its bundle — but the
@@ -935,11 +949,21 @@ class World:
         if "markdown" in formats:
             claimed = {r.artifact_id for r in rendered if r.artifact_id}
             orphaned = {ir.id for ir in irs if ir.id not in claimed}
-            if orphaned:
+            if orphaned and enterprise_ctx is not None:
+                from .render import enterprise
+
+                rendered.extend(enterprise.orphans(enterprise_ctx, orphaned))
+            elif orphaned:
                 from .render import markdown as markdown_module
 
                 rendered.extend(markdown_module.orphans(staged, orphaned))
         rendered.extend(render_module.citation_sidecars(staged))
+        if enterprise_ctx is not None:
+            # Revision and family files come last, so every artifact's first
+            # rendered file (the manifest's path) is still its canonical one.
+            from .render import enterprise
+
+            rendered.extend(enterprise.extras(enterprise_ctx))
 
         return replace(
             staged,

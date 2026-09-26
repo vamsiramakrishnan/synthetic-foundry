@@ -671,6 +671,102 @@ def census(world: World) -> ShapeCensus:
     return ShapeCensus(tuple(out), tuple(ids), tuple(refused))
 
 
+# ---------------------------------------------------------------------------
+# Document size and structure, as shipped
+# ---------------------------------------------------------------------------
+#
+# The repetition reading above says whether a corpus says the same thing
+# twice. This one says whether its documents are the size and shape a
+# company's are: a board paper of four pages and a deck of seven slides are
+# not what an agent will meet, however varied their prose. Read from the
+# rendered bytes (`artifact_text`), never from the plan, so it measures what a
+# reader opens.
+
+
+def _rendered_files(world: World) -> list[tuple[str, str, bytes]]:
+    """``(artifact_id, path, payload)`` for every rendered file: in memory when
+    the world was rendered in this process, from ``artifacts/`` on disk when it
+    was loaded."""
+    if world._rendered:
+        return [(item.artifact_id, item.path, bytes(item.payload)) for item in world._rendered]
+    root = world.root
+    if root is None or not (root / "artifacts").is_dir():
+        return []
+    by_stem: dict[str, str] = {}
+    for artifact in world.artifacts:
+        if artifact.path:
+            by_stem[artifact.path.rsplit("/", 1)[-1].rsplit(".", 1)[0]] = artifact.id
+    out: list[tuple[str, str, bytes]] = []
+    for path in sorted((root / "artifacts").rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        stem = path.name.rsplit(".", 1)[0]
+        artifact_id = by_stem.get(stem) or by_stem.get(stem.rsplit("-v", 1)[0], "")
+        out.append((artifact_id, rel, path.read_bytes()))
+    return out
+
+
+def document_shapes(world: World) -> dict[str, Any]:
+    """Words, pages, slides, notes, sections, tables and revisions, per
+    document type and format, read from the rendered files.
+
+    ``pages`` is real for a PDF and the layout equivalent for Word
+    (`artifact_text` says how it is estimated); ``revisions`` counts the
+    separate revision files a document has beside its canonical one.
+    """
+    from . import realism_profiles
+    from .artifact_text import extract
+
+    types: dict[str, str] = {}
+    for ir in world.artifact_irs:
+        types[ir.id] = world.artifact_intents.by_id(ir.intent_id).artifact_type
+    for artifact in world.artifacts:
+        types.setdefault(artifact.id, artifact.artifact_type)
+
+    rows: dict[tuple[str, str], dict[str, Any]] = {}
+    revisions: Counter[tuple[str, str]] = Counter()
+    files = 0
+    for artifact_id, path, payload in _rendered_files(world):
+        if path.endswith(".citations.md"):
+            continue
+        extracted = extract(path, payload)
+        if extracted is None:
+            continue
+        files += 1
+        kind = types.get(artifact_id, "pack" if "/families/" in path else "site")
+        key = (extracted.format, kind)
+        if "/revisions/" in path:
+            revisions[key] += 1
+            continue
+        row = rows.setdefault(key, {
+            "format": extracted.format, "artifact_type": kind, "documents": 0, "words": 0,
+            "words_max": 0, "pages_max": 0, "slides_max": 0, "notes_max": 0,
+            "sections_max": 0, "tables_max": 0, "comments": 0,
+        })
+        row["documents"] += 1
+        row["words"] += extracted.words
+        row["words_max"] = max(row["words_max"], extracted.words)
+        row["pages_max"] = max(row["pages_max"], extracted.pages)
+        row["slides_max"] = max(row["slides_max"], int(extracted.extra.get("slides", 0)))
+        row["notes_max"] = max(row["notes_max"], extracted.notes)
+        row["sections_max"] = max(row["sections_max"], extracted.headings)
+        row["tables_max"] = max(row["tables_max"], extracted.tables)
+        row["comments"] += extracted.comments
+    out = []
+    for key in sorted(rows):
+        row = dict(rows[key])
+        row["words_mean"] = round(row.pop("words") / max(1, row["documents"]), 1)
+        row["revisions"] = revisions.get(key, 0)
+        out.append(row)
+    return {
+        "realism": realism_profiles.of(world),
+        "files": files,
+        "revision_files": sum(revisions.values()),
+        "by_type": out,
+    }
+
+
 __all__ = [
     "Distribution",
     "Measurement",
@@ -679,6 +775,7 @@ __all__ = [
     "census",
     "compute",
     "diff",
+    "document_shapes",
     "measure",
     "SHINGLE_SIZE",
     "NEAR_DUPLICATE_THRESHOLD",

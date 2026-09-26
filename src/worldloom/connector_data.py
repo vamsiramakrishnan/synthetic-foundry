@@ -442,9 +442,15 @@ def file_formats(connector: str) -> tuple[str, ...]:
 def rendered_files(world: World) -> dict[str, list[Any]]:
     """Rendered bodies by artifact id, main files only (no citation sidecars)."""
 
+    from .render.enterprise import is_supplementary
+
     by_artifact: dict[str, list[Any]] = {}
     for item in world._rendered:
         if not item.artifact_id or item.path.endswith(".citations.md"):
+            continue
+        # A revision or a pack file is not a second copy of the document in
+        # the library; it reaches a record as version history instead.
+        if is_supplementary(item.path):
             continue
         by_artifact.setdefault(item.artifact_id, []).append(item)
     return by_artifact
@@ -460,6 +466,47 @@ def rendered_payload(world: World, record: ConnectorRecord | Mapping[str, Any]) 
         if item.path == path:
             return bytes(item.payload)
     return None
+
+
+def _content_fields(path: str, payload: bytes) -> dict[str, Any]:
+    """``content`` and ``structure`` for a file record, read from its bytes."""
+    from .artifact_text import extract
+
+    extracted = extract(path, payload)
+    if extracted is None:
+        return {}
+    return {"content": extracted.text, "structure": extracted.structure()}
+
+
+def _revision_files(world: World) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    """Every version of each (artifact, format), oldest first, current flagged."""
+    from .render.enterprise import REVISIONS_DIR
+
+    versions: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    canonical: dict[tuple[str, str], Any] = {}
+    for item in world._rendered:
+        if not item.artifact_id or item.path.endswith(".citations.md"):
+            continue
+        fmt = _FILE_FORMAT_BY_SUFFIX.get(Path(item.path).suffix) or Path(item.path).suffix.lstrip(".")
+        if item.path.startswith(REVISIONS_DIR + "/"):
+            payload = bytes(item.payload)
+            versions.setdefault((item.artifact_id, fmt), []).append({
+                "version": item.path.rsplit("-v", 1)[-1].rsplit(".", 1)[0],
+                "path": item.path, "size_bytes": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(), "canonical": False,
+            })
+        else:
+            canonical.setdefault((item.artifact_id, fmt), item)
+    out: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for key, entries in versions.items():
+        item = canonical.get(key)
+        if item is None:
+            continue
+        payload = bytes(item.payload)
+        entries = [*entries, {"version": "1.0", "path": item.path, "size_bytes": len(payload),
+                              "sha256": hashlib.sha256(payload).hexdigest(), "canonical": True}]
+        out[key] = sorted(entries, key=lambda e: tuple(int(p) for p in str(e["version"]).split(".")))
+    return out
 
 
 def generate_artifact_projection(
@@ -484,6 +531,15 @@ def generate_artifact_projection(
     }[connector]
     formats = file_formats(connector) if container == "file" else ()
     rendered = rendered_files(world) if formats else {}
+    # Under the enterprise realism profile a record carries what its file
+    # says: the extracted text (what `get_file` returns as content), the
+    # file's structure (pages, slides, sections) and its revision files.
+    # Legacy records are unchanged, byte for byte.
+    from . import realism_profiles
+
+    carries_content = realism_profiles.of(world) == realism_profiles.ENTERPRISE
+    revisions = _revision_files(world) if carries_content else {}
+    pages = rendered_files(world) if carries_content and container == "page" else {}
     artifacts = tuple(world.artifacts) or tuple(world.artifact_intents)
     records = []
     for index, artifact in enumerate(sorted(artifacts, key=lambda item: item.id), start=1):
@@ -512,16 +568,25 @@ def generate_artifact_projection(
         if bodies:
             for fmt, item in sorted(bodies, key=lambda pair: pair[0]):
                 payload = bytes(item.payload)
-                variants.append((fmt, fmt, {
+                fields: dict[str, Any] = {
                     "format": fmt,
                     "media_type": item.media_type,
                     "path": item.path,
                     "size_bytes": len(payload),
                     "sha256": hashlib.sha256(payload).hexdigest(),
                     "name": Path(item.path).name,
-                }))
+                }
+                if carries_content:
+                    fields.update(_content_fields(item.path, payload))
+                variants.append((fmt, fmt, fields))
         else:
-            variants.append(("", container, {"name": title}))
+            extra_fields: dict[str, Any] = {"name": title}
+            if carries_content:
+                page = next((item for item in pages.get(artifact.id, ())
+                             if Path(item.path).suffix in {".md", ".html"}), None)
+                if page is not None:
+                    extra_fields.update(_content_fields(page.path, bytes(page.payload)))
+            variants.append(("", container, extra_fields))
         for fmt, entity, extra in variants:
             key = content_key(connector, world.seed, artifact.id, fmt) if fmt else content_key(connector, world.seed, artifact.id)
             external_id = {
@@ -564,6 +629,8 @@ def generate_artifact_projection(
                             }
                         ],
                         **extra,
+                        **({"version_history": revisions[(artifact.id, fmt)]}
+                           if (artifact.id, fmt) in revisions else {}),
                     },
                     fact_ids=fact_ids,
                     event_ids=sorted(

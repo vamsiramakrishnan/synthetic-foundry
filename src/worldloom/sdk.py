@@ -132,6 +132,12 @@ class Blueprint:
     shape, seed, physics and estate but not its words rebuilt a world the
     mosaic never planned."""
 
+    realism_name: str | None = None
+    """Which files the world materialises into: ``"enterprise"``, ``"legacy"``
+    or ``"ecology"`` (``worldloom.realism_profiles``). ``None`` is the default
+    for new builds, ``enterprise/v1``; ``"legacy"`` reproduces the compact
+    files every earlier build wrote, byte for byte. Recorded on the recipe."""
+
     locale_name: str | None = None
     """The jurisdiction this corpus is written in. Applied to the *recipe*
     after the build rather than to the builder, because that is where a locale
@@ -340,6 +346,13 @@ class Blueprint:
         from .generators.masterdata import check_request
 
         return replace(self, master_data_counts=check_request(counts))
+
+    def realism(self, name: str) -> Blueprint:
+        """How the world materialises: ``"enterprise"`` (the default),
+        ``"legacy"`` or ``"ecology"``. Refuses an unknown name here."""
+        from . import realism_profiles
+
+        return replace(self, realism_name=realism_profiles.named(name))
 
     def located(self, locale: str) -> Blueprint:
         """The jurisdiction. Refuses an unknown one here rather than at render.
@@ -711,6 +724,13 @@ class Blueprint:
             from .recipe import with_locale
 
             world = world.extend(recipe=with_locale(world.recipe, self.locale_name))
+        # Last, and unconditionally: a new build records the realism profile it
+        # will render under (``legacy`` records nothing, so its recipe is the
+        # one every earlier build wrote).
+        from . import realism_profiles
+
+        world = world.extend(recipe=realism_profiles.with_realism(
+            world.recipe, self.realism_name or realism_profiles.DEFAULT_FOR_NEW_BUILDS))
         return Built(world, self)
 
 
@@ -851,7 +871,7 @@ class Built:
         return self.world.export(Path(out), overwrite=overwrite)
 
     def render(self, *formats: str, out: str | Path | None = None,
-               profile: str | Any = None) -> Path:
+               profile: str | Any = None, realism: str | None = None) -> Path:
         """Render to xlsx/docx/pdf/pptx/markdown and write the corpus.
 
         *profile* decides who the documents are for — ``"reader"`` for
@@ -865,6 +885,9 @@ class Built:
         on disk and the record of how they were made cannot disagree. Needs no
         rebuild: a profile decides nothing about the world, so re-rendering one
         corpus under two profiles is an ordinary thing to do.
+
+        *realism* is the realism profile (``"enterprise"``, ``"legacy"``,
+        ``"ecology"``), applied the same way; omitted, the recipe's own.
         """
         world = self.world
         if profile is not None:
@@ -874,6 +897,12 @@ class Built:
             world = world.extend(recipe=with_presentation(
                 world.recipe, named(profile) if isinstance(profile, str) else profile
             ))
+        if realism is not None:
+            # ``"legacy"`` re-renders the compact files; the blueprint's own
+            # choice (``Blueprint.realism``) is already on the recipe.
+            from . import realism_profiles
+
+            world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
         rendered = world.render(*formats)
         return rendered.export(Path(out) if out else Path("."), overwrite=True)
 

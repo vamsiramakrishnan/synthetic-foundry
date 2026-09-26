@@ -792,6 +792,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_messiness": "no messiness level is registered under that name",
     "unknown_parameter": "no physics parameter starts with that prefix",
     "unknown_profile": "no presentation profile is registered under that name",
+    "unknown_realism": "no realism profile has that name: legacy, ecology or enterprise",
     "unknown_timeline": "--timeline names no known density",
     "unknown_value": "the facet exists but has no such value",
     "unknown_world": "the mosaic has no world with that index",
@@ -1489,6 +1490,22 @@ def build(
             "would write the least plausible sentence in the corpus."
         ),
     ),
+    realism: str = typer.Option(
+        "enterprise", "--realism",
+        help=(
+            "How the world materialises into files. `enterprise` (the default"
+            " for new builds) writes the documents a company keeps: controlled"
+            " reports with cover, document control, contents, numbered sections,"
+            " schedules from the pack's workbook, appendices, revision files and"
+            " reviewer comments; decks on real layouts with speaker notes and"
+            " native charts; intranet pages; wiki exports; pack indexes; and"
+            " connector file records that carry their text. `legacy` reproduces"
+            " the compact files every corpus built before this flag has, byte for"
+            " byte. `ecology` is the artifact-ecology annotation. Recorded on the"
+            " recipe, so a replay and a later `worldloom render` reproduce it;"
+            " the world, its facts and its validation are the same under all three."
+        ),
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
 ) -> None:
     """Generate a world deterministically from a seed, then validate it.
@@ -1582,6 +1599,12 @@ def build(
             locales_module.named(locale)
         except KeyError as exc:
             _refuse("unknown_locale", f"[red]error:[/red] {escape(str(exc))}")
+    from . import realism_profiles
+
+    try:
+        realism = realism_profiles.named(realism)
+    except ValueError as exc:
+        _refuse("unknown_realism", f"[red]error:[/red] {escape(str(exc))}")
     if timeline is not None and timeline not in _TIMELINE_DENSITIES:
         _refuse(
             "unknown_timeline",
@@ -3014,10 +3037,12 @@ def build(
             # writes one onto an existing corpus, so a corpus rendered after it
             # was narrated would otherwise refuse to replay itself.
             def _world_only(document: dict[str, Any]) -> dict[str, Any]:
+                # The realism profile likewise: it decides which files a world
+                # materialises into, never the world.
                 return {
                     key: value
                     for key, value in document.items()
-                    if key != recipe_module.PRESENTATION_KEY
+                    if key not in (recipe_module.PRESENTATION_KEY, realism_profiles.REALISM_KEY)
                 }
 
             here, there = _world_only(world.recipe), _world_only(source.recipe)
@@ -3068,6 +3093,11 @@ def build(
             f", {rejected} rejected\n"
         )
 
+    # The realism profile rides the recipe, like the presentation profile:
+    # recorded before rendering so the files and the record of how they were
+    # made cannot disagree, and absent under `legacy` so a legacy build's
+    # world.json is the one every earlier build wrote.
+    world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
     if formats:
         from .render import RenderError
 
@@ -4020,6 +4050,16 @@ def render(
             "`worldloom present lint` checks one you wrote."
         ),
     ),
+    realism: str = typer.Option(
+        None, "--realism",
+        help=(
+            "Which files the corpus materialises into: `enterprise` (long-form"
+            " controlled documents, decks, intranet pages, revisions and packs),"
+            " `legacy` (the compact files, byte-identical to every earlier"
+            " render) or `ecology`. Omit it to keep what the corpus's recipe"
+            " records; a corpus that records none is `legacy`."
+        ),
+    ),
 ) -> None:
     """Render an existing corpus into files.
 
@@ -4028,7 +4068,13 @@ def render(
     later `--replay` reproduces this rendering rather than the default one.
     Re-rendering an existing corpus under a second profile is a supported thing
     to do and needs no rebuild: a profile decides nothing about the world.
+
+    `--realism` is the same kind of decision one level up (which documents
+    exist and what shape they take). Omitted, the corpus keeps the one its
+    recipe records, which for a corpus built before realism profiles is
+    `legacy`, so re-rendering an old corpus writes the bytes it always had.
     """
+    from . import realism_profiles
     from .presentation import named
     from .recipe import with_presentation
     from .render import RenderError
@@ -4039,6 +4085,11 @@ def render(
             world = world.extend(recipe=with_presentation(world.recipe, named(profile)))
         except ValueError as exc:
             _refuse("unknown_profile", f"[red]error:[/red] {escape(str(exc))}")
+    if realism is not None:
+        try:
+            world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
+        except ValueError as exc:
+            _refuse("unknown_realism", f"[red]error:[/red] {escape(str(exc))}")
     try:
         rendered = world.render(*formats)
     except (RenderError, ValueError) as exc:
@@ -4178,6 +4229,12 @@ def mosaic(
     describe: bool = typer.Option(
         False, "--describe", help="Print what a mosaic varies, and build nothing.",
     ),
+    realism: str = typer.Option(
+        "enterprise", "--realism",
+        help=("How each world materialises into files: `enterprise` (the default"
+              " for new builds), `legacy` (byte-identical to earlier mosaics) or"
+              " `ecology`. See `worldloom build --realism`."),
+    ),
     as_json: bool = typer.Option(False, "--json", help="Emit the plan as data."),
 ) -> None:
     """Build several companies at once, as unlike each other as the rules allow.
@@ -4207,6 +4264,12 @@ def mosaic(
     """
     from . import batch as batch_module
     from . import mosaic as mosaic_module
+    from . import realism_profiles
+
+    try:
+        realism = realism_profiles.named(realism)
+    except ValueError as exc:
+        _refuse("unknown_realism", f"[red]error:[/red] {escape(str(exc))}")
 
     if describe:
         try:
@@ -4433,6 +4496,7 @@ def mosaic(
             sections = world._narration[0]
             narrated_sections += sections
 
+        world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
         # After narration, never before: `render` compiles if it must, and a
         # render that ran first would freeze the empty sections into the IR the
         # narration then had to be threaded back into.
@@ -5721,6 +5785,18 @@ def diversity(
             "rather than counting equality classes can say so."
         ),
     ),
+    sizes: bool = typer.Option(
+        False, "--sizes",
+        help=(
+            "Report document size and structure instead, read from the rendered "
+            "files: words, pages (real for PDF, a layout equivalent for Word), "
+            "slides and speaker notes, sections, tables and revision files per "
+            "document type and format. The realism reading beside the variety "
+            "one: twenty distinct shapes of four-page memos are still four-page "
+            "memos. The `measure_corpus` MCP tool returns the same reading."
+        ),
+    ),
+    as_json: bool = typer.Option(False, "--json", help="With --sizes, emit the reading as JSON."),
 ) -> None:
     """Fingerprint every compilable artifact and report how structurally varied the batch is.
 
@@ -5735,9 +5811,26 @@ def diversity(
     from .compiler.diversity import Fingerprint, Quotas, check, report
     from .compiler.diversity import collisions as diversity_collisions
     from .evaluate.index import passages
-    from .stats import census
+    from .stats import census, document_shapes
 
     world = _load(corpus)
+    if sizes:
+        reading = document_shapes(world)
+        if as_json:
+            typer.echo(json.dumps(reading, indent=2, sort_keys=True))
+            return
+        table = Table(title=f"Document sizes ({reading['realism']}, {reading['files']} file(s),"
+                            f" {reading['revision_files']} revision file(s))")
+        for column in ("format", "type", "docs", "words (mean)", "words (max)", "pages", "slides",
+                       "notes", "sections", "tables", "revisions"):
+            table.add_column(column)
+        for row in reading["by_type"]:
+            table.add_row(row["format"], row["artifact_type"], str(row["documents"]),
+                          str(row["words_mean"]), str(row["words_max"]), str(row["pages_max"]),
+                          str(row["slides_max"]), str(row["notes_max"]), str(row["sections_max"]),
+                          str(row["tables_max"]), str(row["revisions"]))
+        console.print(table)
+        return
     if not world.artifact_irs:
         try:
             world = world.compile()
