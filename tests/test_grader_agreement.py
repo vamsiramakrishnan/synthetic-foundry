@@ -232,7 +232,7 @@ def test_compare_calls_runs_graded_differently_incomparable(tmp_path: Path) -> N
     assert plain.improvements == ("c3",) and plain.regressions == ("c1",)
     assert plain.grader_mismatch is False and plain.notes == ()
     one = grader_identity(GroundedRater())
-    other = {**one, "digest": "0" * 32}
+    other = {**one, "prompts_digest": "0" * 32, "digest": "0" * 32}  # graded under other prompts
     # One side without a grader: exactly the old behaviour.
     assert compare(baseline.model_copy(update={"grader": one}), recent) == plain
     same = compare(baseline.model_copy(update={"grader": one}), recent.model_copy(update={"grader": one}))

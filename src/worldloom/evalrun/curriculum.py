@@ -38,6 +38,7 @@ from ..ids import content_key
 from ..models import Model
 from .autopsy import Autopsy, Cluster
 from .runner import RunReport
+from .stages import STAGE_FINDINGS
 from .value import (
     REPRESENTATIVE_KEY,
     MixCheck,
@@ -328,6 +329,12 @@ def design_curriculum(
         if cluster.key.startswith(_UNACTIONABLE):
             unmapped.append(Unmapped(key=cluster.key, cases=cluster.cases,
                                      reason="describes the run, not the agent's behaviour"))
+            continue
+        if cluster.key.split(":", 1)[0] in STAGE_FINDINGS:
+            # A stage finding never fails a case by itself: every case it
+            # names already fails on an axis, and that cluster targets it.
+            unmapped.append(Unmapped(key=cluster.key, cases=cluster.cases,
+                                     reason="a stage finding refines an axis finding, which targets its cases"))
             continue
         where = cluster_filters(cluster, base=report.base, cases=report.cases, dominance=dominance)
         if not where:

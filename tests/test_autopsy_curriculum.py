@@ -33,7 +33,7 @@ from worldloom.evalrun import (
     service_for,
     write_run,
 )
-from worldloom.evalrun.autopsy import GLOSSES, autopsy, finding_keys, render_brief
+from worldloom.evalrun.autopsy import autopsy, finding_keys, gloss, render_brief
 from worldloom.evalrun.curriculum import (
     MAPPABLE_DIMENSIONS,
     _allocate,
@@ -215,7 +215,7 @@ def test_every_emitted_key_has_a_gloss_or_is_an_error_code(runs: dict[str, Any])
     for report in (runs["lazy"], runs["mixed"]):
         for row in report.results:
             for key in finding_keys(row):
-                assert key in GLOSSES or key.startswith("error:"), key
+                assert gloss(key) or key.startswith("error:"), key
 
 
 # -- autopsy -----------------------------------------------------------------------
