@@ -38,6 +38,14 @@ shape out as JSON, any `{placeholder}` or `{{term:...}}` token (policy text is
 sent verbatim), and text past `evalrun.agent_pack.max_chars`. The overlay
 enforces the lock again at run time.
 
+Every text a policy holds (`system`, `planning`, rule overlays, `skills`,
+tool descriptions and hints, and every file) is also refused when it looks
+like it carries a credential, or when it contains a phrase the harness uses
+to delimit a policy in its prompt ("End of the standing instruction.", the
+`worldloom-policy` tag). The real boundary around a policy's text is a line
+carrying a fresh nonce per invocation, so a policy cannot close its own block
+and speak as the harness.
+
 ## The skills tree and proposals as diffs
 
 The skills tree is the one place generated procedure text or code may live.

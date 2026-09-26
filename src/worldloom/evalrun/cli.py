@@ -920,6 +920,7 @@ def improve_command(
     """
     from ..cli import _refuse
     from ..packkit.authoring import run_exec_exchange
+    from .grader import GraderDrift
     from .harness import ExecAgent
     from .improve import improve
     from .runner import default_concurrency, run_cases, service_for
@@ -968,12 +969,16 @@ def improve_command(
                          exchange=run_exec_exchange(proposer, timeout=timeout), out=out, rater=grader,
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
                          ablate=False if no_ablate else None, values=values)
+    except GraderDrift as error:
+        _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
         _refuse("cases_uncompilable", str(error))
     if json_output:
         typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
         return
     typer.echo(f"{report.train_cases} training and {report.holdout_cases} held-out case(s); grader {report.grader['digest']}")
+    if report.held_out_dropped:
+        typer.echo(f"{report.held_out_dropped} case(s) of CORPUS declare a held-out split and were left out of training")
     for item in report.rounds:
         gates = "; ".join(f"{gate.name} {gate.mean_delta:+}" for gate in (item.train, item.holdout) if gate is not None)
         candidate = f" -> {item.candidate['ref']}@{item.candidate['digest'][:12]}" if item.candidate else ""

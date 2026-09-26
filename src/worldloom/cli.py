@@ -718,6 +718,7 @@ _REFUSALS: dict[str, str] = {
     "reader_check_rejected": "persisted independent reader review failed evidence admission",
     "calibration_rejected": "observed trial or snapshot violates the calibration contract",
     "fleet_error": "the fleet directory cannot be qualified or curated",
+    "grader_drift": "the grader an improvement loop pinned changed mid-loop; data.changed names what moved",
     "history_too_short": "the corpus's history is too short for this decomposition",
     "implausible_productivity": "revenue and employees describe an implausible revenue per head",
     "infeasible_estate": "the structural estate endpoints admit no path over the periods",

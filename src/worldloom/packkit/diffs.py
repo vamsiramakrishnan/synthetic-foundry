@@ -154,6 +154,7 @@ def parse(diff: str) -> tuple[FilePatch, ...]:
             raise DiffError(f"line {at + 1}: expected a `--- a/<path>` file header, found {row[:80]!r}")
         if at + 1 >= len(rows) or not rows[at + 1].startswith("+++ "):
             raise DiffError(f"line {at + 2}: a `--- ` header must be followed by `+++ b/<path>`")
+        _refuse_crlf(rows, at, at + 1)
         old_path = _strip_path(row[4:], "a/")
         new_path = _strip_path(rows[at + 1][4:], "b/")
         if old_path is None and new_path is None:
@@ -171,6 +172,7 @@ def _parse_hunk(rows: Sequence[str], at: int, old_path: str | None, new_path: st
                 index: int) -> tuple[Hunk, int]:
     header = rows[at]
     name = new_path or old_path
+    _refuse_crlf(rows, at)
     match = _HUNK_HEADER.match(header)
     if match is None:
         raise DiffError(f"line {at + 1}: hunk {index} of {name} has a malformed header {header!r}")
@@ -179,6 +181,8 @@ def _parse_hunk(rows: Sequence[str], at: int, old_path: str | None, new_path: st
     new_count = int(match.group(4)) if match.group(4) is not None else 1
     at += 1
     body: list[str] = []
+    #: (diff row, body index) of each line a no-newline marker follows.
+    marked: list[tuple[int, int]] = []
     seen_old = seen_new = 0
     while at < len(rows) and (seen_old < old_count or seen_new < new_count):
         row = rows[at]
@@ -190,8 +194,11 @@ def _parse_hunk(rows: Sequence[str], at: int, old_path: str | None, new_path: st
         if tag == "\\":
             if not body:
                 raise DiffError(f"line {at + 1}: hunk {index} of {name} starts with a no-newline marker")
+            if body[-1] == NO_NEWLINE:
+                raise DiffError(f"line {at + 1}: hunk {index} of {name} has two no-newline markers in a row")
             body[-1] = body[-1][:-1]
             body.append(NO_NEWLINE)
+            marked.append((at, len(body) - 2))
             at += 1
             continue
         if tag not in {" ", "-", "+"}:
@@ -205,10 +212,47 @@ def _parse_hunk(rows: Sequence[str], at: int, old_path: str | None, new_path: st
         raise DiffError(f"hunk {index} of {name}: the header counts -{old_count} +{new_count} lines, the body has "
                         f"-{seen_old} +{seen_new}")
     if at < len(rows) and rows[at].startswith("\\"):
+        if body[-1] == NO_NEWLINE:
+            raise DiffError(f"line {at + 1}: hunk {index} of {name} has two no-newline markers in a row")
         body[-1] = body[-1][:-1]
         body.append(NO_NEWLINE)
+        marked.append((at, len(body) - 2))
         at += 1
+    _check_markers(body, marked, index, name)
     return Hunk(old_path, new_path, index, header, old_start, old_count, new_start, new_count, tuple(body)), at
+
+
+def _refuse_crlf(rows: Sequence[str], *positions: int) -> None:
+    """Refuse a header row ending in a carriage return: the diff was written with CRLF line endings.
+
+    Read as it is, the ``\\r`` would become part of a path (``b/policy.json\\r``),
+    and the patch would name a file nobody has.
+    """
+    for position in positions:
+        if rows[position].endswith("\r"):
+            raise DiffError(f"line {position + 1}: the header ends in a carriage return; the diff has CRLF (\\r\\n) "
+                            "line endings. Write it with LF (\\n) line endings")
+
+
+_SIDES = (("old", frozenset({" ", "-"})), ("new", frozenset({" ", "+"})))
+
+
+def _check_markers(body: Sequence[str], marked: Sequence[tuple[int, int]], index: int, name: str | None) -> None:
+    """Refuse a no-newline marker after a line that is not the last of its side of the hunk.
+
+    The marker says the line before it ends its file without a newline, so
+    that line must be the hunk's last old line (a ``-`` or context line) or
+    its last new line (a ``+`` or context line). Anywhere else it would glue
+    that line to the next one.
+    """
+    for row, position in marked:
+        tag = body[position][:1]
+        later = {line[:1] for line in body[position + 1:] if line != NO_NEWLINE}
+        clash = [side for side, tags in _SIDES if tag in tags and later & tags]
+        if clash:
+            raise DiffError(f"line {row + 1}: hunk {index} of {name} has a no-newline marker after a line that is "
+                            f"not the last {' or '.join(clash)} line of the hunk; the marker belongs only after a "
+                            "file's final line")
 
 
 def hunks(diff: str) -> list[Hunk]:

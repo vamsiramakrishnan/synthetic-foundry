@@ -632,6 +632,46 @@ def test_the_evalrun_seams_run_the_child_without_tools(monkeypatch):
     assert workdirs[3:] == [None, None], "authoring and narration keep the caller's directory"
 
 
+def test_the_proposer_and_the_agent_run_from_an_empty_directory_under_either_harness(monkeypatch, tmp_path):
+    """Neither a pack-interview proposer nor an agent under test starts where the operator works.
+
+    A codex child in its read-only sandbox, started in the caller's directory,
+    could read the held-out cases and the loop's runs there; so could a
+    proposer. Every seam with a role of its own now starts in a fresh empty
+    directory, and codex is pointed at it with the `--cd` it already takes.
+    """
+    seen = []
+
+    def run(argv, **kwargs):
+        workdir = kwargs.get("cwd")
+        seen.append((argv, workdir, sorted(Path(workdir).iterdir()) if workdir else None))
+        if argv[0] == "codex":
+            Path(argv[argv.index("--output-last-message") + 1]).write_text('{"answer": "done"}', encoding="utf-8")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        return subprocess.CompletedProcess(argv, 0, '{"result":"{}"}', "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "holdout-cases.jsonl").write_text("{}\n", encoding="utf-8")
+    interview = {"schema": "worldloom.pack-interview/v1", "request_id": "r"}
+    for harness in ("codex", "claude"):
+        for payload in (interview, {"schema": "worldloom.evalrun-turn/v2", "query": "q"},
+                        {"schema": "worldloom.evalrun-plan/v1", "query": "q"}):
+            invoke(harness, payload)
+    assert len(seen) == 6
+    workdirs = {workdir for _, workdir, _ in seen}
+    assert len(workdirs) == 6, "a fresh directory per invocation"
+    for argv, workdir, listing in seen:
+        assert workdir is not None and Path(workdir).resolve() != tmp_path.resolve() and listing == []
+        assert "worldloom-harness-" in str(workdir)
+        if argv[0] == "codex":
+            assert argv[argv.index("--cd") + 1] == str(workdir) and "read-only" in argv
+    # The authoring and narration seams, which may read the project, are unchanged.
+    seen.clear()
+    invoke("codex", {"company": {}})
+    assert seen[0][1] is None and "--cd" not in seen[0][0]
+
+
 def test_the_adapter_re_asks_once_when_a_reply_is_not_one_object(monkeypatch):
     """A reply cut off inside a long body is re-asked once, with the refusal in front.
 

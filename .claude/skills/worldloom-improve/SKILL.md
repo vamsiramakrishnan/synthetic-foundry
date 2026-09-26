@@ -42,7 +42,9 @@ interview request to a reply), which is how a test drives the loop offline.
 
 - `decision`: `promoted`, `rejected` (a gate failed), or why no candidate was
   judged: `no_failures`, `questions`, `refused` (no proposal linted clean),
-  `unchanged` (the proposal restated the champion).
+  `unchanged` (the proposal restated the champion), `proposer_error` (the
+  proposer's process failed, timed out or answered with something that is
+  not JSON; `reasons` holds its error).
 - `reasons`: every reason, in words. A rejection names the gate and the rule.
 - `failing`, `clusters`, `brief_digest`: what the proposer was shown;
   `champion`, `candidate`, `grader`: identities by digest.
@@ -56,8 +58,11 @@ interview request to a reply), which is how a test drives the loop offline.
    curriculum; more rounds here teach nothing.
 2. `questions`: the proposer asked something only the operator can answer.
    Answer it and run again; paid-for runs are reused.
-3. `GraderDrift` (raised): the grader's digest moved mid-loop. Nothing after it
-   is comparable; find what changed the rater, prompts or policy.
+3. `proposer_error`: the proposing harness did not answer. Fix its install,
+   login or timeout and run again; paid-for runs are reused.
+4. `GraderDrift` (raised; the CLI refuses with `grader_drift`): the grader's
+   digest moved mid-loop. Nothing after it is comparable; find what changed
+   the rater, prompts or policy.
 
 ## Rules that are never broken
 
