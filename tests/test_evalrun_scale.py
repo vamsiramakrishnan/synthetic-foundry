@@ -328,10 +328,10 @@ def test_a_torn_final_line_is_dropped_with_a_note_and_nothing_else_is(tmp_path: 
 def test_append_result_syncs_each_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import worldloom.evalrun.results as module
 
+    report = read_run(_small_run(tmp_path))
     synced: list[int] = []
     real = module.os.fsync
     monkeypatch.setattr(module.os, "fsync", lambda fd: (synced.append(fd), real(fd))[1])
-    report = read_run(_small_run(tmp_path))
     for result in report.results:
         append_result(tmp_path / "appended", result)
     assert len(synced) == 3
@@ -472,6 +472,20 @@ def test_the_policy_sets_the_cli_concurrency(exported: Path, tmp_path: Path, mon
     assert _run(str(exported), "-o", str(tmp_path / "b"), "--limit", "2", "--concurrency", "3").exit_code == 0
     # The empty identity run, then the real one, per invocation.
     assert used == [1, 1, 1, 3]
+
+
+def test_a_workers_serving_error_is_not_refused_as_concurrency(exported: Path, tmp_path: Path,
+                                                              monkeypatch: pytest.MonkeyPatch) -> None:
+    import worldloom.evalrun.runner as module
+
+    def failing(*args: Any, **kwargs: Any) -> Any:
+        raise ServingError("unknown_run: the service lost this run")
+
+    monkeypatch.setattr(module, "run_case", failing)
+    monkeypatch.setenv("WORLDLOOM_OUTPUT", "json")
+    result = _run(str(exported), "-o", str(tmp_path / "run"), "--limit", "3", "--concurrency", "2")
+    assert "concurrency_refused" not in result.output
+    assert isinstance(result.exception, ServingError), result.output
 
 
 # -- Studio ---------------------------------------------------------------------

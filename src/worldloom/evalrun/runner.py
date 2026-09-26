@@ -285,6 +285,14 @@ def run_cases(
                      agent_identity=fingerprint(agent))
 
 
+class ConcurrencyRefused(ServingError):
+    """``run_cases`` asked for more cases in flight than the service admits, refused before any case ran.
+
+    Its own class so a caller can refuse this and only this: a
+    ``ServingError`` a worker raises mid-run is a different failure.
+    """
+
+
 def admitted_concurrency(service: ConnectorEvaluationService) -> int:
     """How many cases this service lets one principal hold open at once."""
     return min(service.limits.max_runs, service.limits.max_runs_per_principal)
@@ -311,7 +319,7 @@ def _run_concurrently(
         # Refused up front rather than letting the surplus begins fail: a
         # refused begin is an error row, and a run whose error count depends
         # on thread timing is not a measurement.
-        raise ServingError(
+        raise ConcurrencyRefused(
             f"concurrency_limit: concurrency {concurrency} exceeds what this service admits "
             f"(max_runs={service.limits.max_runs}, max_runs_per_principal={service.limits.max_runs_per_principal}); "
             f"build it with service_for(..., concurrency={concurrency}) or pass limits that admit it")
@@ -339,4 +347,4 @@ def _run_concurrently(
     return tuple(result for result in slots if result is not None)
 
 
-__all__ = ["RUN_SCHEMA", "CaseResult", "Clock", "Latency", "RunReport", "admitted_concurrency", "case_set_digest", "default_concurrency", "grade_run", "run_case", "run_cases", "safety_for", "service_for"]
+__all__ = ["RUN_SCHEMA", "CaseResult", "Clock", "ConcurrencyRefused", "Latency", "RunReport", "admitted_concurrency", "case_set_digest", "default_concurrency", "grade_run", "run_case", "run_cases", "safety_for", "service_for"]

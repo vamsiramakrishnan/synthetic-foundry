@@ -119,6 +119,22 @@ def _harness_exec(harness: str | None, exec_command: str | None, *, timeout: flo
     return adapter_command(harness, timeout=max(1.0, timeout - 5))
 
 
+def _read_run(path: Path) -> Any:
+    """``read_run`` for a command: an unfinished run is refused as ``run_partial`` with its fix.
+
+    Any other failure propagates, so each command keeps refusing it as
+    ``run_unreadable`` in its own words.
+    """
+    from ..cli import _refuse
+    from .results import PartialRun, read_run
+
+    try:
+        return read_run(path)
+    except PartialRun as error:
+        _refuse("run_partial", str(error),
+                fix=f"finish it with `worldloom evalrun run <corpus> -o {path} --resume` and the flags it was started with")
+
+
 _AGENT_PACK_HELP = ("An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. "
                     "Its standing instruction, rule overlays and tool advice reach the child, and run.json records "
                     "its reference and digest.")
@@ -269,7 +285,6 @@ def run_command(
     every mean and carrying the child's stderr tail.
     """
     from ..cli import _refuse
-    from ..connectors.serving import ServingError
     from .rater import GroundedRater
     from .results import (
         append_result,
@@ -280,7 +295,13 @@ def run_command(
         write_run,
         write_shard,
     )
-    from .runner import case_set_digest, default_concurrency, run_cases, service_for
+    from .runner import (
+        ConcurrencyRefused,
+        case_set_digest,
+        default_concurrency,
+        run_cases,
+        service_for,
+    )
 
     # Before the corpus: a typo in --harness should not wait on a build.
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
@@ -366,7 +387,7 @@ def run_command(
     try:
         report = run_cases(service, pending, under_test, principal=principal, clock=clock, rater=grader,
                            on_result=_checkpoint, concurrency=workers)
-    except ServingError as error:
+    except ConcurrencyRefused as error:
         _refuse("concurrency_refused", str(error))
     if prior or shard_doc is not None:
         # Resumed or sharded: the prior results and this process's, in the
@@ -493,10 +514,10 @@ def summarize_command(
 ) -> None:
     """Recompute a run's summary from its results ledger."""
     from ..cli import _refuse
-    from .results import read_run, summarize
+    from .results import summarize
 
     try:
-        report = read_run(run)
+        report = _read_run(run)
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", f"{run}: {error}")
     _print_summary(summarize(report), json_output)
@@ -515,10 +536,10 @@ def compare_command(
     other is reported as a reliability change, not a score change.
     """
     from ..cli import _refuse
-    from .results import compare, read_run
+    from .results import compare
 
     try:
-        left, right = read_run(baseline), read_run(recent)
+        left, right = _read_run(baseline), _read_run(recent)
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", str(error))
     result = compare(left, right)
@@ -692,10 +713,9 @@ def autopsy_command(
     from ..cli import _refuse
     from ..corpus import write_json
     from .autopsy import autopsy, render_brief
-    from .results import read_run
 
     try:
-        report = read_run(run)
+        report = _read_run(run)
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", f"{run}: {error}")
     result = autopsy(report, top=top)
@@ -739,11 +759,10 @@ def curriculum_command(
     from ..evals.company_dataset import load_dataset_plan
     from .autopsy import autopsy
     from .curriculum import design_curriculum, escalate
-    from .results import read_run
 
     try:
-        report = read_run(run)
-        earlier = [read_run(path) for path in history]
+        report = _read_run(run)
+        earlier = [_read_run(path) for path in history]
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", str(error))
     try:
@@ -812,7 +831,6 @@ def export_command(
         sft_records,
         write_records,
     )
-    from .results import read_run
 
     if fmt not in FORMATS:
         _refuse("exactly_one", f"--format takes exactly one of {', '.join(FORMATS)}; got {fmt!r}")
@@ -825,8 +843,8 @@ def export_command(
     except HoldoutRefused as error:
         _refuse("dataset_rejected", str(error))
     try:
-        report = read_run(run)
-        other = read_run(against) if against is not None else None
+        report = _read_run(run)
+        other = _read_run(against) if against is not None else None
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", str(error))
     loaded, cases = _corpus_cases(corpus, None)
@@ -1108,7 +1126,6 @@ def value_command(
     """
     from ..cli import _refuse
     from ..corpus import write_json
-    from .results import read_run
     from .value import (
         index_records,
         mix_report,
@@ -1118,7 +1135,7 @@ def value_command(
     )
 
     try:
-        report = read_run(run)
+        report = _read_run(run)
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", str(error))
     loaded, cases = _corpus_cases(corpus, None)
