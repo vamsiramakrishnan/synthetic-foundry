@@ -177,6 +177,13 @@ class ImproveLoop:
     brief: str | None = None
     #: A reference-agent run over the training cases, for a ``traces`` brief's accepted calls.
     reference_run: RunReport | None = None
+    #: Wide search; ``None`` reads each ``evalrun.improve.*`` policy (``candidates``,
+    #: ``screen_cases``, ``finalists``, ``parents``, ``round_budget``).
+    candidates: int | None = None
+    screen_cases: int | None = None
+    finalists: int | None = None
+    parents: str | None = None
+    round_budget: int | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
@@ -231,7 +238,9 @@ class ImproveLoop:
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
                        max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
                        holdout_values=holdout_values, repeats=self.repeats, brief=self.brief,
-                       reference_run=self.reference_run)
+                       reference_run=self.reference_run, candidates=self.candidates,
+                       screen_cases=self.screen_cases, finalists=self.finalists, parents=self.parents,
+                       round_budget=self.round_budget)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -381,6 +390,11 @@ class EvalSession:
         repeats: int | None = None,
         brief: str | None = None,
         reference_run: RunRef | None = None,
+        candidates: int | None = None,
+        screen_cases: int | None = None,
+        finalists: int | None = None,
+        parents: str | None = None,
+        round_budget: int | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -407,6 +421,11 @@ class EvalSession:
         the reference agent over the training cases: a label, a directory or
         a report) supplies accepted calls for it and is refused when it
         touches a held-out case.
+        Wide search: ``candidates`` proposals a round, screened by successive
+        halving from ``screen_cases`` training cases down to ``finalists``;
+        ``parents="archive"`` branches each round from the archive's Pareto
+        frontier; ``round_budget`` caps a round's screening and finalist
+        case-runs. Each defaults to its ``evalrun.improve.*`` policy.
         """
         from .evidence import brief_mode
         from .runner import default_concurrency
@@ -434,7 +453,9 @@ class EvalSession:
                            max_axis_regression=max_axis_regression, value=value, ablate=ablate,
                            repeats=repeats, brief=brief_mode(brief),
                            reference_run=None if reference_run is None else self.report(reference_run),
-                           _records=records, _holdout_records=held_records)
+                           candidates=candidates, screen_cases=screen_cases, finalists=finalists,
+                           parents=parents, round_budget=round_budget, _records=records,
+                           _holdout_records=held_records)
 
     def campaign(
         self,

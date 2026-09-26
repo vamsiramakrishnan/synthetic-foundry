@@ -746,10 +746,16 @@ def campaign(
                 f"campaign's {budget} remain (policy `evalrun.campaign.max_cases`)",)
             break
         by_set = {case_set_digest(train): train_groups, case_set_digest(held): held_groups}
+        train_ids = frozenset(case.id for case in train)
 
         def run_stage(subset: Sequence[EvalCase], agent: AgentUnderTest,
-                      _groups: Mapping[str, RecordGroups] = by_set) -> RunReport:
+                      _groups: Mapping[str, RecordGroups] = by_set, _train: RecordGroups = train_groups,
+                      _train_ids: frozenset[str] = train_ids) -> RunReport:
             groups = _groups.get(case_set_digest(subset))
+            if groups is None and subset and all(case.id in _train_ids for case in subset):
+                # Wide search screens candidates on part of the training
+                # set; each case still runs over its own world's records.
+                groups = _train
             if groups is None:
                 raise ValueError("the improve loop asked to run cases that are neither the stage's training "
                                  "nor its held-out set")

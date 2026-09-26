@@ -435,20 +435,25 @@ worldloom evalrun campaign <CORPUS>
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
 | `--brief` | What every stage's proposer is shown: summary or traces (see `evalrun improve --brief`). Default: policy `evalrun.improve.brief`, summary. |
+| `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
+| `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--json` | Emit campaign.json on stdout. |
 | `--max-cases` | Training plus held-out cases the campaign may spend (default: policy `evalrun.campaign.max_cases`). |
 | `--max-turns` |  |
 | `--out`, `-o` | Directory for campaign.json and stages/NNN/. |
+| `--parents` | Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion). |
 | `--plan` | The base DatasetPlan (JSON) every stage's case sets are compiled from, under fresh seeds. |
 | `--principal` |  |
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
 | `--rater` | grounded or exec:<command>; pinned for the whole campaign. |
 | `--rater-timeout` |  |
+| `--round-budget` | Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit). |
 | `--rounds` | Improve rounds per stage (default: policy `evalrun.improve.rounds`). |
+| `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--seed` | The campaign seed every stage's seeds derive from. |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--stages` | Stages to run at most (default: policy `evalrun.campaign.max_stages`). |
@@ -604,8 +609,10 @@ worldloom evalrun improve <CORPUS>
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
 | `--brief` | What the proposer is shown: summary (the failure clusters) or traces (also the connectors' own error messages, the arguments behind them, the tools' contracts and failing trajectories). Default: policy `evalrun.improve.brief`, summary. |
+| `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
+| `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
 | `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
@@ -614,6 +621,7 @@ worldloom evalrun improve <CORPUS>
 | `--max-turns` |  |
 | `--no-ablate` | Send the candidate to the holdout whole, without taking out hunks that carry nothing. |
 | `--out`, `-o` | Directory for rounds/, runs/, packs/ and improve.json. |
+| `--parents` | Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion). |
 | `--principal` |  |
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
@@ -622,7 +630,9 @@ worldloom evalrun improve <CORPUS>
 | `--rater-timeout` |  |
 | `--reference-run` | A run directory of the reference agent over the training cases only, whose accepted calls a traces brief shows beside the failing ones. Refused when it holds a held-out case. |
 | `--repeats` | Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`. |
+| `--round-budget` | Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit). |
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
+| `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
