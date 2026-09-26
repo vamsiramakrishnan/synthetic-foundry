@@ -326,3 +326,47 @@ def test_the_skill_is_registered() -> None:
     assert ".claude/skills/worldloom-improve/SKILL.md" in index
     evalrun_skill = (ROOT / ".claude" / "skills" / "worldloom-evalrun" / "SKILL.md").read_text(encoding="utf-8")
     assert "worldloom-improve" in evalrun_skill
+
+
+def test_a_fresh_seed_holdout_with_repeated_case_ids_runs_over_its_own_records(corpus: Any, tmp_path: Path) -> None:
+    """Enterprise case ids come from a request's shape, so a second world repeats them for different requests.
+
+    Those are exactly the held-out cases a fresh seed is for: they must not be
+    refused as overlap, and each corpus must be served over its own records
+    (the two worlds share external keys).
+    """
+    world = RetailWorld(seed=4242).build()
+    program = with_parameters(retail(stores=2, products=3, ticks=12), {"initial_stock": 8, "target_stock": 15})
+    rule = IncidentRule(table="inventory", signal="lost", title="Stock availability")
+    fresh, _ = (EnterpriseEvalHarness.from_world(world)
+                .with_scenario(operational_profile("retail"))
+                .with_operational_data(Simulator(program, seed=4242), rule, include_world_records=False)
+                .exhaustive().take(8)
+                .with_dag_grammar("map_read", "conditional", "fan_in", "write_chain")).build()
+    session, held = EvalSession.open(corpus), EvalSession.open(fresh)
+    shared = {case.id for case in session.cases} & {case.id for case in held.cases}
+    assert shared, "the fixture must repeat case ids across worlds for this test to mean anything"
+    held_queries = {case.query for case in held.cases}
+
+    class Reads:
+        def __init__(self, pack: Any) -> None:
+            self.name = agent_name("reads", pack)
+            self.pack_record = pack_record(pack)
+            self.skilled = "verify" in pack.body.skills
+            self.train, self.held = ReferenceAgent(session.cases), ReferenceAgent(held.cases)
+            self.idle = ScriptedAgent([], name="idle")
+
+        def run(self, task: Any, tools: Any) -> Any:
+            if not self.skilled:
+                return self.idle.run(task, tools)
+            return (self.held if task.query in held_queries else self.train).run(task, tools)
+
+    loop = session.improver(agent=Reads, proposer=_proposer(HELPFUL), out=tmp_path / "loop", holdout=held)
+    report = loop.run("agent:baseline", rounds=1)
+    first = report.rounds[0]
+    assert first.decision == "promoted", first.reasons
+    assert first.holdout is not None and first.holdout.compared == len(held.cases)
+    candidate_held = next((tmp_path / "loop" / "runs").glob(f"*@{first.candidate['digest'][:12]}/holdout"))
+    lines = [json.loads(line) for line in (candidate_held / "results.jsonl").read_text().splitlines()]
+    # The reference walk passes every held-out case only over the held-out world's own records.
+    assert lines and all(line["score"]["passed"] for line in lines)

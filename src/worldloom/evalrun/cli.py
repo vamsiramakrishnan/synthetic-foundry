@@ -939,24 +939,31 @@ def improve_command(
         _refuse("no_cases", f"{corpus} compiled to no cases")
     records = list(loaded.connector_data.records)
     held: tuple[Any, ...] | None = None
+    held_records: list[Any] = []
     if holdout_corpus is not None:
         held_loaded, held = _corpus_cases(holdout_corpus, None)
-        records += list(held_loaded.connector_data.records)
+        held_records = list(held_loaded.connector_data.records)
     services: dict[str, Any] = {}
     workers = default_concurrency() if concurrency is None else concurrency
-    values = None
+    values = holdout_values = None
     if value:
         from .value import value_table
 
-        values = value_table((*cases, *(held or ())), records)
+        values = value_table(cases, records)
+        if held is not None:
+            holdout_values = value_table(held, held_records)
+    from .runner import case_set_digest
+
+    # Each corpus is served over its own records: two worlds reuse external
+    # keys (`WL-1`), so one service over both would resolve a key to whichever
+    # world came first.
+    held_key = case_set_digest(held) if held is not None else None
 
     def run(subset: Any, agent: Any) -> Any:
-        from .runner import case_set_digest
-
         key = case_set_digest(subset)
         if key not in services:
             try:
-                services[key] = service_for(subset, records, concurrency=workers)
+                services[key] = service_for(subset, held_records if key == held_key else records, concurrency=workers)
             except Exception as error:  # ServingError and its causes are all refusals here
                 _refuse("service_unbuildable", str(error))
         return run_cases(services[key], subset, agent, principal=principal, rater=grader, concurrency=workers)
@@ -968,7 +975,7 @@ def improve_command(
         report = improve(champion, cases, run=run, agent_for=agent_for,
                          exchange=run_exec_exchange(proposer, timeout=timeout), out=out, rater=grader,
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
-                         ablate=False if no_ablate else None, values=values)
+                         ablate=False if no_ablate else None, values=values, holdout_values=holdout_values)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:

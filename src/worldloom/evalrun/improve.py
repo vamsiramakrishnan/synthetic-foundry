@@ -296,6 +296,10 @@ class Improver:
     #: Case id to value at stake (``value.value_table``); when given, every
     #: gate also requires the value-weighted delta to clear its bar.
     values: Mapping[str, Any] | None = None
+    #: Values for the held-out cases when they come from another corpus, whose
+    #: case ids may repeat the training corpus's for different requests;
+    #: ``None`` uses ``values`` for both.
+    holdout_values: Mapping[str, Any] | None = None
     _runs: dict[tuple[str, str, str], RunReport] = field(default_factory=dict)
     _candidates: dict[str, ResolvedPack] = field(default_factory=dict)
 
@@ -421,9 +425,14 @@ class Improver:
             raise ValueError("no training cases: the loop has nothing to learn from")
         if not holdout:
             raise ValueError("no held-out cases: a candidate could only be judged where it was tuned")
-        overlap = {case.id for case in train} & {case.id for case in holdout}
+        # A case is the same case when its id, request and row all match: case
+        # ids are derived from a request's shape, so a corpus built from a
+        # fresh seed reuses ids for different requests over a different world,
+        # and those are exactly the held-out cases a fresh seed is for.
+        train_keys = {_case_key(case): case.id for case in train}
+        overlap = sorted(train_keys[key] for key in {_case_key(case) for case in holdout} if key in train_keys)
         if overlap:
-            raise ValueError(f"{len(overlap)} case(s) are both training and held out, e.g. {sorted(overlap)[0]}")
+            raise ValueError(f"{len(overlap)} case(s) are both training and held out, e.g. {overlap[0]}")
         sealed = sorted(case.id for case in train if is_held_out(declared_split(case)))
         if sealed:
             raise ValueError(f"{len(sealed)} training case(s) declare a held-out split, e.g. {sealed[0]}; "
@@ -515,7 +524,8 @@ class Improver:
         champion_held = self._pinned_run(champion, holdout, "holdout", grader)
         candidate_held = self._pinned_run(candidate, holdout, "holdout", grader)
         held_gate = judge(compare(champion_held, candidate_held), name="holdout", min_delta=min_held,
-                          strict=True, max_axis_regression=max_fall, values=self.values)
+                          strict=True, max_axis_regression=max_fall,
+                          values=self.holdout_values if self.holdout_values is not None else self.values)
         return RoundReceipt(**common, **changed, decision="promoted" if held_gate.passed else "rejected",
                             authoring=rounds, candidate=_identity(candidate), train=train_gate, holdout=held_gate,
                             reasons=held_gate.reasons, ablation=ablation)
@@ -615,6 +625,11 @@ def _diff(champion: ResolvedPack, candidate: ResolvedPack) -> str:
     return diffs.render(codec.to_tree(champion.data), codec.to_tree(candidate.data))
 
 
+def _case_key(case: EvalCase) -> str:
+    return hashlib.sha256(json.dumps({"id": case.id, "query": case.query, "row": case.row}, sort_keys=True,
+                                     default=str).encode()).hexdigest()
+
+
 def _write(path: Path, document: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -627,7 +642,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             min_train_delta: float | None = None, min_holdout_delta: float | None = None,
             max_axis_regression: float | None = None, ablate: bool | None = None,
             ablation_max_hunks: int | None = None, ablation_tolerance: float | None = None,
-            values: Mapping[str, Any] | None = None) -> ImproveReport:
+            values: Mapping[str, Any] | None = None,
+            holdout_values: Mapping[str, Any] | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
@@ -653,7 +669,7 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
                         if ablation_max_hunks is None else ablation_max_hunks,
                         ablation_tolerance=float(packkit.policy("evalrun.improve.ablation_tolerance"))
                         if ablation_tolerance is None else ablation_tolerance,
-                        values=values)
+                        values=values, holdout_values=holdout_values)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,

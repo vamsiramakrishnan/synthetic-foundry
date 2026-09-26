@@ -171,6 +171,9 @@ class ImproveLoop:
     value: bool = False
     ablate: bool | None = None
     _records: tuple[Any, ...] = ()
+    #: The held-out session's records, when the holdout is another corpus: each
+    #: corpus is served over its own, since two worlds reuse external keys.
+    _holdout_records: tuple[Any, ...] | None = None
     _services: dict[str, ConnectorEvaluationService] = field(default_factory=dict, repr=False)
 
     def run_cases(self, cases: Sequence[EvalCase], agent: AgentUnderTest) -> RunReport:
@@ -186,7 +189,10 @@ class ImproveLoop:
         key = case_set_digest(cases)
         service = self._services.get(key)
         if service is None:
-            service = service_for(cases, self._records, concurrency=self.concurrency,
+            held = (self._holdout_records is not None and self.holdout is not None
+                    and key == case_set_digest(self.holdout))
+            records = self._holdout_records if held and self._holdout_records is not None else self._records
+            service = service_for(cases, records, concurrency=self.concurrency,
                                   definitions=self.session._definitions or None)
             self._services[key] = service
         return run_cases(service, cases, agent, principal=self.session.principal, rater=self.rater,
@@ -203,16 +209,21 @@ class ImproveLoop:
 
         roots = (self.out / "packs", *self.pack_roots)
         start = self.session.agent_pack(champion, roots=roots) if isinstance(champion, str) else champion
-        values = None
+        values = holdout_values = None
         if self.value:
             from .value import value_table
 
-            values = value_table((*self.session.cases, *(self.holdout or ())), self._records)
+            if self._holdout_records is not None and self.holdout is not None:
+                values = value_table(self.session.cases, self._records)
+                holdout_values = value_table(self.holdout, self._holdout_records)
+            else:
+                values = value_table((*self.session.cases, *(self.holdout or ())), self._records)
         return improve(start, self.session.cases, run=self.run_cases, agent_for=self.agent, exchange=self.exchange,
                        out=self.out, rater=self.rater, holdout=self.holdout, holdout_share=self.holdout_share,
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
-                       max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values)
+                       max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
+                       holdout_values=holdout_values)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -377,9 +388,10 @@ class EvalSession:
 
         records: tuple[Any, ...] = self._records
         held: tuple[EvalCase, ...] | None = None
+        held_records: tuple[Any, ...] | None = None
         if isinstance(holdout, EvalSession):
             held = holdout.cases
-            records = records + holdout._records
+            held_records = holdout._records
         elif holdout is not None:
             held = tuple(holdout)
         workers = default_concurrency() if concurrency is None else concurrency
@@ -390,7 +402,7 @@ class EvalSession:
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
                            max_axis_regression=max_axis_regression, value=value, ablate=ablate,
-                           _records=records)
+                           _records=records, _holdout_records=held_records)
 
     # -- the loop's parts, one call each ------------------------------------------------
 
