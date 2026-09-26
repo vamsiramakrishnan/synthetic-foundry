@@ -592,6 +592,8 @@ class CornerBatch(Model):
     drops: tuple[CornerDrop, ...] = ()
     #: Occurrences a template found and could not turn into a case, by reason.
     unmatched: tuple[str, ...] = ()
+    #: The rater the proof graded answers with (its name), when one did.
+    rater: str | None = None
 
     def summary(self) -> dict[str, Any]:
         """What `corners.json` carries: counts per template, drops and the case-set digest, never the cases."""
@@ -601,7 +603,7 @@ class CornerBatch(Model):
                 "cases": len(self.cases), "case_set": case_set_digest(self.cases),
                 "yields": [item.model_dump() for item in self.yields],
                 "drops": [item.model_dump() for item in self.drops],
-                "unmatched": list(self.unmatched)}
+                "unmatched": list(self.unmatched), "rater": self.rater}
 
 
 def _case(draft: _Draft, world: str) -> EvalCase:
@@ -654,16 +656,45 @@ def _reason(result: CaseResult) -> str:
     return "; ".join(part for part in (", ".join(keys[:4]), fails) if part) or "not passed"
 
 
+class GroundedWhereAllowed:
+    """The grounded rater on the shapes it can check; no verdict (and no error) on the rest.
+
+    A proof must include the answer contract, or a case whose answer the
+    reference gets wrong would be kept as solvable. But a judge-only shape
+    (``rater.JUDGE_ONLY``), or a golden with no figure to check, is beyond
+    a lexical check: failing the case there would drop it for the rater's
+    limit, not the case's. Such an answer is left to the other axes, and a
+    caller with a model judge passes it as ``rater`` instead.
+    """
+
+    name = "grounded"
+    kind = "grounded"
+
+    def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
+        from .rater import GroundedRater
+
+        score, error = GroundedRater()(case, answer)
+        return (None, None) if score is None else (score, error)
+
+
 def prove(cases: Sequence[EvalCase], records: Sequence[Any], *,
-          reference: AgentUnderTest | None = None) -> tuple[tuple[EvalCase, ...], tuple[CornerDrop, ...]]:
-    """Keep the cases the reference agent solves with their full expected outcome; drop the rest, with the reason."""
+          reference: AgentUnderTest | None = None,
+          rater: Any = None) -> tuple[tuple[EvalCase, ...], tuple[CornerDrop, ...]]:
+    """Keep the cases the reference agent solves with their full expected outcome; drop the rest, with the reason.
+
+    The full outcome includes the answer: a case with an answer contract is
+    graded by *rater* (default ``GroundedWhereAllowed``, the grounded rater
+    wherever the shape allows it), so a reference answer that misses the
+    golden drops the case like any other failed expectation.
+    """
     from .agents import ReferenceAgent
     from .runner import run_cases, service_for
 
     if not cases:
         return (), ()
     agent = reference if reference is not None else ReferenceAgent(cases)
-    report = run_cases(service_for(cases, records), cases, agent)
+    report = run_cases(service_for(cases, records), cases, agent,
+                       rater=rater if rater is not None else GroundedWhereAllowed())
     kept: list[EvalCase] = []
     drops: list[CornerDrop] = []
     for case, result in zip(cases, report.results, strict=True):
@@ -676,15 +707,18 @@ def prove(cases: Sequence[EvalCase], records: Sequence[Any], *,
 
 
 def corner_cases(world: World, *, templates: Iterable[str] | None = None, limit: int | None = None,
-                 seed: int | None = None, reference: AgentUnderTest | None = None) -> CornerBatch:
+                 seed: int | None = None, reference: AgentUnderTest | None = None,
+                 rater: Any = None) -> CornerBatch:
     """The world's event-grounded corner cases, each proved solvable by the reference agent or dropped.
 
-    ``limit`` keeps the first N solvable cases in template order. The same
+    ``limit`` keeps the first N solvable cases in template order. ``rater``
+    grades any answer contract during the proof (see ``prove``). The same
     world always yields the same batch, byte for byte.
     """
     records = world_records(world)
     drafted, skipped = draft_cases(world, templates=templates, records=records)
-    kept, drops = prove(drafted, records, reference=reference)
+    proof_rater = rater if rater is not None else GroundedWhereAllowed()
+    kept, drops = prove(drafted, records, reference=reference, rater=proof_rater)
     if limit is not None:
         kept = kept[:limit]
     generated = Counter(case.dimensions["corner"] for case in drafted)
@@ -701,6 +735,7 @@ def corner_cases(world: World, *, templates: Iterable[str] | None = None, limit:
     # name: the superseded record beside the current one is the corner.
     held = tuple(record for record in records if record.connector in connectors or record.id in used)
     return CornerBatch(world=world_key(world), seed=seed, cases=kept, records=held, yields=yields, drops=drops,
+                       rater=str(getattr(proof_rater, "name", type(proof_rater).__name__)),
                        unmatched=tuple(f"{template}: {miss}" for template in TEMPLATE_IDS
                                        for miss in skipped.get(template, ())))
 
@@ -981,7 +1016,10 @@ def write_frontier(report: FrontierReport, out: str | Path) -> Path:
     One batch (one world) is written at *out*. Batches from several worlds
     are written one case set per world under *out*, because two worlds'
     records share external keys (both have a `WL-1`) and one service over
-    both would resolve a key to whichever came first.
+    both would resolve a key to whichever came first. A directory is
+    named for the batch's seed, else its world; when two batches would take
+    one name (two batches of one world, or a seed searched twice), the
+    later ones carry their batch index, so no batch overwrites another.
     """
     root = Path(out)
     if len(report.batches) <= 1:
@@ -991,8 +1029,12 @@ def write_frontier(report: FrontierReport, out: str | Path) -> Path:
     from ..corpus import write_json
 
     root.mkdir(parents=True, exist_ok=True)
-    for batch in report.batches:
+    taken: set[str] = set()
+    for index, batch in enumerate(report.batches):
         name = f"seed-{batch.seed}" if batch.seed is not None else f"world-{batch.world}"
+        if name in taken:
+            name = f"{name}-batch-{index}"
+        taken.add(name)
         write_case_set(root / name, batch.cases, batch.records)
     write_json(root / FRONTIER_FILE, report.summary())
     return root
@@ -1041,6 +1083,7 @@ __all__ = [
     "FrontierBatch",
     "FrontierReport",
     "FrontierYield",
+    "GroundedWhereAllowed",
     "HoldoutOverlap",
     "TemplateYield",
     "activity",

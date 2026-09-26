@@ -294,6 +294,59 @@ def test_the_frontier_refuses_to_touch_the_holdout(batches: dict[str, CornerBatc
         frontier(batch, idle, budget=0)
 
 
+def test_two_frontier_batches_from_one_world_are_both_written(batches: dict[str, CornerBatch], tmp_path: Path) -> None:
+    from worldloom.evalrun.corners import FrontierBatch, FrontierReport
+
+    batch = batches["banking"]
+    assert len(batch.cases) >= 2
+    halves = (batch.cases[: len(batch.cases) // 2], batch.cases[len(batch.cases) // 2:])
+    kept = tuple(FrontierBatch(seed=None, world=batch.world, cases=half, records=batch.records) for half in halves)
+    report = FrontierReport(champion="idle", reference="reference", budget=len(batch.cases), spent=len(batch.cases),
+                            seeds=(0,), offered=len(batch.cases), solved=len(batch.cases),
+                            frontier_ids=tuple(case.id for case in batch.cases), yields=(), batches=kept)
+    written = write_frontier(report, tmp_path / "frontier")
+    directories = sorted(path for path in written.iterdir() if path.is_dir())
+    assert len(directories) == 2, directories
+    read = [case.id for directory in directories for case in read_case_set(directory)[0]]
+    assert sorted(read) == sorted(case.id for case in batch.cases), "neither batch overwrote the other"
+
+
+def test_proof_rates_the_answer_where_the_shape_allows(worlds: dict[str, World]) -> None:
+    from worldloom.evalrun import AnswerOutcome
+    from worldloom.evalrun.corners import prove, world_records
+    from worldloom.models import EvaluationType
+
+    world = worlds["banking"]
+    records = world_records(world)
+    drafted, _ = draft_cases(world, records=records)
+    case = drafted[0]
+    stated = str(case.row["expected_answer"])
+
+    def answered(golden: str, rubric: EvaluationType) -> Any:
+        return case.model_copy(update={"outcomes": case.outcomes.model_copy(
+            update={"answer": AnswerOutcome(golden=golden, rubric=rubric)})})
+
+    kept, drops = prove([answered(stated, EvaluationType.DIRECT_LOOKUP)], records)
+    assert len(kept) == 1 and drops == ()
+    # A golden the reference's answer does not carry: the proof now sees the answer contract.
+    kept, drops = prove([answered("The figure was 987654321.", EvaluationType.DIRECT_LOOKUP)], records)
+    assert kept == () and len(drops) == 1
+    # A judge-only shape is left to a model rater; the grounded default does not fail it.
+    kept, _ = prove([answered("The figure was 987654321.", EvaluationType.CAUSAL_MULTI_HOP)], records)
+    assert len(kept) == 1
+
+    class Harsh:
+        name = "harsh"
+        kind = "custom"
+
+        def __call__(self, case: Any, answer: str) -> tuple[float | None, str | None]:
+            return 0.0, None
+
+    kept, drops = prove([answered(stated, EvaluationType.CAUSAL_MULTI_HOP)], records, rater=Harsh())
+    assert kept == () and drops
+    assert corner_cases(world).summary()["rater"] == "grounded"
+
+
 # -- the CLI --------------------------------------------------------------------------------------
 
 

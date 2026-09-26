@@ -462,6 +462,8 @@ worldloom evalrun corners <CORPUS>
 | `--json` | Emit corners.json on stdout. |
 | `--limit` | Keep only the first N solvable cases. |
 | `--out`, `-o` | Case set directory to write (evalrun-cases.jsonl, records.jsonl, corners.json). |
+| `--rater` | The rater the proof grades answer contracts with: grounded or exec:<command>. Default: grounded wherever the shape allows it. |
+| `--rater-timeout` | Seconds an exec: rater child may run per answer. |
 | `--templates` | Corner templates to draw from (repeat, or comma-separate); default every template. |
 
 ### `worldloom evalrun curriculum`
@@ -500,7 +502,7 @@ worldloom evalrun export <RUN>
 | `--corpus` | The corpus or case set the run was over: personas, splits and the case-set digest come from it. |
 | `--format` | sft (chat demonstrations) \| pairs (preference pairs, needs --against) \| rewards (verifiable reward records). |
 | `--include-failed` | sft: keep cases that scored at least --min-score without passing. |
-| `--include-holdout` | Allow test and holdout splits. A model trained on them has seen the exam, so promotion over them is void. |
+| `--include-holdout` | Allow held-out splits (test, holdout, validation) and runs marked held out. A model trained on them has seen the exam, so promotion over them is void. |
 | `--margin` | pairs: the least overall-score lead of chosen over rejected (default: policy `evalrun.delta_band`). |
 | `--max-result-chars` | sft and pairs: characters of one tool result kept before a truncation marker (default: policy `evalrun.export.max_result_chars`). |
 | `--min-score` | sft: the least overall score a demonstration may have. |

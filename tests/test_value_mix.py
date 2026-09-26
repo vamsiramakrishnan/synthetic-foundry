@@ -202,6 +202,48 @@ def test_quantity_times_unit_price_and_currencies_are_never_mixed() -> None:
     assert "po1.quantity=4 x unit_price=25.5" in euro.basis
 
 
+def _reading(case_id: str, fixture: str) -> Any:
+    return case_from_row({"id": case_id, "query": f"Read {fixture}.", "expected_dag": {"nodes": [
+        {"id": "read", "server": "sor", "tool": "get_record", "fixture": fixture, "entity": "record", "op": "read"},
+    ], "edges": []}, "assertions": []})
+
+
+def test_at_stake_is_relative_to_its_own_currencys_median() -> None:
+    records = [
+        {"fid": "usd-big", "server": "sor", "entity": "order", "amount": 1000, "currency": "USD"},
+        {"fid": "usd-small", "server": "sor", "entity": "order", "amount": 100, "currency": "USD"},
+        {"fid": "jpy-big", "server": "sor", "entity": "order", "amount": 150000, "currency": "JPY"},
+        {"fid": "jpy-small", "server": "sor", "entity": "order", "amount": 15000, "currency": "JPY"},
+    ]
+    table = value_table([_reading(fid, fid) for fid in ("usd-big", "usd-small", "jpy-big", "jpy-small")], records)
+    # A yen figure is not a hundred times the risk of a dollar figure: each
+    # case is priced against the median of its own currency.
+    assert table["jpy-big"].weight == pytest.approx(table["usd-big"].weight)
+    assert table["jpy-small"].weight == pytest.approx(table["usd-small"].weight)
+    assert table["usd-big"].weight > table["usd-small"].weight
+    assert any("median 82500 JPY" in line for line in table["jpy-big"].basis), table["jpy-big"].basis
+
+
+def test_frequency_is_normalised_within_its_unit() -> None:
+    per_period = [{"fid": f"{activity}-{n}", "server": "sor", "entity": "order", "activity_id": activity,
+                   "period": f"p{n % 2}"} for activity, many in (("slow", 20), ("fast", 80)) for n in range(many)]
+    episodes = [{"fid": f"{entity}-{n}", "server": "sim", "entity": entity, "case_id": f"{entity}-ep{n}",
+                 "synthesis_provenance": {"rule": "r"}} for entity, many in (("rare", 1), ("common", 4))
+                for n in range(many)]
+    cases = [_reading("slow", "slow-0"), _reading("fast", "fast-0"), _reading("rare", "rare-0"),
+             _reading("common", "common-0")]
+    table = value_table(cases, [*per_period, *episodes])
+    assert (table["slow"].frequency, table["fast"].frequency) == (10.0, 40.0)
+    assert (table["rare"].frequency, table["common"].frequency) == (1.0, 4.0)
+    assert table["slow"].frequency_unit == "period" and table["rare"].frequency_unit == "horizon"
+    # Ten a period against a median of 25 a period is the same share as one
+    # episode against a median of 2.5 episodes: counts over a horizon are
+    # never divided by volumes per period.
+    assert table["slow"].weight == pytest.approx(table["rare"].weight) == pytest.approx(0.4)
+    assert table["fast"].weight == pytest.approx(table["common"].weight) == pytest.approx(1.6)
+    assert any("frequency unit horizon" in line for line in table["rare"].basis)
+
+
 def test_programme_money_frequency_and_activity_come_from_the_records(telecom: dict[str, Any]) -> None:
     records = _by_id(telecom["records"])
     cases = telecom["cases"][:80]

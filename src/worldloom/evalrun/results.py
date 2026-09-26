@@ -692,6 +692,13 @@ def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str =
     answer score, its three latencies, and nothing about plan or trajectory.
     The report says so: plan and trajectory grades are absent, the overall
     score is the answer score alone, and a duplicate query text refuses.
+
+    A row whose query matches no case is not a result, but it is not
+    nothing either: the count is recorded on the report as
+    ``agent_identity["unmatched_rows"]`` (beside ``rows``, the CSV's row
+    count), so ``agreement`` can report it instead of shrinking the set
+    silently. An import where every row matched carries no identity, so its
+    bytes are the ones it always had.
     """
 
     from .grading import (
@@ -710,10 +717,12 @@ def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str =
     with path.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     results: list[CaseResult] = []
+    unmatched = 0
     for row in rows:
         query = (row.get("query") or "").strip()
         case = by_query.get(query)
         if case is None:
+            unmatched += 1
             continue
         error = (row.get("scoreError") or "").strip() or None
         fetched = row.get("fetched") or row.get("response") or ""
@@ -740,7 +749,9 @@ def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str =
         results.append(CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
                                   agent=agent, status="graded", score=score, answer=fetched, latency=latency,
                                   notes=("answer axis only: Eval Studio observes no tool call",)))
-    return RunReport(agent=agent, principal="eval-studio", case_set=case_set_digest(listed), results=tuple(results))
+    identity = {"source": "eval-studio-csv", "rows": len(rows), "unmatched_rows": unmatched} if unmatched else None
+    return RunReport(agent=agent, principal="eval-studio", case_set=case_set_digest(listed), results=tuple(results),
+                     agent_identity=identity)
 
 
 __all__ = [

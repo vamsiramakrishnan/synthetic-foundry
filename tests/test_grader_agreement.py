@@ -282,7 +282,8 @@ def test_agreement_counts_unknown_cases_and_local_errors(tmp_path: Path) -> None
     studio = import_studio_results(_csv(tmp_path / "studio.csv", cases), cases)
     fewer = tuple(case for case in cases if case.id != "c1")
     report = agreement(studio, fewer, GroundedRater())
-    assert report.excluded.unknown_cases == 1 and report.stats.n == 5
+    # c1 is outside the given cases; the CSV's unmatched row is counted too.
+    assert report.excluded.unknown_cases == 2 and report.stats.n == 5
 
     def flaky(case: EvalCase, answer: str) -> tuple[float | None, str | None]:
         return (None, "exec_timeout: overran") if case.id in {"c2", "c7"} else GroundedRater()(case, answer)
@@ -294,9 +295,10 @@ def test_agreement_counts_unknown_cases_and_local_errors(tmp_path: Path) -> None
             return flaky(case, answer)
 
     report = agreement(studio, cases, Flaky())
-    # c2 is a local error; c7 is judge-only, so a refusal there is an abstention.
-    assert report.excluded.local_errors == 1 and report.excluded.local_error_messages == {"exec_timeout": 1}
-    assert report.abstained.cases == 1 and report.stats.n == 5
+    # c2 and c7 are local errors: c7 is judge-only, but only the grounded
+    # rater abstains on it by design, and this one was asked to rate it.
+    assert report.excluded.local_errors == 2 and report.excluded.local_error_messages == {"exec_timeout": 2}
+    assert report.abstained.cases == 0 and report.stats.n == 5
     assert report.local["rater"] == {"name": "flaky", "kind": "custom"}
 
 
@@ -363,3 +365,116 @@ def test_the_cli_measures_an_exec_judge(tmp_path: Path) -> None:
     assert report["stats"]["n"] == 7 and report["abstained"]["cases"] == 0
     assert report["local"]["rater"]["kind"] == "exec" and str(judge) in report["local"]["rater"]["command"]
     assert report["stats"]["pearson"] is None and "second" in report["stats"]["undefined"]["pearson"]
+
+
+# -- review regressions ----------------------------------------------------------------
+
+
+def test_two_judge_models_are_two_graders() -> None:
+    from worldloom.evalrun import model_rater
+
+    def complete(prompt: str) -> str:
+        return "Score: 1"
+
+    flash, pro = model_rater(complete, model="gemini-flash"), model_rater(complete, model="gemini-pro")
+    assert grader_identity(flash)["rater"] == {"name": "model:gemini-flash", "kind": "model", "model": "gemini-flash"}
+    assert grader_identity(flash)["digest"] != grader_identity(pro)["digest"]
+    assert grader_identity(model_rater(complete, model="gemini-pro", name="judge"))["rater"]["model"] == "gemini-pro"
+    with pytest.raises(TypeError):
+        model_rater(complete)  # type: ignore[call-arg]
+    with pytest.raises(ValueError, match="names no model"):
+        model_rater(complete, model=" ")
+
+    class Anonymous:
+        name = "model"
+        kind = "model"
+
+        def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
+            return 1.0, None
+
+    with pytest.raises(ValueError, match="names no model"):
+        grader_identity(Anonymous())
+
+
+@pytest.mark.parametrize(("command", "secret"), [
+    ('curl -H "Authorization: Bearer sk-abc" https://judge.example/rate', "sk-abc"),
+    ("judge --url 'https://judge.example/rate?key=sk-2&model=m'", "sk-2"),
+    ('judge --header "x-api-key: sk5"', "sk5"),
+    ("judge -k sk-4", "sk-4"),
+    ("judge --model m ghp_abcdefghijklmnop", "ghp_abcdefghijklmnop"),
+    ("judge AKIAABCDEFGHIJKLMNOP", "AKIAABCDEFGHIJKLMNOP"),
+    ("judge --slack xoxb-1234-5678", "xoxb-1234-5678"),
+    ("judge https://h/rate?model=m&access_token=t0k", "t0k"),
+])
+def test_credentials_in_headers_queries_and_known_prefixes_are_redacted(command: str, secret: str) -> None:
+    redacted = redact_command(command)
+    assert secret not in redacted and "REDACTED" in redacted, redacted
+    rotated = command.replace(secret, secret[:-1] + ("7" if secret[-1] != "7" else "8"))
+    assert redact_command(rotated) == redacted, "rotating the key must not move the digest"
+
+
+def test_redaction_keeps_what_is_not_a_secret() -> None:
+    assert redact_command('curl -H "Authorization: Bearer sk-abc" x') == 'curl -H "Authorization: Bearer REDACTED" x'
+    assert redact_command("judge --url 'https://h/r?key=sk-2&model=m'") == "judge --url 'https://h/r?key=REDACTED&model=m'"
+    assert redact_command('judge --header "x-api-key: sk5"') == 'judge --header "x-api-key: REDACTED"'
+    # A negated flag takes no value, and a script or a file is not a credential.
+    assert redact_command("judge --no-auth a.py") == "judge --no-auth a.py"
+    assert redact_command("judge --auth-config judge.yaml --model m") == "judge --auth-config judge.yaml --model m"
+    assert redact_command("judge --token --model m") == "judge --token --model m"
+    assert redact_command("judge --token abc") == "judge --token REDACTED"
+    windows = r"C:\Python\python.exe C:\Temp\judge.py --token abc"
+    assert redact_command(windows) == r"C:\Python\python.exe C:\Temp\judge.py --token REDACTED"
+    # Words that merely contain a prefix are left alone.
+    assert redact_command("judge --task task-list --disk risk-free") == "judge --task task-list --disk risk-free"
+
+
+def test_the_redacted_command_reaches_the_identity_and_the_name() -> None:
+    identity = grader_identity(exec_rater('curl -H "Authorization: Bearer sk-abc" https://h/r?key=sk-2'))
+    text = json.dumps(identity)
+    assert "sk-abc" not in text and "sk-2" not in text
+    named = grader_identity(exec_rater("sk-live-9 judge"))
+    assert "sk-live-9" not in json.dumps(named)
+
+
+def test_agreement_counts_studio_rows_that_matched_no_case(tmp_path: Path) -> None:
+    cases = _cases()
+    studio = import_studio_results(_csv(tmp_path / "studio.csv", cases), cases)
+    assert studio.agent_identity is not None and studio.agent_identity["unmatched_rows"] == 1
+    report = agreement(studio, cases, GroundedRater())
+    # The CSV's extra row (a query no case asks) is counted, not dropped.
+    assert report.excluded.unknown_cases == 1
+    result = runner.invoke(app, ["evalrun", "agreement", str(_case_set(tmp_path / "cases", cases)),
+                                 str(tmp_path / "studio.csv")])
+    assert result.exit_code == 0 and "1 Studio row(s) matched no case" in result.output, result.output
+
+
+def test_agreement_refuses_a_case_graded_twice(tmp_path: Path) -> None:
+    cases = _cases()
+    path = _csv(tmp_path / "studio.csv", cases)
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        csv.writer(handle, lineterminator="\n").writerow([cases[0].query, GOLDEN, "Revenue was 4200.", "0", "0", "0",
+                                                          "0.1", ""])
+    studio = import_studio_results(path, cases)
+    with pytest.raises(ValueError, match="c1"):
+        agreement(studio, cases, GroundedRater())
+    result = runner.invoke(app, ["evalrun", "agreement", str(_case_set(tmp_path / "cases", cases)), str(path)])
+    assert result.exit_code != 0 and "c1" in result.output, result.output
+
+
+def test_only_a_grounded_rater_abstains_by_design(tmp_path: Path) -> None:
+    cases = _cases()
+    studio = import_studio_results(_csv(tmp_path / "studio.csv", cases), cases)
+
+    class Judge:
+        name = "exec:judge"
+        kind = "exec"
+        command = "judge"
+
+        def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
+            return (None, "exec_timeout: overran") if case.id == "c7" else GroundedRater()(case, answer)
+
+    report = agreement(studio, cases, Judge())
+    # A judge that fails on a causal chain failed: it was supposed to rate it.
+    assert report.abstained.cases == 0
+    assert report.excluded.local_errors == 1 and report.excluded.local_error_messages == {"exec_timeout": 1}
+    assert agreement(studio, cases, GroundedRater()).abstained.case_ids == ("c7",)

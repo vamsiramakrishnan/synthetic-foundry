@@ -49,6 +49,10 @@ One chat transcript per case, rebuilt in the order the service recorded it:
    with null values, and a refusal without an `index` is placed after the
    last span. `metadata.order` labels every turn (`call:s1`, `ask:q1`,
    `refused:1`, `answer`) so a reader can see where each came from.
+   Questions and refusals are recorded in two lists with no sequence across
+   them, so when one of each shares a span index their true order is not on
+   the ledger; the rule is fixed rather than guessed: questions first, then
+   refusals, each in the order it was recorded.
 6. The final `assistant` answer.
 
 A case qualifies when it is graded, scores at least `--min-score`, and
@@ -70,10 +74,10 @@ under `tools`.
 
 Two runs of one case set, joined on case id. For each case both runs graded
 on the same axes, the run with the higher overall score is `chosen` when it
-leads by at least `--margin` (default: the policy `evalrun.delta_band`, the
-band `evalrun compare` calls stable, so a pair never teaches a difference the
-comparison would not report). The order of the two run directories does not
-matter.
+leads by more than `--margin` (default: the policy `evalrun.delta_band`, the
+band `evalrun compare` calls stable, edge included, so a pair never teaches a
+difference the comparison would not report). The order of the two run
+directories does not matter.
 
 Refused rather than paired: two runs over different case sets (a pair must
 share its prompt), two runs whose `grader` digests differ (their scores are
@@ -110,23 +114,34 @@ holds only what the service observed and a deterministic rule decided:
 rater (possibly a model) produced. When no answer was rated,
 `verifiable.reward` equals `reward` exactly. A trainer that wants a reward
 no model influenced reads `verifiable.reward`; a run that executed nothing
-(an Eval Studio import) has none.
+(an Eval Studio import) has none. The case set is required here as for the
+other formats: a compiled row carries its split at its top level, which the
+result does not copy, so a reward export without the cases is refused rather
+than exporting held-out rows it cannot see.
 
 ## The holdout guard
 
 A case set built by the dataset compiler carries a split (`train`,
-`validation`, `test`) in its dimensions or on its row. Promotion is decided
-on the test split, and a model trained on it has seen the exam, so every
-later promotion decision over it is void. The export therefore:
+`validation`, `test`) in its dimensions, on its row, or in the row's own
+dimensions. The held-out splits are `test`, `holdout` and `validation`, the
+one set `evalrun.splits` owns and the improve loop reads too. Promotion is
+decided on them, and a model trained on them has seen the exam, so every
+later promotion decision over them is void. The export therefore:
 
 - keeps `train` (and any case that carries no split) by default, and prints
   how many cases of each other split it withheld and why;
-- keeps other splits when named with `--split` (repeatable), such as
-  `--split validation`;
-- refuses `--split test` or `--split holdout` unless `--include-holdout` is
-  given, and `--include-holdout` alone exports every split.
+- keeps other splits when named with `--split` (repeatable);
+- refuses `--split test`, `--split holdout` or `--split validation` unless
+  `--include-holdout` is given, and `--include-holdout` alone exports every
+  split;
+- refuses outright a run made on a held-out split (`split` in its
+  `run.json`, which the improve loop writes on its held-out runs), unless
+  `--include-holdout`. The improve loop holds cases back by hash, so those
+  cases carry no split of their own; the run's mark is what seals them, and
+  a case without a split in such a run is read as being in the run's split.
 
-A case set without splits has nothing to guard, and every case is eligible.
+A case set without splits, in a run nobody marked held out, has nothing to
+guard, and every case is eligible.
 
 ## Determinism
 

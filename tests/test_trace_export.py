@@ -340,12 +340,12 @@ def test_a_rated_answer_stays_out_of_the_verifiable_reward() -> None:
 
 
 def test_a_run_that_executed_nothing_has_no_verifiable_reward() -> None:
-    reference, _ = _run(ReferenceAgent(_cases()))
+    reference, cases = _run(ReferenceAgent(_cases()))
     result = reference.results[0]
     assert result.score is not None
     only = result.score.model_copy(update={"observed": ("outcomes",)})
     report = reference.model_copy(update={"results": (result.model_copy(update={"score": only}),)})
-    record = reward_records(report)[0]
+    record = reward_records(report, cases)[0]
     assert record["verifiable"]["reward"] is None and record["verifiable"]["trajectory"] is None
     assert record["axes"]["plan"] is None and record["axes"]["outcomes"] == 1.0
 
@@ -369,8 +369,8 @@ def test_holdout_rows_are_withheld_by_default_and_refused_unless_asked_for() -> 
                    for case in cases)
     rerun, _ = _run(ReferenceAgent(by_row), by_row)
     assert [item["case_id"] for item in reward_records(rerun, by_row)] == ["amb", "del"]
-    # Validation is not a holdout: it may be asked for by name.
-    assert SplitFilter(("validation",)).keeps("validation")
+    # Validation is held out as test is: asking for it by name needs include_holdout.
+    assert SplitFilter(("validation",), include_holdout=True).keeps("validation")
     unsplit, unsplit_cases = _run(ReferenceAgent(_cases({})), _cases({}))
     assert len(sft_records(unsplit, unsplit_cases)) == 3, "a set with no splits has nothing to guard"
 
@@ -437,3 +437,95 @@ def test_the_cli_exports_all_three_formats_deterministically(tmp_path: Path) -> 
 def test_the_writer_pins_key_order_and_newlines(tmp_path: Path) -> None:
     assert write_records(tmp_path / "a.jsonl", [{"b": 1, "a": "é"}]) == 1
     assert (tmp_path / "a.jsonl").read_bytes() == '{"a": "é", "b": 1}\n'.encode()
+
+
+# -- review regressions ----------------------------------------------------------------
+
+
+def test_a_run_marked_held_out_is_refused_even_when_its_cases_carry_no_split() -> None:
+    # The improve loop holds cases back by hash, so they carry no split; the
+    # run it made over them says `holdout`, and that is what export must read.
+    unsplit = _cases({})
+    reference, _ = _run(ReferenceAgent(unsplit), unsplit)
+    sealed = reference.model_copy(update={"split": "holdout"})
+    lazy, _ = _run(ScriptedAgent([], name="lazy", answer="nothing"), unsplit)
+    for export in (lambda: sft_records(sealed, unsplit), lambda: reward_records(sealed, unsplit),
+                   lambda: preference_pairs(sealed, lazy, unsplit), lambda: preference_pairs(lazy, sealed, unsplit)):
+        with pytest.raises(HoldoutRefused, match="held-out split"):
+            export()
+    assert len(sft_records(sealed, unsplit, include_holdout=True)) == 3
+    assert {item["split"] for item in reward_records(sealed, unsplit, include_holdout=True)} == {"holdout"}
+    # Validation is a held-out split too.
+    with pytest.raises(HoldoutRefused):
+        sft_records(reference.model_copy(update={"split": "validation"}), unsplit)
+
+
+def test_validation_is_held_out_and_a_split_in_the_rows_dimensions_counts() -> None:
+    with pytest.raises(HoldoutRefused):
+        SplitFilter(("validation",))
+    guard = SplitFilter()
+    assert not guard.keeps("validation") and guard.withheld == {"validation": 1}
+    explained = guard.explain()
+    assert explained is not None and "invalidates promotion" in explained
+    nested = tuple(case.model_copy(update={"dimensions": {}, "row": {**case.row, "dimensions": {"split": SPLITS[case.id]}}})
+                   for case in _cases())
+    report, _ = _run(ReferenceAgent(nested), nested)
+    assert [item["case_id"] for item in reward_records(report, nested)] == ["amb", "del"]
+    assert [item["metadata"]["case_id"] for item in sft_records(report, nested)] == ["amb", "del"]
+
+
+def test_the_cli_refuses_a_held_out_run_by_its_recorded_split(tmp_path: Path) -> None:
+    from worldloom.evalrun.results import read_run, write_run
+
+    corpus = tmp_path / "set"
+    _write_case_set(corpus)
+    result = runner.invoke(app, ["evalrun", "run", str(corpus), "-o", str(tmp_path / "ref"), "--agent", "reference"])
+    assert result.exit_code == 0, result.output
+    write_run(tmp_path / "holdout", read_run(tmp_path / "ref").model_copy(update={"split": "holdout"}))
+    base = ["evalrun", "export", str(tmp_path / "holdout"), "--corpus", str(corpus), "--format", "rewards"]
+    result = runner.invoke(app, [*base, "-o", str(tmp_path / "x.jsonl")])
+    assert result.exit_code != 0 and "held-out split" in result.output, result.output
+    assert not (tmp_path / "x.jsonl").exists()
+    result = runner.invoke(app, [*base, "--include-holdout", "-o", str(tmp_path / "x.jsonl")])
+    assert result.exit_code == 0, result.output
+
+
+def test_rewards_need_the_cases_to_see_their_splits() -> None:
+    # The compiled row carries the split at its top level; a reward export
+    # without the cases would never see it.
+    by_row = tuple(case.model_copy(update={"dimensions": {}, "row": {**case.row, "split": SPLITS[case.id]}})
+                   for case in _cases())
+    report, _ = _run(ReferenceAgent(by_row), by_row)
+    with pytest.raises(ExportRefused, match="needs the case set"):
+        reward_records(report, None)  # type: ignore[arg-type]
+    assert [item["case_id"] for item in reward_records(report, by_row)] == ["amb", "del"]
+
+
+def test_a_lead_of_exactly_the_margin_is_not_a_preference() -> None:
+    cases = _cases()
+    reference, _ = _run(ReferenceAgent(cases), cases)
+
+    def scored(report: RunReport, value: float, name: str) -> RunReport:
+        rows = tuple(row.model_copy(update={"score": row.score.model_copy(update={"score": value})})
+                     if row.score is not None else row for row in report.results)
+        return report.model_copy(update={"results": rows, "agent": name})
+
+    band = default_margin()
+    high, low = scored(reference, 0.9, "high"), scored(reference, round(0.9 - band, 4), "low")
+    assert preference_pairs(high, low, cases) == [], "compare calls a lead of exactly the band stable"
+    assert preference_pairs(high, low, cases, margin=band - 0.01)
+    # Floating-point noise at the band is still inside it.
+    assert preference_pairs(scored(reference, 0.7, "a"), scored(reference, 0.6, "b"), cases) == []
+
+
+def test_a_question_and_a_refusal_at_one_span_index_keep_the_documented_tie_order() -> None:
+    # The service records questions and refusals in two lists with no shared
+    # sequence, so at one span index questions come first, then refusals,
+    # each list in the order it was recorded.
+    report, _ = _run(_asking_agent())
+    amb = next(result for result in report.results if result.case_id == "amb")
+    tied = amb.model_copy(update={"refusals": (
+        {"tool": "servicenow.nope", "arguments": [], "error": "tool_not_allowed", "index": 1},
+        {"tool": "servicenow.nope2", "arguments": [], "error": "tool_not_allowed", "index": 1})})
+    _, order = continuation(tied)
+    assert order == ["call:s1", "ask:q1", "refused:1", "refused:2", "call:s2", "call:s3", "answer"]

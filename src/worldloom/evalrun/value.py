@@ -34,8 +34,13 @@ Value of one case (``value_of``):
 - **Weight** is the product of the three, each monetary and volume part
   divided by the set's median of it (so a typical case has 1.0) and clamped to
   ``[1/max_factor, max_factor]``; a missing part is 1.0, the typical case, and
-  the basis says so. ``value_table`` computes the medians over a case set;
-  ``value_of`` alone, without a ``scale``, can only compare a case with itself.
+  the basis says so. Medians are never taken across units: a case's at-stake
+  money is divided by the median of its own currency (a yen figure is not a
+  hundred times a dollar one), and its frequency by the median of its own
+  ``frequency_unit`` (``period`` for volumes per period, ``horizon`` for
+  episode counts over the simulation's horizon, which are not per period).
+  ``value_table`` computes the medians over a case set; ``value_of`` alone,
+  without a ``scale``, can only compare a case with itself.
 
 Mix (``mix_report``, ``check_mix``): a case set's shares over activity,
 workflow and operation, compared with a reference mix by total variation
@@ -175,6 +180,10 @@ class CaseValue(Model):
     currency: str | None = None
     #: The activity's volume per period; ``None`` when the case maps to no activity or source volume.
     frequency: float | None
+    #: What ``frequency`` counts: ``period`` (volume per period, from the
+    #: catalogue or the records) or ``horizon`` (exception episodes over the
+    #: simulation's whole horizon). Frequencies are only compared within one unit.
+    frequency_unit: str | None = None
     #: The operation-class multiplier, times the designed-failure factor when the case carries one.
     error_cost: float
     #: The normalised product; 1.0 is a typical case of its set.
@@ -188,11 +197,19 @@ class CaseValue(Model):
 
 
 class ValueScale(Model):
-    """The medians a set's weights are normalised against, and the clamp."""
+    """The medians a set's weights are normalised against, and the clamp.
+
+    ``at_stake_by_currency`` and ``frequency_by_unit`` are the medians
+    ``value_scale`` computes, one per currency (``""`` for records that name
+    none) and one per frequency unit. ``at_stake`` and ``frequency`` are the
+    fallback for a currency or unit the maps do not hold (a hand-built scale).
+    """
 
     at_stake: float | None = None
     frequency: float | None = None
     max_factor: float = 100.0
+    at_stake_by_currency: dict[str, float] = Field(default_factory=dict)
+    frequency_by_unit: dict[str, float] = Field(default_factory=dict)
 
 
 def touched_records(case: EvalCase) -> tuple[str, ...]:
@@ -288,26 +305,32 @@ def _catalogue_volume(catalogue: Any, activity: str) -> tuple[float, str] | None
                     f" x {per} record(s) per period (compiled catalogue; authored prior, not measured)")
 
 
+#: A volume per period (catalogue bindings, record counts over their periods).
+PER_PERIOD = "period"
+#: A count over the simulation's whole horizon (exception episodes on a source).
+OVER_HORIZON = "horizon"
+
+
 def _frequency(case: EvalCase, activity: str | None, touched: Sequence[_Record], index: RecordIndex,
-               catalogue: Any) -> tuple[float | None, str]:
+               catalogue: Any) -> tuple[float | None, str | None, str]:
     if activity is not None and catalogue is not None:
         found = _catalogue_volume(catalogue, activity)
         if found is not None:
-            return found
+            return found[0], PER_PERIOD, found[1]
     if activity is not None and index.activity_records.get(activity):
         count = index.activity_records[activity]
         periods = index.activity_periods.get(activity) or 1
         volume = round(count / periods, 4)
-        return volume, (f"frequency {volume:g}/period for {activity}: {count} record(s) over {periods} period(s)"
-                        " in the record set (the company's simulated volume, an authored prior)")
+        return volume, PER_PERIOD, (f"frequency {volume:g}/period for {activity}: {count} record(s) over {periods}"
+                                    " period(s) in the record set (the company's simulated volume, an authored prior)")
     sources = sorted({(record.connector, record.entity) for record in touched
                       if (record.connector, record.entity) in index.episodes})
     if sources:
         connector, entity = sources[0]
         volume = float(index.episodes[(connector, entity)])
-        return volume, (f"frequency {volume:g} for {connector}:{entity}: exception episodes the simulation raised"
-                        " over its horizon (simulated volume, not measured)")
-    return None, "no frequency: the case maps to no activity or simulated source volume"
+        return volume, OVER_HORIZON, (f"frequency {volume:g} for {connector}:{entity}: exception episodes the"
+                                      " simulation raised over its horizon (simulated volume, not measured)")
+    return None, None, "no frequency: the case maps to no activity or simulated source volume"
 
 
 def _error_cost(case: EvalCase) -> tuple[float, str, str]:
@@ -323,14 +346,14 @@ def _error_cost(case: EvalCase) -> tuple[float, str, str]:
     return round(cost, 4), operation, line
 
 
-def _factor(value: float | None, median: float | None, cap: float, name: str) -> tuple[float, str]:
+def _factor(value: float | None, median: float | None, cap: float, name: str, unit: str = "") -> tuple[float, str]:
     if value is None:
         return 1.0, f"{name} unknown: counted as a typical case (1.0)"
     if not median:
-        return 1.0, f"{name} has no positive median in the set: counted as 1.0"
+        return 1.0, f"{name} has no positive median in the set{f' for {unit}' if unit else ''}: counted as 1.0"
     raw = value / median
     clamped = min(cap, max(1.0 / cap, raw))
-    note = f"{name} factor {clamped:.4g} ({value:g} / median {median:g})"
+    note = f"{name} factor {clamped:.4g} ({value:g} / median {median:g}{f' {unit}' if unit else ''})"
     return clamped, note + (f", clamped from {raw:.4g}" if clamped != raw else "")
 
 
@@ -372,18 +395,25 @@ def _raw(case: EvalCase, index: RecordIndex, catalogue: Any) -> tuple[CaseValue,
         basis.append(f"at stake unknown: no monetary field on the {len(touched)} touched record(s)")
     activity, activity_line = _activity_of(case, touched)
     basis.append(activity_line)
-    frequency, frequency_line = _frequency(case, activity, touched, index, catalogue)
+    frequency, frequency_unit, frequency_line = _frequency(case, activity, touched, index, catalogue)
     basis.append(frequency_line)
+    if frequency_unit is not None:
+        basis.append(f"frequency unit {frequency_unit}: compared only with frequencies in the same unit")
     cost, operation, cost_line = _error_cost(case)
     basis.append(cost_line)
     value = CaseValue(case_id=case.id, at_stake=at_stake, currency=currency_out, frequency=frequency,
-                      error_cost=cost, weight=cost, activity=activity, operation=operation, basis=tuple(basis))
+                      frequency_unit=frequency_unit, error_cost=cost, weight=cost, activity=activity,
+                      operation=operation, basis=tuple(basis))
     return value, basis
 
 
 def _weighted(value: CaseValue, basis: list[str], scale: ValueScale) -> CaseValue:
-    stake, stake_line = _factor(value.at_stake, scale.at_stake, scale.max_factor, "at stake")
-    often, often_line = _factor(value.frequency, scale.frequency, scale.max_factor, "frequency")
+    currency = value.currency or ""
+    stake_median = scale.at_stake_by_currency.get(currency, scale.at_stake)
+    often_median = scale.frequency_by_unit.get(value.frequency_unit or "", scale.frequency)
+    stake, stake_line = _factor(value.at_stake, stake_median, scale.max_factor, "at stake", currency)
+    often, often_line = _factor(value.frequency, often_median, scale.max_factor, "frequency",
+                                f"per {value.frequency_unit}" if value.frequency_unit else "")
     weight = round(stake * often * value.error_cost, 6)
     lines = [*basis, stake_line, often_line,
              f"weight {weight:g} = at-stake factor x frequency factor x error cost"]
@@ -396,12 +426,25 @@ def _median(values: Iterable[float | None]) -> float | None:
 
 
 def value_scale(values: Iterable[CaseValue]) -> ValueScale:
-    """The medians of a set's known at-stake and frequency parts, and the policy clamp."""
+    """The medians of a set's known at-stake parts per currency and frequencies per unit, and the policy clamp.
+
+    A median across currencies would price a yen case against dollar ones,
+    and one across units would divide an episode count over a horizon by a
+    volume per period; so each is taken within its own group only.
+    """
 
     items = list(values)
-    return ValueScale(at_stake=_median(item.at_stake for item in items),
-                      frequency=_median(item.frequency for item in items),
-                      max_factor=float(_policy("evalrun.value.max_factor")))
+    stakes: dict[str, list[float | None]] = defaultdict(list)
+    often: dict[str, list[float | None]] = defaultdict(list)
+    for item in items:
+        if item.at_stake is not None:
+            stakes[item.currency or ""].append(item.at_stake)
+        if item.frequency is not None and item.frequency_unit is not None:
+            often[item.frequency_unit].append(item.frequency)
+    by_currency = {key: median for key in sorted(stakes) if (median := _median(stakes[key])) is not None}
+    by_unit = {key: median for key in sorted(often) if (median := _median(often[key])) is not None}
+    return ValueScale(max_factor=float(_policy("evalrun.value.max_factor")),
+                      at_stake_by_currency=by_currency, frequency_by_unit=by_unit)
 
 
 def value_of(case: EvalCase, records: Iterable[Any] | RecordIndex, *, catalogue: Any = None,
