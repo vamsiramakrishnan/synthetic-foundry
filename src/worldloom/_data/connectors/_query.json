@@ -1,0 +1,244 @@
+{
+  "about": "Vendor query languages for worldloom.connectors.query: the vendor field names each language knows beyond a connector definition's own query_fields and field manifests, the fields its free text searches, and the error bodies the vendor answers with. Record keys are tried in the order listed; the first one a record carries is its value.",
+  "tool_languages": {
+    "sharepoint.search_files": "kql",
+    "sharepoint.search_pages": "kql",
+    "onedrive.search_items": "kql"
+  },
+  "text_fields": ["summary", "title", "name", "subject", "short_description", "description", "body", "text", "content", "snippet"],
+  "languages": {
+    "jql": {
+      "unknown_field": "error",
+      "fields": {
+        "key": ["key", "ident", "external_id"],
+        "issuekey": ["key", "ident", "external_id"],
+        "id": ["id", "fid"],
+        "summary": ["summary", "title", "name"],
+        "description": ["description", "body"],
+        "project": ["project", "project_key"],
+        "status": ["status"],
+        "priority": ["priority"],
+        "assignee": ["assignee", "assignee_id"],
+        "reporter": ["reporter", "reporter_id"],
+        "creator": ["creator", "reporter", "reporter_id"],
+        "labels": ["labels"],
+        "issuetype": ["issue_type", "issuetype", "entity"],
+        "type": ["issue_type", "issuetype", "entity"],
+        "created": ["created_at", "created"],
+        "createddate": ["created_at", "created"],
+        "updated": ["modified_at", "updated_at", "updated"],
+        "updateddate": ["modified_at", "updated_at", "updated"],
+        "duedate": ["due_at", "due_date", "duedate"],
+        "due": ["due_at", "due_date", "duedate"],
+        "resolved": ["resolved_at", "resolved"],
+        "resolution": ["resolution"],
+        "sprint": ["sprint", "sprint_id"],
+        "parent": ["parent", "epic_key"],
+        "component": ["components", "component"],
+        "fixversion": ["fix_versions", "fixversion"]
+      },
+      "text_fields": ["summary", "title", "name", "description", "body", "comment", "environment"],
+      "errors": {
+        "parse": {"status": 400, "message": "Error in the JQL Query: {detail} (line 1, character {position})", "body": {"errorMessages": ["{message}"], "errors": {}}},
+        "unknown_field": {"status": 400, "message": "Field '{field}' does not exist or you do not have permission to view it.", "body": {"errorMessages": ["{message}"], "errors": {}}},
+        "unknown_order_field": {"status": 400, "message": "Not able to sort using field '{field}'.", "body": {"errorMessages": ["{message}"], "errors": {}}},
+        "unknown_function": {"status": 400, "message": "Unable to find JQL function '{name}'.", "body": {"errorMessages": ["{message}"], "errors": {}}}
+      }
+    },
+    "soql": {
+      "unknown_field": "error",
+      "fields": {
+        "id": ["ident", "external_id", "id"],
+        "name": ["name", "title"],
+        "createddate": ["created_at", "created"],
+        "lastmodifieddate": ["modified_at", "updated_at"],
+        "systemmodstamp": ["modified_at", "updated_at"],
+        "ownerid": ["owner_id", "owner"],
+        "stagename": ["stage"],
+        "amount": ["amount"],
+        "closedate": ["close", "close_date"],
+        "isclosed": ["closed", "is_closed"],
+        "nextstep": ["next_step"],
+        "subject": ["subject", "title"],
+        "status": ["status"],
+        "priority": ["severity", "priority"],
+        "billingcountry": ["region", "country"],
+        "title": ["title"],
+        "leadsource": ["source"],
+        "description": ["description", "body"],
+        "type": ["type"],
+        "industry": ["industry"],
+        "accountid": ["account_id", "account"],
+        "account.name": ["company", "account_name"]
+      },
+      "text_fields": ["name", "title", "subject", "description", "body"],
+      "errors": {
+        "parse": {"status": 400, "message": "\n{context}\n{marker}\nERROR at Row:1:Column:{column}\n{detail}", "body": [{"message": "{message}", "errorCode": "MALFORMED_QUERY"}]},
+        "unknown_field": {"status": 400, "message": "\n{context}\n{marker}\nERROR at Row:1:Column:{column}\nNo such column '{field}' on entity '{entity}'. If you are attempting to use a custom field, be sure to append the '__c' after the custom field name. Please reference your WSDL or the describe call for the appropriate names.", "body": [{"message": "{message}", "errorCode": "INVALID_FIELD"}]},
+        "unknown_relationship": {"status": 400, "message": "\n{context}\n{marker}\nERROR at Row:1:Column:{column}\nDidn't understand relationship '{relationship}' in field path. If you are attempting to use a custom relationship, be sure to append the '__r' after the custom relationship name. Please reference your WSDL or the describe call for the appropriate names.", "body": [{"message": "{message}", "errorCode": "INVALID_FIELD"}]},
+        "unknown_order_field": {"status": 400, "message": "\n{context}\n{marker}\nERROR at Row:1:Column:{column}\nNo such column '{field}' on entity '{entity}'. If you are attempting to use a custom field, be sure to append the '__c' after the custom field name. Please reference your WSDL or the describe call for the appropriate names.", "body": [{"message": "{message}", "errorCode": "INVALID_FIELD"}]},
+        "unknown_type": {"status": 400, "message": "\n{context}\n{marker}\nERROR at Row:1:Column:{column}\nsObject type '{entity}' is not supported. If you are attempting to use a custom object, be sure to append the '__c' after the entity name. Please reference your WSDL or the describe call for the appropriate names.", "body": [{"message": "{message}", "errorCode": "INVALID_TYPE"}]}
+      }
+    },
+    "encoded_query": {
+      "unknown_field": "ignore",
+      "fields": {
+        "sys_id": ["sys_id", "fid"],
+        "number": ["number", "ident", "external_id"],
+        "short_description": ["short_description", "short", "title", "name"],
+        "description": ["description", "body"],
+        "state": ["state"],
+        "priority": ["priority"],
+        "assignment_group": ["assignment_group"],
+        "assigned_to": ["assigned_to", "assignee"],
+        "cmdb_ci": ["ci", "cmdb_ci", "cmdb_ci_ids"],
+        "sys_created_on": ["created_at", "opened_at", "sys_created_on"],
+        "opened_at": ["opened_at", "created_at"],
+        "sys_updated_on": ["modified_at", "sys_updated_on"],
+        "closed_at": ["closed_at"],
+        "category": ["category"],
+        "approval": ["approval"],
+        "correlation_id": ["correlation_id"]
+      },
+      "text_fields": ["short_description", "short", "title", "name", "description", "body", "text"],
+      "errors": {
+        "parse": {"status": 400, "message": "Invalid query", "body": {"error": {"message": "{message}", "detail": "{detail}"}, "status": "failure"}},
+        "unknown_type": {"status": 400, "message": "Invalid table {entity}", "body": {"error": {"message": "{message}", "detail": null}, "status": "failure"}}
+      }
+    },
+    "odata": {
+      "unknown_field": "error",
+      "type_name": "microsoft.graph.{name}",
+      "fields": {
+        "id": ["id", "fid"],
+        "subject": ["subject", "title", "name"],
+        "name": ["name", "title"],
+        "displayname": ["display_name", "name", "title"],
+        "body/content": ["body", "text", "content"],
+        "bodypreview": ["body", "text"],
+        "from/emailaddress/address": ["from", "sender"],
+        "sender/emailaddress/address": ["sender", "from"],
+        "torecipients/emailaddress/address": ["to", "recipient"],
+        "receiveddatetime": ["received_at", "sent_at", "created_at"],
+        "sentdatetime": ["sent_at", "created_at"],
+        "createddatetime": ["created_at", "sent_at"],
+        "lastmodifieddatetime": ["modified_at", "updated_at"],
+        "isread": ["is_read"],
+        "importance": ["importance"],
+        "hasattachments": ["has_attachments"],
+        "conversationid": ["thread_id", "conversation"],
+        "categories": ["categories", "labels"],
+        "size": ["size"]
+      },
+      "text_fields": ["subject", "title", "name", "body", "text", "content", "description"],
+      "errors": {
+        "parse": {"status": 400, "message": "Invalid filter clause: {detail}", "body": {"error": {"code": "BadRequest", "message": "{message}"}}},
+        "unknown_field": {"status": 400, "message": "Invalid filter clause: Could not find a property named '{field}' on type '{entity}'.", "body": {"error": {"code": "BadRequest", "message": "{message}"}}},
+        "unknown_order_field": {"status": 400, "message": "Invalid $orderby clause: Could not find a property named '{field}' on type '{entity}'.", "body": {"error": {"code": "BadRequest", "message": "{message}"}}},
+        "unknown_select_field": {"status": 400, "message": "Could not find a property named '{field}' on type '{entity}'.", "body": {"error": {"code": "BadRequest", "message": "{message}"}}},
+        "unknown_function": {"status": 400, "message": "Invalid filter clause: An unknown function with name '{name}' was found. This may also be a function import or a key lookup on a navigation property, which is not allowed.", "body": {"error": {"code": "BadRequest", "message": "{message}"}}}
+      }
+    },
+    "cql": {
+      "unknown_field": "error",
+      "fields": {
+        "id": ["ident", "external_id", "id"],
+        "content": ["ident", "external_id", "id"],
+        "type": ["entity", "type"],
+        "space": ["space", "space_key"],
+        "space.key": ["space", "space_key"],
+        "title": ["title", "name"],
+        "label": ["labels", "label"],
+        "creator": ["creator", "author", "created_by"],
+        "contributor": ["contributors", "modified_by", "creator"],
+        "created": ["created_at", "created"],
+        "lastmodified": ["modified_at", "updated_at", "lastmodified"],
+        "ancestor": ["ancestors", "parent", "ancestor"],
+        "parent": ["parent"],
+        "mention": ["mentions"]
+      },
+      "text_fields": ["title", "name", "body", "text", "content", "description", "excerpt"],
+      "errors": {
+        "parse": {"status": 400, "message": "com.atlassian.confluence.api.service.exceptions.BadRequestException: Could not parse cql : {query}", "body": {"statusCode": 400, "data": {"authorized": false, "valid": true, "errors": [], "successful": false}, "message": "{message}"}},
+        "unknown_field": {"status": 400, "message": "com.atlassian.confluence.api.service.exceptions.BadRequestException: Could not parse cql : {query}", "body": {"statusCode": 400, "data": {"authorized": false, "valid": true, "errors": [], "successful": false}, "message": "{message}"}},
+        "unknown_order_field": {"status": 400, "message": "com.atlassian.confluence.api.service.exceptions.BadRequestException: Could not parse cql : {query}", "body": {"statusCode": 400, "data": {"authorized": false, "valid": true, "errors": [], "successful": false}, "message": "{message}"}},
+        "unknown_function": {"status": 400, "message": "com.atlassian.confluence.api.service.exceptions.BadRequestException: Could not parse cql : {query}", "body": {"statusCode": 400, "data": {"authorized": false, "valid": true, "errors": [], "successful": false}, "message": "{message}"}}
+      }
+    },
+    "kql": {
+      "unknown_field": "text",
+      "fields": {
+        "title": ["title", "name"],
+        "filename": ["name", "title"],
+        "author": ["author", "created_by", "owner"],
+        "createdby": ["created_by", "author", "owner"],
+        "modifiedby": ["modified_by", "last_modified_by"],
+        "filetype": ["file_type", "format", "entity"],
+        "fileextension": ["file_type", "format", "entity"],
+        "contenttype": ["content_type", "entity"],
+        "path": ["path", "folder", "url"],
+        "site": ["site", "site_name"],
+        "lastmodifiedtime": ["modified_at", "updated_at"],
+        "write": ["modified_at", "updated_at"],
+        "created": ["created_at"],
+        "size": ["size"],
+        "owner": ["owner"],
+        "status": ["status"]
+      },
+      "text_fields": ["title", "name", "body", "text", "content", "description", "summary"],
+      "errors": {
+        "parse": {"status": 400, "message": "Your query is malformed. Please rephrase your query.", "body": {"error": {"code": "BadRequest", "message": "{message}"}}}
+      }
+    },
+    "drive_q": {
+      "unknown_field": "error",
+      "fields": {
+        "name": ["name", "title"],
+        "mimetype": ["mime_type", "mimeType"],
+        "modifiedtime": ["modified_at", "updated_at"],
+        "createdtime": ["created_at"],
+        "viewedbymetime": ["viewed_at"],
+        "trashed": ["trashed"],
+        "starred": ["starred"],
+        "parents": ["parents", "parent_id", "folder"],
+        "owners": ["owners", "owner"],
+        "writers": ["writers"],
+        "readers": ["readers"],
+        "sharedwithme": ["shared_with_me", "shared"]
+      },
+      "defaults": {"trashed": false, "starred": false},
+      "operators": {
+        "name": ["contains", "=", "!="],
+        "fulltext": ["contains"],
+        "mimetype": ["contains", "=", "!="],
+        "modifiedtime": ["<=", "<", "=", "!=", ">", ">="],
+        "createdtime": ["<=", "<", "=", "!=", ">", ">="],
+        "viewedbymetime": ["<=", "<", "=", "!=", ">", ">="],
+        "trashed": ["=", "!="],
+        "starred": ["=", "!="],
+        "parents": ["in"],
+        "owners": ["in"],
+        "writers": ["in"],
+        "readers": ["in"],
+        "sharedwithme": ["=", "!="]
+      },
+      "text_fields": ["name", "title", "body", "text", "content", "description"],
+      "errors": {
+        "parse": {"status": 400, "message": "Invalid Value", "body": {"error": {"code": 400, "message": "{message}", "errors": [{"domain": "global", "reason": "invalid", "message": "{message}", "locationType": "parameter", "location": "q"}]}}},
+        "unknown_field": {"status": 400, "message": "Invalid Value", "body": {"error": {"code": 400, "message": "{message}", "errors": [{"domain": "global", "reason": "invalid", "message": "{message}", "locationType": "parameter", "location": "q"}]}}}
+      }
+    },
+    "slack_search": {
+      "unknown_field": "ignore",
+      "fields": {
+        "in": ["channel", "channel_name", "conversation"],
+        "from": ["sender", "user", "author", "from"],
+        "timestamp": ["ts", "sent_at", "created_at"]
+      },
+      "text_fields": ["text", "body", "title", "name", "subject"],
+      "errors": {
+        "parse": {"status": 200, "message": "invalid_search", "body": {"ok": false, "error": "{message}"}}
+      }
+    }
+  }
+}

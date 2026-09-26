@@ -129,3 +129,71 @@ The grader reports the established `status`, `fails`, executed spans and DAG
 format. Missing calls, incorrect order and wrong target state remain visible.
 The surface grades the compiled assertions; it does not evaluate the quality
 of a prose answer or treat an agent's claim of refusal as observed behavior.
+
+## Native vendor queries (opt-in)
+
+By default a search tool's `query` string is read as the historical
+conjunctive subset (`field = value AND ...`) and compiled to a Worldloom
+predicate. Set the policy `connectors.query.engine` to `native` (or construct
+`ConnectorEmulator(..., query_engine="native")`) and the same argument runs as
+the vendor's own query language through `worldloom.connectors.query`. The
+default is `predicate`, and under it every emulator answer is byte-identical
+to what it was before the evaluator existed.
+
+A policy pack that opts a run in:
+
+```json
+{"schema": "worldloom.pack/v1", "kind": "policy", "name": "native",
+ "body": {"values": {"connectors.query.engine": "native"}}}
+```
+
+Which language a tool reads is its connector's `query_language`, except that
+SharePoint's `search_files` and `search_pages` and OneDrive's `search_items`
+read KQL (their list endpoints stay OData). Connectors whose language the
+evaluator does not parse (Teamwork Graph's GraphQL, Rovo search, the system
+of record) keep the historical path under either setting.
+
+| Language | Connectors | Supported subset |
+|---|---|---|
+| JQL | Jira | `= != > >= < <= ~ !~ IN NOT IN`, `IS [NOT] EMPTY`, `AND OR NOT`, parentheses, `ORDER BY`, `currentUser()`, `now()`, `startOf`/`endOf` `Day Week Month Year(inc)`, relative dates like `-7d` |
+| SOQL | Salesforce | `SELECT .. FROM obj WHERE .. ORDER BY .. [NULLS FIRST/LAST] LIMIT OFFSET`, `= != < > <= >= LIKE IN NOT IN INCLUDES EXCLUDES`, date literals (`TODAY`, `LAST_N_DAYS:n`, `THIS_QUARTER`, ...), relationship paths (`Account.Name`) |
+| Encoded query | ServiceNow | `^`, `^OR`, `^NQ`, `= != LIKE STARTSWITH ENDSWITH IN NOT IN ISEMPTY ISNOTEMPTY > < >= <= BETWEEN ON`, `ORDERBY`/`ORDERBYDESC`, `javascript:gs.daysAgoStart(n)` and the other `gs` date helpers |
+| OData | Outlook, email, Teams, OneDrive and SharePoint lists | `$filter` with `eq ne gt ge lt le in and or not`, `startswith`, `endswith`, `contains`, `any()`/`all()` on simple collections; `$orderby`, `$top`, `$skip`, `$select`, `$search` |
+| CQL | Confluence | `space type title text ~ label creator created lastmodified ...`, `AND OR NOT`, `ORDER BY`, `now("-4w")` |
+| KQL | SharePoint and OneDrive search | free text, `"phrases"`, `prefix*`, `prop:value`, `prop>date`, `AND OR NOT`, `-term` |
+| Drive `q` | Google Drive | `name contains`, `fullText contains`, `mimeType =`, `modifiedTime >`, `'id' in parents`, `trashed = false`, `and or not` |
+| Slack search | Slack | `in:#channel`, `from:@user`, `before:` `after:` `on:` `during:`, `-term`, free text |
+
+Every relative date resolves against the connector definition's `clock`, the
+corpus's as-of time. Field names bind to record keys through the definition's
+`query_fields` and field manifests, then the vendor names listed per language
+in `worldloom/_data/connectors/_query.json`, then any key the records carry.
+Free text ranks by BM25 over the record's text fields with ties broken by
+record id; an explicit order also breaks ties by id.
+
+A query outside the subset is refused the way the vendor refuses it, with the
+vendor's HTTP status and message on the `ConnectorError` (the full vendor
+response body is on the underlying `QueryError`). Jira answers an unknown
+field with `Field 'foo' does not exist or you do not have permission to view
+it.`, Salesforce with `INVALID_FIELD` and a row and column, Graph with
+`Invalid filter clause: Could not find a property named 'foo' on type
+'microsoft.graph.message'.`, Confluence with `Could not parse cql`, Drive with
+`Invalid Value`. ServiceNow drops a condition on an unknown field and
+SharePoint searches an unknown property as text, because those products do.
+The templates live in `_query.json`, not in code.
+
+An out-of-process provider uses the same three calls the emulator does:
+
+```python
+from datetime import datetime
+
+from worldloom.connector_definition import load_connector_definition
+from worldloom.connectors.query import bind, execute, parse, target_for
+
+definition = load_connector_definition("jira")
+records = [{"fid": "r1", "ident": "PHX-1", "project": "PHX", "summary": "Checkout outage"}]
+query = parse("jql", 'project = PHX AND text ~ "outage"', clock=datetime.fromisoformat(definition.clock))
+target = target_for(definition, records=records)
+result = execute(bind(query, target), records, target)
+[records[index]["ident"] for index in result.matches]  # ["PHX-1"]
+```
