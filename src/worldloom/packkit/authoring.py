@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from ..cascade import CascadeModel, Finding, refuse
 from ..providers import digest
@@ -192,8 +192,19 @@ class Verdict:
 
 def accept(request_payload: dict[str, Any], reply: dict[str, Any] | InterviewReply, *,
            roots: Sequence[str | Path] = ()) -> Verdict:
-    """Judge one reply to *request_payload*. Stores nothing."""
-    parsed = reply if isinstance(reply, InterviewReply) else InterviewReply.model_validate(reply)
+    """Judge one reply to *request_payload*. Stores nothing.
+
+    A reply that is not the interview's shape is refused with a finding per
+    field, like any other refusal, so the harness is told what to fix
+    instead of the loop stopping on it.
+    """
+    if isinstance(reply, InterviewReply):
+        parsed = reply
+    else:
+        try:
+            parsed = InterviewReply.model_validate(reply)
+        except ValidationError as error:
+            return Verdict("refused", findings=tuple(_shape_findings(error)))
     if parsed.request_id != request_payload["request_id"]:
         return Verdict("refused", findings=(f"reply answers request {parsed.request_id}, not {request_payload['request_id']}",))
     if parsed.proposal is None:
@@ -225,6 +236,16 @@ def accept(request_payload: dict[str, Any], reply: dict[str, Any] | InterviewRep
         return Verdict("refused", envelope=envelope, findings=tuple(findings), message=parsed.message)
     return Verdict("accepted", envelope=envelope, resolved=resolved, message=parsed.message,
                    questions=parsed.questions)
+
+
+def _shape_findings(error: ValidationError) -> list[Finding]:
+    """A finding per problem pydantic found in a reply, located by field; at most twelve."""
+    findings: list[Finding] = []
+    for problem in error.errors()[:12]:
+        where = ".".join(str(part) for part in problem.get("loc", ())) or "reply"
+        findings.append(f"{where}: {problem.get('msg', 'invalid')}; the reply must match the request's "
+                        "`response_schema`")
+    return findings
 
 
 def _body_from_diff(request_payload: dict[str, Any], proposal: Proposal) -> tuple[dict[str, Any] | None, str]:

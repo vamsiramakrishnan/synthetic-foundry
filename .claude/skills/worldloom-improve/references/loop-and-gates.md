@@ -51,6 +51,10 @@ the behaviour. That is the gate working; do not loosen it to promote.
   case that declares its split (`test`, `holdout`, `validation`) keeps it.
 
 Training and held-out case ids must not overlap; the loop refuses otherwise.
+A training case that declares a held-out split never trains: beside a
+separate holdout it is dropped and counted in `improve.json` as
+`held_out_dropped`. Held-out runs carry `"split": "holdout"` in `run.json`,
+so export refuses them after they leave the loop.
 
 ## Output directory
 
@@ -62,9 +66,15 @@ improve/
   packs/agent/<stem>-rN.json   every accepted proposal, usable as --agent-pack
 ```
 
-**Resume.** A run on disk for the same pack digest, case set digest and grader
-digest is read instead of paid for again, so rerunning an interrupted loop
-into the same `-o` continues it. Changing the rater or the cases starts those
+**Numbering.** Rounds are numbered across every loop into one `-o`: a second
+loop continues after the last receipt, so earlier receipts and candidates are
+never overwritten. A name a receipt or the champion already uses, or that a
+pack outside `packs/` holds, gets a suffix instead (`baseline-r3-1f2e3d4c`).
+
+**Resume.** A run on disk for the same pack digest, agent fingerprint, case
+set digest and grader digest is read instead of paid for again, so rerunning
+an interrupted loop into the same `-o` continues it. Changing the rater, the
+cases or the agent (another `--exec` command or `--harness`) starts those
 runs over.
 
 ## Knobs

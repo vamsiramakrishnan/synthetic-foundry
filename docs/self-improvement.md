@@ -268,14 +268,31 @@ which is the stronger test: a policy that learned this company rather than the
 task fails on another. Otherwise a share of the corpus
 (`evalrun.improve.holdout_share`) is held back by a stable hash of each case
 id, and a case that declares its split (`test`, `holdout`, `validation`) keeps
-it. The proposer sees the training brief only; no held-out case id or result
-reaches it.
+it. A training case that declares a held-out split never trains, whichever
+way the holdout is chosen: with `--holdout-corpus` it is dropped, and
+`improve.json` counts it as `held_out_dropped`. Every run on the held-out
+cases is written with `"split": "holdout"` in its `run.json`, so trace export
+recognises it after it leaves the loop. The proposer sees the training brief
+only; no held-out case id or result reaches it.
+
+The proposer and the agent under test run in a fresh empty working directory
+when either is a bundled harness (`--harness`, `--proposer-harness`): with no
+tools where the harness allows it, or in codex's read-only sandbox pointed
+there with `--cd`. The
+loop's output directory, with its runs and held-out results, is never that
+directory. A working directory is not a jail: a codex child with shell access
+could still read an absolute path it guessed, so keep the corpus and the
+output directory where no child needs to look.
 
 A round stops early when the champion passes every training case (escalate
 the curriculum instead), when the proposer asks questions (the operator
 answers them), when no proposal lints clean within
-`evalrun.improve.authoring_rounds`, or when the proposal restates the
-champion. Every round writes `rounds/NNN.json` with the champion, the
+`evalrun.improve.authoring_rounds`, when the proposal restates the champion,
+or when the proposer fails (`proposer_error`: its process exited non-zero,
+timed out or answered with something that is not JSON; the receipt keeps the
+error and the loop stops). A reply that is JSON but not the interview's
+shape is refused with a finding per field, like any other refusal. If the
+grader moves mid-loop the command refuses with `grader_drift`. Every round writes `rounds/NNN.json` with the champion, the
 candidate, the grader digest, the brief's digest, the clusters, the authoring
 rounds and both gates. A round with a candidate also stores the candidate's
 unified diff against the champion (`diff`, and its hunk count in
@@ -285,10 +302,21 @@ and each hunk with its file, header, decision (`kept`, `dropped` or
 `untested`) and measured contribution. The diff is that of the candidate that
 went to the holdout, so after ablation it holds only the hunks that carried
 the gain, and that candidate is what `packs/agent/` holds under the round's
-name. Runs already on disk for the same policy, case set and
-grader are reused, so an interrupted loop resumes without paying twice.
+name. Runs already on disk for the same policy, agent, case set and grader
+are reused, so an interrupted loop resumes without paying twice; the agent is
+compared by its fingerprint (for `--exec` or `--harness`, the command and the
+policy), so a run another agent made under the same pack is run again.
 Accepted candidates are stored under `packs/agent/`, so any of them can be
-named with `--agent-pack` afterwards. The loop writes nothing outside its
+named with `--agent-pack` afterwards.
+
+Round numbers run across every loop into one output directory: a second loop
+continues from the last receipt in `rounds/`, so it never overwrites an
+earlier loop's receipts, and its candidates are named after their rounds
+(`baseline-r3`, with the stem taken from the champion's name less any round
+suffix). A name that a receipt or the current champion already refers to, or
+that a pack outside the loop's own `packs/` holds, is never overwritten: that
+round's candidate takes a suffixed name (`baseline-r3-1f2e3d4c`) instead, so
+an earlier loop's champion always resolves by its pinned digest. The loop writes nothing outside its
 output directory and that pack root: a candidate's skill tree is
 materialised under `skills-cache/` there, not in the user's cache.
 

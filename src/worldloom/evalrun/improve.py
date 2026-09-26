@@ -15,6 +15,21 @@ One round:
 6. a candidate that clears both gates becomes the champion; every round,
    promoted or not, leaves a receipt.
 
+Rounds are numbered across every loop run into one output directory: a loop
+continues from the last receipt in ``rounds/``, so a second loop never
+overwrites an earlier one's receipts, and a candidate is named after its
+round (``baseline-r3``). A name already held by a pack a receipt or the
+current champion refers to, or by a pack outside the loop's own root, is
+never overwritten: the round takes a suffixed name instead
+(``baseline-r3-1f2e3d4c``).
+
+Which cases are held out is ``evalrun.splits``'s answer, the same one trace
+export and the curriculum use. A training case that declares a held-out
+split never trains: without a separate holdout it joins the held-out cases,
+and with one it is dropped and counted (``held_out_dropped``). Every run on
+the held-out cases is written with ``split="holdout"``, so an export can
+refuse it after it leaves the loop.
+
 The proposer works on the champion as a tree of files (the ``agent`` kind's
 tree codec: ``policy.json`` plus real skills under ``skills/``) and is asked
 for a unified diff against it, so a revision is code generation over the
@@ -43,6 +58,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -51,39 +67,38 @@ from typing import Any
 from pydantic import Field
 
 from .. import packkit
+from ..execseam import ExecError
 from ..models import Model
 from ..packkit import diffs
 from ..packkit.authoring import Exchange, author, check, install
 from ..packkit.envelope import PackEnvelope
 from ..packkit.resolve import ResolvedPack
-from .agents import AgentUnderTest
+from .agents import AgentUnderTest, fingerprint
 from .autopsy import autopsy, render_brief
 from .contract import EvalCase
 from .grader import check_frozen, grader_identity
 from .harness import skills_cache_in
 from .results import Comparison, compare, delta_band, read_run, write_run
 from .runner import RunReport, case_set_digest
+from .splits import HELD_OUT_SPLITS, declared_split, is_held_out
 from .value import value_weighted_delta
 
 IMPROVE_SCHEMA = "worldloom.improve/v1"
 ROUND_SCHEMA = "worldloom.improve-round/v1"
 
-#: Splits a case can declare that keep it out of training: what the dataset
-#: compiler and the foundry call the cases a result is judged on.
-HELD_OUT_SPLITS = frozenset({"test", "holdout", "validation"})
+#: A round's suffix on a candidate's name: ``-r3``, or ``-r3-1f2e3d4c`` when
+#: the plain name was taken.
+_ROUND_SUFFIX = re.compile(r"-r\d+(-[0-9a-f]+)?$")
+#: What a failing proposer raises: the exec seam's errors, a harness adapter's
+#: refusals and unreadable replies (``ValueError``, JSON errors included), and
+#: the operating system's. Anything else is a bug and propagates.
+_PROPOSER_ERRORS: tuple[type[Exception], ...] = (ExecError, ValueError, OSError, TimeoutError)
 
 Runner = Callable[[Sequence[EvalCase], AgentUnderTest], RunReport]
 AgentFor = Callable[[ResolvedPack], AgentUnderTest]
 
 
 # -- splits -------------------------------------------------------------------
-
-
-def _declared_split(case: EvalCase) -> str | None:
-    for source in (case.dimensions, case.row, case.row.get("dimensions") or {}):
-        if isinstance(source, Mapping) and isinstance(source.get("split"), str):
-            return str(source["split"])
-    return None
 
 
 def split_cases(cases: Iterable[EvalCase], *, holdout_share: float) -> tuple[tuple[EvalCase, ...], tuple[EvalCase, ...]]:
@@ -98,9 +113,9 @@ def split_cases(cases: Iterable[EvalCase], *, holdout_share: float) -> tuple[tup
     train: list[EvalCase] = []
     held: list[EvalCase] = []
     for case in cases:
-        declared = _declared_split(case)
+        declared = declared_split(case)
         if declared is not None:
-            (held if declared in HELD_OUT_SPLITS else train).append(case)
+            (held if is_held_out(declared) else train).append(case)
             continue
         bucket = int(hashlib.sha256(f"improve-split\0{case.id}".encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
         (held if bucket < holdout_share else train).append(case)
@@ -200,7 +215,8 @@ class RoundReceipt(Model):
     candidate: dict[str, Any] | None = None
     #: ``promoted``, ``rejected`` (a gate failed), or why the round stopped
     #: before a candidate could be judged: ``no_failures``, ``questions``,
-    #: ``refused``, ``unchanged``.
+    #: ``refused``, ``unchanged``, or ``proposer_error`` (the proposing
+    #: harness failed or timed out; ``reasons`` holds its error).
     decision: str
     reasons: tuple[str, ...] = ()
     brief_digest: str | None = None
@@ -228,6 +244,9 @@ class ImproveReport(Model):
     champion: dict[str, Any]
     rounds: tuple[RoundReceipt, ...]
     promotions: int
+    #: Training cases that declared a held-out split and were dropped because
+    #: a separate holdout was given (without one they join the held-out cases).
+    held_out_dropped: int = 0
 
 
 def _identity(pack: ResolvedPack) -> dict[str, Any]:
@@ -236,6 +255,19 @@ def _identity(pack: ResolvedPack) -> dict[str, Any]:
 
 def _slug(pack: ResolvedPack) -> str:
     return f"{pack.name}@{pack.digest[:12]}"
+
+
+def round_stem(name: str) -> str:
+    """*name* without the round suffix a loop gave it: ``ops-runner-r2`` is ``ops-runner``."""
+    return (_ROUND_SUFFIX.sub("", name) or name)[:48]
+
+
+class _ProposerFailed(Exception):
+    """The proposing harness failed; carries its error to the round."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(str(error))
+        self.error = error
 
 
 # -- the loop -----------------------------------------------------------------
@@ -264,17 +296,26 @@ class Improver:
     #: Case id to value at stake (``value.value_table``); when given, every
     #: gate also requires the value-weighted delta to clear its bar.
     values: Mapping[str, Any] | None = None
-    _runs: dict[tuple[str, str], RunReport] = field(default_factory=dict)
+    _runs: dict[tuple[str, str, str], RunReport] = field(default_factory=dict)
     _candidates: dict[str, ResolvedPack] = field(default_factory=dict)
 
     def _pinned_run(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str, grader: dict[str, Any]) -> RunReport:
-        key = (pack.digest, label)
+        # The agent is built first, so a run is reused only when this agent
+        # made it: one pack run by two different agents (another command,
+        # another harness) is two runs. It is built here so a skill tree it
+        # materialises lands in this loop's output directory, not the user's
+        # cache.
+        with skills_cache_in(self.out / "skills-cache"):
+            agent = self.agent_for(pack)
+        identity = fingerprint(agent)
+        key = (pack.digest, label, json.dumps(identity, sort_keys=True, default=str))
         held = self._runs.get(key)
         if held is not None:
             return held
         directory = self.out / "runs" / _slug(pack) / label
-        # A run already on disk for this exact policy, case set and grader is
-        # reused, so an interrupted loop resumes without paying for it twice.
+        # A run already on disk for this exact policy, agent, case set and
+        # grader is reused, so an interrupted loop resumes without paying for
+        # it twice.
         if (directory / "run.json").exists():
             try:
                 stored = read_run(directory)
@@ -282,34 +323,100 @@ class Improver:
                 stored = None
             if (stored is not None and stored.case_set == case_set_digest(cases)
                     and (stored.grader or {}).get("digest") == grader["digest"]
-                    and (stored.agent_pack or {}).get("digest") == pack.digest):
+                    and (stored.agent_pack or {}).get("digest") == pack.digest
+                    and stored.agent_identity == identity):
                 self._runs[key] = stored
                 return stored
         check_frozen(grader, self.rater)
-        # The agent is built here so a skill tree it materialises lands in
-        # this loop's output directory, not the user's cache.
-        with skills_cache_in(self.out / "skills-cache"):
-            agent = self.agent_for(pack)
         report = self.run(cases, agent)
         check_frozen(grader, self.rater)
-        report = report.model_copy(update={"grader": grader,
-                                           "agent_pack": report.agent_pack or _identity(pack)})
+        update: dict[str, Any] = {"grader": grader, "agent_pack": report.agent_pack or _identity(pack),
+                                  "agent_identity": identity}
+        if label == "holdout":
+            # Marked on the run itself, so an export refuses it wherever it goes.
+            update["split"] = "holdout"
+        report = report.model_copy(update=update)
         write_run(directory, report)
         self._runs[key] = report
         return report
 
-    def _propose(self, champion: ResolvedPack, brief: str, round_number: int, stem: str) -> Any:
+    def _earlier(self) -> tuple[int, frozenset[str]]:
+        """The last round number receipted in this output directory, and every pack ref a receipt names.
+
+        A second loop into the same directory continues the numbering, so
+        its receipts and candidates never land on an earlier loop's.
+        """
+        last = 0
+        refs: set[str] = set()
+        documents: list[Path] = []
+        rounds_dir = self.out / "rounds"
+        if rounds_dir.is_dir():
+            for path in sorted(rounds_dir.glob("*.json")):
+                if path.stem.isdigit():
+                    last = max(last, int(path.stem))
+                documents.append(path)
+        documents.append(self.out / "improve.json")
+        for path in documents:
+            try:
+                document = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(document, dict):
+                continue
+            ablation = document.get("ablation")
+            for identity in (document.get("champion"), document.get("candidate"), document.get("initial"),
+                             ablation.get("proposed") if isinstance(ablation, dict) else None):
+                if isinstance(identity, dict) and isinstance(identity.get("ref"), str):
+                    refs.add(identity["ref"])
+        return last, frozenset(refs)
+
+    def _candidate_name(self, champion: ResolvedPack, stem: str, number: int, protected: frozenset[str]) -> str:
+        """A name for round *number*'s candidate that overwrites nothing anyone refers to.
+
+        The plain ``<stem>-r<number>`` is taken when no pack holds it, or when
+        the pack holding it is in the loop's own root and neither a receipt
+        nor the champion names it (a round interrupted before its receipt,
+        which the same name resumes). Otherwise the name carries a short
+        digest of the champion and the round, stable across reruns.
+        """
+        from ..packkit.sources import find
+
+        own = (self.out / "packs").resolve()
+        attempt = 0
+        name = f"{stem}-r{number}"
+        while True:
+            located = find(champion.kind, name, roots=self._search())
+            if located is None:
+                return name
+            inside = Path(located.location).resolve().is_relative_to(own)
+            if inside and name != champion.name and f"{champion.kind}:{name}" not in protected:
+                return name
+            attempt += 1
+            suffix = hashlib.sha256(f"{champion.digest}\0{number}\0{attempt}".encode()).hexdigest()[:8]
+            name = f"{stem}-r{number}-{suffix}"
+
+    def _propose(self, champion: ResolvedPack, brief: str, round_number: int, stem: str,
+                 protected: frozenset[str] = frozenset()) -> Any:
         message = (packkit.text("evalrun.improve.message", brief=brief, champion=champion.pinned, round=round_number)
                    + "\n\n" + packkit.text("evalrun.improve.rule.diff"))
-        draft = {"schema": "worldloom.pack/v1", "kind": "agent", "name": f"{stem}-r{round_number}",
+        name = self._candidate_name(champion, stem, round_number, protected)
+        draft = {"schema": "worldloom.pack/v1", "kind": "agent", "name": name,
                  "title": f"{stem}, round {round_number}", "body": champion.data}
-        return author("agent", message, self.exchange, name=f"{stem}-r{round_number}",
-                      max_rounds=self.authoring_rounds, root=self.out / "packs",
-                      roots=tuple(self.pack_roots), replace=True, draft=draft)
+
+        def exchange(payload: dict[str, Any]) -> dict[str, Any]:
+            try:
+                return self.exchange(payload)
+            except _PROPOSER_ERRORS as error:
+                raise _ProposerFailed(error) from error
+
+        # `replace` only ever overwrites a pack `_candidate_name` found no
+        # receipt or champion naming.
+        return author("agent", message, exchange, name=name, max_rounds=self.authoring_rounds,
+                      root=self.out / "packs", roots=tuple(self.pack_roots), replace=True, draft=draft)
 
     def improve(self, champion: ResolvedPack, train: Sequence[EvalCase], holdout: Sequence[EvalCase], *,
                 rounds: int, min_train_delta: float | None = None, min_holdout_delta: float | None = None,
-                max_axis_regression: float | None = None) -> ImproveReport:
+                max_axis_regression: float | None = None, held_out_dropped: int = 0) -> ImproveReport:
         if not train:
             raise ValueError("no training cases: the loop has nothing to learn from")
         if not holdout:
@@ -317,18 +424,26 @@ class Improver:
         overlap = {case.id for case in train} & {case.id for case in holdout}
         if overlap:
             raise ValueError(f"{len(overlap)} case(s) are both training and held out, e.g. {sorted(overlap)[0]}")
+        sealed = sorted(case.id for case in train if is_held_out(declared_split(case)))
+        if sealed:
+            raise ValueError(f"{len(sealed)} training case(s) declare a held-out split, e.g. {sealed[0]}; "
+                             "a case judged on is never trained on")
         band = delta_band()
         min_train = band if min_train_delta is None else min_train_delta
         min_held = float(packkit.policy("evalrun.improve.min_holdout_delta")) if min_holdout_delta is None else min_holdout_delta
         max_fall = band if max_axis_regression is None else max_axis_regression
         grader = grader_identity(self.rater)
-        stem = champion.name.split("-r")[0][:48]
+        stem = round_stem(champion.name)
         initial = champion
         receipts: list[RoundReceipt] = []
         self.out.mkdir(parents=True, exist_ok=True)
-        for number in range(1, rounds + 1):
-            receipt = self._round(number, champion, train, holdout, grader, stem,
+        last, protected = self._earlier()
+        for number in range(last + 1, last + rounds + 1):
+            protected |= {f"{champion.kind}:{champion.name}"}
+            receipt = self._round(number, champion, train, holdout, grader, stem, protected,
                                   min_train=min_train, min_held=min_held, max_fall=max_fall)
+            if receipt.candidate is not None:
+                protected |= {str(receipt.candidate["ref"])}
             receipts.append(receipt)
             _write(self.out / "rounds" / f"{number:03d}.json", receipt.model_dump(mode="json", by_alias=True))
             if receipt.diff:
@@ -336,20 +451,22 @@ class Improver:
             if receipt.decision == "promoted":
                 assert receipt.candidate is not None
                 champion = self._candidates[receipt.candidate["digest"]]
-            elif receipt.decision in {"no_failures", "questions"}:
-                # Nothing left to learn from this set, or the operator has
-                # to answer before a harness can go on: another round would
-                # repeat this one.
+            elif receipt.decision in {"no_failures", "questions", "proposer_error"}:
+                # Nothing left to learn from this set, the operator has to
+                # answer before a harness can go on, or the harness is not
+                # answering at all: another round would repeat this one.
                 break
         report = ImproveReport(grader=grader, train_cases=len(train), holdout_cases=len(holdout),
                                train_case_set=case_set_digest(train), holdout_case_set=case_set_digest(holdout),
                                initial=_identity(initial), champion=_identity(champion), rounds=tuple(receipts),
-                               promotions=sum(item.decision == "promoted" for item in receipts))
+                               promotions=sum(item.decision == "promoted" for item in receipts),
+                               held_out_dropped=held_out_dropped)
         _write(self.out / "improve.json", report.model_dump(mode="json", by_alias=True))
         return report
 
     def _round(self, number: int, champion: ResolvedPack, train: Sequence[EvalCase], holdout: Sequence[EvalCase],
-               grader: dict[str, Any], stem: str, *, min_train: float, min_held: float, max_fall: float) -> RoundReceipt:
+               grader: dict[str, Any], stem: str, protected: frozenset[str] = frozenset(), *,
+               min_train: float, min_held: float, max_fall: float) -> RoundReceipt:
         base = {"round": number, "grader": grader["digest"], "champion": _identity(champion)}
         champion_train = self._pinned_run(champion, train, "train", grader)
         found = autopsy(champion_train, cases=train)
@@ -360,7 +477,11 @@ class Improver:
         clusters = tuple(cluster.key for cluster in found.clusters)
         brief_digest = hashlib.sha256(brief.encode()).hexdigest()[:16]
         common = {**base, "brief_digest": brief_digest, "failing": found.failing, "clusters": clusters}
-        authored = self._propose(champion, brief, number, stem)
+        try:
+            authored = self._propose(champion, brief, number, stem, protected)
+        except _ProposerFailed as failure:
+            return RoundReceipt(**common, decision="proposer_error",
+                                reasons=(f"the proposer failed: {type(failure.error).__name__}: {failure.error}",))
         rounds = tuple(authored.rounds)
         verdict = authored.verdict
         if verdict.status == "questions":
@@ -513,11 +634,16 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     test: a policy that learned this company rather than the task fails
     there. Without one, a share of *cases* is held back by case id.
     """
+    dropped = 0
     if holdout is None:
         share = float(packkit.policy("evalrun.improve.holdout_share")) if holdout_share is None else holdout_share
         train, held = split_cases(cases, holdout_share=share)
     else:
-        train, held = tuple(cases), tuple(holdout)
+        # A case the training corpus itself declares held out stays sealed
+        # even when the holdout comes from elsewhere: it is dropped, counted.
+        train = tuple(case for case in cases if not is_held_out(declared_split(case)))
+        dropped = len(cases) - len(train)
+        held = tuple(holdout)
     improver = Improver(run=run, agent_for=agent_for, exchange=exchange, out=out, rater=rater,
                         pack_roots=pack_roots,
                         authoring_rounds=int(packkit.policy("evalrun.improve.authoring_rounds"))
@@ -531,8 +657,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
-                            max_axis_regression=max_axis_regression)
+                            max_axis_regression=max_axis_regression, held_out_dropped=dropped)
 
 
 __all__ = ["HELD_OUT_SPLITS", "IMPROVE_SCHEMA", "ROUND_SCHEMA", "Ablation", "Gate", "HunkContribution", "ImproveReport",
-           "Improver", "RoundReceipt", "improve", "judge", "split_cases"]
+           "Improver", "RoundReceipt", "improve", "judge", "round_stem", "split_cases"]

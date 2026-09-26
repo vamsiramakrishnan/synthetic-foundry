@@ -239,6 +239,36 @@ def test_apply_is_strict_and_says_where_and_what() -> None:
         diffs.apply({"a": "x\n"}, "Here is my patch:\n--- a/a\n+++ b/a\n")
 
 
+def test_a_no_newline_marker_belongs_only_after_a_files_last_line() -> None:
+    # Where it belongs: the old file's last line lacks a newline, the new one adds a line after it.
+    good = "--- a/a\n+++ b/a\n@@ -1,2 +1,3 @@\n x\n-y\n\\ No newline at end of file\n+y\n+z\n"
+    assert diffs.apply({"a": "x\ny"}, good) == {"a": "x\ny\nz\n"}
+    # After a line with more of its side to come, the marker used to glue two lines into one.
+    glued = "--- a/a\n+++ b/a\n@@ -1,2 +1,2 @@\n-x\n\\ No newline at end of file\n-y\n+x\n+y\n"
+    with pytest.raises(diffs.DiffError, match=r"line 5: hunk 1 of a has a no-newline marker after a line that is "
+                                              r"not the last old line of the hunk"):
+        diffs.apply({"a": "xy\n"}, glued)
+    added = "--- a/a\n+++ b/a\n@@ -0,0 +1,2 @@\n+x\n\\ No newline at end of file\n+y\n"
+    with pytest.raises(diffs.DiffError, match="not the last new line"):
+        diffs.apply({}, added.replace("--- a/a", "--- /dev/null"))
+    context = "--- a/a\n+++ b/a\n@@ -1,2 +1,3 @@\n x\n\\ No newline at end of file\n y\n+z\n"
+    with pytest.raises(diffs.DiffError, match="not the last old or new line"):
+        diffs.apply({"a": "xy\n"}, context)
+    twice = "--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n\\ No newline at end of file\n\\ No newline at end of file\n+y\n"
+    with pytest.raises(diffs.DiffError, match="two no-newline markers in a row"):
+        diffs.apply({"a": "x"}, twice)
+
+
+def test_a_crlf_diff_is_refused_naming_its_line_endings() -> None:
+    patch = diffs.render({"a.md": "x\n"}, {"a.md": "y\n"}).replace("\n", "\r\n")
+    with pytest.raises(diffs.DiffError, match=r"line 1: the header ends in a carriage return; the diff has CRLF"):
+        diffs.apply({"a.md": "x\n"}, patch)
+    # A hunk header is held to the same rule when the file header was clean.
+    mixed = "--- a/a.md\n+++ b/a.md\n@@ -1 +1 @@\r\n-x\n+y\n"
+    with pytest.raises(diffs.DiffError, match=r"line 3: the header ends in a carriage return"):
+        diffs.apply({"a.md": "x\n"}, mixed)
+
+
 def test_hunks_can_be_left_out_and_the_rest_still_applies() -> None:
     lines = "".join(f"line {n}\n" for n in range(1, 21))
     edited = lines.replace("line 3\n", "LINE 3\n").replace("line 15\n", "LINE 15\n")
@@ -295,6 +325,29 @@ def test_the_interview_refuses_a_bad_diff_with_findings() -> None:
     assert verdict.status == "refused" and any("starts without frontmatter" in f for f in verdict.findings)
     both = packkit.accept(payload, _reply(payload, diff=outside, body={"system": "x"}))
     assert both.status == "refused" and "not both" in both.findings[0]
+
+
+def test_a_reply_of_the_wrong_shape_is_refused_with_findings_not_raised() -> None:
+    payload = packkit.request("agent", "A careful agent", name="careful", draft=_draft())
+    for reply in ({"message": "no id"}, {"request_id": payload["request_id"], "questions": "one string"},
+                  {"request_id": payload["request_id"], "proposal": {"name": "careful", "diff": 7}}, ["not", "an", "object"]):
+        verdict = packkit.accept(payload, reply)  # type: ignore[arg-type]
+        assert verdict.status == "refused" and verdict.findings, reply
+        assert all("response_schema" in finding for finding in verdict.findings)
+    verdict = packkit.accept(payload, {"message": "no id"})
+    assert verdict.findings[0].startswith("request_id: ")
+    # The loop hands the finding back and takes the corrected reply.
+    replies: list[dict[str, Any]] = []
+
+    def exchange(request: dict[str, Any]) -> dict[str, Any]:
+        replies.append(request)
+        if len(replies) == 1:
+            return {"proposal": "the whole pack, as prose"}
+        return _reply(request, diff=diffs.render(request["draft_tree"], {**request["draft_tree"], **_FILES}))
+
+    authored = packkit.author("agent", "A careful agent", exchange, name="careful", draft=_draft())
+    assert [item["status"] for item in authored.rounds] == ["refused", "accepted"]
+    assert any(finding.startswith("request_id:") for finding in replies[1]["findings"])
 
 
 def test_the_refusal_loop_takes_a_diff_until_it_lints() -> None:

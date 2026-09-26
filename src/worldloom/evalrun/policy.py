@@ -36,7 +36,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -178,6 +178,10 @@ def lint_policy(body: AgentPolicy, context: LintContext) -> list[Finding]:
         if REPLY_SHAPE.search(text):
             findings.append(f"{where}: restates a reply shape as JSON; the reply grammar is the harness's, stated once "
                             "by the locked rule 02")
+        # Every text a policy holds reaches a prompt or a receipt, so a
+        # credential is refused wherever it is, not only in a skill file.
+        findings += secret_findings(where, text)
+    findings += marker_findings([*_texts(body), *((f"files.{path}", text) for path, text in sorted(body.files.items()))])
     findings += lint_files(body.files, strings=body.skills)
     cap = int(packkit.policy("evalrun.agent_pack.max_chars"))
     total = sum(len(text) for _, text in _texts(body)) + sum(len(key) for key in body.tools)
@@ -234,6 +238,27 @@ def _looks_literal(value: str) -> bool:
             and any(char.isdigit() for char in value) and any(char.isalpha() for char in value))
 
 
+def marker_findings(texts: Sequence[tuple[str, str]]) -> list[Finding]:
+    """A finding per text that holds a phrase the harness delimits a policy with.
+
+    The words around a policy in a prompt are public prompt text; a policy
+    that wrote them could close its own block and speak as the harness. The
+    real boundary carries a per-invocation nonce, and these phrases are
+    refused so nothing that looks like a boundary is sent at all.
+    """
+    from ..studio.harness import marker_phrases
+
+    phrases = [(phrase, phrase.casefold()) for phrase in marker_phrases()]
+    findings: list[Finding] = []
+    for where, text in texts:
+        folded = text.casefold()
+        found = next((phrase for phrase, key in phrases if key in folded), None)
+        if found is not None:
+            findings.append(f"{where}: contains {found!r}, which the harness uses to delimit a policy in the prompt; "
+                            "reword it")
+    return findings
+
+
 def secret_findings(where: str, text: str) -> list[Finding]:
     """A finding per line of *text* that looks like it holds a credential; the value is never repeated.
 
@@ -254,7 +279,7 @@ def secret_findings(where: str, text: str) -> list[Finding]:
                     reason = "a credential assigned to a secret-looking name"
                     break
         if reason is not None:
-            findings.append(f"{where}:{number}: looks like {reason}; a skill must not carry credentials. Read them "
+            findings.append(f"{where}:{number}: looks like {reason}; a policy must not carry credentials. Read them "
                             "from the environment at run time instead")
     return findings
 
