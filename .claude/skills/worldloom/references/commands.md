@@ -455,6 +455,7 @@ worldloom evalrun plan <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent` | reference \| scripted:<plans.json> |
+| `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
 | `--exec` | The planner as an executable, one subprocess per case: reads a `worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints {"plan": {"nodes": [...]}} on stdout. Nothing is executed. |
 | `--harness` | An installed coding harness as the planner, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
@@ -490,11 +491,12 @@ worldloom evalrun run <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
+| `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
-| `--max-turns` | Turns the --exec child may take per case (default: policy `evalrun.max_turns`, 64). |
+| `--max-turns` | Turns the --exec child may take per case (default: the agent pack's max_turns, else policy `evalrun.max_turns`, 64). |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
 | `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |

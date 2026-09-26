@@ -42,7 +42,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import model_validator
 
@@ -62,6 +62,9 @@ from .grading import (
 )
 from .runner import CaseResult, RunReport, case_set_digest, safety_for
 from .safety import OperationSafety
+
+if TYPE_CHECKING:
+    from ..packkit import ResolvedPack
 
 PLAN_SCHEMA = "worldloom.evalrun-plan/v1"
 PLANS_SCHEMA = "worldloom.evalrun-plans/v1"
@@ -221,13 +224,26 @@ class ReferencePlanner:
 
 
 class ExecPlanner:
-    """A command run once per case over the ``--exec`` seam; it prints the plan."""
+    """A command run once per case over the ``--exec`` seam; it prints the plan.
 
-    def __init__(self, command: str, *, timeout: float = DEFAULT_TIMEOUT, shell: bool = False, name: str | None = None) -> None:
+    With *policy* (an ``agent`` pack), ``plan_cases`` builds each request
+    under it: the ``agent`` block, the plan rules overlaid by ``plan_rules``,
+    and the tool advice. The name carries the policy, and ``pack_record`` is
+    what the run records as ``agent_pack``.
+    """
+
+    def __init__(self, command: str, *, timeout: float = DEFAULT_TIMEOUT, shell: bool = False, name: str | None = None,
+                 policy: ResolvedPack | None = None) -> None:
+        from .policy import agent_name, pack_record, require
+
+        if policy is not None:
+            policy = require(policy)
         self.command = command
         self.timeout = timeout
         self.shell = shell
-        self.name = name or f"plan:exec:{command.split()[0] if command.split() else command}"
+        self.policy = policy
+        self.pack_record = pack_record(policy) if policy is not None else None
+        self.name = name or agent_name(f"plan:exec:{command.split()[0] if command.split() else command}", policy)
 
     def plan(self, request: Mapping[str, Any]) -> PlannedDag:
         try:
@@ -276,11 +292,26 @@ def load_plans(path: Path) -> dict[str, PlannedDag]:
 # -- the run --------------------------------------------------------------------
 
 
-def plan_request(case: EvalCase, catalog: Iterable[Mapping[str, Any]], *, principal: str = "agent") -> dict[str, Any]:
-    """What the planner may know: the request and the tools, nothing about the expected DAG."""
+def plan_request(case: EvalCase, catalog: Iterable[Mapping[str, Any]], *, principal: str = "agent",
+                 policy: ResolvedPack | None = None) -> dict[str, Any]:
+    """What the planner may know: the request and the tools, nothing about the expected DAG.
 
+    Under *policy* (an ``agent`` pack) the request gains the ``agent`` block,
+    its ``instructions`` are the plan rules overlaid by ``plan_rules`` (the
+    rule stating the plan shape is locked) and advised tools gain
+    ``description`` and ``hints``; without one it is unchanged.
+    """
+
+    tools = [dict(tool) for tool in catalog]
+    if policy is None:
+        return {"schema": PLAN_SCHEMA, "case_id": case.id, "query": case.query, "persona": case.persona,
+                "principal": principal, "tools": tools, "instructions": plan_instructions()}
+    from .policy import advise, agent_block, plan_rules, require
+
+    policy = require(policy)
     return {"schema": PLAN_SCHEMA, "case_id": case.id, "query": case.query, "persona": case.persona,
-            "principal": principal, "tools": [dict(tool) for tool in catalog], "instructions": plan_instructions()}
+            "principal": principal, "tools": advise(tools, policy.body), "instructions": plan_rules(policy.body),
+            "agent": agent_block(policy)}
 
 
 def _catalogs(service: ConnectorEvaluationService, cases: Iterable[EvalCase], principal: str) -> dict[str, list[dict[str, Any]]]:
@@ -324,7 +355,7 @@ def plan_cases(service: ConnectorEvaluationService, cases: Iterable[EvalCase], p
     catalogs = _catalogs(service, listed, principal)
     results: list[CaseResult] = []
     for case in listed:
-        request = plan_request(case, catalogs[case.id], principal=principal)
+        request = plan_request(case, catalogs[case.id], principal=principal, policy=getattr(planner, "policy", None))
         try:
             planned = planner.plan(request)
         except Exception as error:  # the planner is untrusted; its failure is a row, not ours
@@ -339,7 +370,8 @@ def plan_cases(service: ConnectorEvaluationService, cases: Iterable[EvalCase], p
             case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape, agent=planner.name,
             status="graded", score=score, notes=("plan only: nothing was executed; trajectory and outcomes are unobserved",),
         ))
-    return RunReport(agent=planner.name, principal=principal, case_set=case_set_digest(listed), results=tuple(results))
+    return RunReport(agent=planner.name, principal=principal, case_set=case_set_digest(listed), results=tuple(results),
+                     agent_pack=getattr(planner, "pack_record", None))
 
 
 __all__ = [

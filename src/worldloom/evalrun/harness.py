@@ -28,6 +28,22 @@ suits fixed trajectories (a regression set, a hand-authored baseline) rather
 than an agent that must find a record id before it can act on it; the
 document says so in its instructions rather than leaving the harness to
 discover it from a `not_found`.
+
+**An agent policy.** ``ExecAgent(..., policy=<agent pack>)`` runs the child
+under an ``agent`` pack (``evalrun.policy``). The turn document keeps its
+``worldloom.evalrun-turn/v2`` schema and every field above, and gains:
+
+- ``agent``: ``{ref, digest, system, planning, skills}``, the policy's
+  identity and its standing instruction, planning note and named procedures;
+- ``instructions``: the shipped ``evalrun.turn.rule.*`` overlaid by the
+  policy's ``turn_rules`` (the rule stating the reply shapes is locked);
+- ``tools[*].description`` and ``tools[*].hints`` on each tool the policy
+  advises.
+
+Without a policy the document is byte-identical to what it was before
+policies existed. The agent's ``name`` carries the policy
+(``exec:python+agent:careful@<digest[:12]>``), and ``pack_record`` is what a
+run writes to ``run.json`` as ``agent_pack``.
 """
 
 from __future__ import annotations
@@ -35,7 +51,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .. import packkit
 from ..connector_emulator import ConnectorError
@@ -43,6 +59,9 @@ from ..connectors.serving import ConnectorEvaluationService, ServingError
 from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
 from .agents import AgentResponse, AgentTask, ProducedArtifact, ToolCall, ToolSurface
 from .contract import EvalCase
+
+if TYPE_CHECKING:
+    from ..packkit import ResolvedPack
 
 TURN_SCHEMA = "worldloom.evalrun-turn/v2"
 REQUESTS_SCHEMA = "worldloom.evalrun-requests/v1"
@@ -77,7 +96,14 @@ class ExecAgent:
     """The child process as the agent, one subprocess per turn."""
 
     def __init__(self, command: str, *, timeout: float = DEFAULT_TIMEOUT, shell: bool = False,
-                 max_turns: int | None = None, name: str | None = None) -> None:
+                 max_turns: int | None = None, name: str | None = None,
+                 policy: ResolvedPack | None = None) -> None:
+        from .policy import agent_name, pack_record, require
+
+        if policy is not None:
+            policy = require(policy)
+        if max_turns is None and policy is not None:
+            max_turns = policy.body.max_turns
         if max_turns is None:
             max_turns = default_max_turns()
         if max_turns < 1:
@@ -86,16 +112,45 @@ class ExecAgent:
         self.timeout = timeout
         self.shell = shell
         self.max_turns = max_turns
-        self.name = name or f"exec:{command.split()[0] if command.split() else command}"
+        self.policy = policy
+        #: What a run records as ``agent_pack``; ``None`` without a policy.
+        self.pack_record = pack_record(policy) if policy is not None else None
+        self.name = name or agent_name(f"exec:{command.split()[0] if command.split() else command}", policy)
+
+    def _unadvisable(self, tools: ToolSurface, catalog: list[dict[str, Any]]) -> tuple[str, ...]:
+        """Tools the policy advises that nothing serves: a finding about the policy, not a failure of the run.
+
+        Checked against every tool the service serves, not only this case's
+        catalog (which holds just the query's connectors), so advice for a
+        connector this case does not use is not reported as unknown.
+        """
+        assert self.policy is not None
+        served = getattr(getattr(tools, "_service", None), "tools", None)
+        known = set(served) if isinstance(served, Mapping) else {str(tool.get("name")) for tool in catalog}
+        return tuple(sorted(key for key in self.policy.body.tools if key not in known))
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         transcript: list[dict[str, Any]] = []
         catalog = [dict(tool) for tool in tools.tools()]
+        extra: dict[str, Any] = {}
+        findings: tuple[str, ...] = ()
+        rules: list[str] | None = None
+        if self.policy is not None:
+            from .policy import advise, agent_block, turn_rules
+
+            rules = turn_rules(self.policy.body)
+            extra = {"agent": agent_block(self.policy)}
+            unknown = self._unadvisable(tools, catalog)
+            catalog = advise(catalog, self.policy.body)
+            if unknown:
+                # Once per case, not per turn: the note is about the policy.
+                findings = (f"agent policy {self.policy.ref} advises tools no connector serves: {', '.join(unknown)}",)
         for turn in range(1, self.max_turns + 1):
             payload = {
                 "schema": TURN_SCHEMA, "case_id": task.case_id, "query": task.query, "persona": task.persona,
                 "principal": task.principal, "turn": turn, "turns_left": self.max_turns - turn,
-                "tools": catalog, "transcript": transcript, "instructions": turn_instructions(),
+                "tools": catalog, "transcript": transcript,
+                "instructions": turn_instructions() if rules is None else list(rules), **extra,
             }
             try:
                 reply = run_exec(self.command, payload, timeout=self.timeout, shell=self.shell)
@@ -134,9 +189,9 @@ class ExecAgent:
                 transcript.append({"ask": asked["question"], "about": [str(value) for value in about], "reply": said})
                 continue
             if "answer" in document:
-                return _response(document, turn)
+                return _response(document, turn, findings)
             raise RuntimeError(f"exec_unparseable: turn {turn} reply has neither `call`, `ask` nor `answer`")
-        return AgentResponse(answer="", notes=(f"turn budget of {self.max_turns} exhausted without an answer",))
+        return AgentResponse(answer="", notes=(f"turn budget of {self.max_turns} exhausted without an answer", *findings))
 
 
 def _artifacts(raw: Any) -> tuple[ProducedArtifact, ...]:
@@ -154,14 +209,14 @@ def _artifacts(raw: Any) -> tuple[ProducedArtifact, ...]:
     return tuple(out)
 
 
-def _response(document: Mapping[str, Any], turns: int) -> AgentResponse:
+def _response(document: Mapping[str, Any], turns: int, findings: tuple[str, ...] = ()) -> AgentResponse:
     planned = document.get("planned_dag")
     return AgentResponse(
         answer=str(document.get("answer") or ""), artifacts=_artifacts(document.get("artifacts")),
         planned_dag=dict(planned) if isinstance(planned, Mapping) else None,
         ttft=document.get("ttft") if isinstance(document.get("ttft"), (int, float)) else None,
         ttfa=document.get("ttfa") if isinstance(document.get("ttfa"), (int, float)) else None,
-        notes=(f"answered on turn {turns}",),
+        notes=(f"answered on turn {turns}", *findings),
     )
 
 

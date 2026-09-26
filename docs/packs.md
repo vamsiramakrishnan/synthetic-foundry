@@ -2,8 +2,8 @@
 
 A **pack** is one JSON document that supplies one layer of the product: how an
 industry talks, the prompts a harness reads, the numeric defaults a run follows,
-a company, a connector, a line of business, a document type or a presentation
-profile. Every kind of pack is found, layered, checked, uploaded and authored by
+a company, a connector, a line of business, a document type, a presentation
+profile or the policy of an agent under test. Every kind of pack is found, layered, checked, uploaded and authored by
 the same mechanism, `worldloom.packkit`. A new kind is a registration and a
 default file; it needs no new loader.
 
@@ -139,6 +139,64 @@ runs the refusal cycle:
 same exchange through files, for a harness you drive yourself. Only the accepted
 envelope is stored. The conversation never is.
 
+## Agent packs
+
+An `agent` pack is the policy of the agent under test in `worldloom evalrun
+run` and `worldloom evalrun plan`. A run used to measure a harness together with
+whatever instructions it happened to carry, so two runs of one harness under
+different instructions looked like one agent. As a pack, a policy is
+content-addressed: each variant has its own digest, a harness can propose one
+and be refused, and every run records which one it ran.
+
+A policy holds:
+
+- `system`: the agent's standing instruction;
+- `turn_rules` and `plan_rules`: overlays on the shipped `evalrun.turn.rule.*`
+  and `evalrun.plan.rule.*`, keyed by the rule's suffix. `01` replaces the
+  shipped rule 01, a new key such as `10` adds a rule, and an empty string
+  removes a shipped rule. Between agent packs, `null` removes a rule a parent
+  added;
+- `tools`: advice per tool, keyed by the tool's catalog name
+  (`servicenow.get_record`), as a `description` and a list of `hints`;
+- `planning`: how the agent should form a plan;
+- `skills`: named procedures the agent can follow;
+- `max_turns`: the turn budget, when it differs from the policy default.
+
+Rule `02` of each list is locked. It states the reply shapes (`call`, `ask`
+and `answer` for a turn, `plan` for a planner), and the harness parses exactly
+those shapes. A policy that could restate them would turn a policy variant into
+a protocol variant, whose failures would read as the agent's. The lint refuses
+an override or removal of a locked rule, and so does the overlay at run time.
+It also refuses any text that writes a reply shape out as JSON. Policy text is
+sent verbatim, so a `{placeholder}` or a `{{term:...}}` token is refused too,
+and the total text is capped by the policy `evalrun.agent_pack.max_chars`.
+
+```bash
+worldloom evalrun run ./cases -o ./runs/careful --exec 'python agent.py' --agent-pack agent:careful
+worldloom evalrun plan ./cases -o ./runs/careful-plan --harness codex --agent-pack ./careful.json
+worldloom pack author agent --name careful \
+  --message "A careful agent that reads before it writes" --harness-command 'python adapter.py'
+```
+
+`--agent-pack` takes `agent:name[@digest]` or a pack file, and it needs
+`--exec` or `--harness`: the reference, lazy and scripted agents never read a
+policy. Under a policy the `worldloom.evalrun-turn/v2` document gains an
+`agent` block (`ref`, `digest`, `system`, `planning`, `skills`). Its
+`instructions` are the overlaid rules, and each advised tool gains
+`description` and `hints`. Without a policy the document is unchanged, byte for
+byte. The plan document gains the same fields. The bundled `--harness` adapter
+puts the `system` text ahead of its role prompt, between markers naming the
+policy. The agent's name carries the policy
+(`exec:python+agent:careful@<digest[:12]>`), and `run.json` records
+`agent_pack` as `{ref, digest, chain}`. Advice for a tool that no connector
+serves is not an error: it is noted once in each case's notes as a finding
+about the policy.
+
+A harness proposes a policy through the same interview as any other pack:
+`worldloom pack author agent` refuses a proposal with its findings until it
+lints clean. `agent:baseline` ships as the example: today's rules, no advice,
+and a neutral standing instruction.
+
 ## Replay
 
 A pack that changes what a seed generates must replay without its file.
@@ -160,6 +218,7 @@ unchanged.
 | `lob` | `lob.Lob` | `lob.lint_lob` | none |
 | `doctype` | `doctypes.DocumentType` | `doctypes.lint` | none |
 | `presentation` | `presentation.PresentationSeed` | `presentation.review` | none |
+| `agent` | `evalrun.policy.AgentPolicy`: the agent under test's standing instruction, rule overlays, tool advice, skills | `evalrun.policy.lint_policy`: non-empty system, key syntax, locked reply-shape rules, verbatim text, size cap | none (`agent:baseline` ships as an example) |
 
 To register a kind, call `packkit.register_kind(PackKind(name=..., model=...,
 lint=..., about=...))`. If the kind has a default, ship it as

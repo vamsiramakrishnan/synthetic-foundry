@@ -119,6 +119,33 @@ def _harness_exec(harness: str | None, exec_command: str | None, *, timeout: flo
     return adapter_command(harness, timeout=max(1.0, timeout - 5))
 
 
+_AGENT_PACK_HELP = ("An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. "
+                    "Its standing instruction, rule overlays and tool advice reach the child, and run.json records "
+                    "its reference and digest.")
+
+
+def _agent_pack(ref: str | None, exec_command: str | None) -> Any:
+    """The resolved, linted `agent` pack for `--agent-pack`, or None.
+
+    Refused without `--exec`/`--harness`: the reference, lazy and scripted
+    agents never read a policy, and a run recording one it ignored would
+    claim a measurement it did not make.
+    """
+    from ..cli import _refuse
+
+    if ref is None:
+        return None
+    if exec_command is None:
+        _refuse("cannot_combine", "--agent-pack applies to an --exec or --harness agent; the reference, lazy and "
+                "scripted agents ignore a policy")
+    from .policy import load
+
+    try:
+        return load(ref)
+    except (KeyError, ValueError) as error:
+        _refuse("pack_rejected", str(error).strip("'\""))
+
+
 def _agent(spec: str, cases: tuple[Any, ...]) -> Any:
     from ..cli import _refuse
     from .agents import ReferenceAgent, ScriptedAgent
@@ -212,7 +239,8 @@ def run_command(
     ),
     timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per turn before it is killed."),
     shell: bool = typer.Option(False, "--shell", help="Run the --exec command through the shell (the opt-in for pipelines)."),
-    max_turns: int | None = typer.Option(None, "--max-turns", min=1, help="Turns the --exec child may take per case (default: policy `evalrun.max_turns`, 64)."),
+    max_turns: int | None = typer.Option(None, "--max-turns", min=1, help="Turns the --exec child may take per case (default: the agent pack's max_turns, else policy `evalrun.max_turns`, 64)."),
+    agent_pack: str | None = typer.Option(None, "--agent-pack", help=_AGENT_PACK_HELP),
     limit: int | None = typer.Option(None, "--limit", min=1),
     principal: str = typer.Option("agent", "--principal", help="The principal every run is begun under."),
     rater: str | None = typer.Option(None, "--rater", help="grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam)."),
@@ -241,6 +269,7 @@ def run_command(
 
     # Before the corpus: a typo in --harness should not wait on a build.
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
+    policy = _agent_pack(agent_pack, exec_command)
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
@@ -249,7 +278,7 @@ def run_command(
             _refuse("cannot_combine", "--exec and --agent both name the agent under test; give one")
         from .harness import ExecAgent
 
-        under_test: Any = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns)
+        under_test: Any = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=policy)
     else:
         under_test = _agent(agent, cases)
     grader: Any = None
@@ -330,6 +359,7 @@ def plan_command(
     ),
     timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per case."),
     shell: bool = typer.Option(False, "--shell", help="Run the --exec command through the shell."),
+    agent_pack: str | None = typer.Option(None, "--agent-pack", help=_AGENT_PACK_HELP),
     limit: int | None = typer.Option(None, "--limit", min=1),
     principal: str = typer.Option("agent", "--principal", help="The principal the tool catalog is advertised to."),
     json_output: bool = typer.Option(False, "--json", help="Emit the summary as JSON."),
@@ -349,6 +379,7 @@ def plan_command(
     from .runner import service_for
 
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
+    policy = _agent_pack(agent_pack, exec_command)
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
@@ -357,7 +388,7 @@ def plan_command(
             _refuse("cannot_combine", "--exec and --agent both name the planner under test; give one")
         from .plans import ExecPlanner
 
-        planner: Any = ExecPlanner(exec_command, timeout=timeout, shell=shell)
+        planner: Any = ExecPlanner(exec_command, timeout=timeout, shell=shell, policy=policy)
     else:
         planner = _planner(agent, cases)
     try:

@@ -1,5 +1,6 @@
 {
   "values": {
+    "evalrun.agent_pack.max_chars": 24000,
     "evalrun.max_turns": 64,
     "evalrun.delta_band": 0.1,
     "evalrun.answer_pass_score": 0.8,
