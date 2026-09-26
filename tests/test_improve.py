@@ -4,7 +4,9 @@ The agent under test here reads its policy for real: it walks every expected
 DAG when its pack teaches the `verify` skill and does nothing otherwise, so a
 proposal that adds the skill is a genuine improvement and one that only
 rewords the instruction is not. The proposer is a function over the pack
-interview's request, the same document a harness reads.
+interview's request, the same document a harness reads. The skill can be a
+string or a real skill file (`skills/verify/SKILL.md`), which a proposer adds
+by diffing the champion's tree.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from worldloom.evalrun.grader import GraderDrift
 from worldloom.evalrun.improve import improve, judge, split_cases
 from worldloom.evalrun.policy import agent_name, pack_record
 from worldloom.evalrun.results import compare
+from worldloom.packkit import diffs
 from worldloom.synthesis import IncidentRule, Simulator, retail, with_parameters
 from worldloom.synthesis.connectors import operational_profile
 
@@ -59,7 +62,7 @@ class PolicyAgent:
         self.pack = pack
         self.name = agent_name("policy", pack)
         self.pack_record = pack_record(pack)
-        self.skilled = "verify" in pack.body.skills
+        self.skilled = "verify" in pack.body.skills or "skills/verify/SKILL.md" in pack.body.files
         self.reference = ReferenceAgent(cases)
         self.idle = ScriptedAgent([], name="idle")
         self.log = log
@@ -84,8 +87,28 @@ def _proposer(body_change: dict[str, Any] | None = None, *, questions: tuple[str
     return exchange
 
 
+def _diff_proposer(files: dict[str, str]) -> Any:
+    """A proposer that answers with a unified diff adding *files* to the draft's tree."""
+    seen: list[dict[str, Any]] = []
+
+    def exchange(payload: dict[str, Any]) -> dict[str, Any]:
+        seen.append(payload)
+        base = payload["draft_tree"]
+        return {"request_id": payload["request_id"], "message": "patched",
+                "proposal": {"name": payload["draft"]["name"], "diff": diffs.render(base, {**base, **files})}}
+
+    exchange.seen = seen  # type: ignore[attr-defined]
+    return exchange
+
+
+_VERIFY = ("---\nname: verify\ndescription: Use after any write, to confirm it held.\n---\n\n"
+           "Walk every step the request needs and read each write back.\n")
+_NOTES = ("---\nname: notes\ndescription: Background on the connectors.\n---\n\n"
+          "Nothing here changes what the agent does.\n")
+
+
 def _loop(corpus: Any, tmp_path: Path, exchange: Any, *, rounds: int = 2, rater: Any = None,
-          log: list[str] | None = None, run_hook: Any = None) -> Any:
+          log: list[str] | None = None, run_hook: Any = None, **options: Any) -> Any:
     cases = cases_from_corpus(corpus)
     records = corpus.connector_data.records
     calls = log if log is not None else []
@@ -97,7 +120,7 @@ def _loop(corpus: Any, tmp_path: Path, exchange: Any, *, rounds: int = 2, rater:
 
     return improve(packkit.resolve("agent:baseline"), cases, run=run,
                    agent_for=lambda pack: PolicyAgent(pack, cases, calls), exchange=exchange,
-                   out=tmp_path / "improve", rater=rater, holdout_share=0.4, rounds=rounds)
+                   out=tmp_path / "improve", rater=rater, holdout_share=0.4, rounds=rounds, **options)
 
 
 def test_split_is_stable_disjoint_and_keeps_declared_splits(corpus: Any) -> None:
@@ -137,6 +160,48 @@ def test_a_revision_that_helps_is_promoted_after_both_gates(corpus: Any, tmp_pat
     assert run_json["grader"]["digest"] == report.grader["digest"]
 
 
+def test_a_diff_is_promoted_and_ablation_drops_the_hunk_that_carried_nothing(corpus: Any, tmp_path: Path) -> None:
+    exchange = _diff_proposer({"skills/notes/SKILL.md": _NOTES, "skills/verify/SKILL.md": _VERIFY})
+    report = _loop(corpus, tmp_path, exchange, rounds=1)
+    first = report.rounds[0]
+    assert first.decision == "promoted", first.reasons
+    # The proposer was handed the champion as a tree and asked for a diff.
+    payload = exchange.seen[0]
+    assert set(payload["draft_tree"]) == {"policy.json"}
+    assert packkit.text("evalrun.improve.rule.diff") in payload["message"]
+    # Ablation measured each hunk: the inert skill cost nothing and was dropped,
+    # the useful one carried the whole gain and was kept.
+    ablation = first.ablation
+    assert ablation is not None and ablation.reduced
+    assert ablation.proposed_diff.count("+++ b/skills/") == 2
+    by_file = {hunk.file: hunk for hunk in ablation.hunks}
+    notes, verify = by_file["skills/notes/SKILL.md"], by_file["skills/verify/SKILL.md"]
+    assert notes.decision == "dropped" and notes.contribution is not None and notes.contribution < ablation.tolerance
+    assert verify.decision == "kept" and verify.contribution is not None and verify.contribution >= 0.1
+    assert ablation.reduced_train is not None and ablation.reduced_train.passed
+    # What went to the holdout, and what the receipt and the pack root hold, is the reduced candidate.
+    assert first.diff_hunks == 1 and first.diff is not None
+    assert "+++ b/skills/verify/SKILL.md" in first.diff and "notes" not in first.diff
+    assert first.candidate["digest"] != ablation.proposed["digest"]
+    rounds_dir = tmp_path / "improve" / "rounds"
+    assert (rounds_dir / "001.diff").read_text(encoding="utf-8") == first.diff
+    stored = json.loads((rounds_dir / "001.json").read_text(encoding="utf-8"))
+    assert stored["diff_hunks"] == 1 and stored["ablation"]["hunks"][0]["decision"] == "dropped"
+    promoted = packkit.resolve("agent:baseline-r1", roots=[tmp_path / "improve" / "packs"])
+    assert promoted.digest == first.candidate["digest"] == report.champion["digest"]
+    assert list(promoted.body.files) == ["skills/verify/SKILL.md"]
+    # Every run stayed in the loop's output directory, the reduced candidate's included.
+    assert list((tmp_path / "improve" / "runs").glob(f"baseline-r1@{first.candidate['digest'][:12]}/holdout/run.json"))
+
+
+def test_without_ablation_the_whole_diff_goes_to_the_holdout(corpus: Any, tmp_path: Path) -> None:
+    exchange = _diff_proposer({"skills/notes/SKILL.md": _NOTES, "skills/verify/SKILL.md": _VERIFY})
+    report = _loop(corpus, tmp_path, exchange, rounds=1, ablate=False)
+    first = report.rounds[0]
+    assert first.decision == "promoted", first.reasons
+    assert first.ablation is None and first.diff_hunks == 2
+
+
 def test_a_revision_that_does_not_help_is_rejected_on_training_and_never_sees_the_holdout(corpus: Any, tmp_path: Path) -> None:
     exchange = _proposer({"system": "Complete the request with care, then answer."})
     log: list[str] = []
@@ -144,6 +209,9 @@ def test_a_revision_that_does_not_help_is_rejected_on_training_and_never_sees_th
     only = report.rounds[0]
     assert only.decision == "rejected"
     assert only.train is not None and not only.train.passed and only.holdout is None
+    # A rejected candidate still leaves its diff against the champion.
+    assert only.diff is not None and "with care" in only.diff and only.diff_hunks == 1
+    assert (tmp_path / "improve" / "rounds" / "001.diff").exists()
     assert any("mean delta" in reason for reason in only.reasons)
     assert report.champion == report.initial
     assert not list((tmp_path / "improve" / "runs").glob("*/holdout"))

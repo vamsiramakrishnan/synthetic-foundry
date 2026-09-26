@@ -77,6 +77,18 @@ def _agent_lint(body: Any, context: LintContext) -> list[Finding]:
     return lint_policy(body, context)
 
 
+def _agent_to_tree(body: Mapping[str, Any]) -> dict[str, str]:
+    from ..evalrun.policy import tree
+
+    return tree(body)
+
+
+def _agent_from_tree(files: Mapping[str, str]) -> dict[str, Any]:
+    from ..evalrun.policy import from_tree
+
+    return from_tree(files)
+
+
 def install() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -124,10 +136,12 @@ def install() -> None:
         about="Who a corpus's documents are for: appendix, author voice, money spelling and table fit."))
     register_kind(PackKind(
         name="agent", model=AgentPolicy, lint=_agent_lint, default=None,
+        to_tree=_agent_to_tree, from_tree=_agent_from_tree,
         about=("The policy an agent under test runs under in `worldloom evalrun run` and `evalrun plan`: its "
                "standing instruction (`system`), rules overlaid on the shipped turn and plan rules by key, "
                "advice per tool keyed by the catalog's tool name, a planning note, named procedures "
-               "(`skills`) and an optional turn budget. A run records the pack's reference and digest, so "
+               "(`skills`), a tree of real skills (`files`, under `skills/`) and an optional turn budget. "
+               "It has a tree codec, so a revision can be a unified diff. A run records the pack's reference and digest, so "
                "two policies on one harness are two agents."),
         asks=("Write `system` as the standing instruction a careful operator would give this agent: what it "
               "is for and how it should weigh speed against care. Keep it short; it is read on every turn.",
@@ -136,7 +150,11 @@ def install() -> None:
               "02 of each states the reply shape and is locked; never restate a reply shape as JSON.",
               "Key `tools` by the tool's name as the catalog lists it (`servicenow.get_record`) and advise "
               "only on tools the operator's cases use.",
-              "Every text is sent verbatim: no {placeholders} and no {{term:...}} tokens.")))
+              "Every text is sent verbatim: no {placeholders} and no {{term:...}} tokens.",
+              "Real skills go in `files` as `skills/<name>/SKILL.md` (frontmatter `name` matching the directory "
+              "and a one-line `description` saying when the skill applies, then the procedure), with "
+              "`references/*.md` and `scripts/*.py` or `scripts/*.sh` beside it. Nothing may live outside "
+              "`skills/`, and no file may carry a credential.")))
 
 
 __all__ = ["install"]

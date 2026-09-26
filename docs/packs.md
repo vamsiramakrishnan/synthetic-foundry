@@ -159,7 +159,9 @@ A policy holds:
 - `tools`: advice per tool, keyed by the tool's catalog name
   (`servicenow.get_record`), as a `description` and a list of `hints`;
 - `planning`: how the agent should form a plan;
-- `skills`: named procedures the agent can follow;
+- `skills`: named procedures the agent can follow, as strings;
+- `files`: real skills, as a tree of files in the layout coding harnesses use
+  (see below);
 - `max_turns`: the turn budget, when it differs from the policy default.
 
 Rule `02` of each list is locked. It states the reply shapes (`call`, `ask`
@@ -192,6 +194,80 @@ policy. The agent's name carries the policy
 serves is not an error: it is noted once in each case's notes as a finding
 about the policy.
 
+### The skill tree
+
+`files` maps relative paths to text. Every path lies under `skills/`:
+
+- `skills/<name>/SKILL.md`: frontmatter with `name` (equal to the directory)
+  and a one-line `description` saying when the skill applies, then the
+  procedure;
+- `skills/<name>/references/*.md`: material the skill points to;
+- `skills/<name>/scripts/*.py` and `skills/<name>/scripts/*.sh`: code the
+  skill runs.
+
+The lint (`evalrun.policy.lint_files`) refuses a path that is absolute,
+contains `..`, a backslash or a segment starting with `.`, or lies outside
+that layout; a skill directory without a SKILL.md; frontmatter that is not
+`name` and `description` on one line each, or whose name does not match its
+directory; a Python script that does not parse; an empty shell script; a file
+over `evalrun.agent_pack.max_file_bytes` or a tree over
+`evalrun.agent_pack.max_tree_bytes`; and any line that looks like a
+credential (a private key block, a known token prefix, or a literal assigned
+to a secret-looking name, by the same name test the grader redacts commands
+with). The finding names the file and the line and never repeats the value.
+The lint parses scripts; it never runs one. String `skills` stay valid beside
+the tree, but one name may not be both.
+
+The tree is also how the whole policy is presented as files. `tree(body)`
+returns `policy.json` (every field but `files`, as sorted JSON with a
+two-space indent) plus the skill tree, and `from_tree` reads that back. This
+is the `agent` kind's tree codec (`PackKind.to_tree` and `from_tree`).
+
+**Delivery.** `ExecAgent` writes the tree once into a content-addressed
+directory (`$WORLDLOOM_HOME/cache/agent-skills/<digest>/skills`, written
+beside its final name and renamed into place) and the turn document's
+`agent` block gains `skills_dir` and `skill_index`, a list of
+`{name, description, path}`. The index is what the agent reads up front; a
+body is opened only when its description fits the step. A policy without
+`files` adds neither key, so its turn document is unchanged. The bundled
+`--harness` adapters put the index ahead of the role prompt. `codex` runs in
+its read-only sandbox, which can read files, so it gets the directory and
+opens a SKILL.md itself. `claude` runs the evalrun seams with no tools at
+all, so it could neither load a skill natively nor read one from disk, and
+granting it file or skill tools would also let it read the cases' expected
+answers; its prompt therefore carries each SKILL.md in full after the index,
+with references and scripts named by path. The plan document does not carry
+the tree.
+
+**Revising by diff.** Because the kind has a tree codec, the pack interview
+hands a harness the draft as `draft_tree`, and a proposal may carry `diff`, a
+unified diff against that tree, instead of `body`. The diff is applied
+strictly by `packkit.diffs`: `a/` and `b/` prefixes, `/dev/null` to create or
+delete a file, and every hunk must match the draft exactly where its header
+says, with no fuzz. A patch that does not apply comes back as a finding such
+as `diff: hunk 2 of skills/verify/SKILL.md does not apply at line 14:
+expected ..., found ...`, and so does a patch whose result the lint refuses.
+A body proposal works as before.
+
+**Boundary.** Generated code lives only in the agent pack's `skills/` tree.
+`from_tree` refuses any path other than `policy.json` and `skills/...` before
+reading anything, so nothing a proposer writes can name another place, and
+the improvement loop writes only under its output directory and the pack root
+it installs candidates into.
+
+```bash
+worldloom pack tree agent:careful -o ./careful-tree
+worldloom pack from-tree ./careful-tree --name careful-2 --into ./packs
+worldloom pack from-tree ./.claude/skills --name native --base agent:baseline
+worldloom pack diff agent:careful agent:careful-2 --root ./packs
+```
+
+`pack tree` writes a pack's tree into a new or empty directory. `pack
+from-tree` reads one back, from a tree with `policy.json` or from a bare
+skills directory of `<name>/SKILL.md` (whose `policy.json` then comes from
+`--base`), lints it and installs it. `pack diff` prints the unified diff
+between two packs of a kind with a tree codec.
+
 A harness proposes a policy through the same interview as any other pack:
 `worldloom pack author agent` refuses a proposal with its findings until it
 lints clean. `agent:baseline` ships as the example: today's rules, no advice,
@@ -218,8 +294,10 @@ unchanged.
 | `lob` | `lob.Lob` | `lob.lint_lob` | none |
 | `doctype` | `doctypes.DocumentType` | `doctypes.lint` | none |
 | `presentation` | `presentation.PresentationSeed` | `presentation.review` | none |
-| `agent` | `evalrun.policy.AgentPolicy`: the agent under test's standing instruction, rule overlays, tool advice, skills | `evalrun.policy.lint_policy`: non-empty system, key syntax, locked reply-shape rules, verbatim text, size cap | none (`agent:baseline` ships as an example) |
+| `agent` | `evalrun.policy.AgentPolicy`: the agent under test's standing instruction, rule overlays, tool advice, skills, skill tree | `evalrun.policy.lint_policy`: non-empty system, key syntax, locked reply-shape rules, verbatim text, size cap, the skill tree's paths, frontmatter, scripts and secrets | none (`agent:baseline` ships as an example) |
 
 To register a kind, call `packkit.register_kind(PackKind(name=..., model=...,
 lint=..., about=...))`. If the kind has a default, ship it as
-`_data/packs/<kind>/default/`.
+`_data/packs/<kind>/default/`. A kind that can be presented as files also
+passes `to_tree` and `from_tree`; its interview then offers `draft_tree` and
+takes a `diff`.

@@ -1090,6 +1090,18 @@ worldloom pack check <SOURCE>
 | --- | --- |
 | `--json` | Emit findings as JSON. An agent authoring a pack should read data. |
 
+### `worldloom pack diff`
+
+Print the unified diff between two packs' trees (kinds with a tree codec, such as agent).
+
+```
+worldloom pack diff <REF_A> <REF_B>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
 ### `worldloom pack export`
 
 Keep a derived world: a mosaic variant or a settled probe, as a pack.
@@ -1120,6 +1132,23 @@ worldloom pack facets <NAME>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the registry as data. |
+
+### `worldloom pack from-tree`
+
+Build an agent pack from a skill tree on disk, lint it, and install it; refused with every finding.
+
+```
+worldloom pack from-tree <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--base` | Where policy.json comes from when DIRECTORY has none. |
+| `--into` | Pack root to store it in (default: the user's). |
+| `--name` | The agent pack's name. |
+| `--replace` | Overwrite a pack of the same name in that root. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+| `--title` |  |
 
 ### `worldloom pack install`
 
@@ -1301,6 +1330,19 @@ worldloom pack texts <ENGINE>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit both key → default-template tables as JSON, for an agent authoring overrides. |
+
+### `worldloom pack tree`
+
+Write a pack as its tree of files: for an agent pack, policy.json and its skills/ directory.
+
+```
+worldloom pack tree <REF>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Directory to write the tree into; must be empty or new. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
 
 ### `worldloom plan`
 

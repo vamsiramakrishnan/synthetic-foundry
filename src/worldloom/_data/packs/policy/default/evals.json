@@ -1,6 +1,8 @@
 {
   "values": {
     "evalrun.agent_pack.max_chars": 24000,
+    "evalrun.agent_pack.max_file_bytes": 32768,
+    "evalrun.agent_pack.max_tree_bytes": 262144,
     "evalrun.max_turns": 64,
     "evalrun.concurrency": 1,
     "evalrun.delta_band": 0.1,
@@ -13,6 +15,9 @@
     "evalrun.improve.rounds": 3,
     "evalrun.improve.holdout_share": 0.25,
     "evalrun.improve.min_holdout_delta": 0.0,
-    "evalrun.improve.authoring_rounds": 4
+    "evalrun.improve.authoring_rounds": 4,
+    "evalrun.improve.ablate": true,
+    "evalrun.improve.ablation_max_hunks": 8,
+    "evalrun.improve.ablation_tolerance": 0.05
   }
 }

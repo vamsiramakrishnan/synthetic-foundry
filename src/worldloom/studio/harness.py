@@ -71,9 +71,13 @@ _REPLY_SCHEMAS: dict[str, dict[str, Any]] = {
             "request_id": {"type": "string"},
             "message": {"type": "string"},
             "questions": {**_STRINGS, "maxItems": 5},
+            # `body` or, for a kind with a tree codec, `diff` against the
+            # request's `draft_tree`; `packkit.accept` refuses a proposal
+            # with neither, or both, as a finding.
             "proposal": {"type": "object", "properties": {
                 "name": {"type": "string"}, "title": {"type": "string"}, "description": {"type": "string"},
-                "extends": _STRINGS, "body": _FREE}, "required": ["name", "body"], "additionalProperties": False},
+                "extends": _STRINGS, "body": _FREE, "diff": {"type": "string"}},
+                "required": ["name"], "additionalProperties": False},
         },
         "required": ["request_id", "message"], "additionalProperties": False,
     },
@@ -151,6 +155,53 @@ def standing_instruction(payload: Mapping[str, Any]) -> str:
         return ""
     return (packkit.text("studio.harness.agent_policy.open", ref=str(block.get("ref") or "agent"))
             + block["system"].strip() + "\n" + packkit.text("studio.harness.agent_policy.close"))
+
+
+def skills_preamble(payload: Mapping[str, Any], name: str) -> str:
+    """The agent policy's skills, for the front of an evalrun turn's prompt; empty without them.
+
+    An `agent` pack with a skill tree reaches the turn document as
+    `agent.skills_dir` (the tree, materialised) and `agent.skill_index`
+    (each skill's name, description and SKILL.md path). The index goes ahead
+    of the role so the child knows what it can open. How the bodies arrive
+    depends on what the harness may do on this seam:
+
+    - `codex` runs in its read-only sandbox, which can read files, so it gets
+      the index and the directory and opens a SKILL.md only when its
+      description fits the step (progressive disclosure);
+    - `claude` runs the evalrun seams with no tools at all (`--tools ""`), so
+      it could neither invoke a skill natively nor read one from disk. Giving
+      it file or skill tools would also let it read the cases' expected
+      answers, so instead each SKILL.md is inlined after the index. Its
+      references and scripts stay on disk, named by path.
+    """
+    from .. import packkit
+
+    block = payload.get("agent")
+    if payload.get("schema") != "worldloom.evalrun-turn/v2" or not isinstance(block, Mapping):
+        return ""
+    index = block.get("skill_index")
+    directory = block.get("skills_dir")
+    if not isinstance(index, list) or not index or not isinstance(directory, str):
+        return ""
+    root = Path(directory).resolve()
+    lines = [packkit.text("studio.harness.agent_skills.open", ref=str(block.get("ref") or "agent"), directory=directory)]
+    lines += [f"- {entry.get('name')}: {entry.get('description')} ({entry.get('path')})\n" for entry in index
+              if isinstance(entry, Mapping)]
+    if name == "claude":
+        lines.append(packkit.text("studio.harness.agent_skills.inline"))
+        cap = int(packkit.policy("evalrun.agent_pack.max_file_bytes"))
+        for entry in index:
+            path = Path(str(entry.get("path") if isinstance(entry, Mapping) else "")).resolve()
+            if path.parent.parent != root or path.name != "SKILL.md" or not path.is_file():
+                raise ValueError(f"the skill index names {path}, which is not a SKILL.md under {root}")
+            if path.stat().st_size > cap:
+                raise ValueError(f"{path} exceeds the policy `evalrun.agent_pack.max_file_bytes` ({cap})")
+            lines.append(f"\n## {path.parent.name}\n\n{path.read_text(encoding='utf-8').strip()}\n")
+    else:
+        lines.append(packkit.text("studio.harness.agent_skills.read"))
+    lines.append(packkit.text("studio.harness.agent_skills.close"))
+    return "".join(lines)
 
 
 def adapter_command(name: str, *, timeout: float = 590, allow_native_writes: bool = False) -> str:
@@ -242,7 +293,7 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
     structured = None if command_tools else reply_schema(payload)
     closing = packkit.text(_CLOSINGS.get(str(payload.get("schema")), "studio.harness.closing.structured")
                            if structured else "studio.harness.closing.object")
-    prompt = (standing_instruction(payload) + role + closing + "\n\n"
+    prompt = (standing_instruction(payload) + skills_preamble(payload, name) + role + closing + "\n\n"
               + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False))
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"

@@ -40,8 +40,17 @@ under an ``agent`` pack (``evalrun.policy``). The turn document keeps its
 - ``tools[*].description`` and ``tools[*].hints`` on each tool the policy
   advises.
 
+A policy with a skill tree (``files``) is materialised once into a
+content-addressed directory (``skills_cache``; by default
+``$WORLDLOOM_HOME/cache/agent-skills/<digest>``, or the directory a caller put
+in force with ``skills_cache_in``) and the ``agent`` block gains
+``skills_dir`` (that directory's ``skills/``) and ``skill_index``: each
+skill's ``name``, ``description`` and SKILL.md ``path``, so the child reads
+descriptions up front and a body only when it needs one.
+
 Without a policy the document is byte-identical to what it was before
-policies existed. The agent's ``name`` carries the policy
+policies existed, and a policy without ``files`` adds nothing beyond the
+fields above. The agent's ``name`` carries the policy
 (``exec:python+agent:careful@<digest[:12]>``), and ``pack_record`` is what a
 run writes to ``run.json`` as ``agent_pack``.
 """
@@ -49,7 +58,9 @@ run writes to ``run.json`` as ``agent_pack``.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -88,6 +99,30 @@ def default_max_turns() -> int:
     return int(packkit.policy("evalrun.max_turns"))
 
 
+#: Where ``ExecAgent`` materialises a policy's skill tree when it is given no
+#: ``skills_cache``. The improvement loop puts its own output directory here
+#: while it builds agents, so nothing it runs writes outside that directory.
+_SKILLS_CACHE: ContextVar[Path | None] = ContextVar("worldloom_skills_cache", default=None)
+
+
+@contextmanager
+def skills_cache_in(directory: Path) -> Iterator[None]:
+    """Agents built inside this block materialise skill trees under *directory*."""
+    token = _SKILLS_CACHE.set(directory)
+    try:
+        yield
+    finally:
+        _SKILLS_CACHE.reset(token)
+
+
+def default_skills_cache() -> Path:
+    """``$WORLDLOOM_HOME/cache/agent-skills`` (``~/.worldloom/cache/agent-skills``), unless a caller set one."""
+    held = _SKILLS_CACHE.get()
+    if held is not None:
+        return held
+    return packkit.user_root().parent / "cache" / "agent-skills"
+
+
 def _catalog(service: ConnectorEvaluationService, principal: str, run_id: str) -> list[dict[str, Any]]:
     return [dict(tool) for tool in service.tool_catalog(principal, run_id)]
 
@@ -97,8 +132,8 @@ class ExecAgent:
 
     def __init__(self, command: str, *, timeout: float = DEFAULT_TIMEOUT, shell: bool = False,
                  max_turns: int | None = None, name: str | None = None,
-                 policy: ResolvedPack | None = None) -> None:
-        from .policy import agent_name, pack_record, require
+                 policy: ResolvedPack | None = None, skills_cache: Path | None = None) -> None:
+        from .policy import agent_name, materialise, pack_record, require, skill_index
 
         if policy is not None:
             policy = require(policy)
@@ -116,6 +151,15 @@ class ExecAgent:
         #: What a run records as ``agent_pack``; ``None`` without a policy.
         self.pack_record = pack_record(policy) if policy is not None else None
         self.name = name or agent_name(f"exec:{command.split()[0] if command.split() else command}", policy)
+        #: The materialised skill tree and its index; ``None`` for a policy without ``files``.
+        self.skills_dir: Path | None = None
+        self.skill_index: list[dict[str, str]] = []
+        if policy is not None and policy.body.files:
+            # Materialised when the agent is built, not per turn or per case:
+            # the tree is the policy's, and a case's threads only read it.
+            cache = skills_cache if skills_cache is not None else default_skills_cache()
+            self.skills_dir = materialise(policy.body.files, cache).resolve()
+            self.skill_index = skill_index(policy.body.files, self.skills_dir)
 
     def _unadvisable(self, tools: ToolSurface, catalog: list[dict[str, Any]]) -> tuple[str, ...]:
         """Tools the policy advises that nothing serves: a finding about the policy, not a failure of the run.
@@ -140,6 +184,9 @@ class ExecAgent:
 
             rules = turn_rules(self.policy.body)
             extra = {"agent": agent_block(self.policy)}
+            if self.skills_dir is not None:
+                extra["agent"] = {**extra["agent"], "skills_dir": str(self.skills_dir),
+                                  "skill_index": [dict(entry) for entry in self.skill_index]}
             unknown = self._unadvisable(tools, catalog)
             catalog = advise(catalog, self.policy.body)
             if unknown:
@@ -295,8 +342,10 @@ __all__ = [
     "ExecAgent",
     "ResponsesAgent",
     "default_max_turns",
+    "default_skills_cache",
     "load_responses",
     "requests_document",
     "response_instructions",
+    "skills_cache_in",
     "turn_instructions",
 ]

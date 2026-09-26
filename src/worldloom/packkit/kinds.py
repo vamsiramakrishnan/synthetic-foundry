@@ -9,7 +9,8 @@ presentation profile. Each kind registers once, with
   misspelled field is a refusal rather than a silently dropped knob),
 - a lint returning every finding a reviser can act on (``cascade``'s rule),
 - how an ``extends`` chain merges (deep by default), and
-- what an interview asks when a harness authors one.
+- what an interview asks when a harness authors one, and
+- optionally, a tree codec: the body as files, so a revision can be a diff.
 
 Nothing else is per kind. Discovery, layering, content addressing, the
 active-pack context, upload, and the harness interview are the kernel's, so a
@@ -73,6 +74,17 @@ class PackKind:
     load: Callable[[Mapping[str, Any]], Any] | None = None
     """How a merged body becomes a model, when validation is not enough (a
     kind wrapping an existing loader). ``model.model_validate`` otherwise."""
+    to_tree: Callable[[Mapping[str, Any]], dict[str, str]] | None = None
+    """The kind's tree codec, when it has one: a body as a tree of text files
+    (``{path: text}``), so a revision can be proposed and reviewed as a
+    unified diff (``packkit.diffs``) rather than as a whole new body."""
+    from_tree: Callable[[Mapping[str, str]], dict[str, Any]] | None = None
+    """The inverse of ``to_tree``: refuses (``ValueError``) a tree it cannot
+    read back, such as a path outside what the kind stores."""
+
+    @property
+    def has_tree(self) -> bool:
+        return self.to_tree is not None and self.from_tree is not None
 
 
 _KINDS: dict[str, PackKind] = {}
