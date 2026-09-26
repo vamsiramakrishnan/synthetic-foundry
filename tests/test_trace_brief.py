@@ -295,7 +295,7 @@ def test_messages_are_normalised_by_ids_values_and_numbers() -> None:
 
 
 def test_the_brief_reaches_the_sdk_the_cli_and_campaigns() -> None:
-    from typer.testing import CliRunner
+    from typer import main as typer_main
 
     from worldloom.cli import app
     from worldloom.evalrun import campaign as campaign_module
@@ -305,6 +305,10 @@ def test_the_brief_reaches_the_sdk_the_cli_and_campaigns() -> None:
     assert {"brief", "reference_run"} <= set(inspect.signature(EvalSession.improver).parameters)
     # A campaign passes improve options through untouched; the brief is not one it owns.
     assert "brief" not in campaign_module._OWNED
-    help_text = CliRunner().invoke(app, ["evalrun", "improve", "--help"], terminal_width=200).output
-    assert "--brief" in help_text and "--reference-run" in help_text
-    assert "--brief" in CliRunner().invoke(app, ["evalrun", "campaign", "--help"], terminal_width=200).output
+    # Read the declared options, not rendered help: CI forces colour, which splits flags.
+    def flags(name: str) -> set[str]:
+        group = typer_main.get_command(app).commands["evalrun"]  # type: ignore[attr-defined]
+        return {opt for param in group.commands[name].params for opt in param.opts}
+
+    assert {"--brief", "--reference-run"} <= flags("improve")
+    assert "--brief" in flags("campaign")
