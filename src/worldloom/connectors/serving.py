@@ -497,7 +497,10 @@ class ConnectorEvaluationService:
         with self._held(principal, run_id) as run:
 
             def refuse(message: str) -> ServingError:
-                run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message})
+                run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message,
+                                     # Where it happened: the span count at the refusal, so an
+                                     # exported trace can place it among the spans.
+                                     "index": len(run.spans)})
                 return ServingError(message)
 
             if name not in self.tools:

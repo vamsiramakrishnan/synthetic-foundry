@@ -242,6 +242,11 @@ def test_calls_on_different_runs_overlap_and_calls_on_one_run_do_not() -> None:
     serial = _timed_calls(service, [("alice", one), ("alice", one)])
     assert serial >= 1.9 * service.delay, serial
     assert [span.ordinal for span in service.spans("alice", one)] == [1, 2, 3]
+    # A refusal records where it fell among the spans.
+    with pytest.raises(ServingError, match="tool_not_allowed"):
+        service.call("alice", one, "nowhere.tool", {"id": "x"})
+    assert service.refusals("alice", one) == (
+        {"tool": "nowhere.tool", "arguments": ["id"], "error": "tool_not_allowed: nowhere.tool", "index": 3},)
     service.end("alice", one)
     with pytest.raises(ServingError, match="unknown_run"):
         service.call("alice", one, "servicenow.get_record", {"id": "INC0000001"})
