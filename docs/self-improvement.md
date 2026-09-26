@@ -268,6 +268,68 @@ mean, so a candidate cannot win on cheap cases by losing a costly one. The
 receipt records it as `value_delta`. `--concurrency N` runs every one of the
 loop's runs N cases at a time, and `--no-ablate` skips ablation.
 
+**Repeats.** An agent under test is stochastic: the same policy over the
+same cases scores differently run to run, so one champion run against one
+candidate run can promote a policy that was lucky and reject one that was
+not. `--repeats K` (SDK `repeats=K`, policy `evalrun.improve.repeats`,
+default 1) runs each policy K times over each case set. Each repeat is an
+ordinary pinned run, in `runs/<pack>@<digest>/<label>/rep-<i>`, cached and
+resumed on its own, so an interrupted loop pays only for the repeats it did
+not finish. At K = 1 nothing changes: the runs live in
+`runs/<pack>@<digest>/<label>` and the receipts carry exactly the fields and
+bytes they always did. The proposer's brief is drawn from the champion's
+first repeat.
+
+**The paired test.** Over repeats, each case is reduced to its mean score on
+each side, and the comparison is the per-case differences (candidate minus
+champion), so every case is compared with itself. Their mean gets a
+percentile interval from a paired bootstrap: the cases are resampled with
+replacement `evalrun.improve.bootstrap_resamples` times (2000) at confidence
+`evalrun.improve.confidence` (0.95). The resampling stream is a seeded
+`worldloom.rng.Rng` keyed on the case-set digest and the two policies'
+digests, so the same runs give the same interval on every machine. The
+Student t interval and the standard error are recorded beside it, and each
+axis (plan, trajectory, outcomes) and the value-weighted difference get the
+same treatment; a weighted resample keeps each case's weight. The gates then
+read the interval rather than the point:
+
+| Rule over repeats | Training gate | Held-out gate |
+| --- | --- | --- |
+| Mean of per-case differences | at least the delta band, and its interval's lower bound at least `evalrun.improve.min_train_ci` (0.0) | the interval's lower bound strictly above `evalrun.improve.min_holdout_delta` (0.0) |
+| Value-weighted difference (with `--value`) | the same rule | the same rule |
+| An axis | fails only when the upper bound of its interval is below minus the band: a fall the noise cannot explain | same |
+| Newly errored | a case that errored in a majority of the candidate's repeats and in none of the champion's | same |
+
+A gate over repeats records `repeats`, `ci_low`, `ci_high`, `stderr`,
+`t_low`, `t_high`, `confidence`, `method` (`bootstrap`), `axis_intervals`,
+`value_interval`, and the **noise floor** of each side
+(`noise_floor_champion`, `noise_floor_candidate`): the pooled run-to-run
+standard deviation of a case's score within one policy, which is pure noise
+because nothing about the policy changed between its repeats. Ablation over
+repeats measures a hunk's contribution the same paired way and drops the
+hunk only when the upper bound of that interval is below the tolerance; each
+hunk records `ci_low` and `ci_high`.
+
+**Sizing an experiment.** Before paying for a loop, run the champion a few
+times and ask how noisy it is:
+
+```bash
+worldloom evalrun noise ./runs/champion-1 ./runs/champion-2 ./runs/champion-3
+worldloom evalrun noise ./improve/runs/baseline@<digest>/train --cases 60 --repeats 5 --json
+```
+
+`evalrun noise` takes run directories of one policy over one case set (or a
+directory of `rep-<i>` runs a loop wrote) and reports each case's mean and
+spread, the pooled standard deviation overall and per axis, and the
+**minimum detectable effect**: `(z(1 - a/2) + z(power)) * sqrt(2 s^2 / (k n))`
+for n cases at k repeats a side, at the confidence above and power
+`evalrun.improve.power` (0.8), with a row for 1, 2, 3, 5 and 10 repeats. It
+is a floor: cases differ in how much a change helps them, and that spread
+only widens the interval. When the effect at your repeats is above the delta
+band, the loop cannot tell a real band-sized gain from noise; add repeats or
+cases until it is below. `noise(run_reports)` in `worldloom.evalrun.noise` is
+the same report from Python.
+
 The held-out cases are a separate corpus when `--holdout-corpus` is given,
 which is the stronger test: a policy that learned this company rather than the
 task fails on another. Otherwise a share of the corpus
@@ -324,6 +386,72 @@ round's candidate takes a suffixed name (`baseline-r3-1f2e3d4c`) instead, so
 an earlier loop's champion always resolves by its pinned digest. The loop writes nothing outside its
 output directory and that pack root: a candidate's skill tree is
 materialised under `skills-cache/` there, not in the user's cache.
+
+## Recursion: improving the improver
+
+The improve loop revises the agent's policy, but the proposer that writes
+each diff used to run under fixed instructions. Now it runs under a policy
+too, held in the same kind of pack as the agent it improves: an `agent`
+pack, so the lint, the tree codec, the diff interview and the content
+address all apply unchanged. `agent:proposer-baseline` ships and restates
+today's proposer. A proposer reads four of the pack's fields (`system`,
+`planning`, `skills` and the `skills/` tree); the meta loop refuses a
+proposer that sets the others, since nothing on the interview seam reads
+them.
+
+```bash
+worldloom evalrun improve ./corpus --agent-pack agent:baseline --harness codex \
+  --proposer-harness codex --proposer-pack agent:proposer-baseline \
+  --holdout-corpus ./fresh-seed-corpus -o ./improve
+```
+
+Under `--proposer-pack` each interview request carries an `agent` block for
+the proposer, the same block an evalrun turn carries, and its id covers the
+policy's digest. The bundled adapters put the standing instruction and the
+skill index ahead of the interview role, inside the fence whose nonce is a
+digest of that block. Each authoring round in a receipt records the
+proposer's `ref` and `digest`. Without the flag the request, the prompt and
+the receipt are byte-identical to before.
+
+The meta loop improves that pack:
+
+```bash
+worldloom evalrun improve-proposer --tasks tasks.json \
+  --proposer-pack agent:proposer-baseline --proposer-harness codex \
+  --meta-rounds 2 --rounds 1 -o ./meta-run
+```
+
+`tasks.json` lists training `tasks` and meta-held-out `holdout_tasks`, each
+naming a `corpus`, a `holdout_corpus`, an `agent_pack` and the agent's `exec`
+or `harness`. A proposer policy is scored by the held-out gain it produces:
+for each task `improve` runs with the proposer under that policy, and the
+task's score is the mean held-out delta of the agent champion the loop ended
+with over the one it started from, measured by running both on the task's
+held-out cases (0 when nothing was promoted). The proposer's score is the
+mean over tasks; its promotion rate and refused proposals are recorded
+beside it and decide nothing.
+
+Each meta round scores the proposer champion on the training tasks, turns
+their inner rounds into a brief (rejections and their reasons, refused lint
+findings, questions asked, earlier meta rounds), and asks a meta-proposer
+for a diff to the proposer pack through the pack interview
+(`evalrun.meta.message`). By default the meta-proposer is the same harness
+running under the current proposer champion: the improver revises itself.
+The candidate is scored on the same training tasks, compared task by task
+(`compare_scores`: the mean delta must reach the delta band and no task may
+fall by more than the band), and only then on the meta-held-out tasks,
+which no brief ever names, where it must gain strictly. Receipts are
+written to `meta/rounds/NNN.json` with the proposer diff beside them, and
+candidates to `meta/packs/agent/`.
+
+The meta loop changes the proposer pack and nothing else. Every task's
+grader and case sets are pinned by digest before the first score and
+checked around each one, the inner loops write only under `meta/tasks/`,
+and a held-out task may not share a case set with a training task. From
+Python, `evalrun.meta.improve_proposer(pack, tasks=..., holdout_tasks=...,
+proposer=..., out=...)` runs the same loop, passing any other keyword to
+every inner `improve` call, and `EvalSession.improver(...,
+proposer_pack=...)` runs an ordinary loop under a promoted proposer.
 
 ## Trace export
 
@@ -532,3 +660,131 @@ curriculum is representative of the simulated company, not of any real one.
 The operational simulators also run one workflow per vertical today, so their
 workflow mix is a single slice; the process-binding volumes are the reference
 with more than one value.
+
+## Campaigns: closing the outer loop
+
+`improve` works one case set until it stops, and the most common stop is
+the best news: `no_failures`, the champion passes every training case. At
+that point the set is spent, not the agent. A campaign keeps going. It is a
+sequence of stages, and each stage is a fresh training set and a fresh
+sealed held-out set, built from seeds the campaign has never used, over
+which `improve` runs until it stops. Then the campaign reads how the stage
+ended and decides what the next one is made of.
+
+```bash
+worldloom evalrun campaign ./cases --agent-pack agent:baseline --harness codex \
+  --proposer-harness codex --plan base-plan.json --stages 4 --seed 11 --rounds 3 -o ./campaign
+```
+
+The champion first runs CORPUS (`./cases` above), so the first stage is
+already decided by its failures there. The decision rules, in order:
+
+| The stage ended | Next stage | Built from |
+| --- | --- | --- |
+| `no_failures` (saturated) | escalate | `escalate` over the champion's final training run: the harder shapes and designed failures beside every slice it mastered |
+| `evalrun.campaign.patience` rounds in a row without a promotion (plateaued) | escalate | the same, since more rounds of the same cases taught nothing |
+| still failing training cases | target | `design_curriculum` over the champion's autopsy, value-weighted with `--value`, with the representative share the mix guard keeps when a reference mix can be counted from the stage's records |
+| `questions` or `proposer_error` | stop | the operator has to answer or fix the proposer; run the same command again afterwards |
+
+A campaign also stops when the stage budget (`--stages`, default policy
+`evalrun.campaign.max_stages`) or the case budget (`--max-cases`, policy
+`evalrun.campaign.max_cases`, training plus held-out cases over every
+stage) is spent, when the builder cannot produce new cases for a stage
+(`no_new_cases`, with its reason), and when escalation proposes nothing
+harder (`nothing_harder`). An escalation needs a slice whose whole Wilson
+interval clears the band, so a stage of a handful of cases can saturate
+without escalating: the campaign says so rather than guess at a harder
+slice.
+
+**What a stage is made of** is a builder's business: the `StageBuilder`
+protocol takes the campaign's request (the mode, the stage's seeds, the
+champion, the previous stage's outcome with its autopsy and escalations)
+and returns the training cases, the held-out cases, the records of each
+and a description. `DatasetStageBuilder` compiles `DatasetPlan`s with
+`compile_dataset`: the base plan's strata for a first stage, the targeted
+curriculum's strata, or one stratum per escalation proposal on the closest
+base stratum. The held-out plan has the same strata scaled by
+`evalrun.campaign.held_ratio` under its own seed, so the two sets share no
+seed and no batch. `CornerStageBuilder` draws corner cases from seeded
+worlds, and when escalating searches the frontier (the reference solves,
+the champion fails) with the held-out seeds refused to the search. Cases
+compiled from several worlds keep their records apart (`RecordGroups`):
+two worlds reuse external keys.
+
+**The seal.** A case is its content: id, request and row. A stage whose
+training set holds any earlier stage's held-out case, or whose held-out set
+holds a case some stage trained on, is refused before anything runs, and
+the campaign stops with `held_out_overlap` and writes `refused.json` in
+the stage's directory. Escalation reads the champion's training run only;
+held-out results judge and nothing else. Each stage's seeds derive from the
+campaign seed, the stage number and the role by content address, skipping
+every seed already used and every seed the builder reserves (a dataset
+builder reserves its base plan's), and every stage records them.
+
+**The ledger** is the number the campaign exists for. After every stage the
+campaign's original champion and its current champion both run that
+stage's held-out cases, which no proposer and no training set ever saw.
+`campaign.json` carries the entries stage by stage: each side's passes,
+pass rate and mean score, and the current minus the original. A policy
+that learned a skill in stage 1 and another in stage 2 shows it twice, on
+two sets of never-seen cases; a policy that learned the case set shows
+nothing.
+
+```text
+campaign/
+  campaign.json            seed, grader, original and final champion, stages, ledger, why it stopped
+  baseline/                the champion's run over CORPUS
+  stages/001/stage.json    mode, builder, seeds, case-set digests, the improve summary, the ledger entry
+  stages/001/cases/        train/ and held/: the cases and their record groups, exactly as run
+  stages/001/build/        what the builder compiled
+  stages/001/improve/      the stage's improve loop: rounds/, runs/, packs/, improve.json
+  stages/001/ledger/       original/ and current/ over the held-out cases
+```
+
+A stage with a `stage.json` is complete: running the campaign again reads it
+back and builds, proposes and runs nothing for it, and a larger `--stages`
+continues from its champion. Runs already on disk are reused as `improve`
+reuses them. A directory holding another seed's or another champion's
+campaign is refused. From Python, `EvalSession.campaign(agent=...,
+proposer=..., builder=plan_or_builder, out=...)` returns a loop whose
+`run(champion)` is the same campaign, and `campaign()` in
+`worldloom.evalrun.campaign` takes any builder and any runner.
+
+| Key | Default | Why |
+| --- | --- | --- |
+| `evalrun.campaign.max_stages` | 3 | Each stage runs a whole improve loop over two fresh case sets; three stages is one first stage and two decisions, enough to see whether escalation or targeting pays before spending more. |
+| `evalrun.campaign.patience` | 2 | One round without a promotion is noise; two in a row on the same cases means the proposer has stopped finding anything there. |
+| `evalrun.campaign.max_cases` | 5000 | Cases are the cost: every one is run by the champion, its candidates and the ledger. A ceiling a campaign reaches only on purpose. |
+| `evalrun.campaign.held_ratio` | 0.5 | Half as many held-out rows per stratum as training rows: enough for a pass rate per stage, cheaper than a second training set. |
+
+## Measured: the first live pilot
+
+One pilot has been run against a live coding harness, acting as both the
+agent under test and the proposer, with the grounded rater. The numbers are
+small and are recorded because they size everything after them.
+
+- **Cases.** 20 training cases from a retail corpus (seed 8128) and 12
+  held-out cases from a fresh-seed corpus (seed 4242). The reference agent
+  scores 1.0 on all 20 training cases.
+- **Noise floor.** Two runs of `agent:baseline` on the same 20 cases gave a
+  pooled run-to-run standard deviation of 0.14 per case (plan 0.17,
+  trajectory 0.10, outcomes 0.27). `evalrun noise` puts the minimum
+  detectable effect at 0.124 for one run per side, 0.088 for two and 0.072
+  for three. One run per side cannot see a gain of one delta band (0.1).
+- **Baseline.** Mean overall score 0.54, no case passed outright; about 55
+  `validation_error` connector errors per run, from malformed searches.
+- **Round 1** proposed a skill and was rejected: mean delta -0.016, 95%
+  interval [-0.082, 0.046].
+- **Round 2** proposed a standing instruction and search-tool advice on
+  validation errors. Its training mean rose from 0.54 to 0.63 (delta +0.086,
+  95% interval [-0.005, 0.189]) and its own run-to-run noise fell to 0.093,
+  but the interval's lower bound sat just below zero, so it was rejected
+  before the holdout. Validation errors rose (the agent retried more), which
+  says the advice changed behaviour without teaching the tools' query
+  grammar.
+
+What this says: the loop, the gates and the grader behave as designed live,
+and no promotion has yet cleared them. The next levers are more repeats or
+cases for the candidate that came close, and a brief that carries the
+connectors' own validation messages so a proposer can write advice about the
+exact query grammar rather than about retrying.

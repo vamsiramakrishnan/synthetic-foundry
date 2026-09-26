@@ -13,6 +13,26 @@ first written up, before the waves above it landed.
 
 ### Closing the loop: agents that improve against the corpus
 
+- **Noise-aware gates.** `worldloom evalrun improve --repeats K` (SDK
+  `repeats=`, policy `evalrun.improve.repeats`, default 1) runs each policy K
+  times per case set, each repeat an ordinary pinned run under
+  `runs/<pack>@<digest>/<label>/rep-<i>`, cached and resumed on its own. The
+  gates then judge a paired comparison over per-case means: a deterministic
+  paired bootstrap interval (seeded from the case-set digest and the two
+  policies' digests; `evalrun.improve.confidence` 0.95,
+  `evalrun.improve.bootstrap_resamples` 2000) with the t interval beside it.
+  Training passes when the mean reaches the delta band and the lower bound
+  reaches `evalrun.improve.min_train_ci` (0.0); the holdout when the lower
+  bound is above `evalrun.improve.min_holdout_delta`; an axis fails only when
+  its upper bound is below minus the band; a case is newly errored only when
+  it errored in most candidate repeats and no champion repeat. Receipts record
+  the interval, the standard error and each side's noise floor, and ablation
+  drops a hunk only when its contribution's upper bound is below the
+  tolerance. At K = 1 every rule, receipt and run directory is byte-identical
+  to before. **`worldloom evalrun noise RUN_DIR...`** (`evalrun.noise.noise`)
+  reports one policy's run-to-run spread and the minimum detectable effect
+  for N cases at K repeats (power `evalrun.improve.power`, 0.8), so an
+  experiment can be sized before it is paid for.
 - **`worldloom evalrun improve`** runs a champion `agent` pack over the
   training cases, clusters its failures, and asks a proposing harness for a
   revision through the pack interview. The candidate is kept only if it gains
@@ -33,6 +53,19 @@ first written up, before the waves above it landed.
   the holdout. Generated code lives only in the pack's `skills/` tree.
   `worldloom pack tree`, `pack from-tree` and `pack diff` move a pack between
   JSON and a directory.
+- **The improver is improvable.** The proposing harness runs under an
+  `agent` pack of its own (`agent:proposer-baseline` ships, restating
+  today's proposer): `evalrun improve --proposer-pack` puts its standing
+  instruction and skills ahead of the pack interview inside the same
+  digest-derived fence the agent under test gets, and each round's authoring
+  log records its reference and digest. `worldloom evalrun improve-proposer`
+  scores a proposer policy by the held-out gain of the agents it improves
+  across a set of tasks, has the proposer revise its own pack by diff, and
+  promotes a revision only when it gains on the training tasks and then on
+  meta-held-out tasks the brief never describes; receipts land in
+  `meta/rounds/`. The SDK form is `evalrun.meta.improve_proposer` and
+  `EvalSession.improver(..., proposer_pack=...)`. Without a proposer pack
+  every request, prompt and receipt is byte-identical to before.
 - **The grader is frozen by digest.** Every run records the rater, the
   `rater.*` prompts, the rubrics and the grading policy as one digest;
   `evalrun compare` calls nothing an improvement across two graders, and the
@@ -64,6 +97,18 @@ first written up, before the waves above it landed.
 - **Recorded, not generated.** A run's `run.json` now names its grader, and
   refused calls in a case's ledger carry the position where they fell. What a
   seed generates is unchanged.
+- **Campaigns.** `worldloom evalrun campaign` keeps improving past
+  `no_failures`: a sequence of stages, each a fresh training set and a sealed
+  held-out set from seeds the campaign never used, each running the improve
+  loop until it stops. A saturated or plateaued stage escalates to harder
+  slices (`escalate`, or the corner frontier); a failing one gets a curriculum
+  aimed at its autopsy. A held-out case never reaches a later training set
+  (refused as `held_out_overlap`), and after every stage the original and the
+  current champion both run its held-out cases, so `campaign.json` reports the
+  gain over the starting policy stage by stage on cases neither trained on.
+  Stage builders are injectable (`StageBuilder`; `DatasetStageBuilder`,
+  `CornerStageBuilder`), completed stages are read back rather than rerun, and
+  the SDK form is `EvalSession.campaign(...)`.
 
 ### Scale, live harnesses, and the last literals
 

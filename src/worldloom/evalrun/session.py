@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from ..packkit.resolve import ResolvedPack
     from .agreement import AgreementReport
     from .autopsy import Autopsy
+    from .campaign import CampaignLoop
     from .curriculum import Curriculum, Escalation
     from .improve import ImproveReport
     from .rater import Rater
@@ -170,6 +171,8 @@ class ImproveLoop:
     #: training and held-out cases and their records).
     value: bool = False
     ablate: bool | None = None
+    #: Runs of each policy per case set; ``None`` is the policy ``evalrun.improve.repeats``.
+    repeats: int | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
@@ -223,7 +226,7 @@ class ImproveLoop:
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
                        max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
-                       holdout_values=holdout_values)
+                       holdout_values=holdout_values, repeats=self.repeats)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -369,6 +372,8 @@ class EvalSession:
         max_axis_regression: float | None = None,
         value: bool = False,
         ablate: bool | None = None,
+        proposer_pack: str | ResolvedPack | None = None,
+        repeats: int | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -383,6 +388,11 @@ class EvalSession:
         ``concurrency`` defaults to the policy ``evalrun.concurrency``.
         ``value=True`` also gates on the delta weighted by each case's value at
         stake; ``ablate`` overrides the policy ``evalrun.improve.ablate``.
+        ``proposer_pack`` is the policy the proposer runs under (an ``agent``
+        pack, such as one ``evalrun.meta.improve_proposer`` promoted); its
+        skill tree is materialised under ``out``.
+        ``repeats`` runs each policy that many times per case set and gates on
+        a paired interval (default: the policy ``evalrun.improve.repeats``, 1).
         """
         from .runner import default_concurrency
 
@@ -397,12 +407,59 @@ class EvalSession:
         workers = default_concurrency() if concurrency is None else concurrency
         if workers < 1:
             raise ValueError("concurrency must be at least 1")
-        return ImproveLoop(session=self, agent=_agent_factory(agent), exchange=_exchange(proposer), out=Path(out),
+        from ..packkit.authoring import with_proposer
+
+        exchange = with_proposer(_exchange(proposer), None if proposer_pack is None
+                                 else self.agent_pack(proposer_pack, roots=pack_roots),
+                                 skills_cache=Path(out) / "skills-cache")
+        return ImproveLoop(session=self, agent=_agent_factory(agent), exchange=exchange, out=Path(out),
                            holdout=held, holdout_share=holdout_share, rater=rater_for(rater),
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
                            max_axis_regression=max_axis_regression, value=value, ablate=ablate,
-                           _records=records, _holdout_records=held_records)
+                           repeats=repeats, _records=records, _holdout_records=held_records)
+
+    def campaign(
+        self,
+        *,
+        agent: Callable[[ResolvedPack], AgentUnderTest] | str,
+        proposer: Exchange | str,
+        out: str | Path,
+        builder: Any,
+        rater: str | Rater | None = None,
+        concurrency: int | None = None,
+        pack_roots: Sequence[str | Path] = (),
+        seed: int = 0,
+        max_cases: int | None = None,
+        patience: int | None = None,
+        value: bool = False,
+        baseline: bool = True,
+        **improve_options: Any,
+    ) -> CampaignLoop:
+        """The outer loop over stages of fresh cases; ``.run(champion)`` starts it.
+
+        ``builder`` makes each stage's case sets: a ``StageBuilder``, or a
+        base ``DatasetPlan`` (its JSON document, or a path to one), which
+        becomes a ``DatasetStageBuilder``. With ``baseline`` the champion
+        runs this session's cases first and the first stage is decided from
+        its failures. ``agent``, ``proposer``, ``rater`` and ``concurrency``
+        are read as ``improver`` reads them; *improve_options* (``rounds``
+        and the rest) reach every stage's ``improve()`` untouched.
+        """
+        from .campaign import CampaignLoop, DatasetStageBuilder
+        from .runner import default_concurrency
+
+        workers = default_concurrency() if concurrency is None else concurrency
+        if workers < 1:
+            raise ValueError("concurrency must be at least 1")
+        stage_builder = builder if callable(builder) else DatasetStageBuilder(_dataset_plan(builder),
+                                                                             principal=self.principal)
+        return CampaignLoop(builder=stage_builder, agent=_agent_factory(agent), exchange=_exchange(proposer),
+                            out=Path(out), baseline=(self.cases, self._records) if baseline else None,
+                            rater=rater_for(rater), concurrency=workers, principal=self.principal,
+                            definitions=self._definitions or None, pack_roots=tuple(pack_roots), seed=seed,
+                            max_cases=max_cases, patience=patience, value=value,
+                            improve_options=dict(improve_options))
 
     # -- the loop's parts, one call each ------------------------------------------------
 

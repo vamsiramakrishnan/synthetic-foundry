@@ -895,6 +895,7 @@ def improve_command(
     harness: str | None = typer.Option(None, "--harness", help="An installed coding harness as the agent under test: codex or claude."),
     proposer_exec: str | None = typer.Option(None, "--proposer-exec", help="The harness that proposes revised policies, over the `pack author` seam."),
     proposer_harness: str | None = typer.Option(None, "--proposer-harness", help="An installed coding harness as the proposer: codex or claude."),
+    proposer_pack: str | None = typer.Option(None, "--proposer-pack", help="The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest."),
     holdout_corpus: Path | None = typer.Option(None, "--holdout-corpus", help="Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back."),
     holdout_share: float | None = typer.Option(None, "--holdout-share", help="Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`)."),
     rounds: int | None = typer.Option(None, "--rounds", min=1, help="Rounds to run (default: policy `evalrun.improve.rounds`)."),
@@ -908,6 +909,7 @@ def improve_command(
     concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1)."),
     value: bool = typer.Option(False, "--value", help="Also require the delta weighted by each case's value at stake to clear every gate."),
     no_ablate: bool = typer.Option(False, "--no-ablate", help="Send the candidate to the holdout whole, without taking out hunks that carry nothing."),
+    repeats: int | None = typer.Option(None, "--repeats", min=1, help="Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
@@ -973,9 +975,11 @@ def improve_command(
 
     try:
         report = improve(champion, cases, run=run, agent_for=agent_for,
-                         exchange=run_exec_exchange(proposer, timeout=timeout), out=out, rater=grader,
+                         exchange=run_exec_exchange(proposer, timeout=timeout, proposer=_proposer_policy(proposer_pack),
+                                                    skills_cache=out / "skills-cache"), out=out, rater=grader,
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
-                         ablate=False if no_ablate else None, values=values, holdout_values=holdout_values)
+                         ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
+                         repeats=repeats)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
@@ -1192,6 +1196,311 @@ def value_command(
             typer.echo(f"  under {item.value}: {item.case_share:.3g} of cases, {item.reference_share:.3g} of the work")
         for note in mixed.notes:
             typer.echo(f"note: {note}")
+
+
+
+# -- improving the improver ------------------------------------------------------
+
+
+def _proposer_policy(ref: str | None) -> Any:
+    """The resolved proposer policy for `--proposer-pack`, linted as a proposer, or None."""
+    from ..cli import _refuse
+
+    if ref is None:
+        return None
+    from .meta import lint_proposer
+    from .policy import load
+
+    try:
+        pack = load(ref)
+    except (KeyError, ValueError) as error:
+        _refuse("pack_rejected", str(error).strip("'\""))
+    findings = lint_proposer(pack)
+    if findings:
+        _refuse("pack_rejected", f"proposer {pack.ref} rejected: {'; '.join(findings[:3])}", findings=findings)
+    return pack
+
+
+def _meta_task(entry: Any, base: Path, *, timeout: float, shell: bool, max_turns: int | None, principal: str,
+               rater: Any, concurrency: int | None) -> Any:
+    """One entry of TASKS.json as an `ImprovementTask`, its paths read relative to that file."""
+    from ..cli import _refuse
+    from .harness import ExecAgent
+    from .improve import split_cases
+    from .meta import ImprovementTask
+    from .runner import case_set_digest, default_concurrency, run_cases, service_for
+
+    if not isinstance(entry, dict):
+        _refuse("unreadable_document", "each task in TASKS.json is an object")
+    name = entry.get("name")
+    corpus = entry.get("corpus")
+    agent_pack = entry.get("agent_pack")
+    if not isinstance(name, str) or not isinstance(corpus, str) or not isinstance(agent_pack, str):
+        _refuse("unreadable_document", "each task in TASKS.json names `name`, `corpus` and `agent_pack`")
+    exec_command = _harness_exec(entry.get("harness"), entry.get("exec"), timeout=timeout)
+    if exec_command is None:
+        _refuse("missing_flag", f"task {name}: give `exec` or `harness`; a policy means nothing to the reference, "
+                "lazy or scripted agents")
+
+    def local(value: str) -> Path:
+        path = Path(value)
+        return path if path.is_absolute() else base / path
+
+    if agent_pack.endswith(".json") or "/" in agent_pack:
+        agent_pack = str(local(agent_pack))
+    champion = _agent_pack(agent_pack, exec_command)
+    limit = entry.get("limit")
+    loaded, cases = _corpus_cases(local(corpus), limit if isinstance(limit, int) else None)
+    if not cases:
+        _refuse("no_cases", f"task {name}: {corpus} compiled to no cases")
+    records = list(loaded.connector_data.records)
+    held_records = records
+    holdout_corpus = entry.get("holdout_corpus")
+    if isinstance(holdout_corpus, str):
+        held_loaded, held = _corpus_cases(local(holdout_corpus), None)
+        held_records = list(held_loaded.connector_data.records)
+        train = tuple(cases)
+    else:
+        from .. import packkit
+
+        train, held = split_cases(cases, holdout_share=float(packkit.policy("evalrun.improve.holdout_share")))
+    workers = default_concurrency() if concurrency is None else concurrency
+    held_key = case_set_digest(held)
+    services: dict[str, Any] = {}
+
+    def run(subset: Any, agent: Any) -> Any:
+        key = case_set_digest(subset)
+        if key not in services:
+            try:
+                services[key] = service_for(subset, held_records if key == held_key else records, concurrency=workers)
+            except Exception as error:  # ServingError and its causes are all refusals here
+                _refuse("service_unbuildable", str(error))
+        return run_cases(services[key], subset, agent, principal=principal, rater=rater, concurrency=workers)
+
+    def agent_for(pack: Any) -> Any:
+        return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
+
+    try:
+        return ImprovementTask(name=name, champion=champion, train=tuple(train), holdout=tuple(held), run=run,
+                               agent_for=agent_for, rater=rater)
+    except ValueError as error:
+        _refuse("cases_uncompilable", str(error))
+
+
+@app.command("improve-proposer")
+def improve_proposer_command(
+    tasks: Path = typer.Option(..., "--tasks", help="TASKS.json: {\"tasks\": [...], \"holdout_tasks\": [...]}, each task {name, corpus, holdout_corpus?, agent_pack, exec | harness, limit?}; paths relative to the file."),
+    proposer_pack: str = typer.Option(..., "--proposer-pack", help="The proposer policy to start from: agent:<name>[@<digest>] or a pack file (agent:proposer-baseline ships)."),
+    out: Path = typer.Option(..., "--out", "-o", help="Directory for meta/rounds, meta/tasks, meta/packs and meta/meta.json."),
+    proposer_exec: str | None = typer.Option(None, "--proposer-exec", help="The proposing harness, over the `pack author` seam; it also revises its own policy."),
+    proposer_harness: str | None = typer.Option(None, "--proposer-harness", help="An installed coding harness as the proposer: codex or claude."),
+    meta_rounds: int = typer.Option(1, "--meta-rounds", min=1, help="Meta rounds: each proposes one revision of the proposer policy."),
+    rounds: int | None = typer.Option(None, "--rounds", min=1, help="Rounds of each inner `improve` loop (default: policy `evalrun.improve.rounds`)."),
+    rater: str | None = typer.Option(None, "--rater", help="grounded or exec:<command>; pinned for every task."),
+    rater_timeout: float = typer.Option(600.0, "--rater-timeout"),
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds a child (agent turn or proposal) may run."),
+    shell: bool = typer.Option(False, "--shell", help="Run the agents' exec commands through the shell."),
+    max_turns: int | None = typer.Option(None, "--max-turns", min=1),
+    principal: str = typer.Option("agent", "--principal"),
+    concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run."),
+    no_ablate: bool = typer.Option(False, "--no-ablate", help="Skip ablation in every inner loop."),
+    json_output: bool = typer.Option(False, "--json", help="Emit meta.json on stdout."),
+) -> None:
+    """Improve the proposer: revise its policy and keep a revision only if the agents it improves gain more.
+
+    A proposer policy is scored by the held-out gain it produces: for each
+    task, `evalrun improve` runs with the proposer under that policy, and the
+    score is the mean held-out delta of the agent champion it ends with over
+    the one it started from. Each meta round asks the proposer, under its own
+    current policy, for a diff to that policy, and promotes the revision only
+    if it gains on the training tasks and then on the held-out tasks, which
+    no brief describes. Every meta round leaves a receipt.
+    """
+    from ..cli import _refuse
+    from ..packkit.authoring import run_exec_exchange
+    from .grader import GraderDrift
+    from .meta import TaskOverlap, improve_proposer
+
+    proposer = _harness_exec(proposer_harness, proposer_exec, timeout=timeout)
+    if proposer is None:
+        _refuse("missing_flag", "name the proposer with --proposer-exec or --proposer-harness")
+    champion = _proposer_policy(proposer_pack)
+    try:
+        document = json.loads(tasks.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        _refuse("unreadable_document", f"{tasks}: {error}")
+    if not isinstance(document, dict) or not isinstance(document.get("tasks"), list) \
+            or not isinstance(document.get("holdout_tasks"), list):
+        _refuse("unreadable_document", f"{tasks}: expected {{\"tasks\": [...], \"holdout_tasks\": [...]}}")
+    grader = _rater_from(rater, timeout=rater_timeout, shell=shell)
+    options = {"timeout": timeout, "shell": shell, "max_turns": max_turns, "principal": principal, "rater": grader,
+               "concurrency": concurrency}
+    base = tasks.resolve().parent
+    train = [_meta_task(entry, base, **options) for entry in document["tasks"]]
+    held = [_meta_task(entry, base, **options) for entry in document["holdout_tasks"]]
+    inner: dict[str, Any] = {"rounds": rounds}
+    if no_ablate:
+        inner["ablate"] = False
+    try:
+        report = improve_proposer(champion, tasks=train, holdout_tasks=held, proposer=run_exec_exchange(proposer, timeout=timeout),
+                                  out=out, meta_rounds=meta_rounds, **inner)
+    except GraderDrift as error:
+        _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
+    except TaskOverlap as error:
+        _refuse("holdout_overlap", str(error))
+    except ValueError as error:
+        _refuse("cases_uncompilable", str(error))
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+        return
+    typer.echo(f"{len(report.tasks)} training and {len(report.holdout_tasks)} meta-held-out task(s)")
+    for item in report.rounds:
+        gates = "; ".join(f"{gate.name} {gate.mean_delta:+}" for gate in (item.train, item.holdout) if gate is not None)
+        candidate = f" -> {item.candidate['ref']}@{item.candidate['digest'][:12]}" if item.candidate else ""
+        why = f" ({'; '.join(item.reasons[:2])})" if item.reasons and item.decision != "promoted" else ""
+        typer.echo(f"meta round {item.round}: {item.decision}{candidate}" + (f" [{gates}]" if gates else "") + why)
+    typer.echo(f"proposer champion: {report.champion['ref']}@{report.champion['digest'][:12]}"
+               f" after {report.promotions} promotion(s); receipts in {out / 'meta' / 'rounds'}")
+
+
+@app.command("noise")
+def noise_command(
+    runs: list[Path] = typer.Argument(..., help="Run directories of one policy over one case set, or a directory of rep-<i> runs an improve loop wrote."),
+    cases: int | None = typer.Option(None, "--cases", min=1, help="Size the experiment for this many cases (default: the cases the runs graded)."),
+    repeats: int | None = typer.Option(None, "--repeats", min=1, help="Size the experiment for this many repeats a side (default: the number of runs given)."),
+    confidence: float | None = typer.Option(None, "--confidence", help="Confidence of the interval (default: policy `evalrun.improve.confidence`, 0.95)."),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Measure one policy's run-to-run noise, and the smallest effect a comparison could detect through it.
+
+    Given k runs of the same policy, reports each case's mean and spread, the
+    pooled run-to-run standard deviation, and the minimum detectable effect
+    for a paired comparison of that many cases at that many repeats a side,
+    so an improve loop's `--repeats` can be sized before it is paid for.
+    """
+    from ..cli import _refuse
+    from .noise import noise, render_noise
+
+    directories: list[Path] = []
+    for path in runs:
+        nested = [] if (path / "run.json").exists() else sorted(path.glob("rep-*/run.json"))
+        if nested:
+            directories.extend(item.parent for item in nested)
+        else:
+            directories.append(path)
+    try:
+        reports = [_read_run(path) for path in directories]
+    except (OSError, ValueError) as error:
+        _refuse("run_unreadable", str(error))
+    try:
+        report = noise(reports, confidence=confidence, cases=cases, repeats=repeats)
+    except ValueError as error:
+        # Runs of different policies, case sets or graders: a usage error in
+        # what was handed over, not an unreadable run.
+        raise typer.BadParameter(str(error), param_hint="RUNS") from error
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+        return
+    typer.echo(render_noise(report), nl=False)
+
+
+@app.command("campaign")
+def campaign_command(
+    corpus: Path = typer.Argument(..., help="The corpus or case set the champion is measured on first; its failures decide the first stage."),
+    agent_pack: str = typer.Option(..., "--agent-pack", help="The champion to start from: agent:<name>[@<digest>] or a pack file."),
+    plan: Path = typer.Option(..., "--plan", help="The base DatasetPlan (JSON) every stage's case sets are compiled from, under fresh seeds."),
+    out: Path = typer.Option(..., "--out", "-o", help="Directory for campaign.json and stages/NNN/."),
+    exec_command: str | None = typer.Option(None, "--exec", help="The agent under test as an executable (the `evalrun run --exec` seam)."),
+    harness: str | None = typer.Option(None, "--harness", help="An installed coding harness as the agent under test: codex or claude."),
+    proposer_exec: str | None = typer.Option(None, "--proposer-exec", help="The harness that proposes revised policies, over the `pack author` seam."),
+    proposer_harness: str | None = typer.Option(None, "--proposer-harness", help="An installed coding harness as the proposer: codex or claude."),
+    stages: int | None = typer.Option(None, "--stages", min=1, help="Stages to run at most (default: policy `evalrun.campaign.max_stages`)."),
+    seed: int = typer.Option(0, "--seed", help="The campaign seed every stage's seeds derive from."),
+    rounds: int | None = typer.Option(None, "--rounds", min=1, help="Improve rounds per stage (default: policy `evalrun.improve.rounds`)."),
+    max_cases: int | None = typer.Option(None, "--max-cases", min=1, help="Training plus held-out cases the campaign may spend (default: policy `evalrun.campaign.max_cases`)."),
+    rater: str | None = typer.Option(None, "--rater", help="grounded or exec:<command>; pinned for the whole campaign."),
+    rater_timeout: float = typer.Option(600.0, "--rater-timeout"),
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds a child (agent turn or proposal) may run."),
+    shell: bool = typer.Option(False, "--shell", help="Run --exec and --proposer-exec through the shell."),
+    max_turns: int | None = typer.Option(None, "--max-turns", min=1),
+    principal: str = typer.Option("agent", "--principal"),
+    concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1)."),
+    value: bool = typer.Option(False, "--value", help="Gate every stage on the value-weighted delta too, and weight targeted stages by value."),
+    json_output: bool = typer.Option(False, "--json", help="Emit campaign.json on stdout."),
+) -> None:
+    """Keep improving an agent across stages of fresh cases, and report how far it moved on cases it never saw.
+
+    The champion runs CORPUS first. Each stage then compiles a training and a
+    sealed held-out case set from the base plan under seeds the campaign has
+    never used, and runs the improve loop over them until it stops. A
+    champion that saturates or plateaus escalates to harder slices; one that
+    still fails gets fresh cases aimed at its failures. After every stage the
+    original and the current champion both run that stage's held-out cases:
+    the ledger is the improvement over the starting policy, stage by stage.
+    A completed stage is read back, never run again.
+    """
+    from ..cli import _refuse
+    from ..connectors.serving import ServingError
+    from ..packkit.authoring import run_exec_exchange
+    from . import campaign as campaign_module
+    from .grader import GraderDrift
+    from .harness import ExecAgent
+    from .runner import default_concurrency
+    from .session import _dataset_plan
+
+    exec_command = _harness_exec(harness, exec_command, timeout=timeout)
+    if exec_command is None:
+        _refuse("missing_flag", "the agent under test is an --exec or --harness child; a policy means nothing to the "
+                "reference, lazy or scripted agents")
+    proposer = _harness_exec(proposer_harness, proposer_exec, timeout=timeout)
+    if proposer is None:
+        _refuse("missing_flag", "name the proposer with --proposer-exec or --proposer-harness")
+    champion = _agent_pack(agent_pack, exec_command)
+    grader = _rater_from(rater, timeout=rater_timeout, shell=shell)
+    try:
+        base = _dataset_plan(plan)
+    except (OSError, ValueError) as error:
+        _refuse("dataset_rejected", f"{plan}: {error}")
+    loaded, cases = _corpus_cases(corpus, None)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    workers = default_concurrency() if concurrency is None else concurrency
+
+    def run(subset: Any, records: Any, agent: Any) -> Any:
+        try:
+            return campaign_module.run_grouped(subset, records, agent, rater=grader, concurrency=workers,
+                                               principal=principal)
+        except ServingError as error:
+            _refuse("service_unbuildable", str(error))
+
+    def agent_for(pack: Any) -> Any:
+        return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
+
+    options: dict[str, Any] = {} if rounds is None else {"rounds": rounds}
+    try:
+        report = campaign_module.campaign(
+            champion, builder=campaign_module.DatasetStageBuilder(base, principal=principal), agent_for=agent_for,
+            exchange=run_exec_exchange(proposer, timeout=timeout), out=out, stages=stages, seed=seed, run=run,
+            rater=grader, baseline=(cases, tuple(loaded.connector_data.records)), max_cases=max_cases, value=value,
+            **options)
+    except GraderDrift as error:
+        _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
+    except ValueError as error:
+        _refuse("cases_uncompilable", str(error))
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+        return
+    if report.baseline is not None:
+        typer.echo(f"baseline: {report.baseline['passed']}/{report.baseline['cases']} passed on {corpus}")
+    for record in report.stages:
+        entry = record.ledger
+        typer.echo(f"stage {record.stage} ({record.mode}): {record.train_cases} training, {record.held_cases} held-out;"
+                   f" {record.improve.promotions} promotion(s) in {record.improve.rounds} round(s); {record.status}")
+        typer.echo(f"  held out: original {entry.original.passed}/{entry.original.cases}"
+                   f" (mean {entry.original.mean:.3f}), current {entry.current.passed}/{entry.current.cases}"
+                   f" (mean {entry.current.mean:.3f}), {entry.mean_delta:+.3f}")
+    typer.echo(f"stopped: {report.stopped}" + (f" ({report.reasons[0]})" if report.reasons else ""))
+    typer.echo(f"champion: {report.champion['ref']}@{report.champion['digest'][:12]}; campaign.json in {out}")
 
 
 __all__ = ["app"]

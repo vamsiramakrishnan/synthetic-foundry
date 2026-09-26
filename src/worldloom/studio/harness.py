@@ -177,6 +177,25 @@ def _fenced(opening: str, text: str, closing: str, nonce: str) -> str:
     return f"{opening}[{MARKER_TAG} {nonce}]\n{text}[/{MARKER_TAG} {nonce}]\n{closing}"
 
 
+#: The seams whose document can carry a policy the child runs under.
+_POLICY_SEAMS = frozenset({"worldloom.evalrun-turn/v2", "worldloom.evalrun-plan/v1"})
+#: The seams whose document can carry a policy's skills.
+_SKILL_SEAMS = frozenset({"worldloom.evalrun-turn/v2"})
+_INTERVIEW = "worldloom.pack-interview/v1"
+
+
+def _proposes_under_policy(payload: Mapping[str, Any]) -> bool:
+    """Whether a pack interview names the proposer policy its harness runs under.
+
+    ``packkit.authoring`` writes that policy as an ``agent`` block with a
+    ``ref`` and a ``digest``; an interview without one (every interview a
+    caller did not give a proposer policy) is rendered exactly as before.
+    """
+    block = payload.get("agent")
+    return (payload.get("schema") == _INTERVIEW and isinstance(block, Mapping)
+            and isinstance(block.get("ref"), str) and isinstance(block.get("digest"), str))
+
+
 def standing_instruction(payload: Mapping[str, Any], nonce: str | None = None) -> str:
     """The agent policy's `system` text, delimited, for the front of the prompt; empty without one.
 
@@ -186,13 +205,16 @@ def standing_instruction(payload: Mapping[str, Any], nonce: str | None = None) -
     a harness takes its instructions, between markers naming the policy and
     lines carrying *nonce* (a digest of the policy block unless given), which the
     policy's text cannot forge.
-    Only the evalrun seams carry it: a pack interview or a narration request
-    with an `agent` key is not running an agent under test.
+    The evalrun seams carry it, and so does a pack interview whose proposer
+    runs under a policy (``packkit.authoring.request(..., proposer=...)``):
+    the improver is then as much a policy as the agent it improves. A
+    narration request, or an interview without a proposer policy, gets
+    nothing here.
     """
     from .. import packkit
 
     block = payload.get("agent")
-    if payload.get("schema") not in {"worldloom.evalrun-turn/v2", "worldloom.evalrun-plan/v1"}:
+    if payload.get("schema") not in _POLICY_SEAMS and not _proposes_under_policy(payload):
         return ""
     if not isinstance(block, Mapping) or not isinstance(block.get("system"), str) or not block["system"].strip():
         return ""
@@ -218,11 +240,15 @@ def skills_preamble(payload: Mapping[str, Any], name: str, nonce: str | None = N
       it file or skill tools would also let it read the cases' expected
       answers, so instead each SKILL.md is inlined after the index. Its
       references and scripts stay on disk, named by path.
+
+    A pack interview whose proposer runs under a policy with a skill tree
+    gets the same preamble; the interview seam gives each harness the same
+    tools an evalrun turn does.
     """
     from .. import packkit
 
     block = payload.get("agent")
-    if payload.get("schema") != "worldloom.evalrun-turn/v2" or not isinstance(block, Mapping):
+    if (payload.get("schema") not in _SKILL_SEAMS and not _proposes_under_policy(payload)) or not isinstance(block, Mapping):
         return ""
     index = block.get("skill_index")
     directory = block.get("skills_dir")

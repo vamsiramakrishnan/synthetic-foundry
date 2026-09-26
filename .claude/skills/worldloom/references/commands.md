@@ -423,6 +423,37 @@ worldloom evalrun autopsy <RUN>
 | `--out`, `-o` | Write the autopsy as JSON here. |
 | `--top` | Clusters to report in full; the rest are counted. |
 
+### `worldloom evalrun campaign`
+
+Keep improving an agent across stages of fresh cases, and report how far it moved on cases it never saw.
+
+```
+worldloom evalrun campaign <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
+| `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
+| `--harness` | An installed coding harness as the agent under test: codex or claude. |
+| `--json` | Emit campaign.json on stdout. |
+| `--max-cases` | Training plus held-out cases the campaign may spend (default: policy `evalrun.campaign.max_cases`). |
+| `--max-turns` |  |
+| `--out`, `-o` | Directory for campaign.json and stages/NNN/. |
+| `--plan` | The base DatasetPlan (JSON) every stage's case sets are compiled from, under fresh seeds. |
+| `--principal` |  |
+| `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
+| `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--rater` | grounded or exec:<command>; pinned for the whole campaign. |
+| `--rater-timeout` |  |
+| `--rounds` | Improve rounds per stage (default: policy `evalrun.improve.rounds`). |
+| `--seed` | The campaign seed every stage's seeds derive from. |
+| `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--stages` | Stages to run at most (default: policy `evalrun.campaign.max_stages`). |
+| `--timeout` | Seconds a child (agent turn or proposal) may run. |
+| `--value` | Gate every stage on the value-weighted delta too, and weight targeted stages by value. |
+
 ### `worldloom evalrun cases`
 
 Compile the corpus into three-axis cases and report what the set can grade.
@@ -584,12 +615,37 @@ worldloom evalrun improve <CORPUS>
 | `--principal` |  |
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--proposer-pack` | The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest. |
 | `--rater` | grounded or exec:<command>; pinned for the whole loop. |
 | `--rater-timeout` |  |
+| `--repeats` | Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`. |
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
+
+### `worldloom evalrun improve-proposer`
+
+Improve the proposer: revise its policy and keep a revision only if the agents it improves gain more.
+
+| Option | Purpose |
+| --- | --- |
+| `--concurrency` | Cases in flight at once in every run. |
+| `--json` | Emit meta.json on stdout. |
+| `--max-turns` |  |
+| `--meta-rounds` | Meta rounds: each proposes one revision of the proposer policy. |
+| `--no-ablate` | Skip ablation in every inner loop. |
+| `--out`, `-o` | Directory for meta/rounds, meta/tasks, meta/packs and meta/meta.json. |
+| `--principal` |  |
+| `--proposer-exec` | The proposing harness, over the `pack author` seam; it also revises its own policy. |
+| `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--proposer-pack` | The proposer policy to start from: agent:<name>[@<digest>] or a pack file (agent:proposer-baseline ships). |
+| `--rater` | grounded or exec:<command>; pinned for every task. |
+| `--rater-timeout` |  |
+| `--rounds` | Rounds of each inner `improve` loop (default: policy `evalrun.improve.rounds`). |
+| `--shell` | Run the agents' exec commands through the shell. |
+| `--tasks` | TASKS.json: {"tasks": [...], "holdout_tasks": [...]}, each task {name, corpus, holdout_corpus?, agent_pack, exec \| harness, limit?}; paths relative to the file. |
+| `--timeout` | Seconds a child (agent turn or proposal) may run. |
 
 ### `worldloom evalrun merge`
 
@@ -602,6 +658,21 @@ worldloom evalrun merge <OUT> <SHARDS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the summary as JSON. |
+
+### `worldloom evalrun noise`
+
+Measure one policy's run-to-run noise, and the smallest effect a comparison could detect through it.
+
+```
+worldloom evalrun noise <RUNS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--cases` | Size the experiment for this many cases (default: the cases the runs graded). |
+| `--confidence` | Confidence of the interval (default: policy `evalrun.improve.confidence`, 0.95). |
+| `--json` |  |
+| `--repeats` | Size the experiment for this many repeats a side (default: the number of runs given). |
 
 ### `worldloom evalrun plan`
 
