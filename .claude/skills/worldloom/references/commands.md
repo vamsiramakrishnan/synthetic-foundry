@@ -636,6 +636,22 @@ worldloom evalrun summarize <RUN>
 | --- | --- |
 | `--json` |  |
 
+### `worldloom evalrun value`
+
+Read a run by what its cases are worth: value-weighted pass rate, money passed and failed, costliest failures.
+
+```
+worldloom evalrun value <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--corpus` | The corpus or case set the run was over: cases and the records they touch come from it. |
+| `--json` | Print the value summary (and mix, with --mix) as JSON. |
+| `--mix` | Compare the run's cases with the company's mix over this dimension, counted from the records: activity, stream, lob, pcf_id or function. |
+| `--out`, `-o` | Also write the JSON here. |
+| `--top` | Costliest failing cases listed (default: policy `evalrun.value.top`). |
+
 ### `worldloom evals`
 
 Work with a corpus's evaluation set.

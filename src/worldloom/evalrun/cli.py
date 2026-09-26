@@ -966,4 +966,72 @@ def _rater_from(spec: str | None, *, timeout: float, shell: bool) -> Any:
     _refuse("unknown_rater", f"{spec!r}; use grounded or exec:<command>")
 
 
+@app.command("value")
+def value_command(
+    run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
+    corpus: Path = typer.Option(..., "--corpus", help="The corpus or case set the run was over: cases and the records they touch come from it."),
+    json_output: bool = typer.Option(False, "--json", help="Print the value summary (and mix, with --mix) as JSON."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Also write the JSON here."),
+    top: int | None = typer.Option(None, "--top", min=1, help="Costliest failing cases listed (default: policy `evalrun.value.top`)."),
+    mix: str | None = typer.Option(None, "--mix", help="Compare the run's cases with the company's mix over this dimension, counted from the records: activity, stream, lob, pcf_id or function."),
+) -> None:
+    """Read a run by what its cases are worth: value-weighted pass rate, money passed and failed, costliest failures.
+
+    Each case is priced from the records its expected DAG reads or writes
+    (their monetary fields, never an estimate), how often the company does
+    its activity (record or binding volume) and the cost of getting its
+    operation wrong (policy `evalrun.value.*`). Nothing is re-graded and the
+    run is unchanged; `evalrun summarize` still prints the unweighted view.
+    With --mix, the run's cases are compared with the company's simulated mix
+    over one dimension by total variation distance.
+    """
+    from ..cli import _refuse
+    from ..corpus import write_json
+    from .results import read_run
+    from .value import (
+        index_records,
+        mix_report,
+        reference_mix,
+        render_value,
+        value_summary,
+    )
+
+    try:
+        report = read_run(run)
+    except (OSError, ValueError) as error:
+        _refuse("run_unreadable", str(error))
+    loaded, cases = _corpus_cases(corpus, None)
+    ran = {result.case_id for result in report.results}
+    chosen = [case for case in cases if case.id in ran]
+    if ran and not chosen:
+        _refuse("results_unjoinable", f"none of the run's {len(ran)} case(s) is in {corpus}")
+    index = index_records(loaded.connector_data.records)
+    summary = value_summary(report, chosen, index, top=top)
+    payload: dict[str, Any] = {"value": summary.model_dump(mode="json", by_alias=True)}
+    mixed = None
+    if mix is not None:
+        try:
+            reference = reference_mix(index, dimension=mix)
+        except ValueError as error:
+            _refuse("unknown_value", str(error))
+        mixed = mix_report(chosen, reference=reference, records=index)
+        payload["mix"] = mixed.model_dump(mode="json", by_alias=True)
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        write_json(out, payload)
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    typer.echo(render_value(summary), nl=False)
+    if mixed is not None and mixed.comparison is not None:
+        comparison = mixed.comparison
+        typer.echo(f"Mix over {comparison.dimension}: total variation {comparison.tvd:.4g} from the company's simulated mix")
+        for item in comparison.over:
+            typer.echo(f"  over  {item.value}: {item.case_share:.3g} of cases, {item.reference_share:.3g} of the work")
+        for item in comparison.under:
+            typer.echo(f"  under {item.value}: {item.case_share:.3g} of cases, {item.reference_share:.3g} of the work")
+        for note in mixed.notes:
+            typer.echo(f"note: {note}")
+
+
 __all__ = ["app"]

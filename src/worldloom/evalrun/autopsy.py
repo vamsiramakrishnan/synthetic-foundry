@@ -31,10 +31,10 @@ the failure is twice as common there as the case set alone would explain.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_serializer
 
 from ..models import Model
 from .contract import EvalCase
@@ -239,6 +239,18 @@ class Exemplar(Model):
     evidence: tuple[str, ...]
 
 
+class ClusterValue(Model):
+    """What a cluster's failing cases are worth, when the autopsy was given case values."""
+
+    #: Sum of the cluster's case weights, and its share of the failing cases' total weight.
+    weight: float
+    value_share: float
+    #: Money the cluster's cases carry in ``currency`` (the failing cases' main
+    #: currency); ``None`` when none of them carries any.
+    at_stake: float | None = None
+    currency: str | None = None
+
+
 class Cluster(Model):
     key: str
     axis: str
@@ -253,6 +265,17 @@ class Cluster(Model):
     #: Values with lift above 1.0, strongest first.
     concentrations: tuple[DimensionLift, ...]
     exemplars: tuple[Exemplar, ...]
+    #: Present only when ``autopsy`` was given ``values``; left out of every
+    #: dump otherwise, so an autopsy without values is byte-identical to one
+    #: written before values existed.
+    value: ClusterValue | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_value(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("value", False) is None:
+            data.pop("value")
+        return data
 
 
 class Autopsy(Model):
@@ -344,6 +367,8 @@ def autopsy(
     top: int = 12,
     exemplars: int = 2,
     concentrations: int = 3,
+    values: Mapping[str, Any] | None = None,
+    order: str = "count",
 ) -> Autopsy:
     """Cluster a run's failing cases by finding key.
 
@@ -353,17 +378,29 @@ def autopsy(
     value. Every ordering is total, so the same run always yields the same
     autopsy. ``cases`` is optional: with it, a missing node's kind comes from
     the case contract rather than its id.
+
+    ``values`` (case id to ``CaseValue`` or a bare weight, from
+    ``evalrun.value.value_table``) adds each cluster's weight, its share of
+    the failing cases' total weight and the money its cases carry. A failing
+    case absent from ``values`` weighs 1.0. ``order="value"`` then orders the
+    clusters by weight (then count, then key) instead of by count; the
+    default ordering, and every byte of an autopsy without ``values``, is
+    unchanged.
     """
 
     if top < 1 or exemplars < 1 or concentrations < 0:
         raise ValueError("top and exemplars must be positive and concentrations non-negative")
+    if order not in {"count", "value"}:
+        raise ValueError("order is count or value")
+    if order == "value" and values is None:
+        raise ValueError("ordering by value needs values")
     by_id = _cases_by_id(cases)
     rows = sorted(report.results, key=lambda row: row.case_id)
     profiles = {row.case_id: profile(row) for row in rows}
     base: dict[str, Counter[str]] = defaultdict(Counter)
     for row in rows:
-        for name, values in profiles[row.case_id].items():
-            base[name].update(values)
+        for name, taken in profiles[row.case_id].items():
+            base[name].update(taken)
     members: dict[str, list[CaseResult]] = defaultdict(list)
     failing = 0
     for row in rows:
@@ -372,14 +409,18 @@ def autopsy(
             failing += 1
         for key in keys:
             members[key].append(row)
-    ordered = sorted(members, key=lambda key: (-len(members[key]), key))
+    weigh = _cluster_weigher(values, members) if values is not None else None
+    if weigh is not None and order == "value":
+        ordered = sorted(members, key=lambda key: (-weigh(key).weight, -len(members[key]), key))
+    else:
+        ordered = sorted(members, key=lambda key: (-len(members[key]), key))
     clusters: list[Cluster] = []
     for key in ordered[:top]:
         group = members[key]
         counts: dict[str, Counter[str]] = defaultdict(Counter)
         for row in group:
-            for name, values in profiles[row.case_id].items():
-                counts[name].update(values)
+            for name, taken in profiles[row.case_id].items():
+                counts[name].update(taken)
         lifts: list[DimensionLift] = []
         for name in sorted(counts):
             for value, count in counts[name].items():
@@ -400,6 +441,7 @@ def autopsy(
             exemplars=tuple(Exemplar(case_id=row.case_id, query=_clip(row.query, _QUERY_LIMIT),
                                      evidence=_evidence(key, row, by_id.get(row.case_id)))
                             for row in group[:exemplars]),
+            value=weigh(key) if weigh is not None else None,
         ))
     graded = [row for row in rows if row.graded]
     return Autopsy(
@@ -411,6 +453,40 @@ def autopsy(
         clusters=tuple(clusters),
         omitted={key: len(members[key]) for key in ordered[top:]},
     )
+
+
+def _cluster_weigher(values: Mapping[str, Any], members: Mapping[str, list[CaseResult]]) -> Callable[[str], ClusterValue]:
+    """A function from cluster key to its ``ClusterValue``, over the failing cases' total weight."""
+
+    def weight_of(case_id: str) -> float:
+        value = values.get(case_id)
+        if value is None:
+            return 1.0
+        return float(getattr(value, "weight", value))
+
+    def money_of(case_id: str) -> tuple[str, float] | None:
+        at_stake = getattr(values.get(case_id), "at_stake", None)
+        if at_stake is None:
+            return None
+        return str(getattr(values[case_id], "currency", None) or ""), float(at_stake)
+
+    failing = sorted({row.case_id for rows in members.values() for row in rows})
+    total = sum(weight_of(case_id) for case_id in failing)
+    money: dict[str, float] = defaultdict(float)
+    for case_id in failing:
+        found = money_of(case_id)
+        if found is not None:
+            money[found[0]] += found[1]
+    currency = sorted(money.items(), key=lambda item: (-item[1], item[0]))[0][0] if money else None
+
+    def weigh(key: str) -> ClusterValue:
+        ids = [row.case_id for row in members[key]]
+        weight = sum(weight_of(case_id) for case_id in ids)
+        amounts = [found[1] for case_id in ids if (found := money_of(case_id)) is not None and found[0] == currency]
+        return ClusterValue(weight=round(weight, 6), value_share=round(weight / total, 4) if total else 0.0,
+                            at_stake=round(sum(amounts), 2) if amounts else None, currency=currency or None)
+
+    return weigh
 
 
 def render_brief(report: Autopsy, *, clusters: int | None = None) -> str:
@@ -435,6 +511,10 @@ def render_brief(report: Autopsy, *, clusters: int | None = None) -> str:
         lines.append(f"{number}. {cluster.key}: {cluster.cases} case(s), {round(cluster.share_of_failures * 100)}% of failures")
         if cluster.gloss:
             lines.append(f"   meaning: {cluster.gloss}")
+        if cluster.value is not None:
+            money = (f", {cluster.value.at_stake:g}{' ' + cluster.value.currency if cluster.value.currency else ''} at stake"
+                     if cluster.value.at_stake is not None else "")
+            lines.append(f"   value: {round(cluster.value.value_share * 100)}% of the failing value{money}")
         if cluster.concentrations:
             lines.append("   concentrated in: " + ", ".join(
                 f"{item.dimension}={item.value} (x{item.lift}, {item.cases} case(s))" for item in cluster.concentrations))
@@ -464,6 +544,7 @@ __all__ = [
     "PROFILE_DIMENSIONS",
     "Autopsy",
     "Cluster",
+    "ClusterValue",
     "DimensionLift",
     "Exemplar",
     "autopsy",

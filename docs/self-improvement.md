@@ -255,3 +255,115 @@ run into SFT transcripts, two runs into preference pairs, and any run into
 reward records whose verifiable parts are kept apart from the model-rated
 answer score. It refuses held-out cases unless asked, because a model trained
 on them can no longer be judged on them. See [Trace export](trace-export.md).
+
+## Value and representativeness
+
+A pass rate counts a courtesy email and a deleted goods receipt the same, and
+a curriculum that chases the most frequent failure can drift into slices the
+company rarely runs. Two measurements correct for that. Both are computed at
+report time from the cases and the records they run over: no case row, no
+case-set digest and no default output changes, and `summarize`, `autopsy`
+and `curriculum` print exactly what they printed before unless given values
+or a reference.
+
+```bash
+worldloom evalrun value ./runs/baseline --corpus ./cases
+worldloom evalrun value ./runs/baseline --corpus ./programme --mix activity --json --out value.json
+```
+
+### What a case is worth
+
+`value_of(case, records, catalogue=None)` in `worldloom.evalrun.value`
+returns a `CaseValue` with a `basis`: one line per input it read or found
+missing, naming the record ids and fields.
+
+- **At stake.** The money on the records the expected DAG reads or writes
+  (node fixtures, `expected_reads`, `reads_contain`, outcome fixtures, the
+  artifact's required records, `expected_record_ids`). Per record: the first
+  field in `evalrun.value.money_fields`, else a quantity field times a unit
+  price field, else the same money field summed over an operational record's
+  observation `history`. Records in different currencies are never added:
+  the largest single-currency total is kept and the others are named. A case
+  whose records carry no money has `at_stake: null`. Nothing is estimated,
+  and a record a create will make carries no money, because it does not
+  exist yet.
+- **Frequency.** How often the company does the case's activity, per
+  period. The activity is the `activity_id` the touched records carry (the
+  system-of-record projection writes one on every record), else the row's
+  own. The volume is the compiled catalogue's (bindings x record kinds x
+  `sor.records_per_period`) when one is passed, else the activity's records
+  over the periods they span, else, for an operational case with no
+  activity, the exception episodes the simulation raised on its source.
+  Every one of these is the simulated company's volume, an authored prior.
+- **Error cost.** A multiplier by operation class, the case's costliest
+  expected outcome (`read` when it writes nothing), times a factor when it
+  carries a designed failure.
+- **Weight.** `at-stake factor x frequency factor x error cost`. Each factor
+  is the part divided by the set's median of that part, so a typical case
+  is 1.0, clamped to `[1/max_factor, max_factor]`. A missing part is 1.0,
+  the typical case: a case with no money is neither favoured nor ignored,
+  and its basis says so. `value_table(cases, records)` weighs a whole set
+  against its own medians; `value_of` alone can only compare a case with
+  itself.
+
+`value_summary(report, cases, records)` reads a run by weight: the
+value-weighted pass rate and mean score beside the plain ones, money at stake
+passed, failed and errored, the costliest failing cases, and a breakdown per
+activity (or `workflow:<name>` when a case maps to none). Errored cases are
+not zeros, as in `summarize`. `value_weighted_delta(comparison, values)` is
+the weighted twin of a comparison's `mean_delta`, over the same cases, for a
+loop that should gate on value; it refuses two runs graded differently.
+
+`autopsy(report, values=table)` adds each cluster's weight, its share of the
+failing value and its money, and `order="value"` ranks clusters by weight.
+`design_curriculum(..., values=table)` makes each stratum's claim its failure
+share times its relative value (the cluster's mean case weight over the
+failing cases' mean), which is the cluster's share of the failing value;
+uniform values leave the plan unchanged.
+
+| Key | Default | Why |
+| --- | --- | --- |
+| `evalrun.value.money_fields` | `amount, total_amount, total, net_amount, revenue, due, cost` | The monetary fields the shipped connectors and simulators write, most specific first: `amount` is the system-of-record field, `revenue` and `due` the retail and banking simulators' flow per observation. `cost` comes last because it is the smaller side of a margin. |
+| `evalrun.value.quantity_fields` / `unit_price_fields` | `quantity, qty, units` / `unit_price, unit_cost, price` | The fallback when a record carries a line rather than a total. |
+| `evalrun.value.error_cost` | read 1, update 2, create 3, delete 5 | A wrong read costs a wrong answer and rework. A wrong update corrupts a record whose history still holds the old value. A wrong create puts a record into the world that others act on (a duplicate order, a spurious payment request) and must be found before it can be undone. A wrong delete destroys the evidence a correction needs, so it costs most. |
+| `evalrun.value.designed_failure_factor` | 1.5 | A case that meets a designed failure is one where the system is already misbehaving, and a mistake there compounds (a write past a refusal, a retry that doubles a payment). Half again, not double, because the operation class already prices the write. |
+| `evalrun.value.max_factor` | 100 | Money is heavy-tailed. A hundredfold case counts a hundredfold, but one outlier cannot become the whole score. |
+| `evalrun.value.top` | 10 | Failing cases listed by `evalrun value`. |
+| `evalrun.curriculum.representative_share` | 0.5 | Half of a curriculum's rows keep measuring the work the company does, so a round cannot improve the tail by regressing the body unnoticed; half is also enough rows for a pass rate with a usable interval on each side. |
+| `evalrun.curriculum.max_mix_tvd` | 0.3 | At least 70% of a plan's probability mass sits where the reference puts it. With the default share the tail may still concentrate hard on failures, but not so hard that the plan stops resembling the company. |
+
+### A realistic mix
+
+`mix_report(cases, reference=..., records=...)` reports the case set's shares
+over activity, workflow and operation and, given a `ReferenceMix`, the total
+variation distance to it (half the L1 distance between the two share maps)
+with the most over- and under-represented slices. `reference_mix(records,
+dimension="activity")` counts the company's records per activity (also
+`stream`, `lob`, `pcf_id`, `function`); `reference_from_catalogue(compiled)`
+derives the same mix from the compiled bindings, and also offers
+`activity_type`. `check_mix(cases_or_plan, reference, max_tvd)` is the guard:
+exact over compiled cases, predicted over a plan from the value each stratum
+pins (a stratum that pins none is assumed to follow the reference).
+
+`design_curriculum(..., reference=mix)` keeps `representative_share` of the
+rows drawn to match the reference (one stratum per reference value when the
+dimension is a dataset predicate, otherwise spread over the base strata,
+whose own draw is the company's mix) and puts only the rest on failure
+targets. When the targets pin slices far from the reference, the
+representative share is raised until the whole plan is within
+`max_mix_tvd`; a reference that leaves fewer rows than `min_per_cluster` for
+the targets is refused. The check is returned as the curriculum's `mix`.
+Representative strata carry the key `mix:representative`, and
+`mix_scores(report, curriculum, strata=...)` scores a run over the
+curriculum's cases on those rows and on the failure-targeted tail apart, so a
+gain on the tail that costs the body is visible.
+
+"Representative" here is relative to the company's own simulated operations:
+record and binding volumes derived from the process catalogue and the
+operational simulators, which are authored priors. Until an empirical
+reference population exists (empirical source acquisition is listed as unmet
+in [Implementation status](implementation-status.md)), a representative
+curriculum is representative of the simulated company, not of any real one.
+The operational simulators also run one workflow per vertical today, so their
+workflow mix is a single slice; the process-binding volumes are the reference
+with more than one value.

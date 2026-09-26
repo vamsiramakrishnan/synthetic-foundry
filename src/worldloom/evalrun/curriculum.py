@@ -28,16 +28,23 @@ Two functions, both returning data and doing nothing else:
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import lru_cache
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_serializer
 
 from ..ids import content_key
 from ..models import Model
 from .autopsy import Autopsy, Cluster
 from .runner import RunReport
+from .value import (
+    REPRESENTATIVE_KEY,
+    MixCheck,
+    ReferenceMix,
+    check_mix,
+    total_variation,
+)
 
 #: Dataset ``where`` predicates a cluster can be mapped onto, in the order a
 #: stratum's filters are chosen. ``failure`` and ``dag_shape`` first: they are
@@ -76,6 +83,17 @@ class Curriculum(Model):
     plan: dict[str, Any]
     targets: tuple[CurriculumTarget, ...]
     unmappable: tuple[Unmapped, ...]
+    #: How the plan's mix compares with the reference mix, when one was
+    #: given; left out of every dump otherwise, so a curriculum designed
+    #: without a reference is byte-identical to one written before mixes.
+    mix: MixCheck | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_mix(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("mix", False) is None:
+            data.pop("mix")
+        return data
 
     def dataset_plan(self) -> Any:
         from ..evals.company_dataset import load_dataset_plan
@@ -244,6 +262,10 @@ def design_curriculum(
     max_share: float = 0.5,
     holdout_share: float = 0.2,
     dominance: float = 0.5,
+    values: Mapping[str, Any] | None = None,
+    reference: ReferenceMix | None = None,
+    representative_share: float | None = None,
+    max_mix_tvd: float | None = None,
 ) -> Curriculum:
     """The targeted plan for one improvement round, with an account of every cluster.
 
@@ -253,6 +275,18 @@ def design_curriculum(
     of failures. Clusters that map onto the same predicates share a stratum.
     ``holdout_share`` becomes the ``test`` split weight; the rest is ``train``.
     Everything not in a stratum is in ``unmappable`` with its reason.
+
+    ``values`` (case id to ``CaseValue`` or a weight) makes each stratum's
+    claim its failure share times its relative value (the cluster's mean
+    case weight over the failing cases' mean weight, which makes the claim
+    the cluster's share of the failing value), for funding order and row
+    counts alike; uniform values leave the plan as it was. ``reference`` keeps ``representative_share`` of the rows
+    (policy ``evalrun.curriculum.representative_share``) drawn to match the
+    reference mix and gives only the rest to failure targets; the share is
+    raised when needed so the whole plan stays within ``max_mix_tvd``
+    (policy ``evalrun.curriculum.max_mix_tvd``) of the reference, and the
+    check is returned as ``mix``. Without either, the plan is exactly the
+    one this function wrote before they existed.
     """
 
     from ..evals.company_dataset import load_dataset_plan
@@ -293,25 +327,47 @@ def design_curriculum(
     for key, cases in sorted(report.omitted.items()):
         unmapped.append(Unmapped(key=key, cases=cases, reason="beyond the autopsy's top clusters"))
 
-    candidates: list[tuple[tuple[tuple[str, str], ...], list[Cluster], Any]] = []
-    for filters, clusters in sorted(grouped.items(), key=lambda item: (-max(c.cases for c in item[1]), item[0])):
+    claim = _value_claim(report, values) if values is not None else None
+
+    def priority(item: tuple[tuple[tuple[str, str], ...], list[Cluster]]) -> tuple[Any, ...]:
+        if claim is None:
+            return (-max(c.cases for c in item[1]), item[0])
+        return (-max(claim(c) for c in item[1]), -max(c.cases for c in item[1]), item[0])
+
+    ranked: list[tuple[tuple[tuple[str, str], ...], list[Cluster], Any]] = []
+    for filters, clusters in sorted(grouped.items(), key=priority):
         stratum, why = _choose_stratum(base, dict(filters))
         if stratum is None:
             unmapped.extend(Unmapped(key=cluster.key, cases=cluster.cases, reason=str(why)) for cluster in clusters)
             continue
-        candidates.append((filters, clusters, stratum))
-    fundable = max(1, budget // min_per_cluster)
-    for _, clusters, _ in candidates[fundable:]:
-        unmapped.extend(Unmapped(key=cluster.key, cases=cluster.cases,
-                                 reason=f"total {budget} funds {fundable} stratum(s) at {min_per_cluster} rows") for cluster in clusters)
-    candidates = candidates[:fundable]
-    if not candidates:
-        raise ValueError("no failing cluster maps onto a dataset stratum: " + "; ".join(
-            f"{item.key} ({item.reason})" for item in unmapped) if unmapped else "the autopsy has no failing cluster")
+        ranked.append((filters, clusters, stratum))
 
-    shares = [max(cluster.share_of_failures for cluster in clusters) for _, clusters, _ in candidates]
-    cap = max(min_per_cluster, int(budget * max_share)) if len(candidates) > 1 else budget
-    counts = _allocate(shares, budget, min_per_cluster, cap)
+    def fund(tail: int) -> tuple[list[tuple[tuple[tuple[str, str], ...], list[Cluster], Any]], list[int], list[float], list[Unmapped]]:
+        fundable = max(1, tail // min_per_cluster)
+        unfunded = [Unmapped(key=cluster.key, cases=cluster.cases,
+                             reason=f"total {tail} funds {fundable} stratum(s) at {min_per_cluster} rows")
+                    for _, clusters, _ in ranked[fundable:] for cluster in clusters]
+        funded = ranked[:fundable]
+        if not funded:
+            raise ValueError("no failing cluster maps onto a dataset stratum: " + "; ".join(
+                f"{item.key} ({item.reason})" for item in [*unmapped, *unfunded]) if unmapped or unfunded
+                else "the autopsy has no failing cluster")
+        if claim is None:
+            weights = [max(cluster.share_of_failures for cluster in clusters) for _, clusters, _ in funded]
+        else:
+            weights = [max(claim(cluster) for cluster in clusters) for _, clusters, _ in funded]
+        cap = max(min_per_cluster, int(tail * max_share)) if len(funded) > 1 else tail
+        return funded, _allocate(weights, tail, min_per_cluster, cap), weights, unfunded
+
+    tail_budget = budget
+    if reference is not None:
+        tail_budget = _tail_budget(reference, base, budget, fund, representative_share, max_mix_tvd, min_per_cluster)
+    candidates, counts, weights, unfunded = fund(tail_budget)
+    unmapped.extend(unfunded)
+    # The targets report the failure share whatever weighted the rows, so a
+    # reader can see how far value moved the allocation.
+    shares = ([max(cluster.share_of_failures for cluster in clusters) for _, clusters, _ in candidates]
+              if claim is not None else weights)
     targets: list[CurriculumTarget] = []
     strata: list[dict[str, Any]] = []
     used: set[str] = set()
@@ -326,6 +382,12 @@ def design_curriculum(
         strata.append({"id": name, "count": count, "source": _source_for(stratum, where)})
         targets.append(CurriculumTarget(stratum=name, keys=tuple(cluster.key for cluster in clusters), where=where,
                                         count=count, share_of_failures=share, base_stratum=stratum.id))
+    if reference is not None:
+        for name, where, count, stratum in _representative(reference, base, budget - sum(counts), round, used, unmapped):
+            strata.append({"id": name, "count": count, "source": _source_for(stratum, where)})
+            targets.append(CurriculumTarget(stratum=name, keys=(REPRESENTATIVE_KEY,), where=where, count=count,
+                                            share_of_failures=0.0, base_stratum=stratum.id))
+            counts.append(count)
 
     rows = sum(counts)
     holdout = max(1, min(99, round_half_up(holdout_share * 100)))
@@ -337,12 +399,123 @@ def design_curriculum(
         minimum_tasks=min(base.minimum_tasks, rows), minimum_companies=min(base.minimum_companies, rows),
     )
     plan = load_dataset_plan(payload)
-    return Curriculum(round=round, seed=chosen_seed, base_seed=base.seed, plan=plan.model_dump(mode="json"),
-                      targets=tuple(targets), unmappable=tuple(unmapped))
+    dumped = plan.model_dump(mode="json")
+    mix = check_mix(dumped, reference, max_mix_tvd) if reference is not None else None
+    return Curriculum(round=round, seed=chosen_seed, base_seed=base.seed, plan=dumped,
+                      targets=tuple(targets), unmappable=tuple(unmapped), mix=mix)
 
 
 def round_half_up(value: float) -> int:
     return int(value + 0.5)
+
+
+def _value_claim(report: Autopsy, values: Mapping[str, Any]) -> Callable[[Cluster], float]:
+    """Failure share times relative value, per cluster, over the failing cases the clusters name.
+
+    Relative value is the cluster's mean case weight over the failing
+    cases' mean weight, so the claim is the cluster's share of the failing
+    value, and uniform values reproduce the unweighted allocation exactly
+    (a product of two shares would square every cluster's count instead).
+    """
+
+    def weight_of(case_id: str) -> float:
+        value = values.get(case_id)
+        return 1.0 if value is None else float(getattr(value, "weight", value))
+
+    failing = sorted({case_id for cluster in report.clusters for case_id in cluster.case_ids})
+    mean = (sum(weight_of(case_id) for case_id in failing) / len(failing)) if failing else 1.0
+
+    def claim(cluster: Cluster) -> float:
+        if not cluster.case_ids or not mean:
+            return cluster.share_of_failures
+        relative = sum(weight_of(case_id) for case_id in cluster.case_ids) / len(cluster.case_ids) / mean
+        return round(cluster.share_of_failures * relative, 6)
+
+    return claim
+
+
+def _pinned(stratum: Any, where: Mapping[str, str], dimension: str) -> str | None:
+    value = where.get(dimension) or stratum.source.where.get(dimension)
+    return str(value) if value else None
+
+
+def _tail_budget(reference: ReferenceMix, base: Any, budget: int, fund: Callable[[int], Any],
+                 share: float | None, max_tvd: float | None, floor: int) -> int:
+    """Rows left for failure targets once the representative share, and the mix limit, are kept.
+
+    The tail's own distance from the reference is predicted from the
+    values its strata pin (a stratum that pins none follows the
+    reference); with the representative rows matching the reference, the
+    plan's distance is the tail's fraction times the tail's distance, so the
+    tail is shrunk until that product is within the limit.
+    """
+
+    from .. import packkit
+
+    kept = float(packkit.policy("evalrun.curriculum.representative_share")) if share is None else float(share)
+    limit = float(packkit.policy("evalrun.curriculum.max_mix_tvd")) if max_tvd is None else float(max_tvd)
+    if not 0.0 <= kept < 1.0:
+        raise ValueError("representative_share must be in [0, 1)")
+    if limit < 0.0:
+        raise ValueError("max_mix_tvd must be non-negative")
+    tail = budget - round_half_up(budget * kept)
+    candidates, counts, _, _ = fund(max(tail, floor))
+    ref = reference.shares
+    mass: dict[str, float] = defaultdict(float)
+    for (filters, _, stratum), count in zip(candidates, counts, strict=True):
+        pinned = _pinned(stratum, dict(filters), reference.dimension)
+        if pinned is not None:
+            mass[pinned] += count
+        else:
+            for key, value in ref.items():
+                mass[key] += count * value
+    whole = sum(mass.values()) or 1.0
+    distance = total_variation({key: value / whole for key, value in mass.items()}, ref)
+    if distance > 0 and (tail / budget) * distance > limit:
+        tail = int(budget * limit / distance)
+    if tail < floor:
+        raise ValueError(f"the reference mix leaves {tail} row(s) for failure targets, under the floor of {floor};"
+                         " raise --total or lower the representative share")
+    return tail
+
+
+def _representative(reference: ReferenceMix, base: Any, rows: int, round_number: int, used: set[str],
+                    unmapped: list[Unmapped]) -> list[tuple[str, dict[str, str], int, Any]]:
+    """Strata that draw ``rows`` rows in the reference's proportions.
+
+    When the reference dimension is a dataset predicate, one stratum per
+    reference value a base stratum admits, sized by largest remainders.
+    Otherwise (a catalogue activity is not a dataset predicate) the rows are
+    spread over the base strata by their counts, with no added predicate:
+    the base plan's own draw is the company's simulated mix.
+    """
+
+    if rows <= 0:
+        return []
+    chosen: list[tuple[str, dict[str, str], float, Any]] = []
+    if reference.dimension in MAPPABLE_DIMENSIONS:
+        for value, share in reference.shares.items():
+            where = {reference.dimension: value}
+            stratum, why = _choose_stratum(base, where)
+            if stratum is None or share <= 0:
+                unmapped.append(Unmapped(key=f"mix:{reference.dimension}={value}", cases=0, reason=str(why)))
+                continue
+            chosen.append((value, where, share, stratum))
+    if not chosen:
+        chosen = [(stratum.id, {}, float(stratum.count), stratum) for stratum in base.strata if stratum.count > 0]
+    counts = _allocate([item[2] for item in chosen], rows, 0, rows)
+    out: list[tuple[str, dict[str, str], int, Any]] = []
+    for (label, where, _, stratum), count in zip(chosen, counts, strict=True):
+        if count <= 0:
+            continue
+        name = f"r{round_number}-mix-{_slug(label)}"
+        suffix = 2
+        while name in used:
+            name = f"r{round_number}-mix-{_slug(label)}-{suffix}"
+            suffix += 1
+        used.add(name)
+        out.append((name, where, count, stratum))
+    return out
 
 
 def targeted_plan(
@@ -355,11 +528,14 @@ def targeted_plan(
     min_per_cluster: int = 4,
     max_share: float = 0.5,
     holdout_share: float = 0.2,
+    values: Mapping[str, Any] | None = None,
+    reference: ReferenceMix | None = None,
 ) -> Any:
     """The ``DatasetPlan`` of ``design_curriculum``; use that to see what was unmappable."""
 
     return design_curriculum(report, base, seed=seed, round=round, total=total, min_per_cluster=min_per_cluster,
-                             max_share=max_share, holdout_share=holdout_share).dataset_plan()
+                             max_share=max_share, holdout_share=holdout_share, values=values,
+                             reference=reference).dataset_plan()
 
 
 # -- escalation -----------------------------------------------------------------
