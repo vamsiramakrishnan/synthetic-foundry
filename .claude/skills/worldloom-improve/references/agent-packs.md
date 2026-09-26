@@ -21,7 +21,8 @@ and every run records the pack's `ref`, `digest` and `chain` in `run.json`.
 | `turn_rules`, `plan_rules` | Overlays on the shipped `evalrun.turn.rule.*` and `evalrun.plan.rule.*`, keyed by suffix: `01` replaces rule 01, a new key adds a rule, `""` removes a shipped one |
 | `tools` | Advice per catalog tool (`servicenow.get_record`): a `description` and `hints` |
 | `planning` | How to form a plan before acting |
-| `skills` | Named procedures the agent can follow: the pack's skills tree |
+| `skills` | Named procedures as plain text (kept for compatibility) |
+| `files` | The skills tree: `skills/<name>/SKILL.md` (frontmatter `name`, `description`), `references/*.md`, `scripts/*.py` or `*.sh`, in the harness's native layout |
 | `max_turns` | The turn budget, when it differs from `evalrun.max_turns` |
 
 `agent:baseline` ships as the starting champion: the shipped rules, no advice,

@@ -881,6 +881,9 @@ def improve_command(
     max_turns: int | None = typer.Option(None, "--max-turns", min=1),
     limit: int | None = typer.Option(None, "--limit", min=1, help="Use only the first N cases of CORPUS."),
     principal: str = typer.Option("agent", "--principal"),
+    concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1)."),
+    value: bool = typer.Option(False, "--value", help="Also require the delta weighted by each case's value at stake to clear every gate."),
+    no_ablate: bool = typer.Option(False, "--no-ablate", help="Send the candidate to the holdout whole, without taking out hunks that carry nothing."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
@@ -895,7 +898,7 @@ def improve_command(
     from ..packkit.authoring import run_exec_exchange
     from .harness import ExecAgent
     from .improve import improve
-    from .runner import run_cases, service_for
+    from .runner import default_concurrency, run_cases, service_for
 
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     if exec_command is None:
@@ -915,6 +918,12 @@ def improve_command(
         held_loaded, held = _corpus_cases(holdout_corpus, None)
         records += list(held_loaded.connector_data.records)
     services: dict[str, Any] = {}
+    workers = default_concurrency() if concurrency is None else concurrency
+    values = None
+    if value:
+        from .value import value_table
+
+        values = value_table((*cases, *(held or ())), records)
 
     def run(subset: Any, agent: Any) -> Any:
         from .runner import case_set_digest
@@ -922,10 +931,10 @@ def improve_command(
         key = case_set_digest(subset)
         if key not in services:
             try:
-                services[key] = service_for(subset, records)
+                services[key] = service_for(subset, records, concurrency=workers)
             except Exception as error:  # ServingError and its causes are all refusals here
                 _refuse("service_unbuildable", str(error))
-        return run_cases(services[key], subset, agent, principal=principal, rater=grader)
+        return run_cases(services[key], subset, agent, principal=principal, rater=grader, concurrency=workers)
 
     def agent_for(pack: Any) -> Any:
         return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
@@ -933,7 +942,8 @@ def improve_command(
     try:
         report = improve(champion, cases, run=run, agent_for=agent_for,
                          exchange=run_exec_exchange(proposer, timeout=timeout), out=out, rater=grader,
-                         holdout=held, holdout_share=holdout_share, rounds=rounds)
+                         holdout=held, holdout_share=holdout_share, rounds=rounds,
+                         ablate=False if no_ablate else None, values=values)
     except ValueError as error:
         _refuse("cases_uncompilable", str(error))
     if json_output:

@@ -166,6 +166,10 @@ class ImproveLoop:
     min_train_delta: float | None = None
     min_holdout_delta: float | None = None
     max_axis_regression: float | None = None
+    #: Gate on the value-weighted delta too (``value.value_table`` over the
+    #: training and held-out cases and their records).
+    value: bool = False
+    ablate: bool | None = None
     _records: tuple[Any, ...] = ()
     _services: dict[str, ConnectorEvaluationService] = field(default_factory=dict, repr=False)
 
@@ -199,11 +203,16 @@ class ImproveLoop:
 
         roots = (self.out / "packs", *self.pack_roots)
         start = self.session.agent_pack(champion, roots=roots) if isinstance(champion, str) else champion
+        values = None
+        if self.value:
+            from .value import value_table
+
+            values = value_table((*self.session.cases, *(self.holdout or ())), self._records)
         return improve(start, self.session.cases, run=self.run_cases, agent_for=self.agent, exchange=self.exchange,
                        out=self.out, rater=self.rater, holdout=self.holdout, holdout_share=self.holdout_share,
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
-                       max_axis_regression=self.max_axis_regression)
+                       max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -347,6 +356,8 @@ class EvalSession:
         min_train_delta: float | None = None,
         min_holdout_delta: float | None = None,
         max_axis_regression: float | None = None,
+        value: bool = False,
+        ablate: bool | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -359,6 +370,8 @@ class EvalSession:
         cases over this session's records; without it a stable share of the
         cases is held back. ``rater`` is pinned for the whole loop.
         ``concurrency`` defaults to the policy ``evalrun.concurrency``.
+        ``value=True`` also gates on the delta weighted by each case's value at
+        stake; ``ablate`` overrides the policy ``evalrun.improve.ablate``.
         """
         from .runner import default_concurrency
 
@@ -376,7 +389,8 @@ class EvalSession:
                            holdout=held, holdout_share=holdout_share, rater=rater_for(rater),
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
-                           max_axis_regression=max_axis_regression, _records=records)
+                           max_axis_regression=max_axis_regression, value=value, ablate=ablate,
+                           _records=records)
 
     # -- the loop's parts, one call each ------------------------------------------------
 

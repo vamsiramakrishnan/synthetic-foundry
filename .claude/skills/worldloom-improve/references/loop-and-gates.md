@@ -77,7 +77,15 @@ runs over.
 | `--rater` | `rater=` | none (answers unrated) |
 | none | `min_train_delta=`, `min_holdout_delta=`, `max_axis_regression=` | the policies above |
 | none | `authoring_rounds=` | `evalrun.improve.authoring_rounds` (4) |
-| none | `concurrency=` | `evalrun.concurrency` |
+| `--concurrency` | `concurrency=` | `evalrun.concurrency` |
+| `--value` | `value=True` | off: gates judge the plain mean only |
+| `--no-ablate` | `ablate=False` | `evalrun.improve.ablate` (on) |
+
+**Value gate.** With `--value` (SDK `value=True`) every gate also computes the
+delta weighted by each case's value at stake (`evalrun value` explains the
+weights) and requires it to clear the same bar as the plain mean. A candidate
+that wins many cheap cases by losing one costly case is refused, and the
+receipt's `value_delta` says by how much.
 
 The low-level function is `worldloom.evalrun.improve.improve(champion, cases,
 run=, agent_for=, exchange=, out=, ...)`; the session builds those callables

@@ -11,6 +11,60 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Closing the loop: agents that improve against the corpus
+
+- **`worldloom evalrun improve`** runs a champion `agent` pack over the
+  training cases, clusters its failures, and asks a proposing harness for a
+  revision through the pack interview. The candidate is kept only if it gains
+  at least the delta band on the training cases, loses nothing beyond the band
+  on any axis, and then gains on held-out cases the proposer never saw: a
+  second corpus from fresh seeds, or a stable share of the first. Every round
+  writes a receipt and its diff; runs already paid for are reused. The SDK
+  form is `EvalSession.improver(...).run(champion)`, and the
+  `worldloom-improve` skill carries the procedure with its detail in
+  references read on demand.
+- **Agent packs.** The policy of the agent under test is a pack of kind
+  `agent`: a standing instruction, overlays on the turn and plan rules, tool
+  advice, planning guidance and a skills tree (`skills/<name>/SKILL.md`,
+  references, scripts). The rules that define the reply grammar are locked.
+  Runs record the pack's reference and digest. A proposer replies with a
+  unified diff against the champion's tree, applied strictly; hunks that
+  carry less than `evalrun.improve.ablation_tolerance` are taken out before
+  the holdout. Generated code lives only in the pack's `skills/` tree.
+  `worldloom pack tree`, `pack from-tree` and `pack diff` move a pack between
+  JSON and a directory.
+- **The grader is frozen by digest.** Every run records the rater, the
+  `rater.*` prompts, the rubrics and the grading policy as one digest;
+  `evalrun compare` calls nothing an improvement across two graders, and the
+  loop stops if its grader moves. `worldloom evalrun agreement` measures the
+  local answer grade against Eval Studio's on the same answers (MAE, Pearson,
+  Spearman, Cohen's kappa, per shape).
+- **Failures become targets.** `evalrun autopsy` clusters failing cases by
+  finding key with the dimensions they concentrate in; `evalrun curriculum`
+  turns the clusters into a dataset plan on a fresh seed with a held-out
+  share, and flags slices the agent has saturated with harder shapes to try.
+  `evalrun corners` builds cases from the world's own events (a confirmed
+  cause that superseded a hypothesis, a restated figure, an escalated invoice
+  exception, a handover) that the reference executor must solve, and
+  `evalrun frontier` keeps the ones a champion fails.
+- **Value at stake.** `evalrun value` weighs each case by the money on the
+  records it touches, how often its activity runs and the cost of its
+  operation, and reports value-weighted pass rates; the loop's `--value`
+  gates on the weighted delta too. A curriculum can keep a share of its rows
+  on the company's own operational mix, within a total variation bound.
+- **Runs at scale.** `evalrun run --concurrency N` keeps N cases in flight
+  on a per-run-locked service with the ledger in case order; `--shard i/n`
+  and `evalrun merge` split one run across processes or machines and join it
+  byte-for-byte; `--resume` continues a killed run; the ledger is fsynced and
+  a torn last line is dropped rather than fatal. On a slowed reference agent,
+  twelve cases ran 7.2 times faster at concurrency 12.
+- **Training data.** `evalrun export` writes SFT transcripts, preference
+  pairs and reward records whose verifiable parts are kept apart from the
+  model-rated answer score, and refuses held-out cases unless asked.
+- **Recorded, not generated.** A run's `run.json` now names its grader, and
+  refused calls in a case's ledger carry the position where they fell. What a
+  seed generates is unchanged.
+
 ### Scale, live harnesses, and the last literals
 
 - **Dataset compiles run in parallel waves.** `batch_wave` (in a plan or a

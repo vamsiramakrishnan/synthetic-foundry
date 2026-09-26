@@ -278,3 +278,56 @@ def test_the_cli_refuses_without_an_agent_or_a_proposer(corpus: Any, tmp_path: P
     result = runner.invoke(app, ["evalrun", "improve", str(tmp_path), "--agent-pack", "agent:baseline", "--exec", "true",
                                  "-o", str(tmp_path / "o")])
     assert result.exit_code != 0 and "proposer" in result.output
+
+
+class Split:
+    """The reference agent on the cases in *ids*, idle on the rest."""
+
+    def __init__(self, cases: Any, ids: set[str], name: str) -> None:
+        self.name = name
+        self.reference = ReferenceAgent(cases)
+        self.idle = ScriptedAgent([], name="idle")
+        self.ids = ids
+
+    def run(self, task: Any, tools: Any) -> Any:
+        return (self.reference if task.case_id in self.ids else self.idle).run(task, tools)
+
+
+def test_a_value_gate_refuses_a_win_on_cheap_cases_bought_with_costly_ones(corpus: Any) -> None:
+    cases = cases_from_corpus(corpus)
+    records = corpus.connector_data.records
+    ids = [case.id for case in cases]
+    costly, cheap = set(ids[: len(ids) // 2]), set(ids[len(ids) // 2 :])
+    # The one costly case the candidate gives up is one the reference agent
+    # actually wins, so giving it up is a real loss.
+    lost = min(delta.case_id for delta in compare(
+        run_cases(service_for(cases, records), cases, Split(cases, set(), "idle")),
+        run_cases(service_for(cases, records), cases, Split(cases, costly, "ref"))).deltas
+        if delta.case_id in costly and (delta.delta or 0) > 0)
+    before = run_cases(service_for(cases, records), cases, Split(cases, costly, "before"))
+    after = run_cases(service_for(cases, records), cases, Split(cases, (costly | cheap) - {lost}, "after"))
+    comparison = compare(before, after)
+    plain = judge(comparison, name="train", min_delta=0.0, strict=True, max_axis_regression=1.0)
+    assert plain.passed and plain.value_delta is None
+    uniform = judge(comparison, name="train", min_delta=0.0, strict=True, max_axis_regression=1.0,
+                    values={case_id: 1.0 for case_id in ids})
+    assert uniform.passed and uniform.value_delta == pytest.approx(comparison.mean_delta, abs=1e-3)
+    weighted = judge(comparison, name="train", min_delta=0.0, strict=True, max_axis_regression=1.0,
+                     values={case_id: (1000.0 if case_id == lost else 0.001) for case_id in ids})
+    assert not weighted.passed and weighted.value_delta is not None and weighted.value_delta < 0
+    assert any("value-weighted delta" in reason for reason in weighted.reasons)
+
+
+def test_the_loop_records_the_value_delta_when_given_values(corpus: Any, tmp_path: Path) -> None:
+    cases = cases_from_corpus(corpus)
+    records = corpus.connector_data.records
+    exchange = _proposer({"skills": {"verify": "Walk every step the request needs and read each write back."}})
+    report = improve(packkit.resolve("agent:baseline"), cases,
+                     run=lambda subset, agent: run_cases(service_for(subset, records), subset, agent),
+                     agent_for=lambda pack: PolicyAgent(pack, cases, []), exchange=exchange,
+                     out=tmp_path / "improve", holdout_share=0.4, rounds=1,
+                     values={case.id: 1.0 for case in cases})
+    first = report.rounds[0]
+    assert first.decision == "promoted"
+    assert first.train is not None and first.train.value_delta is not None
+    assert first.holdout is not None and first.holdout.value_delta is not None

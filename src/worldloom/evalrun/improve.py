@@ -63,6 +63,7 @@ from .grader import check_frozen, grader_identity
 from .harness import skills_cache_in
 from .results import Comparison, compare, delta_band, read_run, write_run
 from .runner import RunReport, case_set_digest
+from .value import value_weighted_delta
 
 IMPROVE_SCHEMA = "worldloom.improve/v1"
 ROUND_SCHEMA = "worldloom.improve-round/v1"
@@ -121,11 +122,21 @@ class Gate(Model):
     improvements: int = 0
     regressions: int = 0
     newly_errored: tuple[str, ...] = ()
+    #: The mean delta weighted by each case's value at stake, when the loop
+    #: was given values: then it must clear the same bar as the plain mean,
+    #: so a candidate cannot win on cheap cases while losing the costly ones.
+    value_delta: float | None = None
 
 
-def judge(comparison: Comparison, *, name: str, min_delta: float, strict: bool, max_axis_regression: float) -> Gate:
+def judge(comparison: Comparison, *, name: str, min_delta: float, strict: bool, max_axis_regression: float,
+          values: Mapping[str, Any] | None = None) -> Gate:
     """Whether *comparison* (champion to candidate) is a win by the loop's rules."""
     reasons: list[str] = []
+    value_delta: float | None = None
+    if values is not None and not comparison.grader_mismatch:
+        value_delta = value_weighted_delta(comparison, values)
+        if (value_delta <= min_delta) if strict else (value_delta < min_delta):
+            reasons.append(f"value-weighted delta {value_delta} is not {'above' if strict else 'at least'} {min_delta}")
     if comparison.grader_mismatch:
         reasons.append("the two runs were graded differently")
     if not comparison.same_case_set:
@@ -144,7 +155,8 @@ def judge(comparison: Comparison, *, name: str, min_delta: float, strict: bool, 
             reasons.append(f"the {axis} axis fell by {-value}, more than {max_axis_regression}")
     return Gate(name=name, passed=not reasons, reasons=tuple(reasons), compared=comparison.compared,
                 mean_delta=delta, axis_deltas=axes, improvements=len(comparison.improvements),
-                regressions=len(comparison.regressions), newly_errored=comparison.newly_errored)
+                regressions=len(comparison.regressions), newly_errored=comparison.newly_errored,
+                value_delta=value_delta)
 
 
 # -- receipts -----------------------------------------------------------------
@@ -249,6 +261,9 @@ class Improver:
     ablation_max_hunks: int = 8
     #: Mean score a hunk must be worth to stay; ``None`` is half the delta band.
     ablation_tolerance: float | None = None
+    #: Case id to value at stake (``value.value_table``); when given, every
+    #: gate also requires the value-weighted delta to clear its bar.
+    values: Mapping[str, Any] | None = None
     _runs: dict[tuple[str, str], RunReport] = field(default_factory=dict)
     _candidates: dict[str, ResolvedPack] = field(default_factory=dict)
 
@@ -362,7 +377,7 @@ class Improver:
         self._candidates[candidate.digest] = candidate
         candidate_train = self._pinned_run(candidate, train, "train", grader)
         train_gate = judge(compare(champion_train, candidate_train), name="train", min_delta=min_train,
-                           strict=False, max_axis_regression=max_fall)
+                           strict=False, max_axis_regression=max_fall, values=self.values)
         if not train_gate.passed:
             return RoundReceipt(**common, **changed, decision="rejected", authoring=rounds,
                                 candidate=_identity(candidate), train=train_gate, reasons=train_gate.reasons)
@@ -379,7 +394,7 @@ class Improver:
         champion_held = self._pinned_run(champion, holdout, "holdout", grader)
         candidate_held = self._pinned_run(candidate, holdout, "holdout", grader)
         held_gate = judge(compare(champion_held, candidate_held), name="holdout", min_delta=min_held,
-                          strict=True, max_axis_regression=max_fall)
+                          strict=True, max_axis_regression=max_fall, values=self.values)
         return RoundReceipt(**common, **changed, decision="promoted" if held_gate.passed else "rejected",
                             authoring=rounds, candidate=_identity(candidate), train=train_gate, holdout=held_gate,
                             reasons=held_gate.reasons, ablation=ablation)
@@ -451,7 +466,7 @@ class Improver:
         if current is candidate:
             return candidate, candidate_train, ablation
         gate = judge(compare(champion_train, current_run), name="train", min_delta=min_train, strict=False,
-                     max_axis_regression=max_fall)
+                     max_axis_regression=max_fall, values=self.values)
         if not gate.passed:
             return candidate, candidate_train, ablation.model_copy(update={
                 "reduced_train": gate,
@@ -490,7 +505,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             pack_roots: Sequence[str | Path] = (), authoring_rounds: int | None = None,
             min_train_delta: float | None = None, min_holdout_delta: float | None = None,
             max_axis_regression: float | None = None, ablate: bool | None = None,
-            ablation_max_hunks: int | None = None, ablation_tolerance: float | None = None) -> ImproveReport:
+            ablation_max_hunks: int | None = None, ablation_tolerance: float | None = None,
+            values: Mapping[str, Any] | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
@@ -510,7 +526,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
                         ablation_max_hunks=int(packkit.policy("evalrun.improve.ablation_max_hunks"))
                         if ablation_max_hunks is None else ablation_max_hunks,
                         ablation_tolerance=float(packkit.policy("evalrun.improve.ablation_tolerance"))
-                        if ablation_tolerance is None else ablation_tolerance)
+                        if ablation_tolerance is None else ablation_tolerance,
+                        values=values)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,

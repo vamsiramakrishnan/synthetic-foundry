@@ -569,6 +569,7 @@ worldloom evalrun improve <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
@@ -576,6 +577,7 @@ worldloom evalrun improve <CORPUS>
 | `--json` | Emit improve.json on stdout. |
 | `--limit` | Use only the first N cases of CORPUS. |
 | `--max-turns` |  |
+| `--no-ablate` | Send the candidate to the holdout whole, without taking out hunks that carry nothing. |
 | `--out`, `-o` | Directory for rounds/, runs/, packs/ and improve.json. |
 | `--principal` |  |
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
@@ -585,6 +587,7 @@ worldloom evalrun improve <CORPUS>
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
+| `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
 
 ### `worldloom evalrun merge`
 

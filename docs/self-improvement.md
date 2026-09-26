@@ -256,6 +256,13 @@ training gate; otherwise the proposed one does. Ablation is on unless
 `evalrun.improve.ablate` is false. Each trial is an ordinary run, pinned to
 the same grader and cached by its policy's digest.
 
+**Value gate.** With `--value` (SDK `value=True`), every gate also computes
+the delta weighted by each case's value at stake (see Value and
+representativeness below) and requires it to clear the same bar as the plain
+mean, so a candidate cannot win on cheap cases by losing a costly one. The
+receipt records it as `value_delta`. `--concurrency N` runs every one of the
+loop's runs N cases at a time, and `--no-ablate` skips ablation.
+
 The held-out cases are a separate corpus when `--holdout-corpus` is given,
 which is the stronger test: a policy that learned this company rather than the
 task fails on another. Otherwise a share of the corpus
