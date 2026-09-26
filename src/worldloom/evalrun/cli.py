@@ -441,6 +441,17 @@ def _print_summary(summary: Any, json_output: bool) -> None:
         typer.echo(f"connector errors: {summary.error_codes}")
     if summary.safety_findings:
         typer.echo(f"safety findings: {summary.safety_findings}")
+    stages = summary.stages
+    if stages is not None:
+        typer.echo(f"queries: {axis(stages.query)} (recall {axis(stages.query_recall)}, precision"
+                   f" {axis(stages.query_precision)}) over {stages.query_calls} call(s),"
+                   f" {stages.zero_result_calls} empty, {stages.error_calls} failed, {stages.overfetch_nodes} over-fetched step(s)")
+        typer.echo(f"plan nodes: {axis(stages.plan_nodes)} (precision {axis(stages.node_precision)}, recall"
+                   f" {axis(stages.node_recall)}, dependencies {axis(stages.dependency_accuracy)})")
+        typer.echo(f"output: {axis(stages.output)} ({stages.fields_met}/{stages.fields_expected} field value(s) met,"
+                   f" grounding {axis(stages.output_grounding)})")
+        if stages.findings:
+            typer.echo(f"stage findings: {stages.findings}")
     for part in summary.by_shape:
         typer.echo(f"  shape {part.key}: {part.passed}/{part.graded} passed, overall {part.means.overall}")
     if summary.mean_ttlt is not None:
@@ -555,11 +566,14 @@ def compare_command(
         f"{axis} {'unobserved on one side' if value is None else value}"
         for axis, value in (("plan", result.axis_deltas.plan), ("trajectory", result.axis_deltas.trajectory),
                             ("outcomes", result.axis_deltas.outcomes))))
+    if result.stage_deltas is not None:
+        typer.echo("stage deltas: " + ", ".join(f"{stage} {value}" for stage, value in result.stage_deltas.items()))
     if result.newly_errored or result.newly_graded:
         typer.echo(f"reliability: {len(result.newly_errored)} newly errored, {len(result.newly_graded)} newly graded")
     for item in result.deltas:
         if item.verdict == "regression":
-            typer.echo(f"  regression {item.case_id}: {item.baseline} -> {item.recent} {item.axes}")
+            moved = f" stages {item.stages}" if item.stages else ""
+            typer.echo(f"  regression {item.case_id}: {item.baseline} -> {item.recent} {item.axes}{moved}")
 
 
 @app.command("import-served")

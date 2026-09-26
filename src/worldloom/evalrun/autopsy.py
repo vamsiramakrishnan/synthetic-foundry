@@ -39,6 +39,7 @@ from pydantic import ConfigDict, Field, model_serializer
 from ..models import Model
 from .contract import EvalCase
 from .runner import CaseResult, RunReport
+from .stages import STAGE_FINDINGS, stage_keys
 
 AUTOPSY_SCHEMA = "worldloom.eval-autopsy/v1"
 
@@ -78,7 +79,19 @@ GLOSSES: dict[str, str] = {
     "assertion.fail": "the row's own assertion verdict failed and no finding above explains it",
     "run.errored": "the agent raised or the run could not be graded",
     "unclassified": "the case failed and no finding explains it (a grader gap worth reporting)",
+    # The stages inside the axes (`stages.STAGE_FINDINGS`): the queries, the
+    # plan's nodes and the output. A keyed family (`plan.node_missing:search`)
+    # is glossed by its family.
+    **STAGE_FINDINGS,
 }
+
+
+def gloss(key: str) -> str:
+    """What a finding key means: by the key itself or, for a keyed stage family, by the family."""
+    if key in GLOSSES:
+        return GLOSSES[key]
+    family = key.split(":", 1)[0]
+    return GLOSSES[family] if family in STAGE_FINDINGS else ""
 
 _QUERY_LIMIT = 160
 _LINE_LIMIT = 160
@@ -173,6 +186,10 @@ def finding_keys(result: CaseResult, case: EvalCase | None = None) -> tuple[str,
 
             if outcomes.answer_score < _answer_pass_score():
                 keys.add("outcomes.answer_below_threshold")
+    # The stages say which query, which plan node, which output field was
+    # behind the failure. They never make a passing case fail; on a failing
+    # one they cluster beside the axis findings.
+    keys.update(stage_keys(score))
     # The row's own verdict fails alongside nearly every finding above, so as
     # a key beside them it would top every autopsy and explain nothing. It is
     # kept for the case it alone condemns.
@@ -353,7 +370,60 @@ def _evidence(key: str, result: CaseResult, case: EvalCase | None) -> tuple[str,
             lines.append(f"answer: {result.answer}")
     elif key == "assertion.fail":
         lines.append("assertion fails: " + ", ".join(score.assertion_fails[:4]))
+    elif key.startswith(("query.", "plan.node_", "output.")):
+        lines.extend(stage_evidence(key, score))
     return tuple(_clip(line, _LINE_LIMIT) for line in lines[:_EVIDENCE_LINES])
+
+
+def stage_evidence(key: str, score: Any) -> list[str]:
+    """The lines of a case's stage grades that bear on one stage key. Counts and field names, never record ids."""
+
+    lines: list[str] = []
+    queries = getattr(score.trajectory, "queries", None)
+    nodes = getattr(score.plan, "nodes", None)
+    output = getattr(score.outcomes, "output", None)
+    if key.startswith("query.") and queries is not None:
+        for node in queries.nodes:
+            if key in node.findings:
+                precision = "" if node.precision is None else f", precision {node.precision}"
+                lines.append(f"{node.node} ({node.connector}/{node.entity}): found {node.found} of {node.needed} needed,"
+                             f" {node.returned} returned over {node.pages} page(s) (min {node.min_pages}){precision}")
+        for call in queries.calls:
+            if call.designed:
+                continue
+            if key == "query.malformed" and call.malformed:
+                lines.append(f"{call.tool} refused: {call.error}")
+            elif key == "query.error" and call.error is not None and not call.malformed:
+                lines.append(f"{call.tool} failed: {call.error}")
+            elif key == "query.wrong_scope" and call.wrong_scope:
+                lines.append(f"{call.tool} searched entity {call.entity or '(any)'}, which no search node of the plan covers")
+            elif key == "query.wrong_window" and call.wrong_window:
+                lines.append(f"{call.tool} window on {', '.join(call.wrong_window)} excludes evidence or starts after the clock")
+            elif key == "query.zero_result" and call.error is None and call.returned == 0 and call.node is not None:
+                lines.append(f"{call.tool} at {call.node} returned nothing (filtered on {', '.join(call.constrained or ()) or 'nothing'})")
+            elif key == "query.missing_filter" and call.missing_filters:
+                lines.append(f"{call.tool} at {call.node} did not filter on {', '.join(call.missing_filters)}")
+        if key == "query.malformed" and queries.refused:
+            lines.append(f"{queries.refused} search call(s) refused by the tool surface")
+    elif key.startswith("plan.node_") and nodes is not None:
+        if key.startswith("plan.node_missing"):
+            lines.append(f"missing ({nodes.source} plan): {', '.join(nodes.missing)}")
+        elif key.startswith("plan.node_extra"):
+            lines.append(f"extra ({nodes.source} plan): {', '.join(nodes.extra)}")
+        else:
+            lines.append("consumer before producer: " + ", ".join(f"{a} -> {b}" for a, b in nodes.misordered))
+    elif key.startswith("output.") and output is not None:
+        if key == "output.field_mismatch":
+            lines.extend(f"{check.node}.{check.field} ({check.source}): expected {check.expected}; {check.detail}"
+                         for check in output.fields if not check.met)
+        elif key == "output.wrong_format":
+            lines.append(f"expected format {output.format}")
+        elif key == "output.missing_section":
+            lines.append(f"missing section(s): {', '.join(output.sections_missing)}")
+        elif key == "output.ungrounded_fact":
+            lines.append(f"{output.facts - output.facts_grounded} of {output.facts} fact(s) trace to no evidence:"
+                         f" {', '.join(output.ungrounded)}")
+    return lines
 
 
 def _share(part: int, whole: int) -> float:
@@ -434,7 +504,7 @@ def autopsy(
                                                base_share=base_share, lift=lift))
         lifts.sort(key=lambda item: (-item.lift, -item.cases, item.dimension, item.value))
         clusters.append(Cluster(
-            key=key, axis=axis_of(key), gloss=GLOSSES.get(key, ""), cases=len(group),
+            key=key, axis=axis_of(key), gloss=gloss(key), cases=len(group),
             share_of_failures=_share(len(group), failing), case_ids=tuple(row.case_id for row in group),
             dimensions={name: dict(sorted(counts[name].items())) for name in sorted(counts)},
             concentrations=tuple(lifts[:concentrations]),
@@ -551,6 +621,8 @@ __all__ = [
     "autopsy_summary",
     "axis_of",
     "finding_keys",
+    "gloss",
     "profile",
     "render_brief",
+    "stage_evidence",
 ]

@@ -13,6 +13,26 @@ first written up, before the waves above it landed.
 
 ### Closing the loop: agents that improve against the corpus
 
+- **Query, plan-node and output stages.** `worldloom evalrun` now grades the
+  stages inside its three axes (`worldloom.evalrun.stages`): every search or
+  list call against the gold evidence of the node it served, by what the
+  emulator returned (evidence recall and precision, over-fetch, pages, zero
+  results, errors, and structural checks for scope, language and time window
+  against the as-of clock), attached as `TrajectoryGrade.queries`; the
+  agent's declared or implied DAG against the gold DAG node by node
+  (`PlanGrade.nodes`); and the output's field values, format, sections and
+  grounded facts (`OutcomeGrade.output`; cases compiled from a corpus now
+  carry the planned artifact's `sections`). New finding keys (`query.*`,
+  `plan.node_*`, `output.*`) cluster in the autopsy and a query section
+  joins the trace brief; `summarize` and `compare` report them as `stages`
+  and `stage_deltas`. No existing axis score, pass or verdict moves. Policies
+  `evalrun.grade.queries`, `.plan_nodes` and `.output` (on by default) and
+  `evalrun.grade.overfetch_ratio`. With a stage on, the grader identity gains
+  a `stages` part (stage grader version 1), so a new run's grader digest
+  differs from an older run's and a loop pinned before this change refuses to
+  continue under it; `compare` judges the axes on the digest without that
+  part, so older ledgers stay readable and comparable. With every stage off,
+  ledgers, summaries and the digest are byte-identical to before.
 - **Trace-level brief.** `worldloom evalrun improve --brief traces` (SDK
   `brief="traces"`, policy `evalrun.improve.brief`; `worldloom evalrun
   campaign --brief`) shows the proposer, below the autopsy summary, an error

@@ -91,6 +91,67 @@ the produced artifact cites or the created record carries. Legacy rows do not
 bind evidence into the write, so their cases carry no artifact contract, and
 `evalrun cases` says so instead of scoring a requirement nothing could meet.
 
+## The stages inside the axes: query, plan, output
+
+Each axis folds a stage into one number, and the number hides what an
+evaluation of an agent usually asks: were the searches good, was the plan the
+right DAG node by node, is the output right. Three stage grades answer those
+as breakdowns attached to the axis they refine. None of them moves an axis
+score, a pass, or a verdict; they say *which stage* moved inside an axis.
+
+| Stage | Attached to | Graded against | Finding keys |
+| --- | --- | --- | --- |
+| **query** (per search or list call) | `TrajectoryGrade.queries` | the gold evidence of the plan node the call served (`expected_reads`, else the fixture) | `query.missed_evidence`, `query.overfetch`, `query.missing_filter`, `query.wrong_window`, `query.malformed`, `query.wrong_scope`, `query.zero_result`, `query.error` |
+| **plan nodes** | `PlanGrade.nodes` | the gold DAG, matched by `(connector, operation kind, target entity)` | `plan.node_missing:<kind>`, `plan.node_extra:<kind>`, `plan.node_misordered` |
+| **output** | `OutcomeGrade.output` | field values the gold binds, the requested format and sections, the evidence records | `output.field_mismatch`, `output.wrong_format`, `output.missing_section`, `output.ungrounded_fact` |
+
+**Queries are graded by what came back, never by their text.** A call is
+assigned to the node it served (the service's attribution, else the search
+node on the same connector and entity); per node the grade reads evidence
+recall, precision and over-fetch (records returned per record needed, graded
+only when the node's gold list is exhaustive), pages pulled against the
+fewest that hold the evidence, and the share of its calls with no structural
+fault. The structural checks read the arguments the emulator recorded: the
+entity the call scoped (`wrong_scope`), a refusal as malformed for its
+language (`malformed`), and each window clause, evaluated on the gold
+records and against the connector's as-of clock (`wrong_window`: it cuts
+evidence, or starts after the clock). A native query is read back through
+the emulator's own parser. The fields a call filtered on are recorded, and a
+field the gold node constrains that an over-broad call left out is named
+(`missing_filter`), but filter choice alone never costs score: two queries
+that return the same records in the same pages with no fault score the same.
+A node with a designed failure, or blocked by one, is not graded for evidence.
+
+**Plan nodes** compare the agent's declared DAG (`planned_dag`, or the stated
+plan of `evalrun plan`) or, when it declared none, the DAG its trajectory
+implies, with the gold DAG: node precision and recall, missing and extra
+nodes, and dependency accuracy (a node that consumes another's output must
+come after it; nodes with no path between them may run in any order). The
+existing plan score is unchanged beside it.
+
+**Output** checks each written record for the values the gold fixes: a
+state target, an evidence list or count bound from the plan's reads, a
+literal the request itself states. For a produced document it checks the
+format (media type, name or content), the required sections of the planned
+artifact, and grounding: every figure of two or more digits and every record
+identifier in the answer and artifacts must trace to an evidence record, the
+request, or the evidence count. With no document text, format and sections
+are unobserved rather than failed. The rated answer is graded as before.
+
+The stages surface in `summarize` (`stages`), in `compare` (`stage_deltas`,
+per case `stages`), in the autopsy (their keys cluster beside the axis keys
+on failing cases) and in the trace brief (a section of searches that fell
+short, with what they sent and how much of the step's evidence came back).
+Policies `evalrun.grade.queries`, `evalrun.grade.plan_nodes` and
+`evalrun.grade.output` switch each stage (on by default), and
+`evalrun.grade.overfetch_ratio` (2.0) is the over-fetch threshold. When any
+stage is on, the grader identity carries a `stages` part (its version, the
+stages on, the threshold), so the grader digest of a new run differs from an
+older one; `compare` judges the three axes on the digest without that part,
+so older ledgers still compare, and reports stage deltas only between runs
+graded by the same stage grader. With every stage off, the ledger, summary and
+digest are byte-identical to what they were before stages existed.
+
 ## The agent seam
 
 An agent under test receives an `AgentTask` (the request, the persona, the

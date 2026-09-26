@@ -14,6 +14,11 @@ graded differently, and ``frozen`` can stop a loop before a round runs under a
 grader other than the one it pinned. The identity is pure and deterministic:
 no clock, no host name, no environment, and never a credential (an exec
 rater's command is recorded with anything that looks like a secret redacted).
+
+The stage graders (queries, plan nodes, output; ``stages.py``) join the
+identity as a ``stages`` part only when one is on, carrying their own
+version. They never move an axis score, so ``axis_digest`` names what graded
+the three axes alone, and a comparison judges the axes on it.
 """
 
 from __future__ import annotations
@@ -213,6 +218,8 @@ def grader_identity(rater: Any = None) -> dict[str, Any]:
     is graded under.
     """
 
+    from .stages import stage_identity
+
     parts: dict[str, Any] = {
         "schema": GRADER_SCHEMA,
         "version": GRADER_VERSION,
@@ -221,7 +228,29 @@ def grader_identity(rater: Any = None) -> dict[str, Any]:
         "rubrics_digest": digest(rubric_texts()),
         "policy": grading_policy(),
     }
+    # The stage graders (queries, plan nodes, output) are part of what
+    # measured the run only when one is on. With all of them off the
+    # identity is the one this function returned before they existed, digest
+    # and all, so an older ledger and a stage-free run stay one grader.
+    stages = stage_identity()
+    if stages is not None:
+        parts["stages"] = stages
     return {**parts, "digest": digest(parts)}
+
+
+def axis_digest(identity: Mapping[str, Any] | None) -> str | None:
+    """The digest of what graded the three axes alone: the identity without its ``stages`` part.
+
+    Stages never move an axis score, so two runs that differ only in their
+    stage graders measured plan, trajectory and outcomes the same way. For an
+    identity without stages this is its own ``digest``.
+    """
+
+    if not isinstance(identity, Mapping) or not identity.get("digest"):
+        return None
+    if "stages" not in identity:
+        return str(identity["digest"])
+    return str(digest({key: value for key, value in identity.items() if key not in {"stages", "digest"}}))
 
 
 class GraderDrift(RuntimeError):
@@ -275,6 +304,7 @@ __all__ = [
     "GRADER_VERSION",
     "GRADING_POLICY_KEYS",
     "GraderDrift",
+    "axis_digest",
     "check_frozen",
     "frozen",
     "grader_identity",
