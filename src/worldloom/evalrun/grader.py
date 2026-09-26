@@ -19,7 +19,6 @@ rater's command is recorded with anything that looks like a secret redacted).
 from __future__ import annotations
 
 import re
-import shlex
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
@@ -47,6 +46,15 @@ _ASSIGNMENT = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 _FLAG = re.compile(r"^(--?[A-Za-z0-9][A-Za-z0-9_.-]*)(?:=(.*))?$")
 
 
+#: One shell word: runs of unquoted text and quoted spans, backslashes kept.
+_WORD = re.compile(r"""(?:[^\s'"]+|'[^']*'|"[^"]*")+""")
+_QUOTED = re.compile(r"""'([^']*)'|"([^"]*)\"""")
+
+
+def _unquote(word: str) -> str:
+    return _QUOTED.sub(lambda match: match.group(1) or match.group(2) or "", word)
+
+
 def redact_command(command: str) -> str:
     """The command with any credential-looking value replaced by ``REDACTED``.
 
@@ -57,31 +65,31 @@ def redact_command(command: str) -> str:
     A command that does not tokenize is kept whole but for such spans.
     """
 
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        tokens = command.split()
-    out: list[str] = []
+    # Spans of the original text are replaced in place rather than the
+    # command re-joined from shlex tokens: POSIX tokenizing eats Windows
+    # backslashes, so a re-joined command would misreport the judge it ran.
+    words = [(match.start(), match.end(), _unquote(match.group(0))) for match in _WORD.finditer(command)]
+    replacements: list[tuple[int, int, str]] = []
     redact_next = False
-    for token in tokens:
+    for start, end, token in words:
         if redact_next:
-            out.append(_REDACTED)
+            replacements.append((start, end, _REDACTED))
             redact_next = False
             continue
         assignment = _ASSIGNMENT.match(token)
         if assignment and _SECRET_NAME.search(assignment.group(1)):
-            out.append(f"{assignment.group(1)}={_REDACTED}")
+            replacements.append((start, end, f"{assignment.group(1)}={_REDACTED}"))
             continue
         flag = _FLAG.match(token)
         if flag and _SECRET_NAME.search(flag.group(1)):
             if flag.group(2) is not None:
-                out.append(f"{flag.group(1)}={_REDACTED}")
+                replacements.append((start, end, f"{flag.group(1)}={_REDACTED}"))
             else:
-                out.append(token)
                 redact_next = True
-            continue
-        out.append(token)
-    return shlex.join(out)
+    out = command
+    for start, end, text in reversed(replacements):
+        out = out[:start] + text + out[end:]
+    return out
 
 
 _INLINE_ASSIGNMENT = re.compile(r"([A-Za-z_][A-Za-z0-9_-]*)=(\S+)")

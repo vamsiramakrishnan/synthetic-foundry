@@ -168,6 +168,11 @@ def test_an_exec_raters_credentials_never_reach_the_identity() -> None:
     assert "sk-live-1" not in text and "abc" not in text and "sk-2" not in text
     assert identity["rater"]["command"] == "OPENAI_API_KEY=REDACTED judge --token REDACTED --api-key=REDACTED --model gemini"
     assert redact_command("judge --model 'a b'") == "judge --model 'a b'"
+    # A Windows path keeps its backslashes: the identity names the judge that ran.
+    windows = r"C:\Python\python.exe C:\Temp\judge.py --token abc"
+    assert redact_command(windows) == r"C:\Python\python.exe C:\Temp\judge.py --token REDACTED"
+    # A quoted value is one word, spaces and all.
+    assert redact_command("judge --token 'sk live' --api-key=\"sk two\" x") == "judge --token REDACTED --api-key=REDACTED x"
     # Rotating a key is not a different grader.
     assert grader_identity(exec_rater(command.replace("sk-live-1", "sk-live-2")))["digest"] == identity["digest"]
 
