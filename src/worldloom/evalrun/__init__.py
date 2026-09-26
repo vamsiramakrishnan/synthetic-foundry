@@ -58,6 +58,12 @@ if TYPE_CHECKING:
     from .agents import (
         ToolSurface as ToolSurface,
     )
+    from .agreement import (
+        AgreementReport as AgreementReport,
+    )
+    from .agreement import (
+        agreement as agreement,
+    )
     from .contract import (
         AnswerOutcome as AnswerOutcome,
     )
@@ -99,6 +105,15 @@ if TYPE_CHECKING:
     )
     from .contract import (
         cases_from_corpus as cases_from_corpus,
+    )
+    from .grader import (
+        GraderDrift as GraderDrift,
+    )
+    from .grader import (
+        check_frozen as check_frozen,
+    )
+    from .grader import (
+        grader_identity as grader_identity,
     )
     from .grading import (
         QUESTION_LAWS as QUESTION_LAWS,
@@ -377,6 +392,11 @@ _EXPORTS: dict[str, str] = {
     'classify_definition': '.safety',
     'classify_tool': '.safety',
     'compare': '.results',
+    'AgreementReport': '.agreement',
+    'agreement': '.agreement',
+    'GraderDrift': '.grader',
+    'check_frozen': '.grader',
+    'grader_identity': '.grader',
     'diff_state': '.grading',
     'error_code_for': '.safety',
     'exec_rater': '.rater',
@@ -457,7 +477,7 @@ def seam_contract() -> dict[str, object]:
         "question_reasons": ["ambiguous_request", "missing_parameter", "destructive_confirmation"],
         "assertion_authority": "worldloom.connector_trace.grade_trace",
         "commands": ["evalrun cases", "evalrun requests", "evalrun run", "evalrun plan", "evalrun summarize",
-                     "evalrun compare", "evalrun import-studio", "evalrun import-served"],
+                     "evalrun compare", "evalrun import-studio", "evalrun import-served", "evalrun agreement"],
         "served_tools": ["eval_list", "eval_begin", "eval_trace", "eval_ask", "eval_grade", "eval_score", "eval_end"],
         "mcp_tools": ["evalrun_cases", "evalrun_run", "evalrun_plan", "evalrun_summarize", "evalrun_compare"],
     }
@@ -558,6 +578,12 @@ __all__ = [
     "to_studio_rows",
     "write_run",
     "write_studio_csv",
+    # The grader, frozen by digest, and its agreement with Eval Studio's.
+    "AgreementReport",
+    "GraderDrift",
+    "agreement",
+    "check_frozen",
+    "grader_identity",
     # Safety.
     "EffectKind",
     "ErrorCode",

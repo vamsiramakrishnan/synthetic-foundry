@@ -129,6 +129,7 @@ class GroundedRater:
     """
 
     name = "grounded"
+    kind = "grounded"
 
     def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
         contract = case.outcomes.answer
@@ -157,6 +158,8 @@ def model_rater(complete: Callable[[str], str], *, name: str = "model") -> Rater
     """
 
     class _ModelRater:
+        kind = "model"
+
         def __init__(self) -> None:
             self.name = name
 
@@ -193,8 +196,14 @@ def exec_rater(command: str, *, timeout: float | None = None, shell: bool = Fals
     from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
 
     class _ExecRater:
+        kind = "exec"
+
         def __init__(self) -> None:
             self.name = name or f"exec:{command.split()[0] if command.split() else command}"
+            # Read by `grader.grader_identity`, which records the command with
+            # anything that looks like a credential redacted.
+            self.command = command
+            self.shell = shell
 
         def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
             contract = case.outcomes.answer
