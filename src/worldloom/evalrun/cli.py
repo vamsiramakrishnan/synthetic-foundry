@@ -910,6 +910,8 @@ def improve_command(
     value: bool = typer.Option(False, "--value", help="Also require the delta weighted by each case's value at stake to clear every gate."),
     no_ablate: bool = typer.Option(False, "--no-ablate", help="Send the candidate to the holdout whole, without taking out hunks that carry nothing."),
     repeats: int | None = typer.Option(None, "--repeats", min=1, help="Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`."),
+    brief: str | None = typer.Option(None, "--brief", help="What the proposer is shown: summary (the failure clusters) or traces (also the connectors' own error messages, the arguments behind them, the tools' contracts and failing trajectories). Default: policy `evalrun.improve.brief`, summary."),
+    reference_run: Path | None = typer.Option(None, "--reference-run", help="A run directory of the reference agent over the training cases only, whose accepted calls a traces brief shows beside the failing ones. Refused when it holds a held-out case."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
@@ -935,6 +937,16 @@ def improve_command(
     if proposer is None:
         _refuse("missing_flag", "name the proposer with --proposer-exec or --proposer-harness")
     champion = _agent_pack(agent_pack, exec_command)
+    from .evidence import BRIEF_MODES
+
+    if brief is not None and brief not in BRIEF_MODES:
+        _refuse("unknown_brief", f"--brief takes one of {', '.join(BRIEF_MODES)}; got {brief!r}")
+    reference = None
+    if reference_run is not None:
+        try:
+            reference = _read_run(reference_run)
+        except (OSError, ValueError) as error:
+            _refuse("run_unreadable", str(error))
     grader = _rater_from(rater, timeout=rater_timeout, shell=shell)
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
@@ -979,7 +991,7 @@ def improve_command(
                                                     skills_cache=out / "skills-cache"), out=out, rater=grader,
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
                          ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
-                         repeats=repeats)
+                         repeats=repeats, brief=brief, reference_run=reference)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
@@ -1426,6 +1438,7 @@ def campaign_command(
     principal: str = typer.Option("agent", "--principal"),
     concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1)."),
     value: bool = typer.Option(False, "--value", help="Gate every stage on the value-weighted delta too, and weight targeted stages by value."),
+    brief: str | None = typer.Option(None, "--brief", help="What every stage's proposer is shown: summary or traces (see `evalrun improve --brief`). Default: policy `evalrun.improve.brief`, summary."),
     json_output: bool = typer.Option(False, "--json", help="Emit campaign.json on stdout."),
 ) -> None:
     """Keep improving an agent across stages of fresh cases, and report how far it moved on cases it never saw.
@@ -1477,6 +1490,12 @@ def campaign_command(
         return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
 
     options: dict[str, Any] = {} if rounds is None else {"rounds": rounds}
+    if brief is not None:
+        from .evidence import BRIEF_MODES
+
+        if brief not in BRIEF_MODES:
+            _refuse("unknown_brief", f"--brief takes one of {', '.join(BRIEF_MODES)}; got {brief!r}")
+        options["brief"] = brief
     try:
         report = campaign_module.campaign(
             champion, builder=campaign_module.DatasetStageBuilder(base, principal=principal), agent_for=agent_for,

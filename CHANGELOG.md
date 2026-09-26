@@ -13,6 +13,18 @@ first written up, before the waves above it landed.
 
 ### Closing the loop: agents that improve against the corpus
 
+- **Trace-level brief.** `worldloom evalrun improve --brief traces` (SDK
+  `brief="traces"`, policy `evalrun.improve.brief`; `worldloom evalrun
+  campaign --brief`) shows the proposer, below the autopsy summary, an error
+  catalogue of each tool, error code and normalised message with a raw
+  message, the failing arguments and the accepted shapes of the same tool;
+  the declared contracts of those tools; and failing trajectories turn by
+  turn (`worldloom.evalrun.evidence`). `--reference-run DIR` (SDK
+  `reference_run=`) adds the reference agent's accepted calls and
+  trajectories, ids masked and write payloads reduced to field names, and is
+  refused when it holds a held-out case. Sections are fitted to the
+  interview message, dropping whole items and saying so. The default
+  `summary` brief is byte-identical to before.
 - **Noise-aware gates.** `worldloom evalrun improve --repeats K` (SDK
   `repeats=`, policy `evalrun.improve.repeats`, default 1) runs each policy K
   times per case set, each repeat an ordinary pinned run under

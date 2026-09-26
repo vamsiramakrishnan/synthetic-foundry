@@ -82,7 +82,7 @@ from ..packkit.authoring import Exchange, author, check, install
 from ..packkit.envelope import PackEnvelope
 from ..packkit.resolve import ResolvedPack
 from .agents import AgentUnderTest, fingerprint
-from .autopsy import autopsy, render_brief
+from .autopsy import autopsy
 from .contract import EvalCase
 from .grader import check_frozen, grader_identity
 from .harness import skills_cache_in
@@ -448,6 +448,14 @@ class Improver:
     confidence: float | None = None
     resamples: int | None = None
     min_train_ci: float | None = None
+    #: What the proposer is shown: ``summary`` (the autopsy brief) or
+    #: ``traces`` (the autopsy, then ``evidence``'s error catalogue, tool
+    #: contracts and trajectories); ``None`` reads ``evalrun.improve.brief``.
+    brief_mode: str | None = None
+    #: A reference-agent run over the training cases, for the accepted calls
+    #: and reference trajectories of a ``traces`` brief; never a held-out run
+    #: (``evidence.admit_reference`` refuses one).
+    reference_run: RunReport | None = None
     _runs: dict[tuple[str, str, str], RunReport] = field(default_factory=dict)
     _candidates: dict[str, ResolvedPack] = field(default_factory=dict)
 
@@ -588,21 +596,17 @@ class Improver:
         return (packkit.text("evalrun.improve.message", brief=brief, champion=champion.pinned, round=round_number)
                 + "\n\n" + packkit.text("evalrun.improve.rule.diff"))
 
-    def _fitted_brief(self, found: Any, champion: ResolvedPack, round_number: int) -> str:
-        """The failure brief, as many clusters as the interview's message limit holds, most frequent first.
-
-        A large case set fails in many ways; the brief drops its rarest
-        findings (it says how many) before it clips any text, so the proposer
-        always gets whole findings, most frequent first.
-        """
-        from ..packkit.authoring import MAX_MESSAGE, clip_message
+    def _fitted_brief(self, found: Any, champion: ResolvedPack, round_number: int, *, run: RunReport | None = None,
+                      train: Sequence[EvalCase] = (), holdout: Sequence[EvalCase] = ()) -> str:
+        """The brief, fitted to the interview's message limit: ``evidence.fit_summary``, or ``trace_brief``."""
+        from ..packkit.authoring import MAX_MESSAGE
+        from .evidence import brief_mode, fit_summary, trace_brief
 
         room = MAX_MESSAGE - len(self._message(champion, "", round_number))
-        for shown in range(len(found.clusters), 0, -1):
-            brief = render_brief(found, clusters=shown)
-            if len(brief) <= room:
-                return str(brief)
-        return clip_message(render_brief(found, clusters=1), room)
+        if run is None or brief_mode(self.brief_mode) == "summary":
+            return fit_summary(found, room)
+        return trace_brief(found, run, room=room, train=train, holdout=holdout, reference=self.reference_run,
+                           values=self.values)
 
     def _propose(self, champion: ResolvedPack, brief: str, round_number: int, stem: str,
                  protected: frozenset[str] = frozenset()) -> Any:
@@ -690,7 +694,7 @@ class Improver:
         if found.failing == 0:
             return RoundReceipt(**base, decision="no_failures",
                                 reasons=("the champion passes every training case; escalate the curriculum",))
-        brief = self._fitted_brief(found, champion, number)
+        brief = self._fitted_brief(found, champion, number, run=champion_train[0], train=train, holdout=holdout)
         clusters = tuple(cluster.key for cluster in found.clusters)
         brief_digest = hashlib.sha256(brief.encode()).hexdigest()[:16]
         common = {**base, "brief_digest": brief_digest, "failing": found.failing, "clusters": clusters}
@@ -876,7 +880,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             values: Mapping[str, Any] | None = None,
             holdout_values: Mapping[str, Any] | None = None, repeats: int | None = None,
             confidence: float | None = None, resamples: int | None = None,
-            min_train_ci: float | None = None) -> ImproveReport:
+            min_train_ci: float | None = None, brief: str | None = None,
+            reference_run: RunReport | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
@@ -888,7 +893,15 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     a paired test over per-case means (``judge_paired``); *confidence*,
     *resamples* and *min_train_ci* tune that test and default to their
     ``evalrun.improve.*`` policies.
+
+    *brief* (default: the policy ``evalrun.improve.brief``, ``summary``) is
+    what the proposer is shown; ``traces`` adds the connectors' own error
+    messages, the arguments behind them, the tools' contracts and failing
+    trajectories (``evidence``), with accepted calls from *reference_run*,
+    a reference-agent run over the training cases, when one is given.
     """
+    from .evidence import admit_reference, brief_mode
+
     dropped = 0
     if holdout is None:
         share = float(packkit.policy("evalrun.improve.holdout_share")) if holdout_share is None else holdout_share
@@ -899,6 +912,10 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
         train = tuple(case for case in cases if not is_held_out(declared_split(case)))
         dropped = len(cases) - len(train)
         held = tuple(holdout)
+    mode = brief_mode(brief)
+    if reference_run is not None:
+        # Refused here, before any run is paid for, as well as at every brief.
+        reference_run = admit_reference(reference_run, train=train, holdout=held)
     improver = Improver(run=run, agent_for=agent_for, exchange=exchange, out=out, rater=rater,
                         pack_roots=pack_roots,
                         authoring_rounds=int(packkit.policy("evalrun.improve.authoring_rounds"))
@@ -910,7 +927,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
                         if ablation_tolerance is None else ablation_tolerance,
                         values=values, holdout_values=holdout_values,
                         repeats=int(packkit.policy("evalrun.improve.repeats")) if repeats is None else int(repeats),
-                        confidence=confidence, resamples=resamples, min_train_ci=min_train_ci)
+                        confidence=confidence, resamples=resamples, min_train_ci=min_train_ci,
+                        brief_mode=mode, reference_run=reference_run)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
