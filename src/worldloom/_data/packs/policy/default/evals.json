@@ -32,6 +32,10 @@
     "evalrun.improve.confidence": 0.95,
     "evalrun.improve.bootstrap_resamples": 2000,
     "evalrun.improve.min_train_ci": 0.0,
-    "evalrun.improve.power": 0.8
+    "evalrun.improve.power": 0.8,
+    "evalrun.campaign.max_stages": 3,
+    "evalrun.campaign.patience": 2,
+    "evalrun.campaign.max_cases": 5000,
+    "evalrun.campaign.held_ratio": 0.5
   }
 }

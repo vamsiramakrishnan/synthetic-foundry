@@ -87,3 +87,4 @@ interview request to a reply), which is how a test drives the loop offline.
 - `references/scale.md`: concurrency, shards, merge and resume for the runs a loop pays for.
 - `references/training-data.md`: exporting runs as SFT, pairs or rewards; the holdout guard.
 - `references/recursion.md`: the proposer's own policy pack and `evalrun improve-proposer`, which improves the improver.
+- `references/campaigns.md`: `worldloom evalrun campaign`, stages of fresh cases after `no_failures`, the held-out ledger.
