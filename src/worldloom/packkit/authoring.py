@@ -12,6 +12,13 @@ with its findings until it passes or the round budget is spent.
 Nothing a harness says is trusted beyond the lint. A pack it writes is a
 proposal until ``accept`` passes it, and the conversation is never stored with
 the pack: only the accepted envelope is, as ``cascade`` requires.
+
+A kind with a tree codec (``PackKind.to_tree``) is also handed its draft as
+files (``draft_tree``), and a proposal may then carry a unified ``diff``
+against that tree instead of a whole ``body``. ``accept`` applies the diff
+strictly (``packkit.diffs``), reads the tree back into a body and judges it
+like any other proposal, so a patch that does not apply, or applies to
+something the lint refuses, comes back as findings through the same loop.
 """
 
 from __future__ import annotations
@@ -25,6 +32,7 @@ from pydantic import Field
 
 from ..cascade import CascadeModel, Finding, refuse
 from ..providers import digest
+from . import diffs
 from .active import text as _text
 from .envelope import PackEnvelope, read_envelope
 from .kinds import kind
@@ -94,6 +102,9 @@ class Proposal(CascadeModel):
     description: str = ""
     extends: tuple[str, ...] = ()
     body: dict[str, Any] = Field(default_factory=dict)
+    diff: str | None = None
+    """For a kind with a tree codec: a unified diff against the request's
+    ``draft_tree``, in place of ``body``."""
 
 
 class InterviewReply(CascadeModel):
@@ -111,6 +122,14 @@ def _response_schema(kind_name: str) -> dict[str, Any]:
         defs.setdefault(key, value)
     proposal = defs["Proposal"]
     proposal["properties"]["body"] = {**body_schema, "description": "The kind's body. With `extends`, state only what differs."}
+    if kind(kind_name).has_tree:
+        proposal["properties"]["diff"] = {
+            "anyOf": [{"type": "string"}, {"type": "null"}], "default": None,
+            "description": ("A unified diff against `draft_tree` (`--- a/<path>`, `+++ b/<path>`, `/dev/null` to "
+                            "create or delete a file), in place of `body`. Every hunk must apply exactly where its "
+                            "header says; the result is read back into a body and linted.")}
+    else:
+        proposal["properties"].pop("diff", None)
     return schema
 
 
@@ -126,13 +145,25 @@ def request(kind_name: str, message: str, *, name: str = "", draft: dict[str, An
         example = resolve(f"{kind_name}:{pack_kind.default}", roots=roots).data
     visible = [{"ref": item.envelope.ref(), "title": item.envelope.title, "origin": item.origin}
                for item in discover(kind_name, roots=roots)]
+    tree_keys: dict[str, Any] = {}
+    tree_asks: list[str] = []
+    if pack_kind.has_tree:
+        assert pack_kind.to_tree is not None
+        draft_tree = None
+        if isinstance(draft, dict) and isinstance(draft.get("body"), dict):
+            try:
+                draft_tree = pack_kind.to_tree(draft["body"])
+            except ValueError:
+                draft_tree = None
+        tree_keys = {"draft_tree": draft_tree}
+        tree_asks = [_text("pack.interview.tree")]
     payload: dict[str, Any] = {
         "schema": INTERVIEW_SCHEMA, "kind": kind_name, "about": pack_kind.about, "message": message,
         "name": name, "draft": draft, "findings": list(findings), "conversation": list(conversation)[-8:],
         "visible_packs": visible, "example": example,
         "instructions": [_text("pack.interview.role", kind=kind_name), *(_text(key) for key in _interview_keys()),
-                         *pack_kind.asks],
-        "response_schema": _response_schema(kind_name),
+                         *pack_kind.asks, *tree_asks],
+        "response_schema": _response_schema(kind_name), **tree_keys,
     }
     payload["request_id"] = digest([INTERVIEW_SCHEMA, kind_name, name, message, draft, list(findings),
                                     list(conversation)[-8:]])
@@ -172,8 +203,20 @@ def accept(request_payload: dict[str, Any], reply: dict[str, Any] | InterviewRep
     wanted = request_payload.get("name") or parsed.proposal.name
     if parsed.proposal.name != wanted:
         return Verdict("refused", findings=(f"name: the operator asked for {wanted!r}, the proposal is {parsed.proposal.name!r}",))
+    fields = parsed.proposal.model_dump(exclude={"diff"})
+    if parsed.proposal.diff is not None:
+        body, problem = _body_from_diff(request_payload, parsed.proposal)
+        if body is None:
+            return Verdict("refused", findings=(problem,), message=parsed.message)
+        fields["body"] = body
+        # A patch changes the body; what it does not restate is the draft's.
+        held = request_payload.get("draft")
+        drafted: dict[str, Any] = held if isinstance(held, dict) else {}
+        for key in ("title", "description", "extends"):
+            if not fields[key] and drafted.get(key):
+                fields[key] = drafted[key]
     try:
-        envelope = PackEnvelope(kind=request_payload["kind"], **parsed.proposal.model_dump())
+        envelope = PackEnvelope(kind=request_payload["kind"], **fields)
     except ValueError as error:
         return Verdict("refused", findings=(str(error),))
     first = Path(roots[0]) if roots else None
@@ -182,6 +225,23 @@ def accept(request_payload: dict[str, Any], reply: dict[str, Any] | InterviewRep
         return Verdict("refused", envelope=envelope, findings=tuple(findings), message=parsed.message)
     return Verdict("accepted", envelope=envelope, resolved=resolved, message=parsed.message,
                    questions=parsed.questions)
+
+
+def _body_from_diff(request_payload: dict[str, Any], proposal: Proposal) -> tuple[dict[str, Any] | None, str]:
+    """The body a diff proposal states, or ``None`` and the finding that refuses it."""
+    pack_kind = kind(request_payload["kind"])
+    if not pack_kind.has_tree:
+        return None, f"diff: a {pack_kind.name} pack has no tree form; propose a `body`"
+    assert pack_kind.from_tree is not None
+    if proposal.body:
+        return None, "a proposal carries a `body` or a `diff`, not both"
+    base = request_payload.get("draft_tree")
+    if not isinstance(base, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in base.items()):
+        return None, "diff: the request carries no `draft_tree` to apply it to; propose a whole `body`"
+    try:
+        return pack_kind.from_tree(diffs.apply(base, proposal.diff or "")), ""
+    except ValueError as error:
+        return None, f"diff: {error}"
 
 
 Exchange = Callable[[dict[str, Any]], dict[str, Any]]

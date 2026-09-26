@@ -15,10 +15,28 @@ One round:
 6. a candidate that clears both gates becomes the champion; every round,
    promoted or not, leaves a receipt.
 
+The proposer works on the champion as a tree of files (the ``agent`` kind's
+tree codec: ``policy.json`` plus real skills under ``skills/``) and is asked
+for a unified diff against it, so a revision is code generation over the
+agent's own skills and every change is reviewable line by line. Each round's
+receipt keeps the candidate's diff against the champion (``rounds/NNN.diff``).
+
+A diff is also measurable hunk by hunk. When a candidate passes the training
+gate, each hunk is taken out in turn (**ablation**): the candidate without it
+is rebuilt, linted and run on the training cases, and a hunk whose removal
+costs less than ``evalrun.improve.ablation_tolerance`` of mean score is
+dropped. What goes to the held-out cases is the reduced candidate, after it
+passes the training gate again; a change that carried no weight on training
+never reaches the holdout, where it could only add noise.
+
 The grader is pinned by digest before the first round and checked around
 every run: a loop that could move its own measuring stick would be measuring
 nothing. Nothing here edits source code; what changes is a pack, which is
-content-addressed, linted and replayable.
+content-addressed, linted and replayable. Generated code lives only in the
+agent pack's ``skills/`` tree (``policy.from_tree`` refuses any other path),
+and the loop writes only under its output directory and the pack root it
+installs candidates into: the materialised skill trees go to
+``<out>/skills-cache``.
 """
 
 from __future__ import annotations
@@ -34,12 +52,15 @@ from pydantic import Field
 
 from .. import packkit
 from ..models import Model
-from ..packkit.authoring import Exchange, author
+from ..packkit import diffs
+from ..packkit.authoring import Exchange, author, check, install
+from ..packkit.envelope import PackEnvelope
 from ..packkit.resolve import ResolvedPack
 from .agents import AgentUnderTest
 from .autopsy import autopsy, render_brief
 from .contract import EvalCase
 from .grader import check_frozen, grader_identity
+from .harness import skills_cache_in
 from .results import Comparison, compare, delta_band, read_run, write_run
 from .runner import RunReport, case_set_digest
 
@@ -129,6 +150,36 @@ def judge(comparison: Comparison, *, name: str, min_delta: float, strict: bool, 
 # -- receipts -----------------------------------------------------------------
 
 
+class HunkContribution(Model):
+    """One hunk of a candidate's diff, and what taking it out cost on the training cases."""
+
+    index: int
+    """1-based position in the proposed diff."""
+    file: str
+    header: str
+    #: ``kept``, ``dropped``, or ``untested`` (past ``evalrun.improve.ablation_max_hunks``).
+    decision: str
+    #: Mean training score lost without this hunk (the candidate as it stood
+    #: then, minus the candidate without it); ``None`` when it was not measured.
+    contribution: float | None = None
+    reason: str = ""
+
+
+class Ablation(Model):
+    """The candidate's diff taken apart: which hunks carried the gain."""
+
+    proposed: dict[str, Any]
+    """The candidate as the proposer wrote it, before any hunk was dropped."""
+    proposed_diff: str
+    tolerance: float
+    hunks: tuple[HunkContribution, ...] = ()
+    #: True when the reduced candidate replaced the proposed one.
+    reduced: bool = False
+    #: The training gate judged again on the reduced candidate, when one was built.
+    reduced_train: Gate | None = None
+    reason: str = ""
+
+
 class RoundReceipt(Model):
     schema_version: str = Field(default=ROUND_SCHEMA, alias="schema")
     round: int
@@ -147,6 +198,11 @@ class RoundReceipt(Model):
     questions: tuple[str, ...] = ()
     train: Gate | None = None
     holdout: Gate | None = None
+    #: The candidate's unified diff against the champion's tree, and its hunk
+    #: count; also written beside the receipt as ``rounds/NNN.diff``.
+    diff: str | None = None
+    diff_hunks: int = 0
+    ablation: Ablation | None = None
 
 
 class ImproveReport(Model):
@@ -189,6 +245,10 @@ class Improver:
     rater: Any = None
     pack_roots: Sequence[str | Path] = ()
     authoring_rounds: int = 4
+    ablate: bool = True
+    ablation_max_hunks: int = 8
+    #: Mean score a hunk must be worth to stay; ``None`` is half the delta band.
+    ablation_tolerance: float | None = None
     _runs: dict[tuple[str, str], RunReport] = field(default_factory=dict)
     _candidates: dict[str, ResolvedPack] = field(default_factory=dict)
 
@@ -211,7 +271,11 @@ class Improver:
                 self._runs[key] = stored
                 return stored
         check_frozen(grader, self.rater)
-        report = self.run(cases, self.agent_for(pack))
+        # The agent is built here so a skill tree it materialises lands in
+        # this loop's output directory, not the user's cache.
+        with skills_cache_in(self.out / "skills-cache"):
+            agent = self.agent_for(pack)
+        report = self.run(cases, agent)
         check_frozen(grader, self.rater)
         report = report.model_copy(update={"grader": grader,
                                            "agent_pack": report.agent_pack or _identity(pack)})
@@ -220,8 +284,8 @@ class Improver:
         return report
 
     def _propose(self, champion: ResolvedPack, brief: str, round_number: int, stem: str) -> Any:
-        message = packkit.text("evalrun.improve.message", brief=brief, champion=champion.pinned,
-                               round=round_number)
+        message = (packkit.text("evalrun.improve.message", brief=brief, champion=champion.pinned, round=round_number)
+                   + "\n\n" + packkit.text("evalrun.improve.rule.diff"))
         draft = {"schema": "worldloom.pack/v1", "kind": "agent", "name": f"{stem}-r{round_number}",
                  "title": f"{stem}, round {round_number}", "body": champion.data}
         return author("agent", message, self.exchange, name=f"{stem}-r{round_number}",
@@ -252,6 +316,8 @@ class Improver:
                                   min_train=min_train, min_held=min_held, max_fall=max_fall)
             receipts.append(receipt)
             _write(self.out / "rounds" / f"{number:03d}.json", receipt.model_dump(mode="json", by_alias=True))
+            if receipt.diff:
+                (self.out / "rounds" / f"{number:03d}.diff").write_text(receipt.diff, encoding="utf-8", newline="")
             if receipt.decision == "promoted":
                 assert receipt.candidate is not None
                 champion = self._candidates[receipt.candidate["digest"]]
@@ -288,23 +354,129 @@ class Improver:
         if verdict.status != "accepted" or verdict.resolved is None:
             return RoundReceipt(**common, decision="refused", authoring=rounds, reasons=tuple(verdict.findings[:12]))
         candidate: ResolvedPack = verdict.resolved
-        if candidate.data == champion.data:
+        proposed_diff = _diff(champion, candidate)
+        if candidate.data == champion.data or not proposed_diff:
             return RoundReceipt(**common, decision="unchanged", authoring=rounds, candidate=_identity(candidate),
                                 reasons=("the proposal restates the champion's policy",))
+        changed: dict[str, Any] = {"diff": proposed_diff, "diff_hunks": len(diffs.hunks(proposed_diff))}
         self._candidates[candidate.digest] = candidate
         candidate_train = self._pinned_run(candidate, train, "train", grader)
         train_gate = judge(compare(champion_train, candidate_train), name="train", min_delta=min_train,
                            strict=False, max_axis_regression=max_fall)
         if not train_gate.passed:
-            return RoundReceipt(**common, decision="rejected", authoring=rounds, candidate=_identity(candidate),
-                                train=train_gate, reasons=train_gate.reasons)
+            return RoundReceipt(**common, **changed, decision="rejected", authoring=rounds,
+                                candidate=_identity(candidate), train=train_gate, reasons=train_gate.reasons)
+        ablation = None
+        if self.ablate:
+            candidate, candidate_train, ablation = self._ablate(
+                champion, candidate, champion_train, candidate_train, train, grader,
+                min_train=min_train, max_fall=max_fall)
+            if ablation.reduced:
+                assert ablation.reduced_train is not None
+                train_gate = ablation.reduced_train
+                reduced_diff = _diff(champion, candidate)
+                changed = {"diff": reduced_diff, "diff_hunks": len(diffs.hunks(reduced_diff))}
         champion_held = self._pinned_run(champion, holdout, "holdout", grader)
         candidate_held = self._pinned_run(candidate, holdout, "holdout", grader)
         held_gate = judge(compare(champion_held, candidate_held), name="holdout", min_delta=min_held,
                           strict=True, max_axis_regression=max_fall)
-        return RoundReceipt(**common, decision="promoted" if held_gate.passed else "rejected", authoring=rounds,
-                            candidate=_identity(candidate), train=train_gate, holdout=held_gate,
-                            reasons=held_gate.reasons)
+        return RoundReceipt(**common, **changed, decision="promoted" if held_gate.passed else "rejected",
+                            authoring=rounds, candidate=_identity(candidate), train=train_gate, holdout=held_gate,
+                            reasons=held_gate.reasons, ablation=ablation)
+
+    def _search(self) -> tuple[Path, ...]:
+        return (self.out / "packs", *(Path(root) for root in self.pack_roots))
+
+    def _rebuild(self, like: ResolvedPack, body: dict[str, Any]) -> tuple[ResolvedPack | None, list[str]]:
+        """*body* as a pack named like *like*: resolved and linted, never stored."""
+        envelope = PackEnvelope(kind=like.kind, name=like.name, title=like.title, description=like.description,
+                                body=body)
+        resolved, findings = check(envelope, roots=self._search(), into=self.out / "packs")
+        return resolved, list(findings)
+
+    def _ablate(self, champion: ResolvedPack, candidate: ResolvedPack, champion_train: RunReport,
+                candidate_train: RunReport, train: Sequence[EvalCase], grader: dict[str, Any], *,
+                min_train: float, max_fall: float) -> tuple[ResolvedPack, RunReport, Ablation]:
+        """The candidate with every hunk that carried less than the tolerance taken out, one at a time.
+
+        Hunks are tried in the diff's order against the candidate as it
+        stands after the earlier drops, so two hunks that only work together
+        are not both dropped for each looking useless alone. The last hunk
+        left is never dropped: without it the candidate is the champion. The
+        reduced candidate is judged by the training gate again and replaces
+        the proposed one only if it still passes.
+        """
+        codec = packkit.kind(candidate.kind)
+        assert codec.to_tree is not None and codec.from_tree is not None
+        tolerance = delta_band() / 2 if self.ablation_tolerance is None else self.ablation_tolerance
+        base = codec.to_tree(champion.data)
+        proposed_diff = diffs.render(base, codec.to_tree(candidate.data))
+        every = diffs.hunks(proposed_diff)
+        keep = list(range(len(every)))
+        current, current_run = candidate, candidate_train
+        records: list[HunkContribution] = []
+        for position, hunk in enumerate(every):
+            if position >= self.ablation_max_hunks:
+                records.append(_contribution(hunk, position, decision="untested",
+                                                reason="past the policy `evalrun.improve.ablation_max_hunks`"))
+                continue
+            remaining = [index for index in keep if index != position]
+            if not remaining:
+                cost = compare(champion_train, current_run).mean_delta
+                records.append(_contribution(hunk, position, decision="kept", contribution=cost,
+                                                reason="the last hunk left; without it the candidate is the champion"))
+                continue
+            try:
+                body = codec.from_tree(diffs.apply(base, diffs.join(every[index] for index in remaining)))
+            except ValueError as error:
+                records.append(_contribution(hunk, position, decision="kept",
+                                                reason=f"the rest does not apply without it: {error}"))
+                continue
+            trial, findings = self._rebuild(candidate, body)
+            if trial is None or findings:
+                records.append(_contribution(hunk, position, decision="kept",
+                                                reason=f"the rest does not lint without it: {'; '.join(findings[:2])}"))
+                continue
+            trial_run = self._pinned_run(trial, train, "train", grader)
+            cost = compare(trial_run, current_run).mean_delta
+            if cost < tolerance:
+                keep = remaining
+                current, current_run = trial, trial_run
+                records.append(_contribution(hunk, position, decision="dropped", contribution=cost,
+                                                reason=f"removing it cost {cost}, under the tolerance {tolerance}"))
+            else:
+                records.append(_contribution(hunk, position, decision="kept", contribution=cost))
+        ablation = Ablation(proposed=_identity(candidate), proposed_diff=proposed_diff, tolerance=tolerance,
+                            hunks=tuple(records))
+        if current is candidate:
+            return candidate, candidate_train, ablation
+        gate = judge(compare(champion_train, current_run), name="train", min_delta=min_train, strict=False,
+                     max_axis_regression=max_fall)
+        if not gate.passed:
+            return candidate, candidate_train, ablation.model_copy(update={
+                "reduced_train": gate,
+                "reason": "the reduced candidate fails the training gate; the proposed one goes to the holdout"})
+        # The reduced candidate is what the loop stands behind, so it is what
+        # the pack root holds under the round's name.
+        envelope = PackEnvelope(kind=current.kind, name=current.name, title=current.title,
+                                description=current.description, body=current.data)
+        install(envelope, root=self.out / "packs", roots=tuple(self.pack_roots), replace=True)
+        self._candidates[current.digest] = current
+        return current, current_run, ablation.model_copy(update={"reduced": True, "reduced_train": gate})
+
+
+def _contribution(hunk: diffs.Hunk, position: int, decision: str, contribution: float | None = None,
+                  reason: str = "") -> HunkContribution:
+    return HunkContribution(index=position + 1, file=hunk.path, header=hunk.header, decision=decision,
+                            contribution=contribution, reason=reason)
+
+
+def _diff(champion: ResolvedPack, candidate: ResolvedPack) -> str:
+    """The candidate's unified diff against the champion, over the kind's tree codec."""
+    codec = packkit.kind(champion.kind)
+    if codec.to_tree is None:
+        return "" if candidate.data == champion.data else "(no tree codec)"
+    return diffs.render(codec.to_tree(champion.data), codec.to_tree(candidate.data))
 
 
 def _write(path: Path, document: Mapping[str, Any]) -> None:
@@ -317,7 +489,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             holdout_share: float | None = None, rounds: int | None = None,
             pack_roots: Sequence[str | Path] = (), authoring_rounds: int | None = None,
             min_train_delta: float | None = None, min_holdout_delta: float | None = None,
-            max_axis_regression: float | None = None) -> ImproveReport:
+            max_axis_regression: float | None = None, ablate: bool | None = None,
+            ablation_max_hunks: int | None = None, ablation_tolerance: float | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
@@ -332,12 +505,17 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     improver = Improver(run=run, agent_for=agent_for, exchange=exchange, out=out, rater=rater,
                         pack_roots=pack_roots,
                         authoring_rounds=int(packkit.policy("evalrun.improve.authoring_rounds"))
-                        if authoring_rounds is None else authoring_rounds)
+                        if authoring_rounds is None else authoring_rounds,
+                        ablate=bool(packkit.policy("evalrun.improve.ablate")) if ablate is None else ablate,
+                        ablation_max_hunks=int(packkit.policy("evalrun.improve.ablation_max_hunks"))
+                        if ablation_max_hunks is None else ablation_max_hunks,
+                        ablation_tolerance=float(packkit.policy("evalrun.improve.ablation_tolerance"))
+                        if ablation_tolerance is None else ablation_tolerance)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
                             max_axis_regression=max_axis_regression)
 
 
-__all__ = ["HELD_OUT_SPLITS", "IMPROVE_SCHEMA", "ROUND_SCHEMA", "Gate", "ImproveReport", "Improver", "RoundReceipt",
-           "improve", "judge", "split_cases"]
+__all__ = ["HELD_OUT_SPLITS", "IMPROVE_SCHEMA", "ROUND_SCHEMA", "Ablation", "Gate", "HunkContribution", "ImproveReport",
+           "Improver", "RoundReceipt", "improve", "judge", "split_cases"]

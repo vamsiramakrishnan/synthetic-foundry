@@ -184,6 +184,13 @@ define the reply grammar are locked: a policy that could restate them would be
 a protocol variant, and its failures would look like the agent's. See
 [Packs](packs.md#agent-packs) for the schema and the lint.
 
+A policy's skills can be real files: a tree under `skills/` in the layout
+coding harnesses use (`skills/<name>/SKILL.md`, `references/`, `scripts/`).
+The loop improves an agent by generating and diffing that code. The whole
+policy is presented as a tree (`policy.json` plus `skills/`), a revision is a
+unified diff against it, and the tree is the only place generated code may
+live: reading a tree back refuses any other path.
+
 ## Grader freeze and agreement
 
 The grader has an identity: the rater, the `rater.*` prompt texts in force,
@@ -219,15 +226,35 @@ Each round:
 1. the champion runs the training cases (`runs/<pack>@<digest>/train`);
 2. `autopsy` clusters its failures and renders the brief;
 3. the proposer receives the brief through the pack interview
-   (`evalrun.improve.message`) with the champion as the draft, and is refused
-   with findings until its proposal lints clean;
+   (`evalrun.improve.message`) with the champion as the draft, handed over as
+   a tree (`draft_tree`), and is asked (`evalrun.improve.rule.diff`) for a
+   minimal unified diff against it, with any code only under `skills/`. A
+   diff that does not apply, or a result the lint refuses, comes back as
+   findings until its proposal lints clean;
 4. the candidate runs the same training cases. It passes the training gate
    when the mean delta is at least the delta band, no axis falls by more than
    the band, and it errors on no case the champion was graded on;
-5. only then do both run the held-out cases. The candidate must gain there
+5. the candidate is ablated hunk by hunk (below), and the reduced candidate
+   is judged by the training gate again;
+6. only then do both run the held-out cases. The candidate must gain there
    (`evalrun.improve.min_holdout_delta`, strictly), under the same axis and
    error rules;
-6. a candidate that clears both gates becomes the champion.
+7. a candidate that clears both gates becomes the champion.
+
+**Ablation.** A candidate that passes the training gate is taken apart. For
+each hunk of its diff against the champion, up to
+`evalrun.improve.ablation_max_hunks` (default 8), the candidate without that
+hunk is rebuilt, linted and run on the training cases. When removing the hunk
+costs less than `evalrun.improve.ablation_tolerance` of mean score (the
+shipped 0.05 is half the shipped delta band), the hunk is dropped. Hunks are
+tried in order against the candidate as it stands after the earlier drops,
+so two hunks that only work together are not both lost, and the last hunk
+left is never dropped, since without it the candidate is the champion. A
+hunk whose removal leaves a patch that does not apply or does not lint is
+kept. The reduced candidate goes to the holdout only if it still passes the
+training gate; otherwise the proposed one does. Ablation is on unless
+`evalrun.improve.ablate` is false. Each trial is an ordinary run, pinned to
+the same grader and cached by its policy's digest.
 
 The held-out cases are a separate corpus when `--holdout-corpus` is given,
 which is the stronger test: a policy that learned this company rather than the
@@ -243,10 +270,20 @@ answers them), when no proposal lints clean within
 `evalrun.improve.authoring_rounds`, or when the proposal restates the
 champion. Every round writes `rounds/NNN.json` with the champion, the
 candidate, the grader digest, the brief's digest, the clusters, the authoring
-rounds and both gates. Runs already on disk for the same policy, case set and
+rounds and both gates. A round with a candidate also stores the candidate's
+unified diff against the champion (`diff`, and its hunk count in
+`diff_hunks`), written beside the receipt as `rounds/NNN.diff`, and, when it
+was ablated, `ablation`: the proposed candidate and its diff, the tolerance,
+and each hunk with its file, header, decision (`kept`, `dropped` or
+`untested`) and measured contribution. The diff is that of the candidate that
+went to the holdout, so after ablation it holds only the hunks that carried
+the gain, and that candidate is what `packs/agent/` holds under the round's
+name. Runs already on disk for the same policy, case set and
 grader are reused, so an interrupted loop resumes without paying twice.
 Accepted candidates are stored under `packs/agent/`, so any of them can be
-named with `--agent-pack` afterwards.
+named with `--agent-pack` afterwards. The loop writes nothing outside its
+output directory and that pack root: a candidate's skill tree is
+materialised under `skills-cache/` there, not in the user's cache.
 
 ## Trace export
 
