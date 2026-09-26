@@ -532,3 +532,23 @@ def test_the_loop_records_the_value_delta_when_given_values(corpus: Any, tmp_pat
     assert first.decision == "promoted"
     assert first.train is not None and first.train.value_delta is not None
     assert first.holdout is not None and first.holdout.value_delta is not None
+
+
+def test_a_long_failure_brief_is_fitted_to_the_interview_limit(corpus: Any, tmp_path: Path) -> None:
+    """Many failing cases make a long brief; the proposer still gets asked, with the most frequent findings."""
+    from worldloom.evalrun.autopsy import autopsy as run_autopsy
+    from worldloom.evalrun.improve import Improver
+    from worldloom.packkit.authoring import MAX_MESSAGE, clip_message
+
+    cases = cases_from_corpus(corpus)
+    records = corpus.connector_data.records
+    idle = run_cases(service_for(cases, records), cases, ScriptedAgent([], name="idle"))
+    found = run_autopsy(idle, cases=cases)
+    improver = Improver(run=lambda s, a: idle, agent_for=lambda p: None, exchange=lambda p: {}, out=tmp_path)
+    champion = packkit.resolve("agent:baseline")
+    # Inflate the message template's brief budget: a long champion ref eats into the room.
+    brief = improver._fitted_brief(found, champion, 1)
+    assert len(improver._message(champion, brief, 1)) <= MAX_MESSAGE
+    huge = "x\n" * (MAX_MESSAGE * 2)
+    clipped = clip_message(huge, 500)
+    assert len(clipped) <= 500 and "more characters not shown" in clipped

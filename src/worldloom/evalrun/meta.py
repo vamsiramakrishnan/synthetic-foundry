@@ -504,7 +504,14 @@ class MetaImprover:
             return MetaRoundReceipt(**base, decision="no_failures",
                                     reasons=("every task's agent passes its training cases; the proposer has "
                                              "nothing to be judged on",))
-        brief = render_meta_brief(champion_train, earlier)
+        from ..packkit.authoring import MAX_MESSAGE, clip_message
+
+        def compose(text: str) -> str:
+            return (packkit.text("evalrun.meta.message", brief=text, champion=champion.pinned, round=number)
+                    + "\n\n" + packkit.text("evalrun.improve.rule.diff"))
+
+        # The brief is sized so the whole interview message fits its limit.
+        brief = clip_message(render_meta_brief(champion_train, earlier), MAX_MESSAGE - len(compose("")))
         common = {**base, "brief_digest": hashlib.sha256(brief.encode()).hexdigest()[:16]}
         # The recursion: unless told otherwise, the harness that proposes
         # agent revisions proposes this revision too, under the policy it is
@@ -515,8 +522,7 @@ class MetaImprover:
         if meta_identity is not None:
             common["meta_proposer"] = _identity(meta_identity)
         name = self._candidate_name(champion, number)
-        message = packkit.text("evalrun.meta.message", brief=brief, champion=champion.pinned, round=number) \
-            + "\n\n" + packkit.text("evalrun.improve.rule.diff")
+        message = compose(brief)
         draft = {"schema": "worldloom.pack/v1", "kind": "agent", "name": name,
                  "title": f"{champion.title or champion.name}, meta round {number}", "body": champion.data}
         failure: list[Exception] = []

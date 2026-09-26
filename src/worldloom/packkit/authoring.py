@@ -146,6 +146,21 @@ def _response_schema(kind_name: str) -> dict[str, Any]:
     return schema
 
 
+#: The longest message a pack interview carries. A caller that builds its
+#: message from data (a failure brief) sizes it to fit with ``clip_message``.
+MAX_MESSAGE = 8000
+
+
+def clip_message(text: str, limit: int, *, marker: str = "\n[... {hidden} more characters not shown]\n") -> str:
+    """*text* cut to *limit* characters at a line boundary, saying how much was left out."""
+    if len(text) <= limit:
+        return text
+    room = max(0, limit - len(marker.format(hidden=len(text))))
+    cut = text.rfind("\n", 0, room)
+    head = text[: cut if cut > 0 else room]
+    return head + marker.format(hidden=len(text) - len(head))
+
+
 def request(kind_name: str, message: str, *, name: str = "", draft: dict[str, Any] | None = None,
             findings: Sequence[Finding] = (), conversation: Sequence[dict[str, str]] = (),
             roots: Sequence[str | Path] = (), proposer: ResolvedPack | Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -157,8 +172,8 @@ def request(kind_name: str, message: str, *, name: str = "", draft: dict[str, An
     identity; without it the request is unchanged.
     """
     pack_kind = kind(kind_name)
-    if not message.strip() or len(message) > 8000:
-        raise ValueError("an interview message must contain 1 to 8000 characters")
+    if not message.strip() or len(message) > MAX_MESSAGE:
+        raise ValueError(f"an interview message must contain 1 to {MAX_MESSAGE} characters")
     example = None
     if pack_kind.default:
         example = resolve(f"{kind_name}:{pack_kind.default}", roots=roots).data

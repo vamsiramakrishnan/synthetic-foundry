@@ -584,10 +584,29 @@ class Improver:
             suffix = hashlib.sha256(f"{champion.digest}\0{number}\0{attempt}".encode()).hexdigest()[:8]
             name = f"{stem}-r{number}-{suffix}"
 
+    def _message(self, champion: ResolvedPack, brief: str, round_number: int) -> str:
+        return (packkit.text("evalrun.improve.message", brief=brief, champion=champion.pinned, round=round_number)
+                + "\n\n" + packkit.text("evalrun.improve.rule.diff"))
+
+    def _fitted_brief(self, found: Any, champion: ResolvedPack, round_number: int) -> str:
+        """The failure brief, as many clusters as the interview's message limit holds, most frequent first.
+
+        A large case set fails in many ways; the brief drops its rarest
+        findings (it says how many) before it clips any text, so the proposer
+        always gets whole findings, most frequent first.
+        """
+        from ..packkit.authoring import MAX_MESSAGE, clip_message
+
+        room = MAX_MESSAGE - len(self._message(champion, "", round_number))
+        for shown in range(len(found.clusters), 0, -1):
+            brief = render_brief(found, clusters=shown)
+            if len(brief) <= room:
+                return str(brief)
+        return clip_message(render_brief(found, clusters=1), room)
+
     def _propose(self, champion: ResolvedPack, brief: str, round_number: int, stem: str,
                  protected: frozenset[str] = frozenset()) -> Any:
-        message = (packkit.text("evalrun.improve.message", brief=brief, champion=champion.pinned, round=round_number)
-                   + "\n\n" + packkit.text("evalrun.improve.rule.diff"))
+        message = self._message(champion, brief, round_number)
         name = self._candidate_name(champion, stem, round_number, protected)
         draft = {"schema": "worldloom.pack/v1", "kind": "agent", "name": name,
                  "title": f"{stem}, round {round_number}", "body": champion.data}
@@ -671,7 +690,7 @@ class Improver:
         if found.failing == 0:
             return RoundReceipt(**base, decision="no_failures",
                                 reasons=("the champion passes every training case; escalate the curriculum",))
-        brief = render_brief(found)
+        brief = self._fitted_brief(found, champion, number)
         clusters = tuple(cluster.key for cluster in found.clusters)
         brief_digest = hashlib.sha256(brief.encode()).hexdigest()[:16]
         common = {**base, "brief_digest": brief_digest, "failing": found.failing, "clusters": clusters}
