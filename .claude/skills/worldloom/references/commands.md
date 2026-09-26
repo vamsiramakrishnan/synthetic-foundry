@@ -351,12 +351,13 @@ worldloom enterprise-evals serve <CORPUS_PATH>
 | `--allowed-host` | Trusted external Host header; repeat for multiple proxy names. |
 | `--check` | Validate the server configuration and exit without listening. |
 | `--host` |  |
-| `--max-calls` |  |
-| `--max-runs` |  |
+| `--max-calls` | Calls one run may make (default: policy `connectors.serving.max_calls_per_run`). |
+| `--max-runs` | Runs open at once (default: policy `connectors.serving.max_runs`). |
 | `--port` |  |
 | `--query-id` | Serve only these query IDs; repeat to select more. |
 | `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
 | `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
+| `--worker-id` | Prefix every run id with this worker's name (w3 mints w3-run-1), so ids from several server processes never collide. Each process keeps its own runs: route every call for a run id to the process that began it. |
 
 ### `worldloom enterprise-evals simulate`
 
@@ -391,6 +392,37 @@ worldloom enterprise-evals validate <PATH>
 
 Execute an agent against a compiled case set and grade plan, trajectory and outcomes.
 
+### `worldloom evalrun agreement`
+
+Measure how well the local grader agrees with Eval Studio's, answer by answer.
+
+```
+worldloom evalrun agreement <CORPUS> <RESULTS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the whole report as JSON. |
+| `--out`, `-o` | Directory to write agreement.json into. |
+| `--rater` | The local grader to measure: grounded (no model) or exec:<command> (a judge over the --exec seam). |
+| `--rater-timeout` | Seconds an exec: rater child may run per answer. |
+| `--shell` | Run the exec: rater through the shell (the opt-in for pipelines). |
+| `--studio-instruction` | The auto-rater instruction the Studio run was configured with; recorded, not used. |
+
+### `worldloom evalrun autopsy`
+
+Cluster a run's failing cases by finding and print a brief an improver can act on.
+
+```
+worldloom evalrun autopsy <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the autopsy as JSON instead of the brief. |
+| `--out`, `-o` | Write the autopsy as JSON here. |
+| `--top` | Clusters to report in full; the rest are counted. |
+
 ### `worldloom evalrun cases`
 
 Compile the corpus into three-axis cases and report what the set can grade.
@@ -416,6 +448,90 @@ worldloom evalrun compare <BASELINE> <RECENT>
 | Option | Purpose |
 | --- | --- |
 | `--json` |  |
+
+### `worldloom evalrun corners`
+
+Draw corner cases from the world's own events, keep the ones the reference agent solves.
+
+```
+worldloom evalrun corners <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit corners.json on stdout. |
+| `--limit` | Keep only the first N solvable cases. |
+| `--out`, `-o` | Case set directory to write (evalrun-cases.jsonl, records.jsonl, corners.json). |
+| `--rater` | The rater the proof grades answer contracts with: grounded or exec:<command>. Default: grounded wherever the shape allows it. |
+| `--rater-timeout` | Seconds an exec: rater child may run per answer. |
+| `--templates` | Corner templates to draw from (repeat, or comma-separate); default every template. |
+
+### `worldloom evalrun curriculum`
+
+Write a dataset plan of fresh cases aimed at a run's failures, and name saturated slices.
+
+```
+worldloom evalrun curriculum <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--band` | Target pass-rate band; a slice whose interval lies above it is saturated. |
+| `--history` | Earlier run directories pooled with RUN for escalation; repeatable. |
+| `--holdout-share` | Weight of the held-out `test` split. |
+| `--json` | Print the curriculum and escalations as JSON. |
+| `--max-share` | Cap on one stratum's share of the rows. |
+| `--min-per-cluster` | Floor on each targeted stratum's rows. |
+| `--out`, `-o` | Write the targeted dataset plan here. |
+| `--plan` | The base dataset plan (JSON) the run's cases came from. |
+| `--round` | Improvement round; seeds the new plan so rounds never repeat cases. |
+| `--top` | Autopsy clusters considered. |
+| `--total` | Rows in the new plan; defaults to the base plan's. |
+
+### `worldloom evalrun export`
+
+Export a graded run as training data: SFT transcripts, preference pairs or reward records.
+
+```
+worldloom evalrun export <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--against` | The second run directory for --format pairs, over the same case set. |
+| `--corpus` | The corpus or case set the run was over: personas, splits and the case-set digest come from it. |
+| `--format` | sft (chat demonstrations) \| pairs (preference pairs, needs --against) \| rewards (verifiable reward records). |
+| `--include-failed` | sft: keep cases that scored at least --min-score without passing. |
+| `--include-holdout` | Allow held-out splits (test, holdout, validation) and runs marked held out. A model trained on them has seen the exam, so promotion over them is void. |
+| `--margin` | pairs: the least overall-score lead of chosen over rejected (default: policy `evalrun.delta_band`). |
+| `--max-result-chars` | sft and pairs: characters of one tool result kept before a truncation marker (default: policy `evalrun.export.max_result_chars`). |
+| `--min-score` | sft: the least overall score a demonstration may have. |
+| `--out`, `-o` | JSONL file to write. |
+| `--split` | Keep only this dataset split (repeatable). Default: train, plus any case that carries no split. |
+
+### `worldloom evalrun frontier`
+
+Keep the cases the reference agent solves and the champion fails: the frontier.
+
+```
+worldloom evalrun frontier <CASE_SET>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
+| `--budget` | Champion case runs to spend. |
+| `--champion-exec` | The champion as an executable (the `evalrun run --exec` seam). |
+| `--champion-harness` | An installed coding harness as the champion: codex or claude. |
+| `--holdout` | Held-out cases: a case set directory, a cases JSONL file or a file of ids (repeat). |
+| `--holdout-id` | A held-out case id (repeat). |
+| `--holdout-seed` | A seed held out for judging (repeat); searching it is refused. |
+| `--json` | Emit frontier.json on stdout. |
+| `--max-turns` |  |
+| `--out`, `-o` | Case set directory for the frontier (frontier.json beside it). |
+| `--seed` | Seed(s) ordering the search (repeat); default 0. |
+| `--shell` | Run --champion-exec through the shell. |
+| `--timeout` | Seconds the champion child may run per turn. |
 
 ### `worldloom evalrun import-served`
 
@@ -444,6 +560,49 @@ worldloom evalrun import-studio <CORPUS> <RESULTS>
 | `--json` |  |
 | `--out`, `-o` | Run directory to write. |
 
+### `worldloom evalrun improve`
+
+Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
+
+```
+worldloom evalrun improve <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
+| `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
+| `--harness` | An installed coding harness as the agent under test: codex or claude. |
+| `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
+| `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
+| `--json` | Emit improve.json on stdout. |
+| `--limit` | Use only the first N cases of CORPUS. |
+| `--max-turns` |  |
+| `--no-ablate` | Send the candidate to the holdout whole, without taking out hunks that carry nothing. |
+| `--out`, `-o` | Directory for rounds/, runs/, packs/ and improve.json. |
+| `--principal` |  |
+| `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
+| `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--rater` | grounded or exec:<command>; pinned for the whole loop. |
+| `--rater-timeout` |  |
+| `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
+| `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--timeout` | Seconds a child (agent turn or proposal) may run. |
+| `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
+
+### `worldloom evalrun merge`
+
+Join the shard directories of one sharded run into one run, in case order.
+
+```
+worldloom evalrun merge <OUT> <SHARDS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the summary as JSON. |
+
 ### `worldloom evalrun plan`
 
 Grade the plan axis alone: the planner states each case's DAG and nothing runs.
@@ -455,6 +614,7 @@ worldloom evalrun plan <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent` | reference \| scripted:<plans.json> |
+| `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
 | `--exec` | The planner as an executable, one subprocess per case: reads a `worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints {"plan": {"nodes": [...]}} on stdout. Nothing is executed. |
 | `--harness` | An installed coding harness as the planner, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
@@ -490,16 +650,20 @@ worldloom evalrun run <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
+| `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
+| `--concurrency` | Cases in flight at once, each on its own fork (default: policy `evalrun.concurrency`, 1). The ledger is in case order whatever order they finish in. |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
-| `--max-turns` | Turns the --exec child may take per case (default: policy `evalrun.max_turns`, 64). |
+| `--max-turns` | Turns the --exec child may take per case (default: the agent pack's max_turns, else policy `evalrun.max_turns`, 64). |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
 | `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |
 | `--rater` | grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam). |
 | `--rater-timeout` | Seconds an exec: rater child may run per answer. |
+| `--resume` | Keep the ledger already in --out when its run.json names this agent, principal and case set (and shard); grade only the cases it lacks. |
+| `--shard` | Run only shard i of n (1-based, e.g. 2/4), a partition by a stable hash of case id; `evalrun merge` joins the shard directories. |
 | `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
 | `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
 | `--timeout` | Seconds the --exec child may run per turn before it is killed. |
@@ -515,6 +679,22 @@ worldloom evalrun summarize <RUN>
 | Option | Purpose |
 | --- | --- |
 | `--json` |  |
+
+### `worldloom evalrun value`
+
+Read a run by what its cases are worth: value-weighted pass rate, money passed and failed, costliest failures.
+
+```
+worldloom evalrun value <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--corpus` | The corpus or case set the run was over: cases and the records they touch come from it. |
+| `--json` | Print the value summary (and mix, with --mix) as JSON. |
+| `--mix` | Compare the run's cases with the company's mix over this dimension, counted from the records: activity, stream, lob, pcf_id or function. |
+| `--out`, `-o` | Also write the JSON here. |
+| `--top` | Costliest failing cases listed (default: policy `evalrun.value.top`). |
 
 ### `worldloom evals`
 
@@ -970,6 +1150,18 @@ worldloom pack check <SOURCE>
 | --- | --- |
 | `--json` | Emit findings as JSON. An agent authoring a pack should read data. |
 
+### `worldloom pack diff`
+
+Print the unified diff between two packs' trees (kinds with a tree codec, such as agent).
+
+```
+worldloom pack diff <REF_A> <REF_B>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+
 ### `worldloom pack export`
 
 Keep a derived world: a mosaic variant or a settled probe, as a pack.
@@ -1000,6 +1192,23 @@ worldloom pack facets <NAME>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the registry as data. |
+
+### `worldloom pack from-tree`
+
+Build an agent pack from a skill tree on disk, lint it, and install it; refused with every finding.
+
+```
+worldloom pack from-tree <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--base` | Where policy.json comes from when DIRECTORY has none. |
+| `--into` | Pack root to store it in (default: the user's). |
+| `--name` | The agent pack's name. |
+| `--replace` | Overwrite a pack of the same name in that root. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
+| `--title` |  |
 
 ### `worldloom pack install`
 
@@ -1181,6 +1390,19 @@ worldloom pack texts <ENGINE>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit both key → default-template tables as JSON, for an agent authoring overrides. |
+
+### `worldloom pack tree`
+
+Write a pack as its tree of files: for an agent pack, policy.json and its skills/ directory.
+
+```
+worldloom pack tree <REF>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Directory to write the tree into; must be empty or new. |
+| `--root` | A pack root searched before the user's and the shipped ones (repeatable). |
 
 ### `worldloom plan`
 

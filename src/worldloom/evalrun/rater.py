@@ -129,6 +129,7 @@ class GroundedRater:
     """
 
     name = "grounded"
+    kind = "grounded"
 
     def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
         contract = case.outcomes.answer
@@ -148,17 +149,29 @@ class GroundedRater:
         return round(hit, 4), None
 
 
-def model_rater(complete: Callable[[str], str], *, name: str = "model") -> Rater:
+def model_rater(complete: Callable[[str], str], *, model: str, name: str | None = None) -> Rater:
     """Wrap any ``prompt -> text`` completion as a rater using Eval Studio's prompt.
 
     The caller supplies the model call; this package never does. The rubric
     is the shape's, from ``gemini_enterprise.RUBRICS``, so the judge is told
     what *this* shape counts as correct rather than asked for similarity.
+    ``model`` names the judge model the completion calls (``gemini-2.5-pro``)
+    and is part of the grader's identity: two judge models are two graders,
+    and a loop pinned to one must refuse the other. ``name`` defaults to
+    ``model:<model>``.
     """
 
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("model_rater names no model: pass model=<the judge model the completion calls>")
+    judge_model = model.strip()
+
     class _ModelRater:
+        kind = "model"
+
         def __init__(self) -> None:
-            self.name = name
+            self.name = name or f"model:{judge_model}"
+            # Read by `grader.grader_identity`, which refuses a model rater without it.
+            self.model = judge_model
 
         def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
             contract = case.outcomes.answer
@@ -193,8 +206,14 @@ def exec_rater(command: str, *, timeout: float | None = None, shell: bool = Fals
     from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
 
     class _ExecRater:
+        kind = "exec"
+
         def __init__(self) -> None:
             self.name = name or f"exec:{command.split()[0] if command.split() else command}"
+            # Read by `grader.grader_identity`, which records the command with
+            # anything that looks like a credential redacted.
+            self.command = command
+            self.shell = shell
 
         def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
             contract = case.outcomes.answer

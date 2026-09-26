@@ -1,7 +1,7 @@
 """Packs: every layer of the product supplied by data, found by name, layered, uploaded or interviewed.
 
 A *pack* is one JSON envelope of a registered *kind* (industry, prompts,
-policy, company, connector, lob, doctype, presentation). Packs are found on
+policy, company, connector, lob, doctype, presentation, agent). Packs are found on
 one search path (a caller's roots, ``WORLDLOOM_PACK_PATH``, the user's
 ``~/.worldloom/packs``, the shipped ``_data/packs``), layer through
 ``extends`` onto their kind's default, resolve to one content-addressed body,

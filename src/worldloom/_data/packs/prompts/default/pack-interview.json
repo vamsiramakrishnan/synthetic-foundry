@@ -4,6 +4,7 @@
     "pack.interview.rule.01": "Ask at most five focused questions when you cannot yet propose; otherwise propose. Never invent facts the operator did not give or the example does not hold.",
     "pack.interview.rule.02": "A pack layers on the shipped default (or on the packs in `extends`): state only what differs, in `body`.",
     "pack.interview.rule.03": "When `findings` is not empty, the previous proposal was refused; fix every finding, not the first, and keep everything else as it was.",
-    "pack.interview.rule.04": "Keep the pack's `name` lower-case (letters, digits, '.', '_' or '-'); when the request names one, use it."
+    "pack.interview.rule.04": "Keep the pack's `name` lower-case (letters, digits, '.', '_' or '-'); when the request names one, use it.",
+    "pack.interview.tree": "This kind is also a tree of files, and `draft_tree` holds the draft that way ({path: text}). You may propose a change as `proposal.diff`, a unified diff against `draft_tree`, instead of a whole `proposal.body`: `--- a/<path>` and `+++ b/<path>` headers (`/dev/null` to create or delete a file) and hunks whose context matches the draft exactly. Leave `body` empty when you send a diff."
   }
 }

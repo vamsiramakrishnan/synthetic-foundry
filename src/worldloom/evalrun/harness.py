@@ -28,14 +28,41 @@ suits fixed trajectories (a regression set, a hand-authored baseline) rather
 than an agent that must find a record id before it can act on it; the
 document says so in its instructions rather than leaving the harness to
 discover it from a `not_found`.
+
+**An agent policy.** ``ExecAgent(..., policy=<agent pack>)`` runs the child
+under an ``agent`` pack (``evalrun.policy``). The turn document keeps its
+``worldloom.evalrun-turn/v2`` schema and every field above, and gains:
+
+- ``agent``: ``{ref, digest, system, planning, skills}``, the policy's
+  identity and its standing instruction, planning note and named procedures;
+- ``instructions``: the shipped ``evalrun.turn.rule.*`` overlaid by the
+  policy's ``turn_rules`` (the rule stating the reply shapes is locked);
+- ``tools[*].description`` and ``tools[*].hints`` on each tool the policy
+  advises.
+
+A policy with a skill tree (``files``) is materialised once into a
+content-addressed directory (``skills_cache``; by default
+``$WORLDLOOM_HOME/cache/agent-skills/<digest>``, or the directory a caller put
+in force with ``skills_cache_in``) and the ``agent`` block gains
+``skills_dir`` (that directory's ``skills/``) and ``skill_index``: each
+skill's ``name``, ``description`` and SKILL.md ``path``, so the child reads
+descriptions up front and a body only when it needs one.
+
+Without a policy the document is byte-identical to what it was before
+policies existed, and a policy without ``files`` adds nothing beyond the
+fields above. The agent's ``name`` carries the policy
+(``exec:python+agent:careful@<digest[:12]>``), and ``pack_record`` is what a
+run writes to ``run.json`` as ``agent_pack``.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .. import packkit
 from ..connector_emulator import ConnectorError
@@ -43,6 +70,9 @@ from ..connectors.serving import ConnectorEvaluationService, ServingError
 from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
 from .agents import AgentResponse, AgentTask, ProducedArtifact, ToolCall, ToolSurface
 from .contract import EvalCase
+
+if TYPE_CHECKING:
+    from ..packkit import ResolvedPack
 
 TURN_SCHEMA = "worldloom.evalrun-turn/v2"
 REQUESTS_SCHEMA = "worldloom.evalrun-requests/v1"
@@ -69,6 +99,30 @@ def default_max_turns() -> int:
     return int(packkit.policy("evalrun.max_turns"))
 
 
+#: Where ``ExecAgent`` materialises a policy's skill tree when it is given no
+#: ``skills_cache``. The improvement loop puts its own output directory here
+#: while it builds agents, so nothing it runs writes outside that directory.
+_SKILLS_CACHE: ContextVar[Path | None] = ContextVar("worldloom_skills_cache", default=None)
+
+
+@contextmanager
+def skills_cache_in(directory: Path) -> Iterator[None]:
+    """Agents built inside this block materialise skill trees under *directory*."""
+    token = _SKILLS_CACHE.set(directory)
+    try:
+        yield
+    finally:
+        _SKILLS_CACHE.reset(token)
+
+
+def default_skills_cache() -> Path:
+    """``$WORLDLOOM_HOME/cache/agent-skills`` (``~/.worldloom/cache/agent-skills``), unless a caller set one."""
+    held = _SKILLS_CACHE.get()
+    if held is not None:
+        return held
+    return packkit.user_root().parent / "cache" / "agent-skills"
+
+
 def _catalog(service: ConnectorEvaluationService, principal: str, run_id: str) -> list[dict[str, Any]]:
     return [dict(tool) for tool in service.tool_catalog(principal, run_id)]
 
@@ -77,7 +131,14 @@ class ExecAgent:
     """The child process as the agent, one subprocess per turn."""
 
     def __init__(self, command: str, *, timeout: float = DEFAULT_TIMEOUT, shell: bool = False,
-                 max_turns: int | None = None, name: str | None = None) -> None:
+                 max_turns: int | None = None, name: str | None = None,
+                 policy: ResolvedPack | None = None, skills_cache: Path | None = None) -> None:
+        from .policy import agent_name, materialise, pack_record, require, skill_index
+
+        if policy is not None:
+            policy = require(policy)
+        if max_turns is None and policy is not None:
+            max_turns = policy.body.max_turns
         if max_turns is None:
             max_turns = default_max_turns()
         if max_turns < 1:
@@ -86,16 +147,65 @@ class ExecAgent:
         self.timeout = timeout
         self.shell = shell
         self.max_turns = max_turns
-        self.name = name or f"exec:{command.split()[0] if command.split() else command}"
+        self.policy = policy
+        #: What a run records as ``agent_pack``; ``None`` without a policy.
+        self.pack_record = pack_record(policy) if policy is not None else None
+        self.name = name or agent_name(f"exec:{command.split()[0] if command.split() else command}", policy)
+        #: The materialised skill tree and its index; ``None`` for a policy without ``files``.
+        self.skills_dir: Path | None = None
+        self.skill_index: list[dict[str, str]] = []
+        if policy is not None and policy.body.files:
+            # Materialised when the agent is built, not per turn or per case:
+            # the tree is the policy's, and a case's threads only read it.
+            cache = skills_cache if skills_cache is not None else default_skills_cache()
+            self.skills_dir = materialise(policy.body.files, cache).resolve()
+            self.skill_index = skill_index(policy.body.files, self.skills_dir)
+
+    def fingerprint(self) -> dict[str, Any]:
+        """The whole command (credentials redacted), how it runs, and the policy it runs under."""
+        from .grader import redact_command
+
+        return {"kind": "exec", "command": redact_command(self.command), "shell": self.shell,
+                "timeout": self.timeout, "max_turns": self.max_turns,
+                "agent_pack": self.policy.digest if self.policy is not None else None}
+
+    def _unadvisable(self, tools: ToolSurface, catalog: list[dict[str, Any]]) -> tuple[str, ...]:
+        """Tools the policy advises that nothing serves: a finding about the policy, not a failure of the run.
+
+        Checked against every tool the service serves, not only this case's
+        catalog (which holds just the query's connectors), so advice for a
+        connector this case does not use is not reported as unknown.
+        """
+        assert self.policy is not None
+        served = getattr(getattr(tools, "_service", None), "tools", None)
+        known = set(served) if isinstance(served, Mapping) else {str(tool.get("name")) for tool in catalog}
+        return tuple(sorted(key for key in self.policy.body.tools if key not in known))
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         transcript: list[dict[str, Any]] = []
         catalog = [dict(tool) for tool in tools.tools()]
+        extra: dict[str, Any] = {}
+        findings: tuple[str, ...] = ()
+        rules: list[str] | None = None
+        if self.policy is not None:
+            from .policy import advise, agent_block, turn_rules
+
+            rules = turn_rules(self.policy.body)
+            extra = {"agent": agent_block(self.policy)}
+            if self.skills_dir is not None:
+                extra["agent"] = {**extra["agent"], "skills_dir": str(self.skills_dir),
+                                  "skill_index": [dict(entry) for entry in self.skill_index]}
+            unknown = self._unadvisable(tools, catalog)
+            catalog = advise(catalog, self.policy.body)
+            if unknown:
+                # Once per case, not per turn: the note is about the policy.
+                findings = (f"agent policy {self.policy.ref} advises tools no connector serves: {', '.join(unknown)}",)
         for turn in range(1, self.max_turns + 1):
             payload = {
                 "schema": TURN_SCHEMA, "case_id": task.case_id, "query": task.query, "persona": task.persona,
                 "principal": task.principal, "turn": turn, "turns_left": self.max_turns - turn,
-                "tools": catalog, "transcript": transcript, "instructions": turn_instructions(),
+                "tools": catalog, "transcript": transcript,
+                "instructions": turn_instructions() if rules is None else list(rules), **extra,
             }
             try:
                 reply = run_exec(self.command, payload, timeout=self.timeout, shell=self.shell)
@@ -134,9 +244,9 @@ class ExecAgent:
                 transcript.append({"ask": asked["question"], "about": [str(value) for value in about], "reply": said})
                 continue
             if "answer" in document:
-                return _response(document, turn)
+                return _response(document, turn, findings)
             raise RuntimeError(f"exec_unparseable: turn {turn} reply has neither `call`, `ask` nor `answer`")
-        return AgentResponse(answer="", notes=(f"turn budget of {self.max_turns} exhausted without an answer",))
+        return AgentResponse(answer="", notes=(f"turn budget of {self.max_turns} exhausted without an answer", *findings))
 
 
 def _artifacts(raw: Any) -> tuple[ProducedArtifact, ...]:
@@ -154,14 +264,14 @@ def _artifacts(raw: Any) -> tuple[ProducedArtifact, ...]:
     return tuple(out)
 
 
-def _response(document: Mapping[str, Any], turns: int) -> AgentResponse:
+def _response(document: Mapping[str, Any], turns: int, findings: tuple[str, ...] = ()) -> AgentResponse:
     planned = document.get("planned_dag")
     return AgentResponse(
         answer=str(document.get("answer") or ""), artifacts=_artifacts(document.get("artifacts")),
         planned_dag=dict(planned) if isinstance(planned, Mapping) else None,
         ttft=document.get("ttft") if isinstance(document.get("ttft"), (int, float)) else None,
         ttfa=document.get("ttfa") if isinstance(document.get("ttfa"), (int, float)) else None,
-        notes=(f"answered on turn {turns}",),
+        notes=(f"answered on turn {turns}", *findings),
     )
 
 
@@ -224,6 +334,11 @@ class ResponsesAgent:
         self.name = name
         self._scripts = dict(scripts)
 
+    def fingerprint(self) -> dict[str, Any]:
+        from ..providers import digest
+
+        return {"kind": "responses", "name": self.name, "scripts": digest(self._scripts)}
+
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         from .agents import ScriptedAgent
 
@@ -240,8 +355,10 @@ __all__ = [
     "ExecAgent",
     "ResponsesAgent",
     "default_max_turns",
+    "default_skills_cache",
     "load_responses",
     "requests_document",
     "response_instructions",
+    "skills_cache_in",
     "turn_instructions",
 ]

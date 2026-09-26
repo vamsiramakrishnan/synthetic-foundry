@@ -7,6 +7,7 @@ receives a bounded task and returns JSON through the ordinary acceptance seam.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -71,9 +72,13 @@ _REPLY_SCHEMAS: dict[str, dict[str, Any]] = {
             "request_id": {"type": "string"},
             "message": {"type": "string"},
             "questions": {**_STRINGS, "maxItems": 5},
+            # `body` or, for a kind with a tree codec, `diff` against the
+            # request's `draft_tree`; `packkit.accept` refuses a proposal
+            # with neither, or both, as a finding.
             "proposal": {"type": "object", "properties": {
                 "name": {"type": "string"}, "title": {"type": "string"}, "description": {"type": "string"},
-                "extends": _STRINGS, "body": _FREE}, "required": ["name", "body"], "additionalProperties": False},
+                "extends": _STRINGS, "body": _FREE, "diff": {"type": "string"}},
+                "required": ["name"], "additionalProperties": False},
         },
         "required": ["request_id", "message"], "additionalProperties": False,
     },
@@ -132,6 +137,117 @@ def role_for(payload: dict[str, Any]) -> str:
     return packkit.text("studio.harness.authoring")
 
 
+#: The prompt texts that open and close a policy's own text in a prompt.
+_MARKER_KEYS = ("studio.harness.agent_policy.open", "studio.harness.agent_policy.close",
+                "studio.harness.agent_skills.open", "studio.harness.agent_skills.close")
+#: The tag of the nonce-bearing lines around a policy's text.
+MARKER_TAG = "worldloom-policy"
+
+
+def marker_phrases() -> tuple[str, ...]:
+    """The fixed text that delimits a policy in a prompt, which the policy's own text may not contain.
+
+    The delimiters around a policy are prose from the prompts pack, which
+    anyone can read, so a policy could write "End of the standing
+    instruction." and go on as if it were the harness. The real boundary is
+    the nonce-bearing line (`fence`), which a policy cannot know in advance;
+    the lint refuses the fixed phrases and the tag so a forged boundary
+    never reaches a prompt at all.
+    """
+    from .. import packkit
+
+    phrases = [packkit.text(key, ref="\x00", directory="\x00").split("\x00")[0].strip() for key in _MARKER_KEYS]
+    return tuple(dict.fromkeys(phrase for phrase in (*phrases, MARKER_TAG) if phrase))
+
+
+def fence_nonce(payload: Mapping[str, Any]) -> str:
+    """The nonce on one prompt's delimiters: a digest of the policy block it fences.
+
+    Deterministic, so the same case under the same policy is the same prompt
+    and a champion and a candidate are measured without prompt noise. It
+    cannot be forged either: the lint refuses the marker tag in any policy
+    text, and a policy that tried to predict its own digest would change it.
+    """
+    block = payload.get("agent")
+    canonical = json.dumps(block if isinstance(block, Mapping) else {}, sort_keys=True, default=str)
+    return hashlib.sha256(f"fence\0{canonical}".encode()).hexdigest()[:16]
+
+
+def _fenced(opening: str, text: str, closing: str, nonce: str) -> str:
+    return f"{opening}[{MARKER_TAG} {nonce}]\n{text}[/{MARKER_TAG} {nonce}]\n{closing}"
+
+
+def standing_instruction(payload: Mapping[str, Any], nonce: str | None = None) -> str:
+    """The agent policy's `system` text, delimited, for the front of the prompt; empty without one.
+
+    An evalrun document run under an `agent` pack carries the policy in its
+    `agent` block. A harness reading only the JSON would see the standing
+    instruction as one field among many, so it goes ahead of the role, where
+    a harness takes its instructions, between markers naming the policy and
+    lines carrying *nonce* (a digest of the policy block unless given), which the
+    policy's text cannot forge.
+    Only the evalrun seams carry it: a pack interview or a narration request
+    with an `agent` key is not running an agent under test.
+    """
+    from .. import packkit
+
+    block = payload.get("agent")
+    if payload.get("schema") not in {"worldloom.evalrun-turn/v2", "worldloom.evalrun-plan/v1"}:
+        return ""
+    if not isinstance(block, Mapping) or not isinstance(block.get("system"), str) or not block["system"].strip():
+        return ""
+    return _fenced(packkit.text("studio.harness.agent_policy.open", ref=str(block.get("ref") or "agent")),
+                   block["system"].strip() + "\n", packkit.text("studio.harness.agent_policy.close"),
+                   nonce or fence_nonce(payload))
+
+
+def skills_preamble(payload: Mapping[str, Any], name: str, nonce: str | None = None) -> str:
+    """The agent policy's skills, for the front of an evalrun turn's prompt; empty without them.
+
+    An `agent` pack with a skill tree reaches the turn document as
+    `agent.skills_dir` (the tree, materialised) and `agent.skill_index`
+    (each skill's name, description and SKILL.md path). The index goes ahead
+    of the role so the child knows what it can open. How the bodies arrive
+    depends on what the harness may do on this seam:
+
+    - `codex` runs in its read-only sandbox, which can read files, so it gets
+      the index and the directory and opens a SKILL.md only when its
+      description fits the step (progressive disclosure);
+    - `claude` runs the evalrun seams with no tools at all (`--tools ""`), so
+      it could neither invoke a skill natively nor read one from disk. Giving
+      it file or skill tools would also let it read the cases' expected
+      answers, so instead each SKILL.md is inlined after the index. Its
+      references and scripts stay on disk, named by path.
+    """
+    from .. import packkit
+
+    block = payload.get("agent")
+    if payload.get("schema") != "worldloom.evalrun-turn/v2" or not isinstance(block, Mapping):
+        return ""
+    index = block.get("skill_index")
+    directory = block.get("skills_dir")
+    if not isinstance(index, list) or not index or not isinstance(directory, str):
+        return ""
+    root = Path(directory).resolve()
+    lines = [f"- {entry.get('name')}: {entry.get('description')} ({entry.get('path')})\n" for entry in index
+              if isinstance(entry, Mapping)]
+    if name == "claude":
+        lines.append(packkit.text("studio.harness.agent_skills.inline"))
+        cap = int(packkit.policy("evalrun.agent_pack.max_file_bytes"))
+        for entry in index:
+            path = Path(str(entry.get("path") if isinstance(entry, Mapping) else "")).resolve()
+            if path.parent.parent != root or path.name != "SKILL.md" or not path.is_file():
+                raise ValueError(f"the skill index names {path}, which is not a SKILL.md under {root}")
+            if path.stat().st_size > cap:
+                raise ValueError(f"{path} exceeds the policy `evalrun.agent_pack.max_file_bytes` ({cap})")
+            lines.append(f"\n## {path.parent.name}\n\n{path.read_text(encoding='utf-8').strip()}\n")
+    else:
+        lines.append(packkit.text("studio.harness.agent_skills.read"))
+    return _fenced(packkit.text("studio.harness.agent_skills.open", ref=str(block.get("ref") or "agent"),
+                                directory=directory),
+                   "".join(lines), packkit.text("studio.harness.agent_skills.close"), nonce or fence_nonce(payload))
+
+
 def adapter_command(name: str, *, timeout: float = 590, allow_native_writes: bool = False) -> str:
     """This module as an `--exec` child, ready to pass wherever one is taken.
 
@@ -154,7 +270,7 @@ def adapter_command(name: str, *, timeout: float = 590, allow_native_writes: boo
 
 
 def command_for(name: str, output: Path, *, native_output: Path | None = None, tools: bool = True,
-                schema: str | None = None) -> list[str]:
+                schema: str | None = None, workdir: Path | None = None) -> list[str]:
     """The child process for one turn.
 
     `tools=False` is the evalrun seams: the agent under test, the planner and
@@ -164,10 +280,15 @@ def command_for(name: str, output: Path, *, native_output: Path | None = None, t
     child answered in prose that plan mode restricted it to read-only actions
     and required a tool it did not have. The authoring and narration seams
     may read the project, so they keep plan mode.
+
+    *workdir* is the empty directory an isolated seam runs from; codex is
+    pointed at it with the same `--cd` a native write uses for its output
+    directory, since codex takes its workspace root from that flag.
     """
     if name == "codex":
+        root = native_output or workdir
         return ["codex", "exec", "--sandbox", "workspace-write" if native_output else "read-only",
-                *(["--cd", str(native_output)] if native_output else []), "--skip-git-repo-check",
+                *(["--cd", str(root)] if root else []), "--skip-git-repo-check",
                 "--output-last-message", str(output), "-"]
     if native_output is not None:
         raise ValueError("native output writes require codex or a custom JSON adapter")
@@ -221,17 +342,29 @@ def invoke(name: str, payload: dict[str, Any], *, timeout: float = 590,
     structured = None if command_tools else reply_schema(payload)
     closing = packkit.text(_CLOSINGS.get(str(payload.get("schema")), "studio.harness.closing.structured")
                            if structured else "studio.harness.closing.object")
-    prompt = role + closing + "\n\n" + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False)
+    nonce = fence_nonce(payload)
+    prompt = (standing_instruction(payload, nonce) + skills_preamble(payload, name, nonce) + role + closing + "\n\n"
+              + json.dumps(payload, sort_keys=True, ensure_ascii=False, allow_nan=False))
     with TemporaryDirectory(prefix="worldloom-harness-") as temp:
         output = Path(temp) / "response.json"
+        # Every seam with a role of its own (the evalrun turn, plan and
+        # rating, and the pack interview) runs from a fresh empty directory,
+        # for either harness. A child started in the repository loads its
+        # project instructions and skills (it answered a turn "in the
+        # Worldloom project"), and one started where the operator works can
+        # read what is there: the held-out cases, the loop's runs. The
+        # materialised skills stay readable by their absolute path. This is
+        # a working directory, not a jail: a child with shell access can
+        # still read an absolute path it is told or guesses; the improve
+        # loop's output directory is simply never the child's directory.
+        workdir = Path(temp) / "work" if not command_tools else None
+        if workdir is not None:
+            workdir.mkdir()
         asked = prompt
         for attempt in range(RETRIES + 1):
             try:
-                command = command_for(name, output, native_output=native_output, tools=command_tools, schema=structured)
-                # The evalrun seams run from an empty directory: a child started
-                # in the repository loads its project instructions and skills
-                # and answered a turn "in the Worldloom project".
-                workdir = temp if (name == "claude" and not command_tools) else None
+                command = command_for(name, output, native_output=native_output, tools=command_tools,
+                                      schema=structured, workdir=workdir)
                 result = subprocess.run(command, input=asked, text=True, cwd=workdir, env=child_environment(),
                                         capture_output=True, timeout=timeout, shell=False)
             except subprocess.TimeoutExpired as error:

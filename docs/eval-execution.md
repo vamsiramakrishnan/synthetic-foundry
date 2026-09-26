@@ -12,6 +12,7 @@ worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
 worldloom evalrun compare ./runs/reference ./runs/mine
 worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py"   # querying alone
 worldloom evalrun import-studio ./cases eval_results.csv -o ./runs/studio
+worldloom evalrun agreement ./cases eval_results.csv -o ./runs/agreement   # does the local grader agree with Studio's?
 worldloom evalrun summarize ./runs/mine --json
 ```
 
@@ -222,6 +223,13 @@ as they grade any other row.
   two cases ask the same words. The summary reports plan and trajectory as
   unobserved because Eval Studio's parser keeps
   `groundedContent.content.text` and drops everything else.
+- **A check on the local grader.** `evalrun agreement` rates each Studio
+  row's own answer again with the local rater and reports how far the two
+  graders agree (kappa, mean absolute error, correlations, per shape). The
+  grader is named by a digest (`evalrun.grader.grader_identity`), and
+  `evalrun compare` calls two runs graded under different digests
+  `incomparable` rather than judging them. See [Measuring the grader against
+  Eval Studio](gemini-enterprise.md#measuring-the-grader-against-eval-studio).
 
 What it could not contribute is the rest: it observes no tool call, caps an
 upload at a hundred rows by truncation, computes no mean, and applies one
@@ -342,6 +350,92 @@ Named and not closed here:
   operational program, and a hundred thousand queries over sixty-eight
   records is a hundred thousand readings of the same evidence. The
   [100k plan](plans/evalset-100k.md) owns that.
+
+## Running at scale
+
+An improvement loop wants many attempts per round, and an agent that waits on
+a model spends most of each case waiting. Four things let a run use the time.
+None of them changes what a run writes: a concurrent, resumed or sharded run
+of a deterministic agent leaves the same bytes as one process running the
+whole set in order.
+
+```bash
+worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py" --concurrency 8
+worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py" --concurrency 8 --resume
+worldloom evalrun run ./cases -o ./runs/shard-1 --exec "python3 my_agent.py" --shard 1/4
+worldloom evalrun merge ./runs/mine ./runs/shard-1 ./runs/shard-2 ./runs/shard-3 ./runs/shard-4
+```
+
+**Concurrency.** `--concurrency N` runs N cases at once on a thread pool, each
+still one run on its own fork of the connector state. Its default is the
+policy `evalrun.concurrency` (1), so a pack can raise it for every run in a
+project. Results are appended to `results.jsonl` as they land, in completion
+order, and the finished ledger is rewritten in case order, so the concurrency
+never shows in the output. From Python it is `run_cases(...,
+concurrency=N)`. Build the service with `service_for(cases, records,
+concurrency=N)`, which raises the run limits (`connectors.serving.max_runs`,
+`max_runs_per_principal`) to admit N runs under one principal; a service you
+build yourself keeps its limits, and a concurrency they cannot admit is
+refused (`ConcurrencyRefused`, a `ServingError`) before any case starts rather than turning into error rows whose
+number depends on thread timing. Workers run in a copy of the caller's
+context, so the packs in force are the same in every thread. The agent must
+tolerate being called from several threads at once: the shipped agents do,
+and an `--exec` agent is one subprocess per turn, so it does by construction.
+
+Inside the service, begin and end (the run registry, the ordinal, the lazily
+built connector bases) take the service lock, and every call, trace, snapshot
+and grade takes the lock of its own run. Calls on different runs proceed in
+parallel; the calls of one run stay strictly ordered, which is what its
+trace records.
+
+**Durability and resume.** Each appended line is flushed and synced before
+the next case starts, and `run.json` is written at the start, marked
+`partial`, so a killed run leaves an identified ledger. A process killed in
+the middle of an append leaves a last line with no newline and only part of
+its JSON; reading the ledger drops that line with a note (it is the case that
+did not finish) and refuses any other line that does not parse, because that
+is corruption rather than a crash. `--resume` keeps the ledger in `--out` when
+its `run.json` names the same agent, principal, case set, agent pack,
+grader, agent identity and split (and the same shard), grades only the cases
+it lacks, and appends them; a ledger for a different run is refused with each
+differing field named. The agent identity is the agent's fingerprint (for an
+`--exec` or `--harness` agent, its whole command), so `--harness codex` and
+`--harness claude`, which share a name, never resume or merge into one run.
+Without `--resume` the directory is started over, as it always was.
+
+Until the last case lands, the ledger is not the run, and nothing reads it
+as one: `summarize`, `compare`, `autopsy`, `curriculum`, `export` and `value`
+refuse a directory whose `run.json` is still `partial` as `run_partial`,
+naming how many of the planned cases finished, and so do `read_run`, the MCP
+tools and `EvalSession.report` (a `PartialRun`, a `ValueError`). Finish it
+with `--resume`; `read_run(directory, allow_partial=True)` reads the finished
+cases when a caller wants exactly those. The finished ledger is written file
+by file to a synced sibling and renamed into place, `run.json` last, so a kill
+while it is written leaves either the previous bytes or the new ones, and a
+ledger still marked `partial` until the header is replaced. A `run.json` torn
+by an older writer is refused as torn rather than as a different run.
+Studio's evaluation job resumes the same way, at case granularity, and runs
+the cases of each batch at the policy's concurrency.
+
+**Shards.** `--shard i/n` (1-based) runs the cases whose id hashes to shard
+i of n. The partition is by a stable hash of the case id, never by position,
+so every machine computes the same one whatever order it listed the cases
+in. The shard directory is an ordinary run over its own cases plus a
+`shard.json` naming the index, the count, the whole set's digest and its case
+order. `evalrun merge OUT SHARD_DIR...` joins them into one run in case
+order, byte-identical to the single-process run, and refuses shards that
+differ in agent, principal, agent pack, grader, agent identity, split, case set or count, a shard
+given twice, a case two shards graded, an unfinished shard (finish it with
+`--resume`), and a missing one. Shards combine with `--concurrency` and
+`--resume`.
+
+**Served MCP.** `worldloom enterprise-evals serve` keeps its runs in the
+memory of the process that began them, so one server is one worker. To serve
+more, start several processes, give each its own `--worker-id` (worker `w3`
+mints run ids `w3-run-1`, `w3-run-2`, ...), and route every call for a run id
+to the process whose prefix it carries. Run state is never shared between
+processes; a call that reaches the wrong one is refused as an unknown run.
+Its `--max-runs` and `--max-calls` default to the serving policy.
 
 ## Python
 

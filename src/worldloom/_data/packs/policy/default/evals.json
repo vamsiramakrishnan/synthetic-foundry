@@ -1,8 +1,32 @@
 {
   "values": {
+    "evalrun.agent_pack.max_chars": 24000,
+    "evalrun.agent_pack.max_file_bytes": 32768,
+    "evalrun.agent_pack.max_tree_bytes": 262144,
     "evalrun.max_turns": 64,
+    "evalrun.concurrency": 1,
     "evalrun.delta_band": 0.1,
     "evalrun.answer_pass_score": 0.8,
-    "evals.calibration.reader_share": 0.1
+    "evalrun.agreement.min_kappa": 0.6,
+    "evalrun.agreement.max_mae": 0.1,
+    "evalrun.agreement.min_cases": 30,
+    "evalrun.export.max_result_chars": 4000,
+    "evals.calibration.reader_share": 0.1,
+    "evalrun.improve.rounds": 3,
+    "evalrun.improve.holdout_share": 0.25,
+    "evalrun.improve.min_holdout_delta": 0.0,
+    "evalrun.improve.authoring_rounds": 4,
+    "evalrun.value.money_fields": ["amount", "total_amount", "total", "net_amount", "revenue", "due", "cost"],
+    "evalrun.value.quantity_fields": ["quantity", "qty", "units"],
+    "evalrun.value.unit_price_fields": ["unit_price", "unit_cost", "price"],
+    "evalrun.value.error_cost": {"read": 1.0, "update": 2.0, "create": 3.0, "delete": 5.0},
+    "evalrun.value.designed_failure_factor": 1.5,
+    "evalrun.value.max_factor": 100.0,
+    "evalrun.value.top": 10,
+    "evalrun.curriculum.representative_share": 0.5,
+    "evalrun.curriculum.max_mix_tvd": 0.3,
+    "evalrun.improve.ablate": true,
+    "evalrun.improve.ablation_max_hunks": 8,
+    "evalrun.improve.ablation_tolerance": 0.05
   }
 }

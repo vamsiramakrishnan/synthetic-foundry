@@ -263,10 +263,17 @@ def evalrun_cases(cases: str, limit: int | None = None) -> dict[str, Any]:
     return _evalrun_session(cases, limit).coverage().model_dump(mode="json")
 
 
-def evalrun_run(cases: str, out: str, agent: str = "reference", limit: int | None = None) -> dict[str, Any]:
+def evalrun_run(cases: str, out: str, agent: str = "reference", limit: int | None = None,
+                agent_pack: str | None = None) -> dict[str, Any]:
     """Run a built-in agent over the case set and write the run directory."""
     from .evalrun import ReferenceAgent, ResponsesAgent, ScriptedAgent, load_responses
 
+    if agent_pack is not None:
+        # Every agent this tool can run ignores a policy; a run recording one
+        # it never read would claim a measurement it did not make.
+        raise ValueError(f"agent_pack {agent_pack!r} applies to an --exec or --harness agent, which runs through "
+                         "`worldloom evalrun run --exec ... --agent-pack`; the reference, lazy and scripted agents "
+                         "ignore a policy")
     session = _evalrun_session(cases, limit)
     if agent == "reference":
         under_test: Any = ReferenceAgent(session.cases)
@@ -582,6 +589,9 @@ TOOLS: tuple[dict[str, Any], ...] = (
                 "out": {"type": "string", "description": "Run directory to write."},
                 "agent": {"type": "string", "description": "reference | lazy | scripted:<responses.json>. Default reference."},
                 "limit": {"type": "integer", "description": "Only the first N cases."},
+                "agent_pack": {"type": "string", "description": (
+                    "An `agent` pack (agent:<name>[@<digest>]). Refused here: only an --exec or --harness agent "
+                    "reads a policy, through `worldloom evalrun run --agent-pack`.")},
             },
             "required": ["cases", "out"],
         },

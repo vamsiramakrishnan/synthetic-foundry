@@ -45,14 +45,22 @@ or unexecutable compiled row. The default ceiling is 100 tools including the
 six evaluation tools. Select a smaller workload when its connector estate
 exceeds that ceiling.
 
-Defaults permit 32 live runs, four per principal, 512 attempted connector calls
+Defaults permit 32 live runs, four per principal, 4,096 attempted connector calls
 per run, 64 KiB request bodies, 1 MiB connector responses and 100,000 initial
-records. Trace pages also obey a byte budget: one bounded result plus its
-bounded request and 16 KiB of framing room. `--max-runs` and `--max-calls` configure the common limits;
+records; each is the policy `connectors.serving.<limit>`. Trace pages also obey a byte budget: one bounded result plus its
+bounded request and 16 KiB of framing room. `--max-runs` and `--max-calls` override the common limits;
 `ServingLimits` configures all of them. Oversized connector responses roll back
 that call, including writes. The trace records the failed attempt. The SDK's
-synchronous tools serialize changes under a lock; this is an evaluation
-service, not a high-throughput connector proxy.
+synchronous tools serialize the calls of one run under that run's lock, and
+calls on different runs proceed in parallel; this is an evaluation service,
+not a high-throughput connector proxy.
+
+Runs live in the memory of the process that began them, so one server is one
+worker. To serve more, start several processes, give each its own
+`--worker-id` (worker `w3` mints run ids `w3-run-1`, `w3-run-2`, ...), and put
+them behind a proxy with sticky routing by run id. A call that reaches a
+process that did not begin its run is refused as an unknown run; run state is
+never shared between processes.
 
 ## Authentication and TLS
 

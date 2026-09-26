@@ -91,6 +91,88 @@ def install_commands(pack_app: typer.Typer) -> None:
             return
         _emit({"installed": resolved.ref, "digest": resolved.digest, "location": str(location), "chain": list(resolved.chain)})
 
+    @pack_app.command("tree")
+    def tree_command(
+        ref: Annotated[str, typer.Argument(help="A pack with a tree codec: agent:NAME[@digest] or a pack file.")],
+        out: Annotated[Path, typer.Option("--out", "-o", help="Directory to write the tree into; must be empty or new.")],
+        root: Roots = None,
+    ) -> None:
+        """Write a pack as its tree of files: for an agent pack, policy.json and its skills/ directory."""
+        from . import packkit
+        from .evalrun.policy import write_tree
+
+        try:
+            resolved = packkit.resolve(ref, roots=root or ())
+            codec = packkit.kind(resolved.kind)
+            if codec.to_tree is None:
+                raise ValueError(f"a {resolved.kind} pack has no tree form; only kinds with a tree codec do")
+            files = codec.to_tree(resolved.data)
+            if out.exists() and (not out.is_dir() or any(out.iterdir())):
+                raise ValueError(f"{out} exists and is not an empty directory; choose a new one")
+            out.mkdir(parents=True, exist_ok=True)
+            write_tree(files, out)
+        except (KeyError, ValueError, OSError) as error:
+            _refuse(str(error).strip("'\""))
+            return
+        _emit({"ref": resolved.ref, "digest": resolved.digest, "out": str(out), "files": sorted(files)})
+
+    @pack_app.command("from-tree")
+    def from_tree_command(
+        directory: Annotated[Path, typer.Argument(help="A tree (policy.json and skills/), or a skills directory of <name>/SKILL.md.")],
+        name: Annotated[str, typer.Option("--name", help="The agent pack's name.")],
+        into: Annotated[Path | None, typer.Option("--into", help="Pack root to store it in (default: the user's).")] = None,
+        base: Annotated[str, typer.Option("--base", help="Where policy.json comes from when DIRECTORY has none.")] = "agent:baseline",
+        title: Annotated[str, typer.Option("--title")] = "",
+        replace: Annotated[bool, typer.Option("--replace", help="Overwrite a pack of the same name in that root.")] = False,
+        root: Roots = None,
+    ) -> None:
+        """Build an agent pack from a skill tree on disk, lint it, and install it; refused with every finding."""
+        from . import packkit
+        from .evalrun.policy import POLICY_FILE, SKILLS_ROOT, from_tree, read_tree, tree
+
+        try:
+            if not directory.is_dir():
+                raise ValueError(f"{directory} is not a directory")
+            held = read_tree(directory)
+            if POLICY_FILE not in held and not any(path.startswith(f"{SKILLS_ROOT}/") for path in held):
+                # A bare skills directory (`.claude/skills`): each entry is a skill.
+                held = {f"{SKILLS_ROOT}/{path}": text for path, text in held.items()}
+            if POLICY_FILE not in held:
+                held[POLICY_FILE] = tree(packkit.resolve(base, kind_name="agent", roots=root or ()).data)[POLICY_FILE]
+            envelope = packkit.PackEnvelope(kind="agent", name=name, title=title, body=from_tree(held))
+            location, resolved = packkit.install(envelope, root=into, roots=root or (), replace=replace)
+        except (KeyError, ValueError, OSError) as error:
+            text = str(error).strip("'\"")
+            findings = [part.strip() for part in text.split(" rejected: ", 1)[-1].split("; ")] if " rejected: " in text else []
+            _refuse(text, findings)
+            return
+        _emit({"installed": resolved.ref, "digest": resolved.digest, "location": str(location),
+               "files": sorted(resolved.body.files)})
+
+    @pack_app.command("diff")
+    def diff_command(
+        ref_a: Annotated[str, typer.Argument(help="The pack before: kind:NAME[@digest] or a pack file.")],
+        ref_b: Annotated[str, typer.Argument(help="The pack after, of the same kind.")],
+        root: Roots = None,
+    ) -> None:
+        """Print the unified diff between two packs' trees (kinds with a tree codec, such as agent)."""
+        from . import packkit
+        from .packkit import diffs
+
+        try:
+            before = packkit.resolve(ref_a, roots=root or ())
+            after = packkit.resolve(ref_b, roots=root or ())
+            if before.kind != after.kind:
+                raise ValueError(f"{before.ref} is a {before.kind} pack and {after.ref} a {after.kind} pack; diff two of one kind")
+            codec = packkit.kind(before.kind)
+            if codec.to_tree is None:
+                raise ValueError(f"a {before.kind} pack has no tree form; only kinds with a tree codec diff")
+            text = diffs.render(codec.to_tree(before.data), codec.to_tree(after.data))
+        except (KeyError, ValueError) as error:
+            _refuse(str(error).strip("'\""))
+            return
+        typer.echo(text, nl=False)
+
     interview_app = typer.Typer(no_args_is_help=True, help="Author a pack with your coding harness through files.")
     pack_app.add_typer(interview_app, name="interview")
 

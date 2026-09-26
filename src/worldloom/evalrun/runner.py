@@ -18,15 +18,18 @@ diff sees exactly what the agent did and nothing the fixture did to itself.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 from pydantic import ConfigDict, Field
 
-from ..connectors.serving import ConnectorEvaluationService, ServingError
+from .. import packkit
+from ..connectors.serving import ConnectorEvaluationService, ServingError, ServingLimits
 from ..ids import content_key
 from ..models import Model
-from .agents import AgentResponse, AgentTask, AgentUnderTest, ToolSurface
+from .agents import AgentResponse, AgentTask, AgentUnderTest, ToolSurface, fingerprint
 from .contract import EvalCase
+from .grader import grader_identity
 from .grading import CaseScore, grade_outcomes, grade_plan, grade_trajectory, score_case
 from .safety import OperationSafety, classify_definition
 
@@ -81,6 +84,22 @@ class RunReport(Model):
     #: when this matches, whatever else differs.
     case_set: str
     results: tuple[CaseResult, ...]
+    #: The ``agent`` pack the agent ran under (``ref``, ``digest``, ``chain``),
+    #: when one was in force: two runs of one harness under different
+    #: policies are different agents, and this says which.
+    agent_pack: dict[str, Any] | None = None
+    #: What graded the run (rater identity and the grader's digest), so a
+    #: comparison can refuse two runs that were not measured the same way.
+    grader: dict[str, Any] | None = None
+    #: What the agent under test was, beyond its name (``agents.fingerprint``):
+    #: the full command, turn budget and policy of an exec agent, the content
+    #: of a script. Resume, merge and the improve loop's cache compare it, so
+    #: two agents that share a name are never mixed into one measurement.
+    agent_identity: dict[str, Any] | None = None
+    #: The split every case of this run was drawn from, when a caller ran one
+    #: split on purpose (the improve loop marks its held-out runs ``holdout``),
+    #: so export can refuse a sealed run even after its cases lose their split.
+    split: str | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -92,10 +111,27 @@ def case_set_digest(cases: Iterable[EvalCase]) -> str:
                                             for case in cases))
 
 
-def service_for(cases: Iterable[EvalCase], records: Iterable[Mapping[str, Any]], **options: Any) -> ConnectorEvaluationService:
-    """A service over the cases' own rows, request text attached for ``eval_list``."""
+def default_concurrency() -> int:
+    """Cases in flight at once when a caller names none: the policy ``evalrun.concurrency``."""
+    return int(packkit.policy("evalrun.concurrency"))
+
+
+def service_for(cases: Iterable[EvalCase], records: Iterable[Mapping[str, Any]], *, concurrency: int = 1,
+                **options: Any) -> ConnectorEvaluationService:
+    """A service over the cases' own rows, request text attached for ``eval_list``.
+
+    ``concurrency`` sizes the run limits for that many cases in flight under
+    one principal: the policy limits, raised where they would refuse the
+    runner's own begins. A caller that passes ``limits`` keeps them exactly.
+    """
 
     rows = [{**case.row, "query": case.query} for case in cases]
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
+    if concurrency > 1 and "limits" not in options:
+        policy = ServingLimits()
+        options["limits"] = replace(policy, max_runs=max(policy.max_runs, concurrency),
+                                    max_runs_per_principal=max(policy.max_runs_per_principal, concurrency))
     return ConnectorEvaluationService(rows, records, **options)
 
 
@@ -213,19 +249,102 @@ def run_cases(
     clock: Clock | None = None,
     rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None = None,
     on_result: Callable[[CaseResult], None] | None = None,
+    concurrency: int = 1,
 ) -> RunReport:
-    """Every case, in order, each on its own fork. ``on_result`` is the checkpoint hook."""
+    """Every case, each on its own fork, results in case order. ``on_result`` is the checkpoint hook.
+
+    ``concurrency`` above one runs that many cases at once on a thread pool.
+    Each case is still one run on its own fork, so a deterministic agent
+    grades exactly as it does sequentially, and the report is in case order
+    whatever order the cases finished in: a ledger written from it is
+    byte-identical to a sequential run's. ``on_result`` is called as each
+    case lands (completion order), one call at a time. Each worker runs in a
+    copy of the caller's context, so the packs in force (policy, texts)
+    are the caller's in every thread. The agent must be safe to call from
+    several threads at once; the shipped agents are.
+    """
 
     listed = list(cases)
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
     safety = _safety(service)
-    results: list[CaseResult] = []
-    for case in listed:
-        result = run_case(service, case, agent, principal=principal, clock=clock, rater=rater, safety=safety)
-        results.append(result)
-        if on_result is not None:
-            on_result(result)
+    if concurrency == 1 or len(listed) < 2:
+        results: list[CaseResult] = []
+        for case in listed:
+            result = run_case(service, case, agent, principal=principal, clock=clock, rater=rater, safety=safety)
+            results.append(result)
+            if on_result is not None:
+                on_result(result)
+        ordered = tuple(results)
+    else:
+        ordered = _run_concurrently(service, listed, agent, principal=principal, clock=clock, rater=rater,
+                                    safety=safety, on_result=on_result, concurrency=concurrency)
     return RunReport(agent=agent.name, principal=principal or (listed[0].principal if listed else "agent"),
-                     case_set=case_set_digest(listed), results=tuple(results))
+                     case_set=case_set_digest(listed), results=ordered,
+                     agent_pack=getattr(agent, "pack_record", None), grader=grader_identity(rater),
+                     agent_identity=fingerprint(agent))
 
 
-__all__ = ["RUN_SCHEMA", "CaseResult", "Clock", "Latency", "RunReport", "case_set_digest", "grade_run", "run_case", "run_cases", "safety_for", "service_for"]
+class ConcurrencyRefused(ServingError):
+    """``run_cases`` asked for more cases in flight than the service admits, refused before any case ran.
+
+    Its own class so a caller can refuse this and only this: a
+    ``ServingError`` a worker raises mid-run is a different failure.
+    """
+
+
+def admitted_concurrency(service: ConnectorEvaluationService) -> int:
+    """How many cases this service lets one principal hold open at once."""
+    return min(service.limits.max_runs, service.limits.max_runs_per_principal)
+
+
+def _run_concurrently(
+    service: ConnectorEvaluationService,
+    listed: Sequence[EvalCase],
+    agent: AgentUnderTest,
+    *,
+    principal: str | None,
+    clock: Clock | None,
+    rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None,
+    safety: Mapping[str, OperationSafety],
+    on_result: Callable[[CaseResult], None] | None,
+    concurrency: int,
+) -> tuple[CaseResult, ...]:
+    import contextvars
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    admitted = admitted_concurrency(service)
+    if concurrency > admitted:
+        # Refused up front rather than letting the surplus begins fail: a
+        # refused begin is an error row, and a run whose error count depends
+        # on thread timing is not a measurement.
+        raise ConcurrencyRefused(
+            f"concurrency_limit: concurrency {concurrency} exceeds what this service admits "
+            f"(max_runs={service.limits.max_runs}, max_runs_per_principal={service.limits.max_runs_per_principal}); "
+            f"build it with service_for(..., concurrency={concurrency}) or pass limits that admit it")
+    slots: list[CaseResult | None] = [None] * len(listed)
+    landed = threading.Lock()
+
+    def one(index: int, case: EvalCase) -> None:
+        result = run_case(service, case, agent, principal=principal, clock=clock, rater=rater, safety=safety)
+        slots[index] = result
+        if on_result is not None:
+            with landed:
+                on_result(result)
+
+    with ThreadPoolExecutor(max_workers=min(concurrency, len(listed)), thread_name_prefix="evalrun") as pool:
+        futures = [pool.submit(contextvars.copy_context().run, one, index, case) for index, case in enumerate(listed)]
+        try:
+            for future in futures:
+                future.result()
+        except BaseException:
+            # The checkpoint hook failed (or the caller was interrupted): stop
+            # starting cases, let the ones in flight finish, and re-raise.
+            for future in futures:
+                future.cancel()
+            raise
+    return tuple(result for result in slots if result is not None)
+
+
+__all__ = ["RUN_SCHEMA", "CaseResult", "Clock", "ConcurrencyRefused", "Latency", "RunReport", "admitted_concurrency", "case_set_digest", "default_concurrency", "grade_run", "run_case", "run_cases", "safety_for", "service_for"]

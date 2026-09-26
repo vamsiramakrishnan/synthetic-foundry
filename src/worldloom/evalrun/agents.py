@@ -20,6 +20,7 @@ ceiling every other agent is compared against, not a claim about any model.
 from __future__ import annotations
 
 import copy
+import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, Protocol
 
@@ -161,6 +162,14 @@ class ScriptedAgent:
                     break
         return AgentResponse(answer=self.answer, artifacts=self.artifacts)
 
+    def fingerprint(self) -> dict[str, Any]:
+        from ..providers import digest
+
+        return {"kind": "scripted", "name": self.name, "stop_on_error": self.stop_on_error,
+                "script": digest({"calls": [call.model_dump(mode="json") for call in self.calls],
+                                  "answer": self.answer,
+                                  "artifacts": [artifact.model_dump(mode="json") for artifact in self.artifacts]})}
+
 
 class CallableAgent:
     """Any ``(task, tools) -> AgentResponse`` callable, named."""
@@ -171,6 +180,19 @@ class CallableAgent:
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         return self._fn(task, tools)
+
+
+def fingerprint(agent: Any) -> dict[str, Any]:
+    """What an agent under test is, beyond its name: two agents with one name differ here.
+
+    An agent may say it itself (``fingerprint()``); otherwise its name and
+    class are all there is to go on, which is exactly what a run recorded
+    before fingerprints existed.
+    """
+    own = getattr(agent, "fingerprint", None)
+    if callable(own):
+        return dict(own())
+    return {"kind": type(agent).__name__, "name": str(getattr(agent, "name", ""))}
 
 
 _CREATE_OPS = frozenset({"create", "send", "post", "upload"})
@@ -203,7 +225,18 @@ class ReferenceAgent:
 
     def __init__(self, cases: Iterable[EvalCase]) -> None:
         self._rows = {case.id: case.row for case in cases}
-        self._params: dict[str, set[str]] = {}
+        # Per thread: `run_cases(concurrency=n)` calls one agent on several
+        # cases at once, and each case's tool list is its own.
+        self._local = threading.local()
+
+    @property
+    def _params(self) -> dict[str, set[str]]:
+        params: dict[str, set[str]] = getattr(self._local, "params", {})
+        return params
+
+    @_params.setter
+    def _params(self, value: dict[str, set[str]]) -> None:
+        self._local.params = value
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         row = self._rows.get(task.case_id)

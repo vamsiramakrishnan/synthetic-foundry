@@ -40,6 +40,7 @@ terminal-capable agent can use it without slash-command support.
 | Measure the result | `worldloom evaluate`, `worldloom diversity` | [Enterprise corpus gates](enterprise-corpus.md#quality-gates) |
 | Generate many configurations | `worldloom mosaic`, `worldloom fleet` | [Fleets](agents/fleets.md) |
 | Evaluate an agent on enterprise workflows | `worldloom evalrun cases`, `worldloom evalrun run`, `worldloom evalrun compare` | [Eval execution](eval-execution.md) |
+| Improve an agent's policy and promote only what wins on held-out cases | `worldloom evalrun improve`, `worldloom evalrun autopsy`, `worldloom evalrun curriculum` | [Self-improvement](self-improvement.md) |
 
 Report the stage result and relevant receipt. A build count, narration
 acceptance, coherence result, and retrieval score answer different questions.
@@ -196,6 +197,18 @@ or MCP through `worldloom enterprise-evals serve`. `worldloom evalrun plan`
 grades a planner on the plan axis alone, nothing executed.
 
 Source: [`.claude/skills/worldloom-evalrun/SKILL.md`](../.claude/skills/worldloom-evalrun/SKILL.md)
+
+### `worldloom-improve`
+
+Improve an agent's policy against a case set: the champion's failures become a
+brief, a proposer revises the `agent` pack, and the revision is kept only when
+it passes the training gate and then the held-out gate, under a grader frozen
+by digest. One command (`worldloom evalrun improve`) or a few lines of Python
+(`EvalSession.improver`); references cover the gates, agent packs, autopsy and
+curriculum, grader agreement, scale and training-data export. Guide:
+[self-improvement](self-improvement.md).
+
+Source: [`.claude/skills/worldloom-improve/SKILL.md`](../.claude/skills/worldloom-improve/SKILL.md)
 
 ### `worldloom-artifact-realism`
 

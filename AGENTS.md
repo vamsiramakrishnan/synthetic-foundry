@@ -86,7 +86,7 @@ Determinism spine:
 | `docs/`, `docs/agents/` | Operator guides; 16 agent topic files |
 | `examples/` | `retail-close/` golden corpus (CI-validated and hand-authored; never regenerate or "fix" it), `grocery-close/` reference narration, `packs/`, `episodes/`, `artifact-types/` |
 | `evals/` | Checkout-only eval harnesses (enterprise_minimum, executive_narration, alphaevolve) |
-| `.claude/skills/`, `.claude/commands/` | 16 skills + 6 slash commands driving the loop; every skill is indexed in `docs/skills.md` |
+| `.claude/skills/`, `.claude/commands/` | 18 skills + 7 slash commands driving the loop; every skill is indexed in `docs/skills.md` |
 | `site/` | Astro/Starlight docs site (npm, GitHub Pages) |
 | `.github/` | CI workflows; `scripts/dispersed_replay.py` is the byte-identity gate |
 
@@ -178,7 +178,8 @@ format.
   objects, pydantic `Model` for serialized entities; `__all__` grouped
   semantically; `TYPE_CHECKING` blocks for import-only types.
 - No async anywhere in `src/`; the only concurrency is `narrative/compiler.py`'s
-  thread pool.
+  thread pool and `evalrun.runner.run_cases(concurrency=N)`'s, which returns
+  results in case order so the ledger never shows it.
 
 ## Important Files
 
