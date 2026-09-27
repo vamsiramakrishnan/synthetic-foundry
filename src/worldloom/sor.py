@@ -645,6 +645,11 @@ def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -
     open ones in workflow order for a `ranked_list`, the item to chase and its
     owner for a `message`, the count and statuses for anything else. Returns the
     text and the ids of the records it cites.
+
+    The only number it states is how many records were read: a record carries
+    that (one per record), while a count of the filtered ones (how many tripped,
+    how many are open) is arithmetic no record carries, which the output stage
+    refuses as an ungrounded figure. The filtered records are named instead.
     """
     if not rows:
         raise ValueError("an answer needs at least one record")
@@ -658,7 +663,7 @@ def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -
     if intent_id in {"find_exception", "reconcile"} or answer_shape == "list":
         if tripped:
             names = ", ".join(f"{r.fields['object']} {r.external_id} ({r.fields['exception']})" for r in tripped)
-            return (f"{len(tripped)} of {len(ordered)} {what} records for {activity} in {period} tripped the exception: {names}.",
+            return (f"Of the {len(ordered)} {what} records for {activity} in {period}, these tripped the exception: {names}.",
                     tuple(r.id for r in tripped))
         return (f"None of the {len(ordered)} {what} records for {activity} in {period} tripped an exception.",
                 tuple(r.id for r in ordered))
@@ -668,7 +673,7 @@ def answer(intent_id: str, answer_shape: str, rows: Sequence[ConnectorRecord]) -
                     tuple(r.id for r in ordered))
         ranked = sorted(open_items, key=lambda r: (str(r.fields["status"]), str(r.external_id)))
         names = "; ".join(f"{r.fields['object']} {r.external_id} ({r.fields['status']})" for r in ranked)
-        return (f"{len(ranked)} open of {len(ordered)} {what} records for {activity} in {period}, by workflow stage: {names}.",
+        return (f"Open among the {len(ordered)} {what} records for {activity} in {period}, by workflow stage: {names}.",
                 tuple(r.id for r in ranked))
     if answer_shape == "message" or intent_id == "chase":
         targets = tripped or open_items

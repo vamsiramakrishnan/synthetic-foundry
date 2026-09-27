@@ -33,6 +33,7 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Turn an agent's failures into findings, fresh targeted cases and harder slices | [Self-improvement](self-improvement.md) | [Eval execution](eval-execution.md) and [Dataset compiler](dataset-compiler.md) |
 | Export graded runs as SFT transcripts, preference pairs or verifiable rewards | [Trace export](trace-export.md) | [Eval execution](eval-execution.md) |
 | Derive every line of business, process, request and count an industry implies | [Industry programme](industry-programme.md) | [Process bindings](process-bindings.md) and [Worldloom Studio](studio.md) |
+| Build a whole world from one interview (company, people, processes, paperwork, history) and its evals per employee level | [Interview to world](interview-to-world.md) | [Eval execution](eval-execution.md) and [Enterprise agent evals](enterprise-agent-evals.md) |
 | Read the process, occupation and function tables the company model is built from | [Reference data](reference-data.md) | [Industry programme](industry-programme.md) and [Process catalogue](process-catalogue.md) |
 | Make rendered artifacts read like their real products | [Artifact ecology](artifact-ecology.md) | [Artifact compiler](artifact-compiler.md) |
 | Look up an exact CLI flag | [Generated command reference](../.claude/skills/worldloom/references/commands.md) | The relevant workflow guide above |

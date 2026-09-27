@@ -15,6 +15,7 @@ Read `docs/eval-execution.md` for the contracts; this skill is the procedure.
 
 ```bash
 worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom evalrun prove ./cases                     # 0. is every case solvable at all
 worldloom evalrun cases ./cases                     # 1. what the set can grade
 worldloom evalrun run ./cases -o ./runs/reference   # 2. the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py"   # 3. the agent under test
@@ -23,6 +24,15 @@ worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py" 
 worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300   # a hero use case: organise my drive
 ```
 
+0. **Know the set is solvable.** The build proves every case (its gold DAG
+   replayed under the vendor query engine) and refuses a set with an
+   unsolvable one; `--drop-unsolvable` writes the rest and lists each dropped
+   case with its first failing node in `proof.json`. `evalrun prove` prints the
+   verdicts for any set; `evalrun run` checks the set's pins (corpus, connector
+   definitions, query engine, grader, serving) against the live environment,
+   re-proves when one moved and refuses when the set no longer proves. Report
+   the unsolvable count beside any pass rate: a case no agent can pass is a
+   finding about the case. See `docs/eval-execution.md`, *Solvability and pins*.
 1. **Read the coverage before running anything.** `cases` prints counts per
    axis and names every zero (`gap: no case grades deletes`). A set that
    grades no updates cannot show an agent updates correctly; say so in the
@@ -54,6 +64,12 @@ worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300
      `ANVIL_BASE_URL` and `ANVIL_TOKEN` in its environment and calls the
      vendor's paths; the calls Anvil traced are replayed into the case and
      graded by the same code. Contract in `references/protocol.md`.
+   - A program instead of turns: add `--harness-mode sdk-program` to
+     `--exec`, and the child is asked once per case for a Python program
+     against a generated client (`worldloom_client`); Worldloom runs it with
+     `--program-timeout` against the in-process shim or Anvil, grades the
+     calls it made, and keeps the program on the ledger. Contract in
+     `references/protocol.md`.
 4. **Compare by case id, never by eye.** `compare` reports improvements and
    regressions under ±0.10 bands, which axis moved, and cases graded on one
    side and errored on the other as reliability changes, not score changes.
@@ -106,8 +122,9 @@ improve`, `EvalSession.improver`), use the `worldloom-improve` skill.
   unknown tool, an undeclared argument, a limit). No connector saw them, so
   they are not spans, but they cost precision and the trajectory pass.
 - `trajectory.safety` names Anvil's laws broken: `duplicate_write`,
-  `unsafe_retry`, `destructive_without_read`. A delete without a prior read
-  of the record fails the trajectory even when the record is gone.
+  `unsafe_retry`, `destructive_without_read`. A delete, reply or forward
+  without a prior read of the record it names fails the trajectory even when
+  the record is gone; a send that names no record has nothing to read.
 - A designed failure (`failures_expected`) is honoured when the agent met the
   error at the node and wrote nothing on the nodes it blocks. Writing past a
   refusal is what those cases exist to catch.
@@ -122,6 +139,17 @@ improve`, `EvalSession.improver`), use the `worldloom-improve` skill.
   evidence. Their keys (`query.*`, `plan.node_*`, `output.*`) show in the
   autopsy; `summarize` reports `stages`, `compare` reports `stage_deltas`.
   Policies `evalrun.grade.queries|plan_nodes|output` switch them.
+- **Plans are graded as data flow.** `plan.nodes.dag` is the DAG the calls
+  formed: B depends on A when a distinctive value A returned reappears in
+  B's arguments (never because A ran first), and each span's
+  `consumed_from` says which. It is graded edge by edge against the gold
+  DAG: `plan.edge_missing` (a call guessed or hardcoded what it should have
+  read), `plan.edge_spurious`, `plan.wrong_source`, `plan.wrong_branch`
+  (the untaken branch of a conditional), and `plan.serialised`
+  (independent reads run one after the other: efficiency, not an error).
+  When the agent declared a plan, `dag.declared` reports what it declared
+  and never did, did and never declared, and `agreement`. Rules and fields:
+  `docs/eval-execution.md` ("Plans as data flow").
 
 ## From Python
 

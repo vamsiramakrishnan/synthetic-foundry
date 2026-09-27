@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from .campaign import CampaignLoop
     from .curriculum import Curriculum, Escalation
     from .improve import ImproveReport
+    from .proof import ProofReport
     from .rater import Rater
 
 #: A run named by its label in the session, by the directory ``write_run``
@@ -185,6 +186,16 @@ class ImproveLoop:
     finalists: int | None = None
     parents: str | None = None
     round_budget: int | None = None
+    #: The levers a round may pull (``agent``, ``interface``); ``interface``
+    #: needs ``contracts`` (connector to served bundle), which also puts every
+    #: run through Anvil. ``anvil_cmd`` and ``source_roots`` locate the Anvil
+    #: CLI and each bundle's locked source; ``transfer`` is the second agent
+    #: an interface candidate must not regress on the held-out cases.
+    levers: tuple[str, ...] | None = None
+    contracts: Mapping[str, str | Path] | None = None
+    anvil_cmd: Sequence[str] | str | None = None
+    source_roots: Mapping[str, str | Path] | None = None
+    transfer: AgentUnderTest | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
@@ -212,6 +223,37 @@ class ImproveLoop:
             self._services[key] = service
         return run_cases(service, cases, agent, principal=self.session.principal, rater=self.rater,
                          concurrency=self.concurrency)
+
+    def serve_cases(self, cases: Sequence[EvalCase], agent: AgentUnderTest, serving: Any) -> RunReport:
+        """One agent over *cases* served through Anvil by *serving*: the interface lever's runner.
+
+        The service searches with the native vendor evaluator, as Anvil's
+        provider does, so the replay of each served call answers as it did.
+        """
+        from .runner import case_set_digest
+
+        key = "anvil\0" + case_set_digest(cases)
+        service = self._services.get(key)
+        if service is None:
+            held = (self._holdout_records is not None and self.holdout is not None
+                    and case_set_digest(cases) == case_set_digest(self.holdout))
+            records = self._holdout_records if held and self._holdout_records is not None else self._records
+            service = service_for(cases, records, concurrency=self.concurrency,
+                                  definitions=self.session._definitions or None, query_engine="native")
+            self._services[key] = service
+        return run_cases(service, cases, agent, principal=self.session.principal, rater=self.rater,
+                         concurrency=self.concurrency, anvil=serving)
+
+    def interface(self) -> Any:
+        """The ``InterfaceLever`` over ``contracts``, or ``None`` when the loop has no interface lever."""
+        from .interface import InterfaceLever, parse_levers
+
+        if "interface" not in parse_levers(self.levers):
+            return None
+        if not self.contracts:
+            raise ValueError("the interface lever needs contracts: {connector: served bundle}")
+        return InterfaceLever.from_contracts(self.contracts, serve=self.serve_cases, out=self.out,
+                                             command=self.anvil_cmd, source_roots=self.source_roots)
 
     def run(self, champion: ResolvedPack | str, *, rounds: int | None = None) -> ImproveReport:
         """Run the loop from *champion*: a resolved ``agent`` pack, or a reference like ``agent:baseline``.
@@ -241,7 +283,8 @@ class ImproveLoop:
                        holdout_values=holdout_values, repeats=self.repeats, brief=self.brief,
                        reference_run=self.reference_run, candidates=self.candidates,
                        screen_cases=self.screen_cases, finalists=self.finalists, parents=self.parents,
-                       round_budget=self.round_budget)
+                       round_budget=self.round_budget, levers=self.levers, interface=self.interface(),
+                       transfer=self.transfer)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -331,6 +374,17 @@ class EvalSession:
         self.runs[label or planner.name] = report
         return report
 
+    def prove(self, *, anvil: AnvilServing | None = None, rater: Rater | None = None) -> ProofReport:
+        """Prove every case solvable: the gold DAG replayed under the vendor engine (``proof.prove_cases``).
+
+        Each unsolvable case names its first failing node and why; the
+        report's ``pins`` say what the proof rests on. With ``anvil``, each
+        gold trajectory is also served through Anvil.
+        """
+        from .proof import prove_cases
+
+        return prove_cases(self.cases, self._records, definitions=self._definitions or None, rater=rater, anvil=anvil)
+
     def reference(self, **options: Any) -> RunReport:
         """The executable ceiling: the reference agent through the same surface."""
 
@@ -404,6 +458,11 @@ class EvalSession:
         finalists: int | None = None,
         parents: str | None = None,
         round_budget: int | None = None,
+        levers: Sequence[str] | str | None = None,
+        contracts: Mapping[str, str | Path] | None = None,
+        anvil_cmd: Sequence[str] | str | None = None,
+        source_roots: Mapping[str, str | Path] | None = None,
+        transfer_agent: AgentUnderTest | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -435,8 +494,14 @@ class EvalSession:
         ``parents="archive"`` branches each round from the archive's Pareto
         frontier; ``round_budget`` caps a round's screening and finalist
         case-runs. Each defaults to its ``evalrun.improve.*`` policy.
+        Two levers: ``levers="agent,interface"`` (or ``"interface"``) with
+        ``contracts`` (connector to a served Anvil bundle) also lets a round
+        reshape the interface the agent is served, an Anvil manifest overlay
+        per connector (``evalrun.interface``); ``transfer_agent`` is the
+        second agent such a candidate must not regress on the held-out cases.
         """
         from .evidence import brief_mode
+        from .interface import parse_levers
         from .runner import default_concurrency
 
         records: tuple[Any, ...] = self._records
@@ -463,7 +528,9 @@ class EvalSession:
                            repeats=repeats, brief=brief_mode(brief),
                            reference_run=None if reference_run is None else self.report(reference_run),
                            candidates=candidates, screen_cases=screen_cases, finalists=finalists,
-                           parents=parents, round_budget=round_budget, _records=records,
+                           parents=parents, round_budget=round_budget, levers=parse_levers(levers),
+                           contracts=contracts, anvil_cmd=anvil_cmd, source_roots=source_roots,
+                           transfer=transfer_agent, _records=records,
                            _holdout_records=held_records)
 
     def campaign(
@@ -510,11 +577,15 @@ class EvalSession:
 
     # -- the loop's parts, one call each ------------------------------------------------
 
-    def autopsy(self, run: RunRef, *, top: int = 12) -> Autopsy:
-        """The run's failing cases clustered by finding key, with the session's cases as the contracts."""
+    def autopsy(self, run: RunRef, *, top: int = 12, owners: bool = False) -> Autopsy:
+        """The run's failing cases clustered by finding key, with the session's cases as the contracts.
+
+        ``owners`` also attributes every failing finding to the agent, the
+        interface, the world or the grader (``evalrun.ownership``).
+        """
         from .autopsy import autopsy
 
-        return autopsy(self.report(run), cases=self.cases, top=top)
+        return autopsy(self.report(run), cases=self.cases, top=top, attribute=owners)
 
     def brief(self, run: RunRef, *, top: int = 12) -> str:
         """The plain-text brief an improving harness is handed for *run*."""

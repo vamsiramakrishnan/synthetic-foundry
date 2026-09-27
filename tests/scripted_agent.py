@@ -15,17 +15,48 @@ import json
 import sys
 
 
+def _sentence(fact: dict) -> str:
+    lead = "It was recorded at the time as" if fact["superseded"] else "The position was"
+    return f"{lead} {{{{fact:{fact['id']}}}}}."
+
+
+def _by_moves(request: dict, picked: list[dict]) -> tuple[str, list[dict]]:
+    """A reader-grade section as its brief asks: one paragraph per move, each at
+    least the `sentences` its move states, so the section meets its `floor`.
+    The same shape as `tools/exec_agent.py`."""
+    by_id = {fact["id"]: fact for fact in request["facts"]}
+    cited: set[str] = set()
+    claims: list[dict] = []
+    paragraphs = []
+    for move in request["moves"]:
+        lines = []
+        for index in range(max(1, move.get("sentences", 1))):
+            fid = move["facts"][index] if index < len(move["facts"]) else None
+            if move.get("derived") or fid is None or fid in cited:
+                lines.append("That is the part of the position the period turns on.")
+                continue
+            sentence = _sentence(by_id[fid])
+            lines.append(sentence)
+            cited.add(fid)
+            claims.append({"text": sentence, "supporting_fact_ids": [fid]})
+        paragraphs.append(" ".join(lines))
+    for fact in picked:
+        if fact["id"] not in cited:
+            sentence = _sentence(fact)
+            paragraphs[-1] += " " + sentence
+            claims.append({"text": sentence, "supporting_fact_ids": [fact["id"]]})
+    return "\n\n".join(paragraphs), claims
+
+
 def answer(document: dict, *, restate: bool) -> dict:
     responses = []
     for request in document["requests"]:
         picked = [f for f in request["facts"] if f["required"]] or request["facts"][:2]
-        sentences, claims = [], []
-        for fact in picked:
-            lead = "It was recorded at the time as" if fact["superseded"] else "The position was"
-            sentence = f"{lead} {{{{fact:{fact['id']}}}}}."
-            sentences.append(sentence)
-            claims.append({"text": sentence, "supporting_fact_ids": [fact["id"]]})
-        text = " ".join(sentences)
+        if request.get("moves") and (request.get("floor") or {}).get("sentences"):
+            text, claims = _by_moves(request, picked)
+        else:
+            claims = [{"text": _sentence(fact), "supporting_fact_ids": [fact["id"]]} for fact in picked]
+            text = " ".join(claim["text"] for claim in claims)
         if restate:
             text += " Revenue finished 2.48% below plan."
         responses.append({"id": request["id"], "text": text, "claims": claims})

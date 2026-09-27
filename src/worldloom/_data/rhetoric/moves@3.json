@@ -1,0 +1,171 @@
+{
+  "schema": "worldloom.rhetoric/v1",
+  "about": "Rhetorical moves: what each section of a document has to do, in order, and which facts each step may draw on. A section's moves become its narration request's `moves`; the writer is asked for one paragraph per move, and the offline narrator realises each move from its sentence plans. The instruction a writer reads for a move is the prompts pack text `narrative.move.<name>`, so a pack can change how a move is asked for without code.",
+  "moves": {
+    "headline": {"about": "The one figure that matters most, and the verdict on it.", "kinds": ["financial.revenue.variance", "financial.gross_profit.variance", "metric.gross_margin_variance", "financial.", "metric.", "close.status", "ops.valuation_status"]},
+    "comparison": {"about": "The same figures set against budget, forecast and the prior period.", "kinds": ["financial.", "metric.", "overhead."]},
+    "attribution": {"about": "Where the movement happened: which unit or line carried it and which held up.", "kinds": ["financial.revenue.", "financial.gross_profit.variance", "overhead.shared_services.recharge", "financial.", "overhead."], "take": 3},
+    "driver": {"about": "What moved the result, cause tied to figure, structural or one-off.", "kinds": ["metric.", "financial.incident_pl_impact"]},
+    "cause": {"about": "The established cause, and the line of enquiry that was ruled out.", "kinds": ["ops.cause", "ops.cause_ruled_out", "ops.root_cause_classification", "ops.previous_similar_incident"]},
+    "chronology": {"about": "What happened, in the order it happened, including the wrong turn.", "kinds": ["ops.", "close."]},
+    "impact": {"about": "The cost in the units the business feels: records, days, the close, money.", "kinds": ["ops.affected_records", "close.delay", "close.revised_date", "financial.incident_pl_impact", "ops.valuation_status"]},
+    "status": {"about": "Where things stand now, with the confidence of the moment.", "kinds": ["close.", "ops.feed_status", "ops.valuation_status", "ops.incident_opened", "ops.cause"]},
+    "decision": {"about": "What the reader is asked to note or decide.", "kinds": ["ops.remediation", "close.status", "financial."]},
+    "action": {"about": "What is being done, by whom, and which action fixes the control rather than the symptom.", "kinds": ["ops.remediation", "ops.workaround", "ops.remediation_addresses", "ops.mapping_table_owner"]},
+    "owner": {"about": "Who owns the next step, and where ownership is missing.", "kinds": ["ops.mapping_table_owner"]},
+    "risk": {"about": "What is still exposed after the fix, and what would make it recur.", "kinds": ["ops.root_cause_classification", "ops.previous_similar_incident", "ops.mapping_table_owner", "ops.remediation_addresses"]},
+    "procedure": {"about": "The steps, in order, in the imperative.", "kinds": ["ops.workaround", "ops.", "close."]},
+    "context": {"about": "The situation a reader needs before the detail: the symptom they will recognise.", "kinds": ["ops.feed_status", "ops.incident_opened", "ops.", "close."]},
+    "implication": {"about": "What the figures mean for this reader, drawn from the facts already cited.", "kinds": [], "derived": true},
+    "transition": {"about": "The line that hands the reader to what comes next.", "kinds": [], "derived": true}
+  },
+  "roles": {
+    "position": ["headline", "comparison", "implication"],
+    "summary": ["headline", "status", "implication"],
+    "evidence": ["attribution", "comparison", "implication"],
+    "explain_change": ["driver", "comparison", "implication"],
+    "comparison": ["comparison", "implication"],
+    "decision": ["decision", "action", "risk"],
+    "chronology": ["chronology", "impact", "implication"],
+    "management": ["action", "owner", "risk"],
+    "explanation": ["cause", "chronology", "implication"],
+    "": ["headline", "comparison", "implication"]
+  },
+  "doctypes": {
+    "cfo_variance_memo": {
+      "Position": ["headline", "comparison", "implication"],
+      "By business unit": ["attribution", "comparison", "implication"],
+      "Drivers": ["driver", "comparison", "implication"],
+      "Recommendation": ["decision", "action", "owner", "risk"]
+    },
+    "executive_summary": {
+      "The ask": ["decision", "headline", "implication"],
+      "The month": ["headline", "comparison", "implication"]
+    },
+    "board_paper": {
+      "*": ["headline", "comparison", "implication", "decision"]
+    },
+    "working_note": {
+      "Where the close stands": ["status", "implication"],
+      "Running note": ["chronology", "status", "implication"]
+    },
+    "incident_rca": {
+      "Cause": ["cause", "chronology", "implication"],
+      "What that cost": ["impact", "implication"],
+      "How we got there": ["chronology", "cause", "implication"],
+      "Standing exposure": ["risk", "owner", "implication"],
+      "Actions": ["action", "owner", "risk"]
+    },
+    "postmortem": {
+      "*": ["cause", "chronology", "impact", "action", "implication"]
+    },
+    "knowledge_article": {
+      "When to use this": ["context", "status"],
+      "Procedure": ["procedure", "action"]
+    },
+    "runbook": {
+      "*": ["context", "procedure", "risk"]
+    },
+    "confluence_page": {
+      "Current position": ["status", "cause", "implication"],
+      "Next steps": ["action", "transition"]
+    },
+    "servicenow_incident": {
+      "Summary": ["status", "chronology", "impact", "action"]
+    },
+    "jira_issues": {
+      "Summary": ["action", "risk"]
+    },
+    "close_calendar": {
+      "Commitment": ["status", "transition"],
+      "Escalation": ["status", "impact", "action"]
+    },
+    "unit_close_commentary": {
+      "Performance": ["headline", "attribution", "comparison", "implication"],
+      "Where we landed": ["headline", "comparison", "implication"],
+      "What moved": ["headline", "attribution", "implication"],
+      "Why": ["driver", "implication"],
+      "Position": ["comparison", "implication"],
+      "Watch items": ["driver", "risk", "implication"]
+    },
+    "meeting_minutes": {
+      "*": ["decision", "action", "owner"]
+    },
+    "email_thread": {
+      "*": [{"move": "context", "kinds": ["ops.feed_status", "ops.incident_opened", "ops.", "close.", "review.challenge", "capital.cet1_ratio", "claims.", "reserves.central_estimate_total", "p2p.exception_status"]}, {"move": "status", "kinds": ["close.", "ops.feed_status", "ops.valuation_status", "ops.incident_opened", "ops.cause", "review.challenge_status", "capital.", "reserves.", "p2p."]}, {"move": "action", "kinds": ["ops.remediation", "ops.workaround", "ops.remediation_addresses", "ops.mapping_table_owner", "regulatory.", "p2p.exception_approved_by"]}, "transition"]
+    },
+    "capital_return": {
+      "Basis of preparation": [{"move": "status", "kinds": ["capital.return_status"]}, {"move": "chronology", "kinds": ["capital.return_due_date", "capital.return_filed_at"]}, "implication"],
+      "Basis of restatement": [{"move": "decision", "kinds": ["capital.restatement_reason", "capital.error_materiality"]}, {"move": "cause", "kinds": ["ops.cause"]}, {"move": "impact", "kinds": ["capital.cet1_delta", "capital."]}, {"move": "action", "kinds": ["regulatory.notification"]}, "implication"]
+    },
+    "rwa_working_paper": {
+      "Methodology and treatment": [{"move": "status", "kinds": ["capital.collateral_treatment"]}, "implication"],
+      "Capital position": [{"move": "headline", "kinds": ["capital.cet1_ratio"]}, {"move": "comparison", "kinds": ["capital.minimum_cet1_requirement", "capital.rwa_total", "capital.cet1_delta", "capital."]}, "implication"],
+      "Basis of preparation": [{"move": "status", "kinds": ["close.", "capital.return_status"]}, "implication"],
+      "Correction": [{"move": "cause", "kinds": ["ops.cause"]}, {"move": "impact", "kinds": ["capital.rwa_understatement", "capital.error_materiality"]}, "implication"]
+    },
+    "second_line_challenge_memo": {
+      "Finding": [{"move": "context", "kinds": ["review.challenge"]}, {"move": "status", "kinds": ["review.challenge_status"]}, "implication"],
+      "Treatment under challenge": [{"move": "status", "kinds": ["capital.collateral_treatment"]}, "implication"],
+      "Ruling": [{"move": "status", "kinds": ["review.challenge_status"]}, {"move": "context", "kinds": ["review.challenge"]}, "implication"],
+      "Position as drafted": [{"move": "headline", "kinds": ["capital.cet1_ratio"]}, {"move": "comparison", "kinds": ["capital.minimum_cet1_requirement", "capital.rwa_total", "capital.cet1_delta", "capital."]}, "implication"],
+      "Capital position": [{"move": "headline", "kinds": ["capital.cet1_ratio"]}, {"move": "comparison", "kinds": ["capital.minimum_cet1_requirement", "capital.rwa_total", "capital.cet1_delta", "capital."]}, "implication"]
+    },
+    "internal_audit_review": {
+      "Ruling": [{"move": "status", "kinds": ["review.challenge_status"]}, {"move": "context", "kinds": ["review.challenge"]}, "implication"],
+      "The challenge and the filing decision": [{"move": "decision", "kinds": ["capital.return_approval"]}, {"move": "chronology", "kinds": ["capital.return_filed_at", "capital.return_due_date"]}, "implication"],
+      "Root cause and classification": [{"move": "cause", "kinds": ["ops.cause"]}, {"move": "risk", "kinds": ["ops.root_cause_classification"]}, {"move": "owner", "kinds": ["ops.collateral_mapping_owner", "ops.mapping_table_owner"]}, "implication"],
+      "Treatment": [{"move": "status", "kinds": ["capital.collateral_treatment"]}, "implication"],
+      "Remediation": [{"move": "action", "kinds": ["ops.remediation"]}, {"move": "risk", "kinds": ["ops.remediation_addresses"]}, "implication"],
+      "Restatement": [{"move": "decision", "kinds": ["capital.restatement_reason"]}, {"move": "impact", "kinds": ["capital."]}, "implication"]
+    },
+    "board_risk_committee_summary": {
+      "Position": [{"move": "headline", "kinds": ["capital.cet1_ratio"]}, {"move": "comparison", "kinds": ["capital.minimum_cet1_requirement", "capital.rwa_total", "capital.cet1_delta", "capital."]}, "implication"],
+      "Restatement": [{"move": "decision", "kinds": ["capital.restatement_reason", "capital.return_status"]}, {"move": "impact", "kinds": ["capital.error_materiality", "capital."]}, "implication"],
+      "Regulator engagement": [{"move": "action", "kinds": ["regulatory.notification"]}, "implication"]
+    },
+    "claims_emergence_note": {
+      "Actual versus expected": [{"move": "headline", "kinds": ["claims.actual_vs_expected"]}, {"move": "comparison", "kinds": ["claims."]}, "implication"]
+    },
+    "actuarial_valuation_report": {
+      "Central estimate": [{"move": "headline", "kinds": ["reserves.central_estimate_total"]}, {"move": "attribution", "kinds": ["reserves.ultimate", "reserves.ibnr", "reserves."]}, "implication"],
+      "Attribution": [{"move": "driver", "kinds": ["reserves.attribution_"]}, "implication"],
+      "Recommendation and the booked position": [{"move": "decision", "kinds": ["reserves.committee_recommendation"]}, {"move": "comparison", "kinds": ["reserves."]}, "implication"],
+      "Basis of valuation": [{"move": "context", "kinds": ["reserves.philosophy"]}, {"move": "status", "kinds": ["reserves."]}, "implication"]
+    },
+    "margin_decision_memo": {
+      "The decision": [{"move": "decision", "kinds": ["reserves.margin_released"]}, {"move": "comparison", "kinds": ["reserves."]}, "implication"],
+      "The central estimate": [{"move": "headline", "kinds": ["reserves.central_estimate_total"]}, {"move": "comparison", "kinds": ["reserves."]}, "implication"],
+      "The standing gap": [{"move": "headline", "kinds": ["reserves.held_vs_central_gap"]}, {"move": "comparison", "kinds": ["reserves."]}, "implication"]
+    },
+    "underwriting_result_commentary": {
+      "The quarter against plan": [{"move": "headline", "kinds": ["financial.revenue."]}, {"move": "comparison", "kinds": ["financial.", "metric."]}, "implication"],
+      "The book and the claims behind it": [{"move": "status", "kinds": ["portfolio."]}, {"move": "comparison", "kinds": ["claims_ops.", "claims."]}, "implication"]
+    },
+    "match_exception_report": {
+      "The exception": [{"move": "headline", "kinds": ["p2p.match_total_variance"]}, {"move": "comparison", "kinds": ["p2p.approval_tolerance", "p2p."]}, "implication"],
+      "Where the variance sits": [{"move": "attribution", "kinds": ["p2p.match_price_variance", "p2p.match_quantity_variance"]}, "implication"],
+      "Status and what is needed": [{"move": "status", "kinds": ["p2p.exception_status"]}, {"move": "action", "kinds": ["p2p."]}, "implication"]
+    },
+    "payment_approval_memo": {
+      "The settlement": [{"move": "headline", "kinds": ["p2p.approved_payment_value"]}, {"move": "comparison", "kinds": ["p2p.invoiced_value", "p2p.credit_note_value", "p2p."]}, "implication"],
+      "Authority for the decision": [{"move": "decision", "kinds": ["p2p.exception_approved_by"]}, {"move": "comparison", "kinds": ["p2p.match_total_variance", "p2p.approval_tolerance", "p2p."]}, "implication"],
+      "What the close carries": [{"move": "status", "kinds": ["close."]}, {"move": "impact", "kinds": ["p2p.received_value", "financial.accrual.", "p2p."]}, "implication"],
+      "Still outstanding": [{"move": "status", "kinds": ["p2p.open_shortfall_"]}, "implication"]
+    },
+    "vendor_master_change": {
+      "The requested change": [{"move": "status", "kinds": ["p2p.vendor_change_status"]}, {"move": "context", "kinds": ["p2p."]}, "implication"],
+      "Counterparty": [{"move": "context", "kinds": ["p2p.contract_counterparty"]}, {"move": "status", "kinds": ["p2p."]}, "implication"]
+    }
+  },
+  "floors": {
+    "about": "How much a section must say for the moves it declares, stated in every reader-grade narration brief (each move's `sentences`, the section's `floor`) and refused as `section_floor` when a section falls below it, so a live writer is held to the floor the offline narrator is measured against. A move that introduces facts says at least one sentence per thing it measures (a subject's measure, however many facets; not a prior-period figure, not a fact an earlier section already said), up to `sentences_per_move` (a move's own `sentences` in the table above overrides the cap); a derived move says `derived_sentences`. The section's paragraphs are at least `paragraphs_per_move` of its introducing moves, rounded up. A section given fewer facts than it has moves is exempt, and the brief records why: a paragraph per move would have to be filler.",
+    "sentences_per_move": 3,
+    "derived_sentences": 1,
+    "paragraphs_per_move": 0.5
+  },
+  "notes": {
+    "moves": ["point", "evidence", "transition"],
+    "about": "What a presenter says over a slide: the point it makes, the evidence behind it, and the line into the next slide. The sentences are the prompts pack texts `render.deck.notes.<move>`."
+  }
+}

@@ -75,6 +75,56 @@ a duration string, so two packs cannot disagree about what `P1DT15H` means),
   against the slowest artifact any episode plans. A later lag puts an author's
   departure before their signature, silently, and only in some months.
 
+## Rhetoric: the moves a section makes
+
+`purpose` says what a section must establish; **`sections[].moves`** says
+how the argument is built, one paragraph per move, and which facts each move
+may draw on. A writer (the live harness or the offline narrator) is asked for
+the section move by move, so a section of twenty-four figures comes back as an
+attribution, a comparison and an implication rather than twenty-four
+sentences.
+
+```json
+{"heading": "Network position", "kinds": ["financial.revenue.", "financial.gross_profit."],
+ "scope": "group", "purpose": "...",
+ "moves": ["headline",
+           {"move": "comparison", "kinds": ["financial.gross_profit."]},
+           {"move": "implication", "say": "Say what the month means for a franchisee's fee."}]}
+```
+
+- A move is a name from the rhetoric catalogue
+  (`src/worldloom/_data/rhetoric/moves@3.json`): `headline`, `comparison`,
+  `attribution`, `driver`, `cause`, `chronology`, `impact`, `status`,
+  `decision`, `action`, `owner`, `risk`, `procedure`, `context`,
+  `implication`, `transition`. Each declares the fact-kind prefixes it
+  prefers; `kinds` on the section's move narrows them (each must sit inside
+  the section's own `kinds`). `headline` and `decision` take only their
+  best-matching kind, so a headline is one figure; `implication` and
+  `transition` introduce no fact and reason from the ones already cited.
+- A fact no move claims joins the last move that introduces facts, so a
+  required fact can never fall between moves; a move with nothing to draw on
+  is dropped rather than padded.
+- What a writer is told a move is for is the prompts pack text
+  `narrative.move.<name>`; `say` replaces it for this section only. How the
+  offline narrator words a move is the pack's `narrative.prose.*` texts
+  (several alternatives per key, `|`-separated, `{{term:...}}` filled by the
+  industry), so an industry pack changes the register without code.
+- Declare nothing and the section takes the catalogue's moves for its type
+  and heading, else for its semantic role (`position`, `evidence`,
+  `explain_change`, `decision`, `chronology`, `management`, `explanation`,
+  `comparison`, `summary`).
+- The lint names a move the catalogue does not define and a move narrowed to
+  kinds outside its section: both compile, and both lose a paragraph.
+
+Moves reach a request only for a reader-grade corpus (`enterprise/v2`, the
+default for new builds). Every other corpus asks what it always asked, and its
+ledger replays. A deck's speaker notes have moves of their own (`notes.moves`
+in the same catalogue: `point`, `evidence`, `transition`), worded by the
+prompts pack's `render.deck.notes.*` texts. Where the figures behind a
+section are printed (beside it, in an appendix, in the file's properties) is
+the presentation profile's decision, not the doctype's; see
+`/worldloom-present`.
+
 ## Then make the company file it
 
 Declaring a type does not produce one. What produces one is lore, in the same

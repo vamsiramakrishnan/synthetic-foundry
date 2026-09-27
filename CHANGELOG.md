@@ -11,6 +11,484 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Real vendor contracts behind every served connector
+
+Serving only; nothing a seed generates changes.
+
+- **A contract lock.** `_data/connectors/_contracts.json`
+  (`worldloom.contract-lock/v1`) pins, per connector, the source URL (or the
+  package path of an authored contract), its format, the sha256 and size of
+  the exact bytes, the version and lock date, the provenance (`vendor` or
+  `authored`), the Worldloom exposure profile and manifest Anvil compiles it
+  under (`_data/connectors/anvil/profiles/`, `manifests/`), the vendor's and
+  the profile's operation counts, and Anvil's snapshot hash. `email`,
+  `rovo`, `teamwork_graph` and `sor` say why they have none. (Underscored
+  because every other JSON file beside the connector definitions is read as
+  one.)
+- **`worldloom contracts fetch | build | trim | coverage`.** `fetch`
+  downloads and verifies each source and refuses a digest mismatch; `build`
+  compiles and approves under the profile with Anvil, checks the snapshot,
+  lints the mapping, and caches the bundle by source, profile, manifest,
+  mapping and Anvil version, with a `build.json` receipt; `trim` cuts a
+  source to the profile's operations and the schemas they reach and proves
+  the cut exposes the same surface; `coverage` reports vendor, profiled,
+  modelled and unmodelled operations per connector.
+- **Authored ServiceNow and Salesforce contracts.** Neither vendor publishes
+  a full OpenAPI document, so the Table, Aggregate and Attachment APIs and
+  the REST API v61.0 query, search, describe, sObject and limits resources
+  are authored from the vendors' references and committed with their
+  documentation URLs.
+- **Mappings for ten connectors.** Jira, Confluence, Slack, Drive, Outlook,
+  OneDrive, SharePoint, Teams, ServiceNow and Salesforce each map every
+  operation their profile exposes to a tool or to `unmodelled` with a reason,
+  and pass their vendor query language through the shared evaluator. The
+  mapping format gained constant, assembled and fallback arguments, value
+  maps and key renames, `tool_by` (by a request location or the addressed
+  record), result envelopes, query locators (Salesforce's `nextRecordsUrl`),
+  and vendor error codes split from the message. Anvil now pages Jira's
+  body-token search and some single-record reads itself; the provider
+  answers those with the protocol's page, and a size Anvil defaulted is not
+  recorded as the agent's argument.
+- **Parity per connector.** `tests/test_contract_parity.py` compiles the
+  committed trims and runs one call sequence per connector through Anvil
+  and in process: records, errors and state diffs agree. The assertions on
+  envelope fields still landing in Anvil (Jira's `isLast`, Slack's
+  `response_metadata.next_cursor` and `messages.matches`, Drive's `kind`,
+  single-record reads served as pages) xfail naming the capability;
+  Confluence's `_links.next` and Graph's `@odata.nextLink` are asserted
+  outright now that Anvil writes them. Each Graph, Jira, Confluence, Slack
+  and Drive lock entry names Anvil's reviewed profile for the same source
+  (`anvil_profile`), and a test holds the two pins equal. Page answers carry
+  the match count and the query ran as provider `meta` for Anvil's trace.
+
+### Reader-grade documents: four edges a live narration showed
+
+Read off a live-narrated `enterprise/v2` corpus of seed 8128; `legacy` and
+`enterprise/v1` corpora (and every `audit` rendering) are byte-identical.
+
+- **The direction once, read from a lexicon.** "missing revenue plan by AUD
+  10.2m adverse": a negative figure drops its "adverse" wherever its own
+  clause already says which way it went, a phrase ("a shortfall of") or a
+  direction word before or just after it ("missing", "fell", "overspent",
+  "... below budget"), from prompts pack text
+  `render.figures.direction_words.adverse` / `.favourable` and
+  `render.figures.direction_window` (`figures.direction`). Decided when the
+  page is spelled, so offline and live prose both read once and the ledger
+  keeps exactly what the writer wrote; a writer who types "adverse" after such
+  a clause, or writes "ahead of plan by" an adverse figure, is refused as
+  `number_spelling` (`direction said twice`, `direction contradicts`).
+- **Titles bounded, complete, dashless.** A presentation knob, `titles`
+  (`free`, the shipped cut; `reader`, 12 words and 80 characters, never
+  truncated, a dash between clauses as a colon or comma), from
+  `_data/presentation/titles.json` (`worldloom.titles`). The title chooser
+  takes a shorter clause that still carries a figure, else the lead fact's
+  template; `presenter.lint_titles` names a title over length, carrying a
+  forbidden character or ending mid-clause. `reader` and `filing` use it.
+- **Every money table states its unit.** Under a reader spelling a schedule
+  of ledger cells captions its unit from the facts its cells cite ("Business
+  Unit P&L (AUD thousands)"), in DOCX, PDF, Markdown, HTML and the presenter
+  deck's appendix; per column header when the columns differ; not at all
+  when the table has a unit column (`figures.unit_caption`, the spelling
+  rulebook's `tables` entry).
+- **The length floor reaches live writers (Generation).** The rhetoric
+  catalogue is `moves@3.json`, adding `floors`: each move states the fewest
+  `sentences` it says (one per thing it measures, up to three; a derived move
+  one) and each reader-grade request a `floor` (sentences, paragraphs, or the
+  recorded `exempt` reason when it has fewer facts than moves). Both are in
+  the brief (the handshake payload and the `section_moves` prompt), and a
+  section below its floor is refused as `section_floor`. The offline narrator
+  keeps the paragraphs its floor asks for and says a plain implication
+  (`narrative.prose.implication.default`) where no kind gave one; two new
+  implication texts (`ops_feed_status`, `ops_incident_opened`). What changes:
+  every reader-grade request digest (so ledger keys) and the offline prose
+  of the sections those texts reach. Seven sections of the reference
+  narration (`examples/grocery-close/narration.json`) were below their new
+  floor and are rewritten to it (a paragraph per move, a sentence per thing
+  measured), and the reference adapter `tools/exec_agent.py` writes a
+  paragraph per move at the length each move states.
+
+### Solvable case sets
+
+- **The shipped generators prove solvable (Generation).** `evalrun prove`
+  over `enterprise-evals build --exhaustive --limit 200 --dag-shape '*'` on the
+  `--seed 8128 --incident` and `--seed 4242 --incident` worlds, with no profile
+  and each shipped profile, now finds 0 of 1,000 cases unsolvable per seed
+  (was 116); corner cases 0 of 10 drafted per seed dropped (was 6); the first
+  100 record-request cases of the banking, retail and healthcare programmes 0
+  of 300 (was 22). Each cause was fixed where the case is made, not by
+  loosening a grade:
+  - A write the trajectory law `destructive_without_read` holds is planned
+    after a read of its target. The planner asks the grader's own
+    classification (`OperationSafety.reads_first`: a destructive tool that
+    names its record by `id`, so a delete, a reply, a forward), so the two
+    cannot drift. The law reads the record a call names as its target as well
+    as what it wrote: a reply acts on the message it answers, and before this
+    a reply was checked against the reply it created, which no call can read
+    first. A send names no record and creates the one it acts on, so it has
+    nothing to read and the law no longer holds it (every send, by any agent,
+    was a finding). The target read waits on no evidence read, so an agent
+    that opens the thread first is not out of order. 44 replies and 21 sends
+    per seed.
+  - A message's body (a reply, a forward, a comment) is an `outline` of the
+    sections its case's document requires over the evidence, a new local
+    transform in `enterprise-dag@1`, in place of the raw result set, which
+    carried none of them. The 44 replies failed this too, behind the law.
+  - The diamond joins its two views on the record (`DIAMOND_JOIN`: its
+    `joined` node is a `unique` keyed on `id` over both projections, where it
+    was a `collect`; `unique` takes optional key `fields`), so its write
+    carries one evidence entry per record read, with the same node count. It concatenated them, and the
+    output stage, which counts distinct evidence records, found an evidence
+    count of two for one record. 51 per seed (54 with those behind a send).
+  - A `restated_figure` corner's answer is the cited issue and what the issue
+    says, not the lodged and current figures, which no record an agent can read
+    carries.
+  - A programme answer (`sor.answer`) for a list or a queue names the records
+    that tripped or are open and states only how many were read; `14 open of
+    18` stated a count no record carries.
+  What changes, for every seed: an enterprise plan's reply, forward, delete
+  and move rows (a `target-<write>` read, and for a message the `document`
+  node), its diamond rows (nodes and the shape's instruction text), and so
+  those rows' compiled cases and case-set digests; `restated_figure` corner
+  cases' `expected_answer` (banking and insurance worlds); and every industry
+  programme request whose intent answers as a list or a ranked list (its
+  `expected_answer`). Other rows are byte-identical: of the pinned narrowed
+  hospital plans, 9 of 171 rows and 6 of 40 moved, all diamonds. The
+  documented builds no longer carry `--drop-unsolvable`; refusal stays the
+  default.
+
+- **Default change: the vendor query engine.** The policy
+  `connectors.query.engine` now defaults to `native`: a search tool's `query`
+  runs as the vendor's own language through the shared evaluator
+  (`worldloom.connectors.query`). A live pilot's call errors were 104 of 122
+  "unsupported query clause" refusals from the old parser, many of them valid
+  vendor queries (`SELECT Id, Name FROM Account ORDER BY LastModifiedDate DESC
+  LIMIT 50`, `priority=1^ORDERBYnumber`, JQL `OR`). `predicate` still selects
+  the historical parser. What moves under the default: an emulator answer to a
+  `query` string (a query the old parser refused now runs; ServiceNow drops a
+  condition it cannot read and SharePoint searches an unknown property as
+  text, as the products do; a malformed OData or JQL query gets the vendor's
+  error text instead of `unsupported ... query clause`), and so any run ledger
+  whose agent searched with query strings. Structured `predicate` searches
+  are unchanged. Tests updated for
+  the correct vendor behaviour: the default-engine test in
+  `test_connector_native_query.py` (now asserts `native`, and `predicate` as
+  the selectable legacy parser), the refused-search probes in `test_evalrun.py`
+  and `test_evalrun_stages.py` (bare words and `state!!new` are not refusals
+  in ServiceNow; the refusal is now a negative offset) and the scripted
+  mistakes in `test_trace_brief.py` (`priority=N^ORDERBYnumber` is valid
+  ServiceNow; the mistake is now a table the instance does not have, and the
+  wrong-dialect email search carries Graph's `Invalid filter clause`).
+- **Every search tool states its query language.** The tool catalog
+  (`tools[*].query` in the turn document, plans and requests documents) and
+  the MCP tool description carry the language a search tool's `query` is read
+  in, a grammar summary, two or three examples in that vendor's syntax, the
+  field names the connector knows, and the free-text form where the product
+  has one (ServiceNow `123TEXTQUERY321=`, Jira and Confluence `text ~`, Drive
+  `fullText contains`, KQL bare terms; SOQL has none and says to use `LIKE`).
+  A tool the evaluator does not read (GraphQL, Rovo, the system of record) says
+  to pass a `predicate`. The words are data
+  (`_data/connectors/_query_docs.json`); every example is executed by the
+  tests. The catalog gains a key, so a turn document's bytes change.
+- **`worldloom evalrun prove <cases>`** (JSON and text; `prove_cases`,
+  `EvalSession.prove()`): replays each case's gold DAG through the emulator
+  under the vendor engine. Every gold query must parse in its vendor grammar
+  (a structured predicate is compiled into the connector's language, an
+  identity lookup restated on the vendor's identity), every gold read must
+  retrieve its evidence, every gold write must leave the expected state, and
+  the reference must score 1.0 on plan, trajectory, outcomes and each stage.
+  Each unsolvable case names its first failing node and why; the command
+  exits 1 when any is unsolvable. `--connectors anvil --contract ...` also
+  serves each gold trajectory through Anvil (each call turned into its
+  contract operation's vendor request), skipped with the reason when no
+  Anvil CLI is found. `--record` writes `proof.json`.
+- **Writers refuse unsolvable sets.** `enterprise-evals build` proves its
+  cases before writing and refuses (`cases_unsolvable`) naming each case's
+  first failing node; `--drop-unsolvable` writes the solvable ones and lists
+  each dropped case with its reason in `proof.json`. `evalrun corners` drops
+  by the same proof (every `restated_figure` case is now dropped: its answer
+  states figures no readable record carries), and `corners.write_case_set`
+  refuses by default. Measured on `--exhaustive --limit 200 --dag-shape '*'`
+  over the `--seed 8128 --incident` and `--seed 4242 --incident` worlds, with
+  no profile and each shipped profile: 116 of 1,000 unsolvable per seed, 65
+  because the gold DAG replies to or sends an email without reading it first
+  (`destructive_without_read`) and 51 because a diamond DAG's write carries an
+  evidence count of 2 for one evidence record (`stage.output`). The documented
+  builds therefore now carry `--drop-unsolvable` until the planner reads a
+  send's target first.
+- **Eval-set pins.** `proof.json` records the pins its proof rests on: the
+  corpus (records and rows), each connector definition, the query engine and
+  its vendor data, the grader, and under Anvil the contracts, any exposure
+  profiles, the provider mappings and the Anvil version. `evalrun run`
+  compares them with the live environment before any agent runs: a moved pin
+  re-proves the set and refuses (`proof_stale_unsolvable`) when it no longer
+  proves, naming what moved; a set with no proof record is proved at the start
+  and runs with a warning. `run.json` records `pins`; `--resume` and `evalrun
+  merge` refuse a ledger under other pins, and `compare` reports two runs
+  under different pins as incomparable (`pins_mismatch`), as it does two
+  graders.
+- **Fixed.** A call whose `entity` names an entity the connector does not
+  declare (`incidents` for `incident`) crashed the agent's turn with a
+  `KeyError` from node attribution; it now gets the emulator's `Unknown
+  entity` validation error, as the vendor would answer.
+- **Failure ownership reads the proof.** `evalrun.ownership.read_proofs`
+  (and `evalrun autopsy --proofs <case set>`) reads the `proof.json` the proof
+  writes, dropped cases included, in place of the `proofs.jsonl`,
+  `solvability.jsonl` and row fields it guessed at; a `world.proof`
+  attribution names the proof's first failing node, check and reason.
+- **Fixed: one name for a rendered file.** The served emulator named a
+  `ConnectorRecord` by its title while a compiled row's snapshot named it by
+  `fields.name`; on a rendered SharePoint or Drive file (whose `name` is its
+  file name, `art-0001-close-calendar.docx`) the two differ, so every read or
+  search over one graded `result_mismatch` for the reference agent itself.
+  The proof found it: on `--seed 8128 --incident` rendered to docx, pdf and
+  xlsx, 15 of 200 non-exhaustive cases. The emulator now keeps a record's own
+  `fields.name` and falls back to the title only for a record with none, so
+  the served answer and the snapshot agree; the interview projection's
+  workaround (renaming the file to its title and keeping `file_name`) is
+  gone. Emulator answers change only for records whose `fields.name` differs
+  from their title.
+
+### Plans as data flow
+
+- **Lineage from the call trace.** `evalrun.lineage.derive_lineage` reads,
+  for every call, which earlier calls it consumed: a distinctive value one
+  call returned (a record id, key, sys_id, email, cursor, a copied title)
+  that reappears in a later call's path, query, body or native query (read
+  through the shared evaluator) makes the later call depend on it. Values
+  the request states, constants, dates and attributes most items of a
+  listing share never link; the most recent producer wins and the others are
+  kept as alternatives; a later page depends on the page before it. An
+  Anvil-served run links by what the agent actually sent and saw over HTTP.
+  With the plan stage on, each ledger span's `consumed_from` is this
+  lineage (it was the service's attribution); with it off the spans are
+  unchanged.
+- **The executed DAG graded edge by edge.** `PlanGrade.nodes.dag` (additive,
+  absent on a run with no calls) carries the executed DAG and its grade
+  against the gold DAG's data edges (bindings, `for_each`, the same record):
+  edge precision and recall, and the findings `plan.edge_missing`,
+  `plan.edge_spurious`, `plan.wrong_source`, `plan.wrong_branch` and
+  `plan.serialised` (independent reads run serially; efficiency, not an
+  error), glossed in the autopsy and the brief. When the agent declares a
+  plan, `dag.declared` reports what it declared and never ran, ran and never
+  declared, the edges that changed, and an `agreement`; `summarize` reports
+  `stages.plan_dag`, `edge_precision`, `edge_recall`, `declared_cases` and
+  `declared_agreement`. Every existing score, pass and finding is unchanged.
+- **`evalrun run --exec <cmd> --harness-mode sdk-program`.** The agent under
+  test writes one Python program per case (`worldloom.evalrun-program/v1`,
+  with a generated `worldloom_client` module and the tool endpoint in
+  `WORLDLOOM_TOOL_URL`, or the Anvil base URLs under `--connectors anvil`);
+  Worldloom runs it under `--program-timeout` against a local HTTP shim over
+  the run's own tool surface, or against Anvil, and grades the calls it made
+  like any run's. The program, its digest, exit status and the plan read off
+  its source (Python `ast`, calls in source order with variable flow) ride
+  on the ledger line as `program`. The default harness mode is unchanged.
+### A whole world from an interview
+
+- **`worldloom interview`** (and `worldloom.interview`, its SDK) interviews a
+  harness or a script one question at a time through seven layers: `company`,
+  `lobs`, `employees`, `processes:<lob>`, `documents`, `timeline`, `evals`.
+  Each answer is refused with every finding until it lints clean against the
+  seam it feeds (`company.resolve`, the LOB cascade's roles stage,
+  `episodes.lint`, `lob.lint_lob`, `doctypes.lint` and `packs.lint` on the
+  assembled pack, `timeline.review` against the built roster) plus the rules
+  only the interview can state: seniority levels on the reporting ladder
+  (`ic`, `manager`, `director`, `executive`), the systems every process step
+  touches, review chains that go up, and eval intents whose reads name steps
+  and systems the processes declared. `run` (with `--script`, `--harness` or
+  `--exec`), `next` / `answer` for the file round trip, `status`, `build`,
+  `measure`. Requests are `worldloom.world-interview/v1`; prompt keys
+  `world.interview.*`, policy `world.interview.max_rounds` and
+  `world.interview.max_reads`; the bundled harness adapters recognise the
+  schema.
+- **Resumable and deterministic.** Every round lands in `transcript.jsonl` as
+  it happens; reopening replays the accepted answers through the lints again
+  and restores the question in progress, so an interrupted interview finishes
+  byte-identical to one never interrupted. Builds inside the interview run
+  under `registries.scoped()`.
+- **One pack, no parallel format.** The accepted answers assemble into one
+  `packs.Pack` (lobs, episodes, artifact types, lore, and a role table when a
+  LOB adds a post) plus a resolution for what a pack has no field for.
+  `interview build` builds it under the enterprise realism profile, runs the
+  reviewed history with every process once per period, narrates under fact
+  constraints (the deterministic writer, or `--narrate-exec` /
+  `--narrate-harness`), renders, validates, and writes the corpus.
+- **Evals from the interviewed world.** Each intent becomes an
+  `enterprise-dag@1` query shaped by its asker's level (IC lookup, manager
+  fan-in, director conditional with period- and revision-aware document reads,
+  executive per-entity maps across LOBs) through the existing materialise,
+  validate and compile path, with `interview_provenance` naming the question
+  behind every node. One case set per level (`evals/<level>/`) with
+  `provenance.jsonl`; the build refuses unless the reference agent passes
+  every case. The interview projection adds `interview_*`, `period`,
+  `revisions` and review-chain fields to the records it touches and mints a
+  record per step on systems the engine projects nothing for; it is opt-in,
+  so every other corpus projects as before.
+- **`examples/interviews/kestrel-vale.json`**: a scripted interviewee whose
+  first answer to every question is refused on purpose. Measured at seed
+  8128: 3 LOBs, 12 levelled roles (3 per level), 3 processes over 8 systems,
+  75 documents (284 files, 132 revision files), 4 periods with an incident, a
+  departure and a mid-history policy, 12 cases (3 per level), reference 12 of
+  12. `docs/interview-to-world.md` carries the gap analysis;
+  `/worldloom-interview` drives it.
+### Two levers: the agent and the interface
+
+- **Failure ownership.** `evalrun.ownership` gives every failing finding one
+  owner, `agent`, `interface`, `world` or `grader`, by deterministic rules
+  applied in order (a solvability proof record or a reference agent failing
+  the same way makes it the world's; an identical trajectory scored
+  differently, a replay divergence or an unexplained failure the grader's;
+  validation, schema and unsupported-operation errors, refused calls,
+  malformed queries on a tool with no documented grammar, undeclared
+  pagination, unexposed tools and serving errors the interface's, with the
+  findings that follow from never getting evidence charged to the interface
+  as consequences). Each attribution names its rule and evidence.
+  `autopsy(attribute=True)` adds owner counts per cluster and owner shares;
+  `evalrun autopsy` prints them (`--no-owners`, `--reference-run`, `--proofs`,
+  `--peer`), `evalrun summarize` prints an owner line and `evalrun compare`
+  the change per owner. The pilot's six training runs reclassify as 54%
+  interface, 46% agent.
+- **The interface lever.** `evalrun improve --levers interface` (or
+  `agent,interface`) with `--contract CONNECTOR=<bundle>` lets a round
+  reshape the interface the agent is served: an Anvil manifest overlay per
+  connector (`evalrun.interface`), proposed from the interface-owned findings,
+  the failing arguments and vendor errors and the served tools, through an
+  interview (kind `anvil-overlay` on the pack interview's wire format)
+  refused with findings until the diff touches only agent-facing keys,
+  compiles with `anvil compile`, keeps every approval (re-granted for
+  simulation with `anvil approve` when needed) and leaves every operation's
+  behaviour in the compiled AIR unchanged. Runs are served through Anvil
+  under the champion interface, the agent is handed the served tool catalog
+  (`$ANVIL_<CONNECTOR>_SURFACE`), recompiled bundles are cached by digest,
+  and candidates face the unchanged training gate, ablation and holdout.
+  `--candidates` mixes agent and interface candidates.
+- **Transfer gate.** An interface candidate must also not regress a second
+  agent (`--transfer-agent`) on the held-out cases; without one the gate is
+  skipped and the receipt says why.
+- **Promotion output.** A promoted overlay is written under
+  `<out>/interface/promoted/NNN/` as a reviewable manifest diff and an
+  approvals record in Anvil's `approvals.jsonl` format marked
+  simulation-only; nothing outside the loop's directory is touched, and
+  production approval stays a human step. Receipts record `lever`, the
+  overlay digests and the recompiled contract digests. With `--levers agent`
+  (the default) every receipt is byte-identical to before.
+### Reader-grade figures, decks and industries
+
+**Generation.** Changes what an `enterprise/v2` build narrates and renders
+(its requests, its offline prose, its figures, its deck, its Word section
+layout). `legacy` and `enterprise/v1` corpora build, narrate, render and
+replay byte for byte as before (checked on retail and banking builds in every
+format).
+
+- **The profile owns number spelling.** A new presentation knob, `spelling`
+  (`exact`, `reader`; `reader` and `filing` profiles use `reader`), backed by
+  a rulebook in `src/worldloom/_data/presentation/spelling.json` and the new
+  `figures` module. A reader spelling rounds money per magnitude (`bn` two
+  places, `m` one, `k` none, at least two significant figures), spells a
+  sentence's figures together (one precision per unit, and a figure at least
+  a tenth of the sentence's largest magnitude spelled in it: `AUD 1.0m
+  adverse` beside `AUD 617.2m`, not `AUD 958 thousands adverse`), writes `k`
+  never "thousands", `nil` for a zero, `%` for a `pct` unit, ISO dates in
+  words and recorded enum values in words, and drops "adverse" after a phrase
+  that already carries the direction (prompts pack `render.figures.*`). A
+  ledger held in millions is no longer relabelled `m` by `magnitudes:
+  scaled`. `figures.agrees` accepts a correct rounding of a fact at the
+  precision shown and refuses a wrong one; reader checks use it (a reader
+  target carries its accepted spellings, off the wire when empty).
+- **Narration refusals for what a reader sees.** Under a reader spelling the
+  claim validator adds `number_spelling` (the substituted prose read by
+  `figures.defects`) and `slug_leak` (a snake_case token, a recorded enum
+  value or a slug in the writer's own words, with the words to use). The
+  request document states both rules (`narrative.spelling.rule.*`) and shows
+  each fact as it will print. The contract fixture (`DeterministicProvider`,
+  `writes_for_reader = False`) is not held to them; every other provider is.
+  A section's facts that an earlier section of its document carries are
+  marked `restated` on the request (still allowed; the offline narrator
+  leaves them to the section that said them).
+- **Presenter deck.** Content slide titles are built from the lead fact of
+  the slide's lead move (`render.deck.takeaway.fact.*`); lead-ins listed in
+  `render.deck.generic_titles` are never titles and `presenter.lint_titles`
+  refuses a title that carries no fact; one fact titles one slide. The agenda
+  lists the argument's sections by lead move (`render.deck.agenda.move.*`).
+  Notes draw on larger pack text banks with a no-repeat rule per deck, and the
+  line into the next slide comes from the relation between the two slides'
+  lead moves (`render.deck.notes.relation.*`). `prose_quality.
+  notes_repetition` and `NOTES_THRESHOLD` measure it.
+- **Industry prose.** The composing narrator (`composed-prose-2`,
+  `ComposedProvider.for_world`) puts the shipped industry pack for the
+  world's engine in force while it writes: `banking` and `insurance` gained
+  phrase banks for their fact kinds, and a new `infrastructure_services`
+  industry pack (no aliases) speaks for the procurement engine's group.
+  Industry packs may add `narrative.prose.*` keys the default does not list.
+  The rhetoric catalogue moves to `moves@2.json` with move sets for the
+  banking, insurance and procurement doctypes. A thin reader-grade section
+  may draw on up to three context facts (same subject, kind family and
+  period, figures only, current and visible to the author, not carried or
+  given elsewhere in the document); a request's `recurrence`
+  walks a recurring fact kind through its alternatives. Retail, banking,
+  insurance and procurement builds all meet the prose thresholds, enforced
+  in `tests/test_industry_prose.py`; `prose_quality` adds
+  `number_spelling_defects` (ceiling zero) and counts recorded enum values
+  reaching the page as slug leaks.
+- **Word structure.** Under `layout: designed` the body is a Word section of
+  its own after the front matter, numbered from one, with the running heads
+  linked. `tests/test_docx_structure.py` verifies styles, keep-with-next,
+  repeating header rows, custom properties, comments, the section break and
+  the header and footer fields with python-docx.
+
+### Reader-grade documents (`enterprise/v2`)
+
+**Generation.** New builds default to `artifact_realism: enterprise/v2`. A
+corpus that recorded `enterprise/v1` or no profile (`legacy`) rebuilds,
+re-renders and replays exactly as before; `--realism enterprise/v1` still
+names the first version, and `--realism enterprise` now means `v2`.
+
+- **Section rhetoric as data.** `src/worldloom/_data/rhetoric/moves@1.json`
+  declares the moves each section of the shipped doctypes makes (a variance
+  memo's Position is headline, comparison, implication; its Recommendation
+  decision, action, owner, risk), with a default per semantic role, and the
+  fact kinds each move draws on. An authored doctype declares its own with
+  `sections[].moves`, linted for unknown moves and out-of-section kinds.
+  Under `enterprise/v2` a narration request carries `moves` (and
+  `display_names` for subjects recorded as slugs); the brief is the prompts
+  pack text `narrative.section_moves.template`, keyed in the ledger as
+  `section_moves@1+<template digest>`, and the per-move instructions are
+  `narrative.move.<name>`. Requests without moves digest exactly as before.
+- **A composing offline narrator.** `narrative.ComposedProvider`
+  (`composed-prose-1`) writes a paragraph per move from sentence plans (one
+  sentence per measure of a subject, actual against budget with its
+  variance), connectives, lead-ins and implications that are prompts pack
+  text under `narrative.prose.*`, so an industry pack changes the words
+  without code. `build --narrate` and `mosaic` use it under `enterprise/v2`;
+  the contract fixture stays the writer for every other profile.
+- **Prose quality is measured.** `worldloom.prose_quality` reads
+  template-opener rate, repeated-sentence rate, slug leakage, sentences and
+  paragraphs per section and paragraph length, with thresholds the tests
+  enforce. `diversity --sizes` and `measure_corpus` report it. On seed 8128
+  the fixture scores an opener rate of 0.39, a repeated rate of 0.82, eleven
+  slug leaks and one paragraph per section; the composing narrator scores
+  0, under 0.2, none, and more than two.
+- **Provenance placement is profile-driven.** New presentation knobs:
+  `citations` (`inline` or `appendix`), `layout` (`plain` or `designed`),
+  `deck` (`ledger` or `presenter`), `notes` (`provenance` or `talk`) and
+  `slide_budget` (`unbounded`, `board`, `briefing`). `reader` and `filing`
+  set the second of each; `audit` keeps the first and its bytes. Under
+  `appendix` the "Key figures" and "Figures cited" tables become one
+  "Sources of figures" appendix, the workbook schedules move behind the
+  paper, and the cited fact ids go into Word and PowerPoint custom properties
+  and the PDF information dictionary, which `artifact_text` reports as
+  `extra["properties"]`. An `enterprise/v2` corpus that names no profile is
+  presented under `reader`.
+- **Presenter decks.** Takeaway titles written from the facts on the slide,
+  bullets that are the section's argument, a Two Content slide pairing the
+  argument with its chart, charts under takeaway titles, tables in the
+  appendix, talk-track notes (point, evidence, transition) from the prompts
+  pack's `render.deck.notes.*` texts, and a slide budget. Seed 8128's
+  executive deck goes from 52 slides (30 Title Only tables) to 21.
+- **Designed layout.** A cover with a classification band, title block,
+  summary box, contents and distribution; a two-column control grid;
+  keep-with-next, whole short tables, unbroken rows and widow and orphan
+  control, in Word and PDF.
+
 ### Serving connectors through Anvil
 
 - **An Anvil state provider.** `python -m worldloom.anvil_provider --corpus

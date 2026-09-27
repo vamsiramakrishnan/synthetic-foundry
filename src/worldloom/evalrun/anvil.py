@@ -19,6 +19,11 @@ diff the grader and the stages read are the ones an in-process run would
 have produced for those calls. A replay that answers differently from what
 the provider answered (a node-scoped failure attributed differently when
 several connectors' calls interleave) is noted on the result, not hidden.
+What the agent actually sent (method, path, query string, body) and the
+response Anvil answered it with are kept per replayed span
+(``AnvilCase.observations``), so data-flow lineage (``evalrun.lineage``)
+links calls by the values the agent saw, not by the replay's connector
+arguments.
 Calls Anvil answered itself (auth, an injected fault, an idempotent replay)
 never reached a connector and are recorded as refusals.
 
@@ -274,6 +279,8 @@ class AnvilCase:
         self.traces: dict[str, Path] = {}
         self._processes: dict[str, subprocess.Popen[str]] = {}
         self._logs: dict[str, Path] = {}
+        #: Span id to what the agent sent (``request``) and saw (``response``), filled by ``close``.
+        self.observations: dict[str, dict[str, Any]] = {}
 
     @property
     def surface(self) -> AnvilToolSurface:
@@ -335,7 +342,7 @@ class AnvilCase:
 
         self.stop()
         return replay_traces(self.service, self.principal, self.run_id, self.traces, self.serving.mappings,
-                             order=self.order)
+                             order=self.order, observations=self.observations)
 
 
 def read_trace(path: Path) -> list[dict[str, Any]]:
@@ -391,9 +398,31 @@ def _argument_names(entry: Mapping[str, Any]) -> list[str]:
     return sorted(set(map(str, names)))
 
 
+def observed_exchange(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """What the agent sent and what Anvil answered it with, from one trace entry (headers left out)."""
+
+    request = entry.get("request") or {}
+    sent = {"method": request.get("method"), "path": request.get("path"), "query": request.get("query") or {},
+            "body": request.get("body")}
+    result = entry.get("result") or {}
+    provider = entry.get("provider")
+    if isinstance(result, Mapping) and "output" in result:
+        seen = result.get("output")
+    elif isinstance(provider, Mapping) and "result" in provider:
+        seen = provider.get("result")
+    else:
+        seen = None
+    return {"request": sent, "response": seen}
+
+
 def replay_traces(service: ConnectorEvaluationService, principal: str, run_id: str, traces: Mapping[str, Path],
-                  mappings: Mapping[str, AnvilMapping], *, order: Path | None = None) -> tuple[str, ...]:
-    """Replay what Anvil served into the run's service; the notes name every call whose answer differed."""
+                  mappings: Mapping[str, AnvilMapping], *, order: Path | None = None,
+                  observations: dict[str, dict[str, Any]] | None = None) -> tuple[str, ...]:
+    """Replay what Anvil served into the run's service; the notes name every call whose answer differed.
+
+    *observations*, when given, is filled with each replayed span's id to the
+    exchange the agent actually had with Anvil (``observed_exchange``).
+    """
 
     loaded = {name: read_trace(path) for name, path in sorted(traces.items())}
     notes: list[str] = []
@@ -412,7 +441,11 @@ def replay_traces(service: ConnectorEvaluationService, principal: str, run_id: s
             service.record_refusal(principal, run_id, f"{connector}.{tool}", _argument_names(entry),
                                    f"anvil_{error.get('code', 'refused')}: {error.get('message', '')}".rstrip())
             continue
+        spans_before = len(service.spans(principal, run_id)) if observations is not None else 0
         replayed = answer(mappings[connector], ServiceBackend(service, principal, run_id, connector), normalized)
+        if observations is not None:
+            for span in service.spans(principal, run_id)[spans_before:]:
+                observations[str(span.id)] = observed_exchange(entry)
         if not replayed.called:
             error = replayed.response.get("error") or {}
             service.record_refusal(principal, run_id, f"{connector}.{replayed.tool or entry.get('tool')}",
@@ -433,6 +466,7 @@ __all__ = [
     "contract_service",
     "find_anvil",
     "merge_traces",
+    "observed_exchange",
     "read_trace",
     "replay_traces",
     "resolve_contracts",

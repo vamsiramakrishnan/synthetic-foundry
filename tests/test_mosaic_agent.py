@@ -25,6 +25,7 @@ from typer.testing import CliRunner
 
 from worldloom.cli import app
 from worldloom.evaluate.across import load
+from worldloom.narrative import ComposedProvider
 
 runner = CliRunner()
 
@@ -76,7 +77,7 @@ def test_agent_prose_is_not_the_deterministic_prose(tmp_path: Path) -> None:
         }
 
     agent, stock_writer = narrator(out, "world-01"), narrator(stock, "world-01")
-    assert agent == {"agent"} and stock_writer == {"deterministic-fake-1"}
+    assert agent == {"agent"} and stock_writer == {ComposedProvider.id}
 
 
 def test_the_checkpoint_wiring_carries_agent_prose(tmp_path: Path) -> None:
@@ -106,21 +107,22 @@ def test_rejections_come_back_as_feedback_and_the_retry_complies(
     the adapter complies only once `feedback` arrives, so a pass here means the
     feedback genuinely travelled."""
     adapter = tmp_path / "guilty_until_advised.py"
+    # Complying is the reference adapter's answer, which writes to the
+    # length floor a reader-grade brief states.
+    tools = Path(__file__).resolve().parents[1] / "tools"
     adapter.write_text(
         "import json, sys\n"
+        f"sys.path.insert(0, {str(tools)!r})\n"
+        "from exec_agent import answer\n"
         "doc = json.load(sys.stdin)\n"
         "out = []\n"
         "for r in doc.get('requests', []):\n"
         "    req = [f for f in r['facts'] if f['required']] or r['facts'][:2]\n"
         "    if doc.get('feedback'):\n"
-        "        sents, claims = [], []\n"
-        "        for f in req:\n"
-        "            s = 'The position was {{fact:%s}}.' % f['id']\n"
-        "            sents.append(s); claims.append({'text': s, "
-        "'supporting_fact_ids': [f['id']]})\n"
-        "    else:\n"
-        "        sents = ['The position was 2.48% below plan.']\n"
-        "        claims = [{'text': sents[0], "
+        "        out.extend(answer({'requests': [r]})['responses'])\n"
+        "        continue\n"
+        "    sents = ['The position was 2.48% below plan.']\n"
+        "    claims = [{'text': sents[0], "
         "'supporting_fact_ids': [req[0]['id']]}]\n"
         "    out.append({'id': r['id'], 'text': ' '.join(sents), "
         "'claims': claims})\n"

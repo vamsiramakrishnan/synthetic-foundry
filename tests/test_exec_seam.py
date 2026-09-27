@@ -71,21 +71,40 @@ import json, sys
 from pathlib import Path
 
 
+def say(fact):
+    lead = (
+        "It was recorded at the time as" if fact["superseded"]
+        else "The position was"
+    )
+    return lead + " {{fact:" + fact["id"] + "}}."
+
+
 def answer(document):
     responses = []
     for request in document["requests"]:
         picked = [f for f in request["facts"] if f["required"]] or request["facts"][:2]
-        sentences, claims = [], []
+        by_id = {f["id"]: f for f in request["facts"]}
+        claims, paragraphs, cited = [], [], set()
+        # A reader-grade request states a floor: a paragraph per move, each
+        # at least the sentences its move asks for.
+        moves = request.get("moves") if (request.get("floor") or {}).get("sentences") else None
+        for move in moves or [{"facts": [f["id"] for f in picked], "sentences": len(picked)}]:
+            lines = []
+            for index in range(max(1, move.get("sentences", 1))):
+                fid = move["facts"][index] if index < len(move["facts"]) else None
+                if move.get("derived") or fid is None or fid in cited:
+                    lines.append("That is the part of the position the period turns on.")
+                    continue
+                lines.append(say(by_id[fid]))
+                cited.add(fid)
+                claims.append({"text": lines[-1], "supporting_fact_ids": [fid]})
+            paragraphs.append(" ".join(lines))
         for fact in picked:
-            lead = (
-                "It was recorded at the time as" if fact["superseded"]
-                else "The position was"
-            )
-            sentence = lead + " {{fact:" + fact["id"] + "}}."
-            sentences.append(sentence)
-            claims.append({"text": sentence, "supporting_fact_ids": [fact["id"]]})
+            if fact["id"] not in cited:
+                paragraphs[-1] += " " + say(fact)
+                claims.append({"text": say(fact), "supporting_fact_ids": [fact["id"]]})
         responses.append(
-            {"id": request["id"], "text": " ".join(sentences), "claims": claims}
+            {"id": request["id"], "text": "\\n\\n".join(paragraphs), "claims": claims}
         )
     return responses
 '''

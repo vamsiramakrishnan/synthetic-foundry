@@ -96,7 +96,14 @@ def _canonical_record(record: ConnectorRecord | Mapping[str, Any]) -> dict[str, 
             "entity": record.entity,
             "ident": record.external_id,
             "external_id": record.external_id,
-            "name": record.title,
+            # A record that names itself (a rendered SharePoint or Drive file:
+            # `fields.name` is its file name, as the products' `name` is) keeps
+            # that name; the title is the name only of a record with none. The
+            # compiled row's snapshot reads the same key
+            # (`enterprise_rows.runtime_records`), and when this overwrote it
+            # with the title every search over a rendered file graded
+            # `result_mismatch` for the reference agent itself.
+            "name": record.fields.get("name") or record.title,
             "title": record.title,
             "fact_ids": list(record.fact_ids),
             "event_ids": list(record.event_ids),
@@ -147,10 +154,13 @@ def _coerce_predicate(value: Predicate | Mapping[str, Any] | None, *, entity: st
     return Predicate(entity=entity, where=tuple(clauses))
 
 
-#: The two ways a search tool can execute a ``query`` string. ``predicate`` is
-#: the historical conjunctive subset (``connector_query.parse_native``) and the
-#: default, so a default emulator's output stays byte-identical; ``native`` is
-#: the vendor-language evaluator in ``worldloom.connectors.query``.
+#: The two ways a search tool can execute a ``query`` string. ``native`` is the
+#: vendor-language evaluator in ``worldloom.connectors.query`` and the default
+#: (policy ``connectors.query.engine``): a pilot's call errors were mostly
+#: valid vendor queries (SOQL ``ORDER BY ... LIMIT``, ServiceNow ``ORDERBY``,
+#: JQL ``OR``) that the historical parser refused. ``predicate`` is that
+#: historical conjunctive subset (``connector_query.parse_native``), still
+#: selectable for a run that must reproduce an older ledger.
 QUERY_ENGINES = ("predicate", "native")
 
 
@@ -163,7 +173,7 @@ def _query_engine(stated: str | None) -> str:
         try:
             stated = str(packkit.policy("connectors.query.engine"))
         except KeyError:
-            stated = "predicate"
+            stated = "native"
     if stated not in QUERY_ENGINES:
         raise ValueError(f"unknown query engine {stated!r}; expected one of {', '.join(QUERY_ENGINES)}")
     return stated

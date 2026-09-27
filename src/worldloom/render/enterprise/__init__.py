@@ -1,4 +1,4 @@
-"""Renderers for the ``enterprise/v1`` realism profile.
+"""Renderers for the ``enterprise/v1`` and ``enterprise/v2`` realism profiles.
 
 Same contract as every renderer beside it: bytes from a plan that was built
 from the IR and the world's own records, never a figure computed here. The
@@ -128,7 +128,7 @@ def context(world: World, formats: Sequence[str]) -> Context:
 
 
 def render_formats(ctx: Context) -> list[Rendered]:
-    """Every requested format, in request order, under ``enterprise/v1``."""
+    """Every requested format, in request order, under an enterprise profile."""
     from .. import renderer
     from . import docx, html, markdown, pdf, pptx
 

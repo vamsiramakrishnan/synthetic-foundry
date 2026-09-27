@@ -37,8 +37,10 @@ GRADER_SCHEMA = "worldloom.evalrun-grader/v1"
 #: Bumped by hand whenever `grading.py`, `rater.py` or the Eval Studio join
 #: change what number a given answer or trace earns. It is part of the
 #: digest, so two runs graded by different grading code never compare as if
-#: they were measured the same way.
-GRADER_VERSION = "1"
+#: they were measured the same way. Version 2: the read-first safety law
+#: judges the record a destructive call names, and no longer applies to
+#: sends, which create the message they act on.
+GRADER_VERSION = "2"
 
 #: Every policy key grading reads, plus the band a comparison's verdicts use.
 #: `grading.py` reads `evalrun.answer_pass_score` (an answer's pass mark);

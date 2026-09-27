@@ -86,7 +86,7 @@ Determinism spine:
 | `docs/`, `docs/agents/` | Operator guides; 16 agent topic files |
 | `examples/` | `retail-close/` golden corpus (CI-validated and hand-authored; never regenerate or "fix" it), `grocery-close/` reference narration, `packs/`, `episodes/`, `artifact-types/` |
 | `evals/` | Checkout-only eval harnesses (enterprise_minimum, executive_narration, alphaevolve) |
-| `.claude/skills/`, `.claude/commands/` | 18 skills + 7 slash commands driving the loop; every skill is indexed in `docs/skills.md` |
+| `.claude/skills/`, `.claude/commands/` | 19 skills + 7 slash commands driving the loop; every skill is indexed in `docs/skills.md` |
 | `site/` | Astro/Starlight docs site (npm, GitHub Pages) |
 | `.github/` | CI workflows; `scripts/dispersed_replay.py` is the byte-identity gate |
 
@@ -124,6 +124,7 @@ Agent evaluation loop (querying, iteration, outcomes; not retrieval):
 
 ```bash
 worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom evalrun prove ./cases                    # every case solvable? first failing node and why
 worldloom evalrun cases ./cases                    # per-axis coverage; a zero is a named gap
 worldloom evalrun run ./cases -o ./runs/reference  # the reference agent: the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json

@@ -6,6 +6,7 @@ with the grading a fact-derived corpus can support and Eval Studio cannot.
 
 ```bash
 worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200
+worldloom evalrun prove ./cases                     # every case solvable? first failing node and why
 worldloom evalrun cases ./cases                     # what the set can grade, per axis
 worldloom evalrun run ./cases -o ./runs/reference   # the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
@@ -151,6 +152,222 @@ older one; `compare` judges the three axes on the digest without that part,
 so older ledgers still compare, and reports stage deltas only between runs
 graded by the same stage grader. With every stage off, the ledger, summary and
 digest are byte-identical to what they were before stages existed.
+
+## Solvability and pins
+
+A grade means something only when full marks were possible. A pilot's call
+errors were mostly valid vendor queries the emulator's old predicate parser
+refused (SOQL `ORDER BY ... LIMIT`, ServiceNow `ORDERBY`, JQL `OR`), so part of
+what it measured was the emulator. Two things close that: the vendor query
+evaluator is the default engine (policy `connectors.query.engine`, `native`;
+`predicate` still selects the historical parser), and every case set is proved
+solvable before an agent is graded on it.
+
+```bash
+worldloom evalrun prove ./cases                   # one verdict per case, first failing node and why
+worldloom evalrun prove ./cases --json --record   # the report as JSON; proof.json written beside the cases
+worldloom evalrun prove ./cases --connectors anvil --contract jira=./contracts/jira   # also served through Anvil
+```
+
+**What the proof checks.** Each case's gold DAG is replayed through the
+connector emulator under the vendor engine, through the tool surface an agent
+gets (`evalrun.proof.prove_cases`; `EvalSession.prove()`):
+
+| Check | Fails when |
+| --- | --- |
+| `query.parse`, `query.field` | the node's gold query, or its structured predicate compiled into the connector's language, does not parse in the vendor grammar or names a field the vendor does not have; the reason is the vendor's own error |
+| `query.evidence` | that vendor query, run by the evaluator, does not return the node's evidence. An identity lookup is restated on the vendor's identity (the Jira key, the Salesforce Id, the ServiceNow number); Drive `q`, KQL and Slack search have no identity clause, so an identity lookup there is not checked in vendor form |
+| `read.error`, `read.evidence` | a gold read fails, or does not retrieve its evidence (`expected_reads`, `reads_contain`, else its fixture) |
+| `write.error`, `write.state` | a gold write fails (a target that does not exist), or does not leave the expected state diff |
+| `node.unexecuted` | the reference could not execute the node (an unbound argument, a blocked parent) |
+| `trajectory.safety` | the gold trajectory itself breaks a safety law |
+| `axis.*`, `stage.*`, `assertions` | the reference does not score 1.0 on plan, trajectory or outcomes, or on a stage it is graded on (queries, plan nodes, output), or the row's assertions fail |
+| `anvil.unmapped`, `anvil.divergence` | with `--connectors anvil`: a gold call has no modelled contract operation, or Anvil served it differently from the emulator |
+
+A case that fails any check is unsolvable. The verdict names the first failing
+node in gold order and why; `prove` exits 1 when any case is unsolvable. Under
+`--connectors anvil` without Node and an Anvil CLI the Anvil half is reported
+as skipped, never as passed, and the in-process verdict stands.
+
+**Writers refuse unsolvable sets.** `enterprise-evals build`, `evalrun
+corners` and the case-set writer (`corners.write_case_set`) prove the cases
+before anything is written. The default is to refuse, naming each case's first
+failing node (refusal `cases_unsolvable`); `enterprise-evals build
+--drop-unsolvable` (and `write_case_set(..., drop_unsolvable=True)`) writes the
+solvable cases instead and lists every dropped case, with its node and reason,
+under `dropped` in `proof.json`. Corner cases were always drawn only where the
+reference solves them; they now use the same proof, so a dropped corner case
+names its node too. Refusal is the default because a writer that quietly
+shipped an unsolvable case hands every agent a zero it did not earn.
+
+**Pins.** `proof.json` records what the proof rests on, as digests
+(`evalrun.proof.environment_pins`):
+
+| Pin | What it names |
+| --- | --- |
+| `corpus` | the records and the case rows |
+| `connectors.<name>` | each connector definition the cases use |
+| `query_engine`, `query_data` | the engine, and the vendor field names and error bodies it reads (`_data/connectors/_query.json`) |
+| `grader` | the grading code, grading policy and stage graders (`grader_identity`, without a rater) |
+| `serving` | `emulator`, or under Anvil the contract digests, any exposure profiles the serving carries, the provider mapping digests and the Anvil version |
+
+`evalrun run` computes the live pins before any agent runs. Equal pins: the
+recorded proof stands. Any difference makes the proof stale: the cases the run
+takes (all of them, or its `--limit` or `--shard`) are proved again under the engine the run will use (deterministic, seconds for a
+few hundred cases) and the run is refused (`proof_stale_unsolvable`) when a
+case the record proved solvable no longer is, naming the pins that moved and
+the first failing node. A set with no proof record (every set written before
+this) is proved at the start of the run and runs with a warning, never a
+refusal. The run records `pins` in `run.json`: the live pins plus `proof`,
+the recorded proof's digest when the pins match it, `reproved:<digest>` when
+they moved and the run's cases proved again, `unrecorded` for a set with no
+record; `--resume` and `evalrun merge` refuse a
+ledger under other pins, and `evalrun compare` treats two runs under different
+pins as it treats two runs under different graders: deltas are reported, no
+case is judged, and `pins_mismatch` names what moved.
+
+**Measured.** `enterprise-evals build <world> ./cases --exhaustive --limit 200
+--dag-shape '*'` over the worlds of `--seed 8128 --incident` and `--seed 4242
+--incident`, with no profile and with each of the four shipped profiles
+(`examples/enterprise-evals/*.json`), proves every case solvable: 0 of 1,000
+per seed. Before the generators were fixed it was 116 of 1,000 per seed (the
+two seeds plan the same shapes), every one the gold plan's or its grader's
+doing, none any agent's:
+
+| Cause | Unsolvable per seed, before | After | Fix |
+| --- | --- | --- | --- |
+| a reply to a message the gold plan never read (`trajectory.safety`, `destructive_without_read`) | 44 | 0 | the planner reads the target of every write the law holds, asking the grader's own classification (`OperationSafety.reads_first`) |
+| the same replies, behind that: a body of raw JSON where the case requires a document's sections (`stage.output`, `output.missing_section`) | (44, masked) | 0 | a message's body is an `outline` of the required sections over the evidence |
+| a send flagged for not reading the message it creates (`destructive_without_read`) | 21 | 0 | the law holds a call to read the record it names by `id`; a send names none |
+| a diamond whose write counts each record twice (`stage.output`, `evidence_count`) | 51 (and 3 masked behind a send) | 0 | the diamond joins its two views on the record, one entry per record |
+
+Corner cases over the same seeds (`seeded_world` for each engine): 0 of 10
+drafted per seed dropped, from 6: every `restated_figure` case's answer stated
+the lodged and current figures, which no record an agent can read carries
+(`output.ungrounded_fact`); it now states the cited issue and what the issue
+says. Industry programmes (the first 100 record-request cases of banking,
+retail and healthcare): 0 of 300, from 22, all `output.ungrounded_fact`: a
+list or queue answer stated how many records tripped or were open (`14 open of
+18`), arithmetic no record carries; it now names those records and states only
+how many were read. Refusal stays the default for any set that does not prove.
+
+**Every search tool states its query language.** The tool catalog an agent
+gets (`tools[*].query` in the turn document, and the MCP tool description)
+carries, for each search tool, the vendor language its `query` is read in, a
+grammar summary, two or three examples in that vendor's syntax, the field
+names the connector knows, and the free-text form where the real product has
+one: ServiceNow `123TEXTQUERY321=`, Jira and Confluence `text ~`, Drive
+`fullText contains`, KQL bare terms, OData `$search`, Slack bare terms. SOQL
+has none, so it says to use `LIKE` with `%` wildcards. A tool whose language
+the evaluator does not read (GraphQL, Rovo, the system of record) says to pass
+a structured `predicate`. The words are data (`_data/connectors/_query_docs.json`)
+and every example is executed by the tests.
+
+## Plans as data flow
+
+A plan is a DAG of calls, and a DAG's edges are dependencies. Matching nodes
+and then reading edges off "ran first" grades a trace as a sequence: two
+reads that happened to run one after the other look like a chain, and a write
+that names an id it never saw looks downstream of the search that would have
+found it, as long as the search ran earlier. The plan stage therefore also
+derives the **executed DAG from data flow** (`evalrun.lineage`) and grades it
+edge by edge against the gold DAG. It is attached as `PlanGrade.nodes.dag`,
+with its own score and findings; the plan axis, the node breakdown beside it
+and every other number are unchanged, byte for byte.
+
+**Lineage.** Call B depends on call A when a value A returned reappears in
+B's arguments. The rules, in order:
+
+- *Produced values* come only from a call that succeeded, and only from what
+  the agent saw: the response the surface returned, or for a run served by
+  Anvil the vendor response Anvil answered with (the replay's own result is
+  not what the agent read). Every scalar that passes the distinctiveness rule
+  counts, and so does every identifier-shaped token inside a longer string. A
+  record the call returned or wrote is also produced under its fid, ident and
+  external id, the handles the in-process surface resolves.
+- *Consumed values* are every scalar in the request (for Anvil, the path,
+  query string and body the agent sent), identifier tokens inside strings,
+  the literal values of a native query (JQL, SOQL, an encoded query, OData,
+  CQL, KQL, Drive and Slack search) read by the shared evaluator in
+  `worldloom.connectors.query`, and the records a get, update or delete
+  resolved.
+- *Distinctiveness*: booleans and nulls never link; a number links when its
+  integer part has five or more digits; a string links when it is an email
+  address, or has a digit and three or more characters (an all-digit string
+  needs five), or has no digit and sixteen or more characters. ISO dates and
+  timestamps never link. A value carried by more than half the items of a
+  list of three or more (a status, an assignee, a project key) is a shared
+  attribute and does not link.
+- *Stated values*: a value the case's request states is the user's, not a
+  call's, and links nothing.
+- *Several producers*: the link goes to the most recent earlier producer; the
+  others are kept as alternatives. An ambiguous link honours a gold edge when
+  the gold producer is the chosen call or an alternative.
+- *Pagination*: a call that repeats the last call to the same tool with the
+  same non-paging arguments and asks for a later page depends on it.
+- *Unsourced*: a record handle the agent used that no earlier call produced
+  and the request did not state is counted as unsourced (guessed or
+  hardcoded), never linked.
+
+The run's ledger carries the result in each span's `consumed_from` when the
+plan stage is on; with it off, the spans keep what the service recorded.
+
+**The executed DAG against the gold DAG.** Executed nodes are the implied
+nodes (one per attributed plan node, one per unattributed tool and entity),
+matched to gold as the node breakdown matches them. Gold edges come from the
+case's generation: a consumer that binds a producer's output
+(`bindings` such as `fields.evidence`, `id` from `$.steps.<node>`, a
+`for_each`), transforms compressed out, is a **data** edge; one whose
+condition reads it is a **control** edge; the rest (a `read_chain`'s listed
+order) are **order** edges. A row without bindings still has a data edge
+where the consumer acts on the producer's record (the same fixture, or the
+readback of a write). `PlanGrade.nodes.dag` reports:
+
+| Field | Meaning | Finding |
+| --- | --- | --- |
+| `edge_recall` | gold data edges the run carried | |
+| `edge_precision` | lineage edges between matched nodes that a gold edge or gold ancestry accounts for | |
+| `missing` | a consumer ran without the producer's output: it guessed or hardcoded the value | `plan.edge_missing` |
+| `spurious` | a consumer used the output of a node the gold DAG says it does not depend on | `plan.edge_spurious` |
+| `wrong_source` | `(consumer, gold producer, actual producer)`: consumed, but from another node | `plan.wrong_source` |
+| `wrong_branch` | a conditional branch the data the run read did not select was executed anyway | `plan.wrong_branch` |
+| `parallelisable`, `serialised` | independent reads (no path either way in gold or in the run), and those run one after the other | `plan.serialised` (efficiency, not an error) |
+| `executed` | the DAG itself: nodes, edges (how each was carried, a few of the values, alternatives), depth, steps | |
+
+Which branch the data selected is decided from the results the reads
+returned; a write carrying the untaken branch's literal arguments is on the
+wrong branch whatever node attribution by shape gave it. Calls an agent
+issued together (an `sdk-program`'s threads, which the shim records as
+overlapping) are one step and never `serialised`.
+
+**Declared against executed.** When the agent declares a plan (`planned_dag`
+in its answer, or the plan read off an `sdk-program`'s source), the node
+breakdown grades the declared DAG as before and `dag.declared` reports the
+divergence: `declared_not_executed`, `executed_not_declared`,
+`edges_dropped` (declared dependencies the calls did not carry),
+`edges_added` (data flow the plan did not declare), the declared DAG's own
+edge precision and recall against gold, and `agreement` (mean of node and
+edge agreement; 1.0 means the agent did what it said). `summarize` reports
+`stages.plan_dag`, `edge_precision`, `edge_recall`, `declared_cases` and
+`declared_agreement`.
+
+**The `sdk-program` harness mode.** A coding harness plans by writing a
+program. `evalrun run --exec "<cmd>" --harness-mode sdk-program` asks the
+child once per case for one: a `worldloom.evalrun-program/v1` document on
+stdin carries the request, the tool catalog, a generated client module
+(`worldloom_client`, one method per tool) and the endpoint variable
+(`WORLDLOOM_TOOL_URL`, or the `anvil` block under `--connectors anvil`), and
+the child replies `{"program": "<python source>"}`, optionally with a
+`planned_dag`. Worldloom runs the program in a subprocess under
+`--program-timeout` against the run's serving path (a local HTTP shim over
+the run's own tool surface, or Anvil), grades the calls it made with every
+axis, stage and lineage, and keeps the program on the ledger line
+(`program`: source, digest, exit status, output tails, the declared DAG and
+where it came from). Without a stated plan, the declared DAG is read off the
+source with Python's `ast`: tool calls in source order, each depending on the
+calls whose results reach its arguments through variables. A program that
+exits non-zero or times out is an error row that still carries its program.
+The default harness mode stays the turn protocol.
 
 ## The agent seam
 
@@ -313,8 +530,10 @@ trace is held to come from one classification.
 Three of Anvil's laws are trajectory findings: `duplicate_write` (a
 non-idempotent mutation issued twice with the same arguments after it
 succeeded), `unsafe_retry` (retried after a non-transient error with no
-idempotency basis) and `destructive_without_read` (a delete on a record no
-earlier call in the run read). Anvil's judge-only rule holds for the answer
+idempotency basis) and `destructive_without_read` (a destructive call on the
+record it names by `id`, a delete, a reply or a forward, that no earlier call
+in the run read; a send names no record, so it has nothing to read). The gold
+plan reads that record first, by the same classification. Anvil's judge-only rule holds for the answer
 axis: `GroundedRater` refuses the causal and authority shapes rather than
 scoring them lexically.
 
@@ -516,6 +735,16 @@ write_run("./runs/mine", mine)
 A `CallableAgent` receives `(task, tools)` and returns an `AgentResponse`
 with the answer, any `ProducedArtifact`s (name, text, and the record ids it
 cites), and optionally the DAG it planned and its first-token latencies.
+
+The proof is one call, and its report carries the pins:
+
+```python
+from worldloom.evalrun import prove_cases
+
+proof = prove_cases(cases, corpus.connector_data.records)   # or EvalSession.open("./cases").prove()
+for item in proof.unsolvable_cases():
+    print(item.case_id, item.failure.node, item.failure.check, item.failure.reason)
+```
 
 [studio]: https://github.com/GoogleCloudPlatform/gemini-enterprise-eval-studio
 [anvil]: https://github.com/vamsiramakrishnan/anvil

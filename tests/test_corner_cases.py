@@ -39,6 +39,7 @@ from worldloom.evalrun.corners import (
     write_corner_set,
     write_frontier,
 )
+from worldloom.evalrun.proof import prove_cases
 from worldloom.evalrun.runner import case_set_digest
 from worldloom.scenarios import MonthEndClose
 
@@ -72,6 +73,19 @@ def batches(worlds: dict[str, World]) -> dict[str, CornerBatch]:
     return {engine: corner_cases(world, seed=SEED) for engine, world in worlds.items()}
 
 
+@pytest.fixture(scope="module")
+def drafts(worlds: dict[str, World]) -> dict[str, CornerBatch]:
+    """Every case each template finds, before the proof: the template's mechanics, solvable or not."""
+    from worldloom.evalrun.corners import world_records
+
+    out = {}
+    for engine, world in worlds.items():
+        records = world_records(world)
+        drafted, _ = draft_cases(world, records=records)
+        out[engine] = CornerBatch(world=engine, seed=SEED, cases=drafted, records=records)
+    return out
+
+
 def _of(batch: CornerBatch, template: str) -> list[Any]:
     return [case for case in batch.cases if case.dimensions["corner"] == template]
 
@@ -99,9 +113,9 @@ def test_every_template_names_real_events_and_catalogue_activities() -> None:
 
 @pytest.mark.parametrize("template", TEMPLATE_IDS)
 def test_each_template_yields_on_a_world_with_its_event_and_not_on_one_without(
-        template: str, worlds: dict[str, World], batches: dict[str, CornerBatch]) -> None:
+        template: str, worlds: dict[str, World], drafts: dict[str, CornerBatch]) -> None:
     home = worlds[HOME[template]]
-    cases = _of(batches[HOME[template]], template)
+    cases = _of(drafts[HOME[template]], template)
     assert cases, f"{template} produced nothing on {HOME[template]}"
     events = {event.id: event for event in home.events}
     facts = {fact.id for fact in home.facts}
@@ -130,7 +144,8 @@ def test_worlds_missing_the_event_in_the_same_engine_yield_nothing() -> None:
     assert all(not misses for misses in skipped.values())
 
 
-def test_the_difficulty_is_the_event(batches: dict[str, CornerBatch], worlds: dict[str, World]) -> None:
+def test_the_difficulty_is_the_event(batches: dict[str, CornerBatch], worlds: dict[str, World],
+                                     drafts: dict[str, CornerBatch]) -> None:
     """Each case punishes the mistake its event invites, and only that mistake."""
     retail = batches["retail"]
     records = retail.records
@@ -167,7 +182,8 @@ def test_the_difficulty_is_the_event(batches: dict[str, CornerBatch], worlds: di
     score = run_cases(service_for((handover,), records), (handover,), carried).results[0].score
     assert score is not None and not score.passed and "state_mismatch:write" in score.assertion_fails
 
-    banking = batches["banking"]
+    # The restatement's mechanics, on the drafted cases.
+    banking = drafts["banking"]
     by_variant = {case.dimensions["variant"]: case for case in _of(banking, "restated_figure")}
     assert set(by_variant) == {"as_reported", "current", "unspecified"}
     refs = {variant: next(node for node in case.row["expected_dag"]["nodes"] if node["id"] == "write")
@@ -204,6 +220,28 @@ def test_every_generated_case_is_solved_by_the_reference_or_dropped_with_a_reaso
         assert failing == [], (engine, failing)
     total = sum(item.solvable for batch in batches.values() for item in batch.yields)
     assert total >= 4
+
+
+def test_a_restatement_proves_solvable_and_its_answer_states_only_what_the_cited_issue_carries(
+        batches: dict[str, CornerBatch], drafts: dict[str, CornerBatch], worlds: dict[str, World]) -> None:
+    # Its answer used to state the lodged and current figures, which no record
+    # an agent can read carries, so the proof dropped every restatement for an
+    # ungrounded fact. The answer is now the cited issue and what it says.
+    drafted = _of(drafts["banking"], "restated_figure")
+    kept = {case.id for case in _of(batches["banking"], "restated_figure")}
+    assert drafted and kept == {case.id for case in drafted}
+    assert not [drop for drop in batches["banking"].drops if drop.template == "restated_figure"]
+    moved = {str(getattr(fact.value, "amount", fact.value)) for fact in worlds["banking"].facts
+             if fact.supersedes and fact.value is not None}
+    assert moved
+    records = {record.external_id: record for record in drafts["banking"].records}
+    for case in drafted:
+        answer = case.row["expected_answer"]
+        cited = answer.split(" ", 1)[0]
+        assert cited in records and records[cited].title[:40] in answer
+        assert not any(value in answer for value in moved), answer
+    proof = prove_cases(drafted, drafts["banking"].records)
+    assert proof.unsolvable == 0, [item.failure for item in proof.unsolvable_cases()]
 
 
 def test_an_unsolvable_case_is_dropped_not_kept(worlds: dict[str, World]) -> None:
@@ -269,8 +307,8 @@ def test_an_idle_champion_yields_a_frontier_the_reference_does_not(tmp_path: Pat
         assert [case.id for case in cases] == [case.id for case in batch.cases] and records
 
 
-def test_a_fixed_case_set_is_searched_in_a_seeded_order_within_budget(batches: dict[str, CornerBatch]) -> None:
-    batch = batches["banking"]
+def test_a_fixed_case_set_is_searched_in_a_seeded_order_within_budget(drafts: dict[str, CornerBatch]) -> None:
+    batch = drafts["banking"]
     idle = ScriptedAgent([], name="idle")
     one = frontier(batch, idle, budget=2, seeds=(7,))
     two = frontier(batch, idle, budget=2, seeds=(7,))
@@ -297,7 +335,7 @@ def test_the_frontier_refuses_to_touch_the_holdout(batches: dict[str, CornerBatc
 def test_two_frontier_batches_from_one_world_are_both_written(batches: dict[str, CornerBatch], tmp_path: Path) -> None:
     from worldloom.evalrun.corners import FrontierBatch, FrontierReport
 
-    batch = batches["banking"]
+    batch = batches["retail"]
     assert len(batch.cases) >= 2
     halves = (batch.cases[: len(batch.cases) // 2], batch.cases[len(batch.cases) // 2:])
     kept = tuple(FrontierBatch(seed=None, world=batch.world, cases=half, records=batch.records) for half in halves)

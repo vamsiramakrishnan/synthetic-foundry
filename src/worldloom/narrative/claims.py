@@ -28,12 +28,37 @@ closing a way a plausible document can be wrong:
     written after it expired — it simply cannot be asserted as current.
 ``forbidden_claim``
     Something this artifact was explicitly told not to say.
+
+Two more run only for a corpus spelled for a reader (the presentation
+profile's ``spelling``), because they judge what a reader sees rather than
+what the ledger holds:
+
+``number_spelling``
+    The prose, with its references spelled, carries a figure no reader should
+    see: a unit word after a figure, a zero as a figure, a direction said
+    twice (`figures.defects`).
+``slug_leak``
+    A recorded identifier in the writer's own words: a slug, a recorded enum
+    value, a snake_case token. The finding names the words to use instead.
+
+And one for a request that states a floor (a reader-grade section's moves):
+
+``section_floor``
+    The section says less than its moves ask for: fewer sentences than the
+    sum of its moves' ``sentences``, or fewer paragraphs than its ``floor``.
+    A live writer averaged 3.23 sentences a section against a 3.5 floor the
+    offline narrator was measured against and nobody else was; the floor is
+    in the brief, so the refusal is the brief kept, not a new rule. A section
+    given fewer facts than moves carries its exemption instead.
 """
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
+from .. import figures
+from ..figures import rules_for
 from . import references
 from .requests import GeneratedNarrative, NarrativeRequest, Verdict, Violation
 
@@ -61,7 +86,9 @@ def known_entity_names(world: World) -> frozenset[str]:
     )
 
 if TYPE_CHECKING:  # pragma: no cover
+    from ..locales import Locale
     from ..models import CanonicalFact
+    from ..presentation import Presentation
 
 
 def validate(
@@ -70,8 +97,16 @@ def validate(
     facts: dict[str, CanonicalFact],
     *,
     entity_names: frozenset[str] = frozenset(),
+    presentation: Presentation | None = None,
+    locale: Locale | None = None,
 ) -> Verdict:
-    """Check a narrative against the facts it was allowed to use."""
+    """Check a narrative against the facts it was allowed to use.
+
+    *presentation* is the profile the corpus's documents are spelled under.
+    Under a reader spelling (`figures`), two more checks run: the prose as a
+    reader will see it must carry no number-spelling defect, and the writer's
+    own words must carry no recorded identifier.
+    """
     violations: list[Violation] = []
     allowed = set(request.allowed_fact_ids)
 
@@ -256,7 +291,90 @@ def validate(
                     Violation(code="unknown_entity", detail=f"{word!r} is not an entity in this world")
                 )
 
+    # 8 and 9. What a reader sees, under a reader spelling only: every other
+    #    corpus is judged exactly as it always was.
+    if presentation is not None and rules_for(presentation) is not None:
+        violations.extend(_spelling_violations(narrative.text, facts, presentation, locale))
+        violations.extend(_identifier_violations(request, narrative.text, facts))
+        violations.extend(_floor_violations(request, narrative.text))
+
     return Verdict(accepted=not violations, violations=violations)
+
+
+def _spelling_violations(text: str, facts: dict[str, CanonicalFact], presentation: Presentation,
+                         locale: Locale | None) -> list[Violation]:
+    """``number_spelling``: the prose, substituted, read for spelling defects.
+
+    A reference spells its figure whole, with currency, magnitude and
+    direction ("AUD 1.0m adverse", "nil"), so a writer who adds a unit word
+    ("{{fact:X}} thousands"), a currency ("AUD {{fact:X}}") or a direction a
+    phrase already carries ("a shortfall of {{fact:X}} adverse") has written
+    a figure no reader should see. Checked on the substituted text because
+    that is the text the defect is in.
+    """
+    from ..locales import DEFAULT as DEFAULT_LOCALE
+
+    spelled = references.substitute(text, facts, locale=locale or DEFAULT_LOCALE, presentation=presentation)
+    return [Violation(code="number_spelling",
+                      detail=f"{defect}. The reference spells the figure whole (currency, magnitude and"
+                             " direction), so write the sentence around it and add no unit, currency or"
+                             " direction word of your own")
+            for defect in figures.defects(spelled, rules_for(presentation))]
+
+
+def _floor_violations(request: NarrativeRequest, text: str) -> list[Violation]:
+    """``section_floor``: the section says less than its moves ask for.
+
+    Counted as `prose_quality.measure` counts (sentences split where a writer
+    ends one, paragraphs at a blank line), and named move by move so the fix
+    is in the finding: which moves, how many sentences each, one paragraph
+    per move.
+    """
+    from ..prose_quality import shape
+
+    floor = request.floor
+    if floor is None or floor.exempt or not request.moves:
+        return []
+    sentences, paragraphs = shape(text)
+    if sentences >= floor.sentences and paragraphs >= floor.paragraphs:
+        return []
+    asked = ", ".join(f"{move.name} {move.sentences}" for move in request.moves)
+    return [Violation(code="section_floor",
+                      detail=f"the section has {sentences} sentence(s) in {paragraphs} paragraph(s); its moves"
+                             f" ask for at least {floor.sentences} sentence(s) in {floor.paragraphs} paragraph(s)"
+                             f" (sentences per move: {asked}). Write one paragraph per move, separated by a blank"
+                             " line, and give each move a sentence for every fact it draws on: what moved, against"
+                             " what, why, what it means")]
+
+
+#: A snake_case token: how a record names a value, never how a reader does.
+_SNAKE = re.compile(r"(?<![\w{:-])[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?![\w}-])")
+
+
+def _identifier_violations(request: NarrativeRequest, text: str,
+                           facts: dict[str, CanonicalFact]) -> list[Violation]:
+    """``slug_leak``: a recorded identifier in the writer's own words.
+
+    The live defect: a writer typed "control_failure: the mapping table has no
+    registered owner", the record's words, into a board deck. Three sources,
+    each with the name a reader uses: a subject recorded as a slug (the
+    request's ``display`` names), a recorded enum value of an allowed fact,
+    and any snake_case token at all. References are removed first: a fact's
+    value is spelled for the reader by the profile, not by the writer.
+    """
+    own = references.strip_references(text)
+    allowed = [facts[f] for f in request.allowed_fact_ids if f in facts]
+    names = {**{token: words for token, words in figures.enum_values(allowed).items()},
+             **dict(request.display)}
+    found: dict[str, str] = {}
+    for token, display in sorted(names.items(), key=lambda item: -len(item[0])):
+        if re.search(rf"(?<![\w-]){re.escape(token)}(?![\w-])", own):
+            found.setdefault(token, display)
+    for token in _SNAKE.findall(own):
+        found.setdefault(token, token.replace("_", " "))
+    return [Violation(code="slug_leak",
+                      detail=f"{token!r} is how the record names it, not how a reader does; write {display!r}")
+            for token, display in sorted(found.items())]
 
 
 #: Function words that begin a sentence and are not part of the name that follows.

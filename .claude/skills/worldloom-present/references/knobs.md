@@ -16,10 +16,19 @@ behind each knob.
 | `provenance` | `footer` | `properties` | `properties` |
 | `magnitudes` | `ledger` | `scaled` | `scaled` |
 | `table_fit` | `fixed` | `measured` | `measured` |
+| `citations` | `inline` | `appendix` | `appendix` |
+| `layout` | `plain` | `designed` | `designed` |
+| `deck` | `ledger` | `presenter` | `presenter` |
+| `notes` | `provenance` | `talk` | `talk` |
+| `slide_budget` | `unbounded` | `board` | `board` |
+| `spelling` | `exact` | `reader` | `reader` |
+| `titles` | `free` | `reader` | `reader` |
 
-`audit` is the default and is byte-for-byte what every corpus rendered before
-this layer existed got. It is not a legacy setting: it is the right profile
-for a corpus whose reader is a validator.
+`audit` is byte-for-byte what every corpus rendered before this layer existed
+got, and what a corpus that names no profile gets under `legacy` and
+`enterprise/v1`. It is not a legacy setting: it is the right profile for a
+corpus whose reader is a validator. A corpus built under `enterprise/v2` (the
+default for new builds) that names no profile is presented under `reader`.
 
 What the knobs do:
 
@@ -35,9 +44,105 @@ What the knobs do:
 - **`magnitudes`**: `ledger` spells a money figure exactly as the fact states
   it (`AUD 5,372,800 thousands`); `scaled` promotes it to the largest magnitude
   that is still *exact* (`AUD 5,372.8m`). Never a rounding: a figure with no
-  shorter exact spelling keeps the ledger wording.
+  shorter exact spelling keeps the ledger wording. Under `spelling: reader`
+  the spelling rulebook decides instead (next).
+- **`spelling`**: how a figure reads inside a sentence. `exact` is the
+  ledger's figure (or its exact promotion under `scaled`), which is what
+  printed "AUD 93.421m" two lines under "AUD 617.2m", "AUD 958 thousands
+  adverse" and "AUD 0 thousands". `reader` rounds money to the places a memo
+  prints per magnitude (`bn` two, `m` one, `k` none, never fewer than two
+  significant figures), spells a sentence's figures together (one precision
+  per unit, and a figure at least a tenth of the sentence's largest magnitude
+  in that magnitude: a gap of `AUD 1.0m adverse` beside revenue of `AUD
+  617.2m`), writes `k` and never "thousands", a zero as `nil`, a `pct` unit as
+  `%`, an ISO date as `24 April 2026`, a recorded enum value in words
+  (`control failure: ...`), and drops "adverse" where the figure's own clause
+  already says which way it went: a phrase ("a shortfall of") or a direction
+  word before or just after it ("missing revenue plan by", "fell", "overspent
+  by", "... below budget"; the lexicon is prompts pack text,
+  `render.figures.direction_words.adverse` and `.favourable`). A clause that
+  says the other way ("ahead of plan by" an adverse figure) keeps the word and
+  is refused at narration. A money table prints the ledger's own cells, so
+  under `reader` every money table states its unit once ("Business Unit P&L
+  (AUD thousands)", the rulebook's `tables` entry): in the caption when its
+  money columns share one, else in each money column's header, and not at all
+  when the table has a unit column of its own. The rules are data
+  (`src/worldloom/_data/presentation/spelling.json`, read by `figures`); the
+  words (`nil`, the direction phrases, month names) are prompts pack text
+  under `render.figures.`. A rounding is a spelling, never a value: the IR
+  and the workbook keep the ledger figure, and every check that compares a
+  reader's copy against the ledger accepts a correct rounding
+  (`figures.agrees`: right at the precision shown, enough significant
+  figures) and refuses a wrong one. A narration request under `reader`
+  shows each fact as it will print and states the spelling rules, and the
+  claim validator refuses prose whose spelled figures read badly
+  (`number_spelling`) or that types a recorded identifier (`slug_leak`).
+- **`titles`**: how a presenter deck's slide titles are fitted. `free` is the
+  shipped cut: 92 characters, at a clause boundary or with an ellipsis, which
+  on a live writer's prose titled a slide "The confirmed cause of the failure
+  was Stale legacy-to-new product hierarchy mapping in the" and an ellipsis.
+  `reader` holds a title to 12 words and 80 characters and never truncates
+  one: a long claim becomes a shorter clause of the same sentence that still
+  carries a figure (or loses a trailing phrase that carries none), and when
+  nothing complete fits the slide is titled from its lead fact's template. A
+  dash between clauses prints as a colon (a comma when the title has one);
+  no dash or ellipsis survives. The styles are data
+  (`src/worldloom/_data/presentation/titles.json`, read by `titles`), and
+  `presenter.lint_titles` names a title over its length, carrying a
+  forbidden character or ending mid-clause.
 - **`table_fit`**: `fixed` divides a PDF table's frame evenly; `measured`
   sizes each column to its widest unbreakable token and shrinks the type if
   even that will not fit. On the shipped fact table `fixed` produces 112
   mid-token line breaks (`system_of_recor`/`d`, a timestamp split as
   `2026-04-07T16:4`/`0:00+00:00`), and `measured` produces none.
+- **`citations`**: where a long document's per-section provenance goes.
+  `inline` follows every numbered section with a "Figures cited" table (a
+  "Key figures" table under the summary), one row per fact id, captioned
+  "Source: Fact ledger". `appendix` takes every one of those rows into a single
+  "Sources of figures" appendix (section, measure, subject, value, fact id),
+  keeps the lineage appendix, moves the workbook schedules behind the paper
+  as an appendix, and writes the cited fact ids into the file itself: Word
+  and PowerPoint custom properties and the PDF information dictionary
+  (`WorldloomFacts`, `WorldloomProvenance`, `WorldloomReference`,
+  `WorldloomProfile`). `artifact_text.extract` reports them as
+  `extra["properties"]`, so a grader or a connector's `get_file` still sees
+  every id and no page prints one.
+- **`layout`**: `plain` is the shipped layout. `designed` gives a long
+  document a real cover (classification band, title block, a summary box
+  carrying the document's own opening paragraphs, an "In this paper" list, a
+  distribution list and a reference block), a two-column document-control
+  grid, headings and captions kept with what follows them, tables of up to
+  fourteen rows kept whole and rows that never break, widow and orphan
+  control on body text, and sections that run on rather than each opening a
+  page. Word and PDF both. In Word the body is a section of its own after
+  the front matter, numbered from one, with the running header and footer
+  (`STYLEREF`, `PAGE`, `NUMPAGES` fields) carried on; `tests/
+  test_docx_structure.py` reads all of it off the package with python-docx,
+  since no office renderer is available to look at it.
+- **`deck`**: `ledger` builds a deck from the pack the way a validator reads
+  it: every schedule as a Title Only table slide. `presenter` builds the deck
+  somebody gives: titles that are the slide's point, built from the lead fact
+  of the slide's lead move (the clause of the prose that carries it, or the
+  fact in the pack's words under `render.deck.takeaway.fact.*`; a lead-in the
+  pack lists under `render.deck.generic_titles`, such as "What the committee
+  needs to note", is never a title, and `presenter.lint_titles` refuses a
+  title that carries no fact), an agenda that lists the argument's sections
+  by lead move (`render.deck.agenda.move.*`) rather than the slide titles,
+  bullets that are the section's argument (one per move), a Two Content slide
+  pairing an argument with the chart it rests on, a chart under a takeaway
+  title, and tables in the appendix unless the table is the point.
+- **`notes`**: what a presenter deck's speaker notes say. `talk` is what the
+  presenter says, from the notes moves (`point`, `evidence`, `transition`) in
+  the rhetoric catalogue and the prompts pack's `render.deck.notes.*` texts:
+  no alternative is used twice in a deck while another is unused, and the
+  line into the next slide says why it follows, from the relation between
+  the two slides' lead moves (`render.deck.notes.relation.<from>.<to>`, then
+  `...relation.from.<from>`, then `...relation.to.<to>`).
+  `prose_quality.notes_repetition` measures it (the share of note sentences
+  whose opening frame recurs in the deck; ceiling `NOTES_THRESHOLD`).
+  `provenance` names the document each slide was drawn from. No fact id
+  appears in either. A `ledger` deck's notes always list its ledger entries,
+  which is what that deck is for.
+- **`slide_budget`**: how many slides a deck may run to: `unbounded` (the
+  renderer's own stop, sixty), `board` (twenty-four) or `briefing` (fourteen).
+  The closing slide is reserved; the appendix takes what the budget leaves.

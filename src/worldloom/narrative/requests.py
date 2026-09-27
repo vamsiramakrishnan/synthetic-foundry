@@ -59,6 +59,44 @@ def superseded_for(fact: CanonicalFact, cutoff: datetime | None) -> bool:
     return cutoff is None or fact.valid_to <= cutoff
 
 
+class RequestMove(Model):
+    """One rhetorical move a section makes: a paragraph, and what it may cite.
+
+    From `rhetoric.plan`. ``fact_ids`` is a subset of the request's allowed
+    facts; a ``derived`` move introduces none of its own and reasons from the
+    ones earlier moves cited.
+    """
+
+    name: str
+    instruction: str
+    fact_ids: list[str] = Field(default_factory=list)
+    derived: bool = False
+    sentences: int = 0
+    """The fewest sentences this move's paragraph says (`rhetoric.floor`):
+    one per thing it measures up to the catalogue's cap, or the derived
+    minimum. Zero where no floor was stated."""
+
+
+class SectionFloor(Model):
+    """How much a section must say for its moves, and why it is exempt if it is.
+
+    From `rhetoric.floor`. ``sentences`` and ``paragraphs`` are the least the
+    claim validator accepts (``section_floor``); ``exempt`` is the recorded
+    reason a section is held to neither (fewer facts than moves), and then
+    both are zero.
+    """
+
+    sentences: int = 0
+    paragraphs: int = 0
+    exempt: str = ""
+
+
+#: Fields added after the request digest was fixed, and left out of it while
+#: empty, so a request that carries none digests exactly as it always did and
+#: every earlier ledger replays.
+ADDITIVE_FIELDS = ("moves", "display", "recurrence", "restated", "floor")
+
+
 class NarrativeRequest(Model):
     """A request for prose over a bounded set of facts."""
 
@@ -116,6 +154,29 @@ class NarrativeRequest(Model):
     register question and the validators police facts, not style."""
     target_words: int = 190
     """Matches the compiler's "medium" brief — see `narrative.compiler._request`."""
+    moves: list[RequestMove] = Field(default_factory=list)
+    """The section's rhetorical moves, in order (`rhetoric.plan`). Empty for
+    every corpus that is not reader-grade, and then left out of the digest."""
+    display: dict[str, str] = Field(default_factory=dict)
+    """Subject name to how a reader would name it in a sentence, where the two
+    differ: a service recorded as ``inventory-valuation`` is "the inventory
+    valuation service" in prose. Advisory, like terminology."""
+    recurrence: dict[str, int] = Field(default_factory=dict)
+    """Allowed fact ID to how many earlier sections of the corpus (in the
+    order the compiler walks them) were given a fact of its kind. A kind a
+    whole document family cites is stated a different way each time it comes
+    back: the offline narrator walks its alternatives by this count. Advisory
+    and never shown to a writer; reader-grade only, and left out of the
+    digest while empty, like ``moves``."""
+    floor: SectionFloor | None = None
+    """How much the section must say for its moves (`rhetoric.floor`), or the
+    recorded reason it is exempt. Reader-grade only, out of the digest while
+    unset, like ``moves``."""
+    restated: list[str] = Field(default_factory=list)
+    """Allowed facts an earlier section of the same document already carries,
+    where this section has facts of its own to add. Still allowed (a writer
+    may refer back); the offline narrator leaves them to the section that
+    said them. Reader-grade only, out of the digest while empty."""
     fact_digest: str = ""
     """Content address of the complete request and supplied fact records.
 
@@ -130,7 +191,20 @@ class NarrativeRequest(Model):
             raise ValueError(
                 f"{self.artifact_id}/{self.section}: required facts not in the allowed set: {sorted(stray)}"
             )
+        allowed = set(self.allowed_fact_ids)
+        for move in self.moves:
+            outside = set(move.fact_ids) - allowed
+            if outside:
+                raise ValueError(
+                    f"{self.artifact_id}/{self.section}: move {move.name!r} draws on facts outside the"
+                    f" allowed set: {sorted(outside)}"
+                )
         return self
+
+    def digest_fields(self) -> set[str]:
+        """Fields excluded from the request digest: the digest itself, and every
+        additive field still at its empty default."""
+        return {"fact_digest"} | {name for name in ADDITIVE_FIELDS if not getattr(self, name)}
 
 
 class GeneratedClaim(Model):

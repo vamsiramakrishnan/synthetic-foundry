@@ -127,10 +127,17 @@ DOCUMENTS = (
     "docs/sdk.md",
     "docs/skills.md",
     "docs/extension-seams.md",
+    # A whole world from one interview: every layer, then its evals.
+    "docs/interview-to-world.md",
+    ".claude/skills/worldloom-interview/SKILL.md",
+    ".claude/skills/worldloom-interview/references/layers.md",
+    ".claude/skills/worldloom-interview/references/evals.md",
+    ".claude/skills/worldloom-interview/references/measuring.md",
     # `docs/build-order.md` is deliberately absent. It is the roadmap, so it names
     # commands that do not exist yet — `worldloom interview` among them — and
     # checking it would either fail the build for describing the future or force
-    # the roadmap to stop naming things before they are built.
+    # the roadmap to stop naming things before they are built. (`worldloom
+    # interview` has since been built; `docs/interview-to-world.md` is checked.)
 )
 
 LINK_CHECKED_DOCUMENTS = (

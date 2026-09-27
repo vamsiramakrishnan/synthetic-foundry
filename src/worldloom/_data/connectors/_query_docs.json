@@ -1,0 +1,178 @@
+{
+  "schema": "worldloom.query-docs/v1",
+  "about": "What a search tool tells the agent about its `query` argument: the vendor language it reads, a grammar summary, two or three examples in that vendor's own syntax, and the free-text form where the real product has one. Served in the tool catalog (`query`) and appended to the MCP tool description. Every example is parsed and executed by tests/test_query_docs.py against the tool's connector definition, so a doc can never show a query the evaluator refuses.",
+  "languages": {
+    "jql": {
+      "name": "JQL (Jira Query Language)",
+      "grammar": "clauses `field OP value` joined by AND, OR, NOT and parentheses; OP is = != > >= < <= ~ !~ IN (..) NOT IN (..), IS EMPTY, IS NOT EMPTY; values are quoted strings, numbers, relative dates (-7d, -2w; units y M w d h m) or functions (now(), currentUser(), startOfDay(), startOfWeek(), startOfMonth(), endOfMonth(-1), ...); optional ORDER BY field [ASC|DESC]. Unknown fields are refused with Jira's own error.",
+      "free_text": "text ~ \"words\" searches every text field (summary, description, comments); summary ~ \"word\" searches one.",
+      "examples": [
+        "project = OPS AND status = open ORDER BY created DESC",
+        "status IN (open, blocked) AND created >= -14d",
+        "text ~ \"vendor onboarding\" AND labels IS NOT EMPTY"
+      ]
+    },
+    "soql": {
+      "name": "SOQL (Salesforce Object Query Language)",
+      "grammar": "SELECT field, ... FROM Object [WHERE condition] [ORDER BY field [ASC|DESC] [NULLS FIRST|LAST]] [LIMIT n] [OFFSET n]; conditions use = != <> < <= > >= LIKE IN (..) NOT IN (..) INCLUDES EXCLUDES joined by AND, OR, NOT (parenthesise when mixing AND and OR); string values in single quotes; date literals TODAY, YESTERDAY, LAST_N_DAYS:n, THIS_QUARTER, ...; relationship paths such as Account.Name.",
+      "free_text": "SOQL has no free-text operator (that is SOSL). Use LIKE with % wildcards on a text field instead, for example Name LIKE '%renewal%'.",
+      "examples": [
+        "SELECT Id, Name FROM Account ORDER BY LastModifiedDate DESC LIMIT 50",
+        "SELECT Id, Name, StageName, Amount FROM Opportunity WHERE StageName = 'Closed Won' AND CreatedDate = LAST_N_DAYS:90",
+        "SELECT Id, Name FROM Opportunity WHERE Name LIKE '%renewal%' LIMIT 20"
+      ]
+    },
+    "encoded_query": {
+      "name": "ServiceNow encoded query (sysparm_query)",
+      "grammar": "conditions `field<OP>value` joined by ^ (AND), ^OR (OR with the previous condition) and ^NQ (new OR'd query); OP is = != LIKE NOT LIKE STARTSWITH ENDSWITH IN (comma list) NOT IN ISEMPTY ISNOTEMPTY > >= < <= BETWEEN (a@b) ON; ORDERBYfield / ORDERBYDESCfield; dates as 2026-09-01 10:00:00 or javascript:gs.daysAgoStart(7) and the other gs helpers. As ServiceNow does, a condition on an unknown field is dropped rather than refused.",
+      "free_text": "123TEXTQUERY321=words searches the record's text (short description, description, notes).",
+      "examples": [
+        "priority=1^state!=7^ORDERBYDESCsys_created_on",
+        "active=true^short_descriptionLIKEpayment^sys_created_on>=javascript:gs.daysAgoStart(30)",
+        "123TEXTQUERY321=invoice mismatch"
+      ]
+    },
+    "odata": {
+      "name": "OData query options (Microsoft Graph)",
+      "grammar": "a bare $filter expression, or query options `$filter=...&$orderby=...&$top=n&$skip=n&$select=a,b&$search=\"terms\"`; $filter uses eq ne gt ge lt le, in (..), and, or, not, parentheses, startswith(p,'x'), endswith(p,'x'), contains(p,'x'), p/any(v: v eq 'x'); strings in single quotes, dates as 2026-09-01 or 2026-09-01T10:00:00Z.",
+      "free_text": "$search=\"words\" searches the item's text fields.",
+      "examples": [
+        "$filter=contains(subject,'invoice')&$orderby=receivedDateTime desc&$top=25",
+        "$filter=receivedDateTime ge 2026-01-01T00:00:00Z and isRead eq false",
+        "$search=\"quarterly close\""
+      ]
+    },
+    "cql": {
+      "name": "CQL (Confluence Query Language)",
+      "grammar": "clauses `field OP value` joined by AND, OR, NOT and parentheses over space, type, title, text, label, creator, contributor, created, lastmodified, ancestor, parent, id; OP is = != > >= < <= ~ !~ IN (..) NOT IN (..); dates as \"2026-09-01\", now(\"-4w\") or startOfMonth(); optional ORDER BY field [ASC|DESC].",
+      "free_text": "text ~ \"words\" searches page title and body; title ~ \"word\" searches titles only.",
+      "examples": [
+        "type = page AND space = FIN AND lastmodified >= now(\"-4w\") ORDER BY lastmodified DESC",
+        "text ~ \"variance commentary\" AND label = close",
+        "title ~ \"runbook\" AND type = page"
+      ]
+    },
+    "kql": {
+      "name": "KQL (Keyword Query Language, Microsoft Search and SharePoint)",
+      "grammar": "free-text terms (all must match), \"quoted phrases\", prefix* wildcards, property restrictions prop:value (contains), prop=value, prop<>value and prop>date, prop>=date, prop<number; AND, OR, NOT in upper case, -term to exclude, parentheses. A restriction on a property the index does not know is searched as text, as SharePoint does.",
+      "free_text": "bare terms are the free-text form: budget forecast, or \"budget forecast\" for a phrase.",
+      "examples": [
+        "\"month-end close\" filetype:xlsx",
+        "budget AND LastModifiedTime>=2026-01-01",
+        "variance* -draft"
+      ]
+    },
+    "drive_q": {
+      "name": "Google Drive search query (q)",
+      "grammar": "clauses joined by and, or, not and parentheses: name contains|=|!= 'x', fullText contains 'x', mimeType = 'type', modifiedTime|createdTime > '2026-01-01T00:00:00' (RFC 3339), 'folderId' in parents, trashed = false, starred = true; each field accepts only the operators Drive documents for it.",
+      "free_text": "fullText contains 'words' searches file content and names; name contains 'word' searches names only.",
+      "examples": [
+        "name contains 'forecast' and trashed = false",
+        "fullText contains 'reconciliation' and modifiedTime > '2026-01-01T00:00:00'",
+        "mimeType = 'application/vnd.google-apps.spreadsheet' and not name contains 'draft'"
+      ]
+    },
+    "slack_search": {
+      "name": "Slack search modifiers",
+      "grammar": "free-text terms (all must match), \"quoted phrases\", word* prefixes, -term exclusions; in:#channel, from:@user, before:/after:/on:/during: with YYYY-MM-DD, YYYY-MM, today or yesterday; has:link, has:pin, is:thread. Repeated in: or from: are alternatives.",
+      "free_text": "bare terms are the free-text form: invoice approval.",
+      "examples": [
+        "invoice in:#finance after:2026-01-01",
+        "\"close checklist\" from:@controller",
+        "outage -resolved during:2026-03"
+      ]
+    },
+    "predicate": {
+      "name": "structured predicate (no vendor query string)",
+      "grammar": "this tool takes no query string. Pass `predicate` as {\"entity\": \"<entity>\", \"where\": [{\"field\": \"<field>\", \"op\": \"eq|ne|gt|gte|lt|lte|in|contains\", \"value\": <value>}]}; clauses are ANDed and `in` takes a list.",
+      "free_text": "no free-text form: use op contains on a text field such as title or name.",
+      "examples": [
+        "{\"where\": [{\"field\": \"status\", \"op\": \"eq\", \"value\": \"open\"}]}",
+        "{\"where\": [{\"field\": \"title\", \"op\": \"contains\", \"value\": \"close\"}]}"
+      ]
+    }
+  },
+  "tools": {
+    "email.search_messages": {
+      "examples": [
+        "$filter=contains(subject,'invoice')&$orderby=sent_at desc&$top=25",
+        "$filter=from eq 'controller@example.com'",
+        "$search=\"quarterly close\""
+      ]
+    },
+    "email.search_threads": {
+      "examples": [
+        "$filter=contains(subject,'invoice')&$top=25",
+        "$search=\"quarterly close\""
+      ]
+    },
+    "outlook.list_messages": {
+      "examples": [
+        "$filter=contains(subject,'invoice')&$orderby=receivedDateTime desc&$top=25",
+        "$filter=receivedDateTime ge 2026-01-01T00:00:00Z and isRead eq false",
+        "$search=\"quarterly close\""
+      ]
+    },
+    "outlook.list_folders": {
+      "examples": [
+        "$filter=startswith(displayName,'Fin')",
+        "$top=10"
+      ]
+    },
+    "onedrive.search_items": {
+      "examples": [
+        "forecast filetype:xlsx",
+        "\"board pack\" AND LastModifiedTime>=2026-01-01",
+        "budget* -draft"
+      ]
+    },
+    "sharepoint.get_list_items": {
+      "examples": [
+        "$filter=fields/Status eq 'open'&$top=50",
+        "$filter=contains(name,'vendor')&$orderby=name"
+      ]
+    },
+    "teams.list_teams": {
+      "examples": [
+        "$filter=startswith(displayName,'Fin')",
+        "$top=20"
+      ]
+    },
+    "teams.list_chats": {
+      "examples": [
+        "$filter=contains(subject,'close')&$top=20",
+        "$search=\"month-end\""
+      ]
+    },
+    "servicenow.search_kb": {
+      "examples": [
+        "workflow_state=published^short_descriptionLIKEpassword",
+        "123TEXTQUERY321=vpn access"
+      ]
+    },
+    "servicenow.query_cmdb": {
+      "examples": [
+        "operational_status=1^nameSTARTSWITHpay",
+        "123TEXTQUERY321=ledger"
+      ]
+    },
+    "slack.list_conversations": {
+      "examples": [
+        "finance",
+        "in:#finance"
+      ]
+    },
+    "slack.list_users": {
+      "examples": [
+        "controller",
+        "\"accounts payable\""
+      ]
+    },
+    "slack.list_files": {
+      "examples": [
+        "forecast in:#finance",
+        "\"close checklist\" after:2026-01-01"
+      ]
+    }
+  }
+}

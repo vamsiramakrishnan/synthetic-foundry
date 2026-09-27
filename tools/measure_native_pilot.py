@@ -18,9 +18,15 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 def main() -> None:
+    from worldloom import realism_profiles
     from worldloom.corpus import write_json
     from worldloom.evals.dataset import _files
-    from worldloom.narrative import DeterministicProvider, handshake, prompts
+    from worldloom.narrative import (
+        ComposedProvider,
+        DeterministicProvider,
+        handshake,
+        prompts,
+    )
     from worldloom.providers import digest
     from worldloom.studio import RunOptions, Studio
     from worldloom.studio.native import source_world
@@ -56,12 +62,19 @@ def main() -> None:
     project = next(row for row in studio.store.history(current["id"]) if row["parent"] is None)
     project = studio.store.get(current["id"], project["revision"])
     world, _ = studio.snapshot(base)
-    provider = DeterministicProvider()
+    # The reference author writes what the corpus asks for: the composing
+    # narrator for a reader-grade corpus (whose requests are held to the
+    # reader-spelling rules), the contract fixture otherwise. Each payload is
+    # the one the loop sends, so its digest is the one the child is shown.
+    reader = realism_profiles.reader_grade(world)
+    provider = ComposedProvider.for_world(world) if reader else DeterministicProvider()
+    prompt = prompts.for_world(world) if reader else prompts.SECTION_PROSE
     facts = {fact.id: fact for fact in world.facts}
+    sent = {request["id"]: request for request in handshake.requests_document(world)["requests"]}
     responses = {}
     for request in handshake.pending(world):
-        response = provider.complete(request, prompts.SECTION_PROSE, facts)
-        public = handshake.request_payload(request, facts)
+        response = provider.complete(request, prompt, facts)
+        public = sent[f"{request.artifact_id}/{request.section}"]
         responses[public["id"]] = {"request_digest": digest(public), "response": {
             "id": public["id"], **response.model_dump(mode="json")}}
     responses_path = studio.root / "reference-author-responses.json"

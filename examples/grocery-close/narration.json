@@ -26,7 +26,7 @@
     },
     {
       "id": "ART-0003/By business unit",
-      "text": "Australian Food carries the period. Revenue of {{fact:FACT-1341}} against {{fact:FACT-1380}} is {{fact:FACT-1419}} against plan, and margin of {{fact:FACT-6264}} against a budgeted {{fact:FACT-6303}} produces a gross profit shortfall of {{fact:FACT-6225}} — the largest of the four divisions by a wide margin. Digital and Marketplace is the second call on attention: revenue {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan, with margin at {{fact:FACT-6267}} against {{fact:FACT-6306}}, and a forecast that has not been re-based since the platform changed. New Zealand Food at {{fact:FACT-1342}} and General Merchandise at {{fact:FACT-1343}} came in {{fact:FACT-1420}} and {{fact:FACT-1421}} respectively. Both behaved normally and neither warrants time this month.",
+      "text": "Australian Food carries the period. Revenue of {{fact:FACT-1341}} against {{fact:FACT-1380}} is {{fact:FACT-1419}} against plan. Margin of {{fact:FACT-6264}} against a budgeted {{fact:FACT-6303}} produces a gross profit shortfall of {{fact:FACT-6225}}, the largest of the four divisions by a wide margin.\n\nDigital and Marketplace is the second call on attention. Revenue came in at {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan, with margin at {{fact:FACT-6267}} against {{fact:FACT-6306}}. Its forecast has not been re-based since the platform changed, so the plan it missed was already out of date.\n\nNew Zealand Food at {{fact:FACT-1342}} and General Merchandise at {{fact:FACT-1343}} came in {{fact:FACT-1420}} and {{fact:FACT-1421}} respectively. Both behaved normally and neither warrants time this month.",
       "claims": [
         {
           "text": "Australian Food produced the largest revenue and gross profit shortfall of the four divisions.",
@@ -140,7 +140,7 @@
     },
     {
       "id": "ART-0003/Recommendation",
-      "text": "Two things should happen, and they are not the same thing. {{fact:FACT-0015}}. The first addresses detection only: it would have caught this month's break sooner, but the same break would have occurred. The second addresses the control itself, which is where the classification puts the fault — {{fact:FACT-0013}}. The mapping table's registered owner is currently {{fact:FACT-0014}}, and that is the decision I need from you rather than from the platform team: Merchandising and the data platform each believe the other holds it, and neither will assign a reviewer until someone says which. Approving the validation ticket alone would close the incident and leave the cause in place.",
+      "text": "Two things should happen, and they are not the same thing. {{fact:FACT-0015}}. The first addresses detection only: it would have caught this month's break sooner, but the same break would have occurred.\n\nThe second addresses the control itself, which is where the classification puts the fault: {{fact:FACT-0013}}. The mapping table's registered owner is currently {{fact:FACT-0014}}, and that is the decision I need from you rather than from the platform team: Merchandising and the data platform each believe the other holds it, and neither will assign a reviewer until someone says which. Approving the validation ticket alone would close the incident and leave the cause in place.",
       "claims": [
         {
           "text": "The remediation is {{fact:FACT-0015}}.",
@@ -472,7 +472,7 @@
     },
     {
       "id": "ART-0010/Close",
-      "text": "The books closed at {{fact:FACT-0018}}, {{fact:FACT-0019}} beyond the committed date. The effect of that overrun on the reported result was {{fact:FACT-0017}}: the delay was to the timetable, not to the numbers. Escalation ran on the day, as standing practice requires.",
+      "text": "The books closed at {{fact:FACT-0018}}, {{fact:FACT-0019}} beyond the committed date. Escalation ran on the day, as standing practice requires.\n\nThe effect of that overrun on the reported result was {{fact:FACT-0017}}: the delay was to the timetable, not to the numbers. The gross profit gap reported elsewhere in this pack has other causes, and none of it traces to the late close.\n\nWhat the committee should take from the close is a lesson about process rather than about the result.",
       "claims": [
         {
           "text": "The close reached final status, later than committed.",
@@ -503,7 +503,7 @@
     },
     {
       "id": "ART-0010/In brief",
-      "text": "Revenue closed at {{fact:FACT-1345}} against a plan of {{fact:FACT-1384}}, {{fact:FACT-1423}} against plan. Margin is where the period was lost: {{fact:FACT-6268}} against a budgeted {{fact:FACT-6307}}, and down on the {{fact:FACT-1306}} delivered a month earlier. Nothing in the period requires a decision from this committee.",
+      "text": "Revenue closed at {{fact:FACT-1345}} against a plan of {{fact:FACT-1384}}, {{fact:FACT-1423}} against plan. Revenue still grew on the {{fact:FACT-1228}} of a month earlier, so the shortfall is against plan rather than against trend. Margin is where the period was lost: {{fact:FACT-6268}} against a budgeted {{fact:FACT-6307}}, and down on the {{fact:FACT-1306}} delivered a month earlier. Nothing in the period requires a decision from this committee.",
       "claims": [
         {
           "text": "Revenue finished below plan.",
@@ -519,6 +519,13 @@
             "FACT-6268",
             "FACT-6307",
             "FACT-1306"
+          ]
+        },
+        {
+          "text": "Revenue grew on the prior month's {{fact:FACT-1228}}.",
+          "supporting_fact_ids": [
+            "FACT-1345",
+            "FACT-1228"
           ]
         }
       ]
@@ -537,7 +544,7 @@
     },
     {
       "id": "ART-0011/Where we landed",
-      "text": "Food closed the month at {{fact:FACT-1341}} against a committed {{fact:FACT-1380}}, leaving revenue {{fact:FACT-1419}} adrift, and converted it at {{fact:FACT-6264}} against the {{fact:FACT-6303}} the division is held to. Gross profit of {{fact:FACT-6147}} against {{fact:FACT-6186}} puts the miss at {{fact:FACT-6225}}. The trading base is not the problem — last year's month was {{fact:FACT-1224}} — the rate is.",
+      "text": "Food closed the month at {{fact:FACT-1341}} against a committed {{fact:FACT-1380}}, leaving revenue {{fact:FACT-1419}} adrift. It converted that revenue at {{fact:FACT-6264}} against the {{fact:FACT-6303}} the division is held to.\n\nGross profit of {{fact:FACT-6147}} against {{fact:FACT-6186}} puts the miss at {{fact:FACT-6225}}. The trading base is not the problem: last year's month was {{fact:FACT-1224}}, and the division has grown on it. The rate is.",
       "claims": [
         {
           "text": "Revenue closed at {{fact:FACT-1341}} against a budget of {{fact:FACT-1380}}, a variance of {{fact:FACT-1419}}.",
@@ -601,7 +608,7 @@
     },
     {
       "id": "ART-0012/What moved",
-      "text": "Revenue is the line that moved: New Zealand Food closed at {{fact:FACT-1342}} against a plan of {{fact:FACT-1381}}, {{fact:FACT-1420}} short. The shortfall sits against a February actual of {{fact:FACT-1225}}, so the division grew through the month and still finished behind what was asked of it — the gap is against plan, not against trend.",
+      "text": "Revenue is the line that moved: New Zealand Food closed at {{fact:FACT-1342}} against a plan of {{fact:FACT-1381}}, {{fact:FACT-1420}} short.\n\nThe shortfall sits against a February actual of {{fact:FACT-1225}}, so the division grew through the month and still finished behind what was asked of it. Gross profit missed with it, at {{fact:FACT-6148}} against {{fact:FACT-6187}}, a gap of {{fact:FACT-6226}}.\n\nThe gap is against plan, not against trend. The plan, set before the month's growth was known, is the thing to revisit, not the division's trading.",
       "claims": [
         {
           "text": "New Zealand Food finished March behind plan on revenue.",
@@ -617,12 +624,20 @@
             "FACT-1342",
             "FACT-1225"
           ]
+        },
+        {
+          "text": "Gross profit was {{fact:FACT-6148}} against {{fact:FACT-6187}}, a gap of {{fact:FACT-6226}}.",
+          "supporting_fact_ids": [
+            "FACT-6148",
+            "FACT-6187",
+            "FACT-6226"
+          ]
         }
       ]
     },
     {
       "id": "ART-0013/Performance",
-      "text": "General Merchandise held its top line — {{fact:FACT-1343}} against {{fact:FACT-1382}}, a gap of only {{fact:FACT-1421}} — and gave most of the month back below it. Gross profit of {{fact:FACT-6149}} against {{fact:FACT-6188}} is {{fact:FACT-6227}} short, and the rate at {{fact:FACT-6266}} sits well under the {{fact:FACT-6305}} plan. The division sold what it planned to sell, at prices it did not plan to sell at.",
+      "text": "General Merchandise held its top line: {{fact:FACT-1343}} against {{fact:FACT-1382}}, a gap of only {{fact:FACT-1421}}. Revenue also grew on the {{fact:FACT-1226}} of a month earlier.\n\nIt gave most of the month back below the top line. Gross profit of {{fact:FACT-6149}} against {{fact:FACT-6188}} is {{fact:FACT-6227}} short, and the rate at {{fact:FACT-6266}} sits well under the {{fact:FACT-6305}} plan.\n\nThe division sold what it planned to sell, at prices it did not plan to sell at. That makes the next period a question of price and mix, not of volume.",
       "claims": [
         {
           "text": "Revenue was {{fact:FACT-1343}} against a budget of {{fact:FACT-1382}}, a variance of {{fact:FACT-1421}}.",
@@ -646,12 +661,19 @@
             "FACT-6266",
             "FACT-6305"
           ]
+        },
+        {
+          "text": "Revenue grew on the prior month's {{fact:FACT-1226}}.",
+          "supporting_fact_ids": [
+            "FACT-1343",
+            "FACT-1226"
+          ]
         }
       ]
     },
     {
       "id": "ART-0014/Position",
-      "text": "For the record: revenue {{fact:FACT-1344}} against {{fact:FACT-1383}} — {{fact:FACT-1422}} adrift — gross profit {{fact:FACT-6150}}, and a rate of {{fact:FACT-6267}}. Against the same month last year, {{fact:FACT-1227}} of revenue at {{fact:FACT-1305}}, the unit is still growing, which is why this reads as a forecasting problem rather than a demand one. Nothing else in the month needs the committee's attention.",
+      "text": "For the record, revenue was {{fact:FACT-1344}} against {{fact:FACT-1383}}, leaving it {{fact:FACT-1422}} adrift. Gross profit came to {{fact:FACT-6150}}, at a rate of {{fact:FACT-6267}}.\n\nAgainst the same month last year, {{fact:FACT-1227}} of revenue at {{fact:FACT-1305}}, the unit is still growing. That is why this reads as a forecasting problem rather than a demand one.\n\nNothing else in the month needs the committee's attention.",
       "claims": [
         {
           "text": "Revenue was {{fact:FACT-1344}} against a budget of {{fact:FACT-1383}}, a variance of {{fact:FACT-1422}}.",
@@ -679,7 +701,7 @@
     },
     {
       "id": "ART-0014/What moved",
-      "text": "Gross profit missed by {{fact:FACT-6228}}, and that is the line that matters this month: {{fact:FACT-6150}} delivered against {{fact:FACT-6189}} planned. Revenue explains part of it — {{fact:FACT-1344}} against a committed {{fact:FACT-1383}}, {{fact:FACT-1422}} short — but the rate explains the rest, landing at {{fact:FACT-6267}} against {{fact:FACT-6306}}. The movement is concentrated after the checkout replatform, and the forecast has not been re-baselined against post-replatform behaviour.",
+      "text": "Gross profit missed by {{fact:FACT-6228}}, and that is the line that matters this month: {{fact:FACT-6150}} delivered against {{fact:FACT-6189}} planned.\n\nRevenue explains part of it, at {{fact:FACT-1344}} against a committed {{fact:FACT-1383}}, {{fact:FACT-1422}} short. The rate explains the rest, landing at {{fact:FACT-6267}} against {{fact:FACT-6306}}.\n\nThe movement is concentrated after the checkout replatform, and the forecast has not been re-baselined against post-replatform behaviour. Neither line points to weaker demand; both point to a plan that has not caught up with the platform.",
       "claims": [
         {
           "text": "Gross profit was {{fact:FACT-6150}} against {{fact:FACT-6189}}, a variance of {{fact:FACT-6228}}.",

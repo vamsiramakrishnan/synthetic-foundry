@@ -34,6 +34,7 @@ terminal-capable agent can use it without slash-command support.
 | Prepare native evaluations | `worldloom studio prepare-native` | [Native document tasks](studio.md#native-documents-and-file-tasks) |
 | Grade agents inside Studio | `worldloom studio evalrun` | [Grade agents on the connector cases](studio.md#grade-agents-on-the-connector-cases) |
 | Build a decided world | `worldloom build`, `worldloom status` | [Company specification](agents/company-specification.md) |
+| Build a whole world, and its evals, from an interview | `worldloom interview run`, `worldloom interview build` | [Interview to world](interview-to-world.md) |
 | Propose an employee action | `worldloom act requests`, `worldloom act accept` | [Actors](agents/actors.md) |
 | Write fact-scoped prose | `worldloom narrate requests`, `worldloom narrate accept` | [Writing responses](agents/writing-responses.md) |
 | Render and inspect files | `worldloom render`, `worldloom validate` | [Artifact compiler](artifact-compiler.md) |
@@ -146,6 +147,18 @@ paperwork. It coordinates the same refusable cascade at every layer rather than
 treating each JSON file as independent configuration.
 
 Source: [`.claude/skills/worldloom-author/SKILL.md`](../.claude/skills/worldloom-author/SKILL.md)
+
+### `worldloom-interview`
+
+Build a whole world from one interview: company, lines of business, employees
+and their levels, each LOB's processes and the systems every step touches, the
+documents each stage files, the history, and what each level of employee would
+ask an agent to do. Each answer is refused with findings until it lints clean;
+the interview resumes from its transcript; the built world's eval cases come
+from the interviewed processes, one case set per level, with per-node
+provenance. Guide: [interview to world](interview-to-world.md).
+
+Source: [`.claude/skills/worldloom-interview/SKILL.md`](../.claude/skills/worldloom-interview/SKILL.md)
 
 ### `worldloom-doctypes`
 

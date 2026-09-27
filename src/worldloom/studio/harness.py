@@ -82,6 +82,18 @@ _REPLY_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "required": ["request_id", "message"], "additionalProperties": False,
     },
+    # `interview.judge` validates the answer against the layer's own model,
+    # so the structured output fixes only the envelope, as for a pack.
+    "worldloom.world-interview/v1": {
+        "type": "object",
+        "properties": {
+            "request_id": {"type": "string"},
+            "message": {"type": "string"},
+            "questions": {**_STRINGS, "maxItems": 5},
+            "answer": _FREE,
+        },
+        "required": ["request_id", "message"], "additionalProperties": False,
+    },
 }
 
 
@@ -104,6 +116,7 @@ _ROLES: dict[str, str] = {
     "worldloom.evalrun-plan/v1": "studio.harness.role.evalrun_plan",
     "worldloom.evalrun-rating/v1": "studio.harness.role.evalrun_rating",
     "worldloom.pack-interview/v1": "studio.harness.role.pack_interview",
+    "worldloom.world-interview/v1": "studio.harness.role.world_interview",
 }
 
 #: The closing sentence for a structured seam whose reply is not one of
@@ -113,6 +126,7 @@ _ROLES: dict[str, str] = {
 #: proposal or the questions.
 _CLOSINGS: dict[str, str] = {
     "worldloom.pack-interview/v1": "studio.harness.closing.envelope",
+    "worldloom.world-interview/v1": "studio.harness.closing.envelope",
 }
 
 #: Every role ends in this sentence, which `invoke` swaps for the write

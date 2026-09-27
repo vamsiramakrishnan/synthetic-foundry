@@ -148,9 +148,13 @@ def test_answers_are_read_off_the_records_by_shape() -> None:
     text, ids = sor.answer("find_exception", "list", period_rows)
     tripped = [r for r in period_rows if r.fields["exception"]]
     assert ids == tuple(sorted((r.id for r in tripped), key=lambda i: next(x.external_id for x in tripped if x.id == i)))[:0] or set(ids) == {r.id for r in tripped}
-    assert text.startswith(f"{len(tripped)} of {len(period_rows)}") and "tripped the exception" in text
+    assert text.startswith(f"Of the {len(period_rows)} ") and "tripped the exception" in text
+    # The one number an answer states is how many records were read; a count
+    # of the filtered ones is arithmetic no record carries.
+    assert f"{len(tripped)} of" not in text
     text, ids = sor.answer("triage_queue", "ranked_list", period_rows)
     assert set(ids) == {r.id for r in period_rows if not r.fields["terminal"]} and "by workflow stage" in text
+    assert text.startswith(f"Open among the {len(period_rows)} ")
     text, ids = sor.answer("chase", "message", period_rows)
     assert text.startswith("Chase ") and set(ids) == {r.id for r in tripped}
     text, ids = sor.answer("respond_to_query", "narrative", period_rows)

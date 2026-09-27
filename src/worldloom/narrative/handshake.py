@@ -20,6 +20,7 @@ adapter would run, with the agent in the loop instead of behind an API.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from . import references
@@ -114,13 +115,17 @@ def _fact_payload(
     subject: str | None = None,
     comparator: str | None = None,
     cutoff: datetime | None = None,
+    spelled: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": fact.id,
         "subject": subject or fact.subject,
         "period": fact.period or "",
         **({"prior_period_fact": comparator} if comparator else {}),
-        "statement": references.describe(fact, subject),
+        # Under a reader spelling the writer is shown the figure as the page
+        # will print it ("AUD 1.0m adverse", "nil"), so the grammar written
+        # around a reference fits what it becomes.
+        "statement": references.describe(fact, subject, **(spelled or {})),
         "kind": fact.kind,
         "authority": fact.authority.value,
         "valid_from": fact.valid_from.isoformat(),
@@ -135,7 +140,8 @@ def _fact_payload(
     }
 
 
-def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact]) -> dict[str, Any]:
+def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact],
+                     spelled: Mapping[str, Any] | None = None) -> dict[str, Any]:
     return {
         "id": f"{request.artifact_id}/{request.section}",
         "artifact_id": request.artifact_id,
@@ -153,6 +159,19 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
         "target_words": request.target_words,
         "knows_as_of": request.temporal_cutoff.isoformat() if request.temporal_cutoff else None,
         "must_not_claim": list(request.forbidden_claims),
+        # Present only on a reader-grade request, so every other request
+        # document is byte-identical to the one this contract always wrote.
+        **({"moves": [
+            {"move": move.name, "instruction": move.instruction, "facts": list(move.fact_ids),
+             **({"derived": True} if move.derived else {}),
+             **({"sentences": move.sentences} if move.sentences else {})}
+            for move in request.moves
+        ]} if request.moves else {}),
+        # How much the section must say for its moves, or why it need not:
+        # the floor `section_floor` refuses below, stated before writing.
+        **({"floor": request.floor.model_dump(mode="json", exclude_defaults=True)}
+           if request.floor is not None else {}),
+        **({"display_names": dict(request.display)} if request.display else {}),
         "facts": [
             _fact_payload(
                 facts[f],
@@ -160,6 +179,7 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
                 subject=request.subjects.get(f),
                 comparator=request.comparators.get(f),
                 cutoff=request.temporal_cutoff,
+                spelled=spelled,
             )
             for f in request.allowed_fact_ids
             if f in facts
@@ -168,7 +188,8 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
 
 
 def request_payload(
-    request: NarrativeRequest, facts: dict[str, CanonicalFact]
+    request: NarrativeRequest, facts: dict[str, CanonicalFact],
+    spelled: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The one entry ``requests[]`` carries — the unit an adapter answers.
 
@@ -177,18 +198,32 @@ def request_payload(
     in a one-element list, and a reply is parsed by `parse_responses` exactly as
     `narrate accept` parses a file. One shape, two surfaces.
     """
-    return _request_payload(request, facts)
+    return _request_payload(request, facts, spelled)
+
+
+def spelling_context(world: World) -> dict[str, Any]:
+    """``{"locale", "presentation"}`` when *world* is spelled for a reader, else
+    empty: a request document written under an exact spelling is the one this
+    contract always wrote, byte for byte."""
+    from ..figures import rules_for
+    from ..recipe import locale_of, presentation_of
+
+    presentation = presentation_of(world.recipe)
+    if rules_for(presentation) is None:
+        return {}
+    return {"locale": locale_of(world.recipe), "presentation": presentation}
 
 
 def pending(world: World) -> list[NarrativeRequest]:
     """Every section still awaiting prose, as a bounded request."""
     facts = {fact.id: fact for fact in world.facts}
     out: list[NarrativeRequest] = []
+    memo: dict[int, list[str]] = {}
     for ir in world.artifact_irs:
         for section in ir.sections:
             if not section.awaiting_prose:
                 continue
-            request = _request_for(world, ir, section, facts)
+            request = _request_for(world, ir, section, facts, memo)
             if request.allowed_fact_ids:
                 out.append(request)
     return out
@@ -200,12 +235,26 @@ def requests_document(world: World) -> dict[str, Any]:
 
     facts = {fact.id: fact for fact in world.facts}
     items = pending(world)
+    rules = list(RULES)
+    if any(request.moves for request in items):
+        # The writing rules for moves are prompts pack text, so a pack can say
+        # how an argument is built in its own industry's terms.
+        from .. import packkit
+
+        rules.extend(packkit.texts("narrative.moves.rule."))
+    spelled = spelling_context(world)
+    if spelled:
+        # How the page will spell a figure, and what the validator refuses
+        # about the words around one, stated before anything is written.
+        from .. import packkit
+
+        rules.extend(packkit.texts("narrative.spelling.rule."))
     return {
         "worldloom_seed": world.seed,
-        "prompt_version": prompts.SECTION_PROSE.key,
+        "prompt_version": prompts.for_world(world).key,
         "company": world.company.name,
         "period": world.period,
-        "rules": list(RULES),
+        "rules": rules,
         "reference_syntax": "{{fact:FACT-0001}}",
         "response_shape": {
             "responses": [
@@ -218,7 +267,7 @@ def requests_document(world: World) -> dict[str, Any]:
                 }
             ]
         },
-        "requests": [_request_payload(request, facts) for request in items],
+        "requests": [_request_payload(request, facts, spelled) for request in items],
     }
 
 
@@ -263,6 +312,7 @@ def review(
     """
     facts = {fact.id: fact for fact in world.facts}
     entity_names = known_entity_names(world)
+    spelled = spelling_context(world)
 
     verdicts: dict[str, Verdict] = {}
     requests = pending(world)
@@ -288,7 +338,7 @@ def review(
                 ],
             )
             continue
-        verdicts[identifier] = validate(request, narrative, facts, entity_names=entity_names)
+        verdicts[identifier] = validate(request, narrative, facts, entity_names=entity_names, **spelled)
     return verdicts
 
 

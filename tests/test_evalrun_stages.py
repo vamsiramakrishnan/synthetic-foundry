@@ -172,7 +172,10 @@ def test_a_window_that_starts_after_the_clock_or_cuts_evidence_is_the_wrong_wind
 
 
 def test_malformed_and_wrong_scope_searches_are_named() -> None:
-    malformed = _run([_search(query="state!!new"), _search(predicate={"state": "new"}), _draft()])
+    # ServiceNow drops a condition it cannot read (`state!!new`) and answers
+    # the rest, as the vendor evaluator does by default; what it refuses is
+    # an argument it cannot honour.
+    malformed = _run([_search(query="state=new", start_at=-1), _search(predicate={"state": "new"}), _draft()])
     grade = malformed.score.trajectory.queries
     assert grade.calls[0].malformed and grade.findings.get("query.malformed") == 1
     assert grade.nodes[0].recall == 1.0 and grade.nodes[0].score < 1.0

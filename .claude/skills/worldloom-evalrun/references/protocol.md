@@ -22,7 +22,11 @@ turn with this on stdin:
     {"name": "jira.search_issues", "op": "search", "entities": ["epic", "story", "bug", "task", "subtask"],
      "params": {"query": "string?", "predicate": "object?", "fields": "array?", "max_results": "int?", "start_at": "int?", "entity": "string?"},
      "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
-     "risk": "none", "idempotency": "natural"}
+     "risk": "none", "idempotency": "natural",
+     "query": {"language": "jql", "argument": "query", "name": "JQL (Jira Query Language)",
+               "grammar": "clauses `field OP value` joined by AND, OR, NOT …", "free_text": "text ~ \"words\" …",
+               "examples": ["project = OPS AND status = open ORDER BY created DESC", "…"],
+               "fields": ["assignee", "cf[10231]", "created", "…"]}}
   ],
   "transcript": [
     {"tool": "jira.search_issues", "arguments": {"max_results": 5}, "result": {"items": [{"id": "PROJ-12", "…": "…"}], "is_last": true}},
@@ -66,8 +70,18 @@ or, to finish:
   `serving`. It reached no connector, so it is not a span, but it is a
   refused attempt: it costs trajectory precision and its pass, and it is on
   the ledger as `refusals`.
+- `query` on a search tool says what its `query` argument is written in: the
+  vendor language (JQL, SOQL, a ServiceNow encoded query, OData, CQL, KQL,
+  Drive `q`, Slack search) with a grammar summary, examples in that syntax,
+  the field names the connector knows and the free-text form (ServiceNow
+  `123TEXTQUERY321=`, Jira and Confluence `text ~`, Drive `fullText contains`,
+  KQL bare terms; SOQL has none, so `LIKE '%word%'`). The query runs through
+  the vendor evaluator, and a query the vendor would refuse comes back with
+  the vendor's own error. `"argument": "predicate"` means the tool reads no
+  vendor language: pass `predicate` as `{"where": [{"field", "op", "value"}]}`.
 - `annotations.destructiveHint` marks a call that cannot be undone; a
-  destructive call on a record no earlier call read is `destructive_without_read`.
+  destructive call on a record it names by `id` (a delete, a reply, a
+  forward) that no earlier call read is `destructive_without_read`.
 - Ask when the request is ambiguous, a required parameter is missing, or a
   call would be destructive and the request did not authorise it. The row
   declares which questions it requires (`question_required` assertions,
@@ -92,6 +106,13 @@ or, to finish:
 serves each case's connectors through `anvil simulate serve` instead of the
 in-process emulator: the agent calls the vendor's real REST paths (Jira's
 `POST /rest/api/2/search/jql`, `GET /rest/api/2/issue/{key}`, ...) over HTTP.
+The bundle is the vendor's real contract under Worldloom's profile:
+`worldloom contracts fetch` downloads the locked spec and refuses one whose
+sha256 moved, `worldloom contracts build jira` compiles and approves it with
+Anvil and prints the bundle path to pass as `--contract jira=<bundle>`, and
+`worldloom contracts coverage` says which operations each connector models
+(`docs/connector-serving.md`, "Real vendor contracts"). A maintainer's
+`worldloom contracts trim` cuts a small test fixture from a locked spec.
 The command's environment carries, on every turn:
 
 | Variable | Value |
@@ -117,6 +138,35 @@ Each case's state, traces and server logs stay under `--out`/anvil. The Anvil
 CLI is `--anvil-cmd`, else `$WORLDLOOM_ANVIL`, else `anvil` on `PATH`.
 `docs/connector-serving.md` ("Serving through Anvil") has the mapping and the
 provider.
+
+## The program document (`worldloom.evalrun-program/v1`)
+
+`worldloom evalrun run ./cases --exec "<command>" --harness-mode sdk-program`
+runs the child **once per case** and asks it for a Python program instead of
+one call per turn. On stdin:
+
+| Field | Meaning |
+|---|---|
+| `schema` | `worldloom.evalrun-program/v1` |
+| `case_id`, `query`, `persona`, `principal` | The request, as in a turn document |
+| `tools` | The case's tool catalog, as in a turn document |
+| `client` | `{module: "worldloom_client", source, endpoint_env: "WORLDLOOM_TOOL_URL"}`: a generated module with one method per tool (`worldloom_client.<connector>.<tool>(**arguments)`, or `worldloom_client.call("<connector.tool>", **arguments)`; a tool error raises `worldloom_client.ToolError`) |
+| `anvil` | Under `--connectors anvil`: the base URLs, as in a turn document; the program calls the vendor API instead |
+| `instructions` | The `evalrun.program.rule.*` texts |
+| `program_timeout` | Seconds the program may run (`--program-timeout`, 300) |
+
+The child prints `{"program": "<python source>"}`, optionally with
+`"planned_dag": {"nodes": [...]}` (the plan-document shape). Worldloom writes
+the program beside `worldloom_client.py`, runs it with `WORLDLOOM_TOOL_URL` (a
+local HTTP shim over the run's own tool surface) and any Anvil variables in
+its environment, and grades the calls it made. The program prints its answer
+last: a JSON line `{"answer": ..., "artifacts": [...]}`, else its stdout is
+the answer. A program that exits non-zero or times out is an error row. The
+ledger line carries `program` (source, digest, exit code, output tails, the
+declared DAG and whether it came from the reply or was read off the source).
+Calls the program issues concurrently (threads) are recorded as one step.
+Grading, including data-flow lineage and the declared-against-executed
+divergence, is in `docs/eval-execution.md` ("Plans as data flow").
 
 ## The requests document (`worldloom.evalrun-requests/v1`)
 
@@ -235,6 +285,7 @@ set, and reports a missing case as `not_attempted`.
 
 `run.json` (schema `worldloom.eval-run/v1`, agent, principal, `case_set`
 digest), `results.jsonl` (one `CaseResult` per line: status, error, the
-three grades, assertion status, answer, spans, latency when timed), and
+three grades, assertion status, answer, spans with their data-flow
+`consumed_from`, latency when timed, the program of an `sdk-program` run), and
 `summary.json` (`worldloom.eval-run-summary/v1`). `compare` reads two of
 them and refuses nothing, but says when the `case_set` digests differ.

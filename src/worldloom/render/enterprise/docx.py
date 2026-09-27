@@ -58,7 +58,8 @@ def _heading(document, text: str, level: int, g: StyleGenome):  # type: ignore[n
 _Cell = tuple[str, bool, bool, str, str]
 
 
-def _write_rows(document, rows: list[list[_Cell]], g: StyleGenome, size_band: int) -> None:  # type: ignore[no-untyped-def]
+def _write_rows(document, rows: list[list[_Cell]], g: StyleGenome, size_band: int,  # type: ignore[no-untyped-def]
+                *, keep: bool = False) -> None:
     """Append a table built as one XML string.
 
     The legacy renderer styles every run through python-docx's object API,
@@ -80,31 +81,42 @@ def _write_rows(document, rows: list[list[_Cell]], g: StyleGenome, size_band: in
     legacy._apply_table_borders(grid, g.gridline_policy, g.rule_weight)
     legacy._apply_cell_padding(grid, legacy._cell_padding_pt(g))
     size = round(g.type_scale[size_band] * 2)
+    # Under a designed layout no row breaks across a page, a short table is
+    # kept whole (every row but the last keeps with the next), and a long one
+    # repeats its header row: Word's own pagination controls, set as Word sets
+    # them, so a two-row spill never sits alone on a page.
+    whole = keep and len(rows) <= 14
     xml_rows = []
-    for row in rows:
+    for index, row in enumerate(rows):
         cells = []
+        next_keep = whole and index < len(rows) - 1
         for text, bold, right, fill, colour in row:
             shade = f'<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/>' if fill else ""
-            align = '<w:pPr><w:jc w:val="right"/></w:pPr>' if right else ""
+            inner = ("<w:keepNext/>" if next_keep else "") + ('<w:jc w:val="right"/>' if right else "")
+            align = f"<w:pPr>{inner}</w:pPr>" if inner else ""
             weight = "<w:b/>" if bold else ""
             run = (f'<w:r><w:rPr>{weight}<w:color w:val="{colour}"/><w:sz w:val="{size}"/></w:rPr>'
                    f'<w:t xml:space="preserve">{escape(text)}</w:t></w:r>') if text else ""
             cells.append(f'<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>{shade}</w:tcPr><w:p>{align}{run}</w:p></w:tc>')
-        xml_rows.append("<w:tr>" + "".join(cells) + "</w:tr>")
+        properties = ""
+        if keep:
+            properties = "<w:trPr><w:cantSplit/>" + ("<w:tblHeader/>" if index == 0 else "") + "</w:trPr>"
+        xml_rows.append("<w:tr>" + properties + "".join(cells) + "</w:tr>")
     fragment = parse_xml(f'<w:tbl {nsdecls("w")}>' + "".join(xml_rows) + "</w:tbl>")
     for tr in list(fragment):
         grid._tbl.append(tr)
 
 
-def _grid(document, header: list[str], rows: list[list[str]], g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+def _grid(document, header: list[str], rows: list[list[str]], g: StyleGenome,  # type: ignore[no-untyped-def]
+          *, keep: bool = False) -> None:
     """A plain text table in the house style: shaded header, genome rules."""
     roles = g.colour_roles
     spec: list[list[_Cell]] = [[(text, True, False, roles["header_fill"], roles["header_text"]) for text in header]]
     spec.extend([(text, False, False, "", roles["body_text"]) for text in values] for values in rows)
-    _write_rows(document, spec, g, _TS_CAPTION)
+    _write_rows(document, spec, g, _TS_CAPTION, keep=keep)
 
 
-def _ir_table(document, table, g: StyleGenome, locale) -> None:  # type: ignore[no-untyped-def]
+def _ir_table(document, table, g: StyleGenome, locale, *, keep: bool = False) -> None:  # type: ignore[no-untyped-def]
     """An IR table, cell for cell as `render.docx._table` draws it."""
     from ..values import format_value
 
@@ -123,7 +135,7 @@ def _ir_table(document, table, g: StyleGenome, locale) -> None:  # type: ignore[
             colour = roles["negative_text"] if negative and not row.emphasis else ink
             cells.append((text, row.emphasis, isinstance(value, (int, float)), fill, colour))
         spec.append(cells)
-    _write_rows(document, spec, g, _TS_BODY)
+    _write_rows(document, spec, g, _TS_BODY, keep=keep)
     if table.note:
         note = document.add_paragraph()
         run = note.add_run(table.note)
@@ -195,24 +207,106 @@ def _cover(document, doc: longform.LongDocument, g: StyleGenome) -> None:  # typ
     document.add_page_break()
 
 
-def _control(document, doc: longform.LongDocument, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+def _designed_cover(document, doc: longform.LongDocument, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+    """A cover a design team would sign off: classification band, title
+    block, summary box, distribution and reference, notice."""
+    from .pdf import _abstract, _distribution, _reference
+
+    roles = g.colour_roles
+    _write_rows(document, [[(doc.classification.upper(), True, False, roles["header_fill"], roles["header_text"]),
+                            (doc.reference, True, True, roles["header_fill"], roles["header_text"])]],
+                g, _TS_CAPTION)
+    document.add_paragraph()
+    company = document.add_paragraph()
+    run = company.add_run(doc.company.upper())
+    run.bold = True
+    run.font.size = _pt(g.type_scale[_TS_SUBHEADING])
+    run.font.color.rgb = legacy._rgb(roles["accent"])
+    genre = document.add_paragraph()
+    _muted(genre.add_run(doc.genre), g, _TS_SUBHEADING)
+    title = document.add_heading(doc.title, level=0)
+    legacy._style_heading(title, size_pt=g.type_scale[_TS_TITLE], colour_hex=roles["body_text"], alignment="left")
+    if doc.subtitle:
+        subtitle = document.add_paragraph()
+        _muted(subtitle.add_run(doc.subtitle), g, _TS_SUBHEADING)
+    status = document.add_paragraph()
+    _muted(status.add_run(f"{doc.period} | {doc.revision.status} | Version {doc.revision.version}"), g)
+    if doc.draft:
+        draft = document.add_paragraph()
+        mark = draft.add_run("DRAFT FOR REVIEW")
+        mark.bold = True
+        mark.font.size = _pt(g.type_scale[_TS_HEADING])
+        mark.font.color.rgb = legacy._rgb(roles["negative_text"])
+    abstract = _abstract(doc.abstract)
+    if abstract:
+        _write_rows(document, [[("Summary", True, False, "F3F4F6", roles["body_text"])],
+                               [(abstract, False, False, "F3F4F6", roles["body_text"])]], g, _TS_BODY, keep=True)
+        document.add_paragraph()
+    if doc.parts:
+        contents: list[list[_Cell]] = [[("In this paper", True, False, "", roles["accent"]), ("", False, False, "", "")]]
+        contents.extend([(part.number, True, False, "", roles["body_text"]),
+                         (part.heading, False, False, "", roles["body_text"])] for part in doc.parts[:9])
+        if doc.appendices:
+            contents.append([("", False, False, "", roles["body_text"]),
+                             (f"Appendices: {', '.join(p.heading for p in doc.appendices[:6])}", False, False, "",
+                              roles["body_text"])])
+        _write_rows(document, contents, g, _TS_CAPTION, keep=True)
+        document.add_paragraph()
+    distribution = _distribution(doc)
+    reference = [f"{k}: {v}" for k, v in _reference(doc)]
+    height = max(len(distribution), len(reference))
+    rows: list[list[_Cell]] = [[("Distribution", True, False, roles["header_fill"], roles["header_text"]),
+                                ("Document", True, False, roles["header_fill"], roles["header_text"])]]
+    for index in range(height):
+        rows.append([(distribution[index] if index < len(distribution) else "", False, False, "", roles["body_text"]),
+                     (reference[index] if index < len(reference) else "", False, False, "", roles["body_text"])])
+    _write_rows(document, rows, g, _TS_CAPTION, keep=True)
+    notice = document.add_paragraph()
+    _muted(notice.add_run(doc.metadata.get("note", "Synthetic corpus generated by Worldloom. Not a real company.")), g)
+    document.add_page_break()
+
+
+def _control(document, doc: longform.LongDocument, g: StyleGenome, *, keep: bool = False) -> None:  # type: ignore[no-untyped-def]
     _heading(document, "Document control", 1, g)
-    _grid(document, ["Field", "Value"], [[label, value] for label, value in longform.control_rows(doc)], g)
+    if keep:
+        pairs = [[label, value] for label, value in longform.control_rows(doc)]
+        rows = [pairs[i] + (pairs[i + 1] if i + 1 < len(pairs) else ["", ""]) for i in range(0, len(pairs), 2)]
+        _grid(document, ["Field", "Value", "Field", "Value"], rows, g, keep=keep)
+    else:
+        _grid(document, ["Field", "Value"], [[label, value] for label, value in longform.control_rows(doc)], g, keep=keep)
     _heading(document, "Revision history", 2, g)
     _grid(document, ["Version", "Date", "Author", "Status", "Description of change"],
-          [list(row) for row in longform.history_rows(doc)], g)
+          [list(row) for row in longform.history_rows(doc)], g, keep=keep)
     _heading(document, "Approvals", 2, g)
     _grid(document, ["Role", "Name", "Title", "Decision", "Date"],
-          [list(row) for row in longform.approval_rows(doc)], g)
+          [list(row) for row in longform.approval_rows(doc)], g, keep=keep)
     if doc.comments:
         _heading(document, "Review record", 2, g)
         _grid(document, ["Section", "Reviewer", "Comment", "Resolution"],
-              [[c.part, c.author.name, c.text, c.resolution] for c in doc.comments], g)
+              [[c.part, c.author.name, c.text, c.resolution] for c in doc.comments], g, keep=keep)
     if doc.long:
         document.add_page_break()
 
 
-def _contents(document, doc: longform.LongDocument, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+def _body_section(document) -> None:  # type: ignore[no-untyped-def]
+    """Open the body in a section of its own, numbered from one.
+
+    Front matter (cover, document control, contents) and the paper are two
+    sections in a Word document a design team signs off, so the body's first
+    page is page 1 and the running heads carry on unchanged: the new section's
+    header and footer stay linked to the first's, and only the first page of
+    the document is a cover.
+    """
+    from docx.enum.section import WD_SECTION
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
+
+    section = document.add_section(WD_SECTION.NEW_PAGE)
+    section.different_first_page_header_footer = False
+    section._sectPr.append(parse_xml(f'<w:pgNumType {nsdecls("w")} w:start="1"/>'))
+
+
+def _contents(document, doc: longform.LongDocument, g: StyleGenome, *, turn: bool = True) -> None:  # type: ignore[no-untyped-def]
     """A TOC field whose cached result is the numbered outline.
 
     A field, so Word rebuilds it (with page numbers) on open; a cached result,
@@ -239,7 +333,8 @@ def _contents(document, doc: longform.LongDocument, g: StyleGenome) -> None:  # 
         if index:
             paragraphs.append(paragraph)
     paragraphs[-1]._element.append(parse_xml(f'<w:r {nsdecls("w")}><w:fldChar w:fldCharType="end"/></w:r>'))
-    document.add_page_break()
+    if turn:
+        document.add_page_break()
 
 
 def _tracked(paragraph, segments, revision: longform.Revision, g: StyleGenome, ids) -> None:  # type: ignore[no-untyped-def]
@@ -266,11 +361,13 @@ def _tracked(paragraph, segments, revision: longform.Revision, g: StyleGenome, i
 
 
 def _blocks(document, blocks, doc: longform.LongDocument, g: StyleGenome, ctx: Context,
-            chart_index, ids) -> None:  # type: ignore[no-untyped-def]
+            chart_index, ids, *, keep: bool = False) -> None:  # type: ignore[no-untyped-def]
     for block in blocks:
         if block.kind == "prose":
             paragraph = document.add_paragraph()
             paragraph.paragraph_format.space_after = _pt(legacy._space_pt(g, 2))
+            if keep:
+                paragraph.paragraph_format.widow_control = True
             if block.segments:
                 _tracked(paragraph, block.segments, doc.revision, g, ids)
             else:
@@ -285,7 +382,9 @@ def _blocks(document, blocks, doc: longform.LongDocument, g: StyleGenome, ctx: C
         elif block.kind == "table" and block.table is not None:
             caption = document.add_paragraph(style="Caption")
             caption.add_run(f"Table {block.number}: {block.caption}").bold = True
-            _ir_table(document, block.table, g, ctx.locale)
+            if keep:
+                caption.paragraph_format.keep_with_next = True
+            _ir_table(document, block.table, g, ctx.locale, keep=keep)
             if block.source:
                 source = document.add_paragraph()
                 _muted(source.add_run(f"Source: {block.source}"), g)
@@ -297,6 +396,8 @@ def _blocks(document, blocks, doc: longform.LongDocument, g: StyleGenome, ctx: C
 
             caption = document.add_paragraph(style="Caption")
             caption.add_run(f"Figure {block.number}: {block.caption}").bold = True
+            if keep:
+                caption.paragraph_format.keep_with_next = True
             rid = legacy._add_chart_part(document, legacy._chart_xml(block.chart, categories, series))
             drawing = document.add_paragraph()
             drawing._p.append(parse_xml(legacy._chart_drawing_xml(rid, next(chart_index))))
@@ -313,10 +414,17 @@ def render_document(doc: longform.LongDocument, ctx: Context, ir: ArtifactIR) ->
     legacy._apply_typeface(document, g)
     legacy._page_setup(document)
     _running_heads(document, doc, g)
-    _cover(document, doc, g)
-    _control(document, doc, g)
+    presentation = ctx.presentation(doc.artifact_type)
+    designed = presentation.layout == "designed"
+    if designed:
+        _designed_cover(document, doc, g)
+    else:
+        _cover(document, doc, g)
+    _control(document, doc, g, keep=designed)
     if doc.long:
-        _contents(document, doc, g)
+        _contents(document, doc, g, turn=not designed)
+    if designed:
+        _body_section(document)
 
     chart_index = count(1)
     ids = count(9001)
@@ -324,14 +432,18 @@ def render_document(doc: longform.LongDocument, ctx: Context, ir: ArtifactIR) ->
     for position, part in enumerate(doc.all_parts()):
         # A report opens each numbered section on a page of its own; a short
         # controlled document runs on, and only its appendices turn the page.
-        if position and (doc.long or (part.appendix and part is doc.appendices[0])):
+        if designed:
+            turn = position > 0 and part.appendix and part is doc.appendices[0]
+        else:
+            turn = bool(position) and (doc.long or (part.appendix and part is doc.appendices[0]))
+        if turn:
             document.add_page_break()
         heading = _heading(document, part.label, 1, g)
         anchors[part.number] = heading
-        _blocks(document, part.blocks, doc, g, ctx, chart_index, ids)
+        _blocks(document, part.blocks, doc, g, ctx, chart_index, ids, keep=designed)
         for child in part.children:
             _heading(document, f"{child.number} {child.heading}", 2, g)
-            _blocks(document, child.blocks, doc, g, ctx, chart_index, ids)
+            _blocks(document, child.blocks, doc, g, ctx, chart_index, ids, keep=designed)
 
     if doc.revision.status == "Reviewed":
         # Native comments on the version the reviewers actually read. The
@@ -361,7 +473,14 @@ def render_document(doc: longform.LongDocument, ctx: Context, ir: ArtifactIR) ->
 
     buffer = BytesIO()
     document.save(buffer)
-    return ooxml.normalise(buffer.getvalue(), created=doc.revision.at.isoformat())
+    payload = buffer.getvalue()
+    if presentation.citations == "appendix":
+        # Provenance off the page and into the file: Word's custom properties
+        # carry every cited fact id and which section cites it.
+        from .pdf import provenance_properties
+
+        payload = ooxml.with_custom_properties(payload, provenance_properties(doc, presentation.name))
+    return ooxml.normalise(payload, created=doc.revision.at.isoformat())
 
 
 def render_all(ctx: Context) -> list[Rendered]:

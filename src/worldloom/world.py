@@ -923,7 +923,7 @@ class World:
 
         enterprise_ctx = None
         rendered: list[render_module.Rendered] = []
-        if realism_profiles.of(staged) == realism_profiles.ENTERPRISE:
+        if realism_profiles.is_enterprise(staged):
             from .render import enterprise
 
             for name in formats:

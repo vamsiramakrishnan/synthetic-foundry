@@ -270,6 +270,8 @@ def run_command(
     connectors: str = typer.Option("emulator", "--connectors", help="What serves the connectors: emulator (in process, the default) or anvil (`anvil simulate serve` over each --contract, the agent calling the vendor API at $ANVIL_BASE_URL)."),
     contract: list[str] | None = typer.Option(None, "--contract", help="With --connectors anvil: a contract bundle (or its air.json) to serve, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector."),
     anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
+    harness_mode: str = typer.Option("turns", "--harness-mode", help="How the --exec child acts: turns (one call per turn, the default) or sdk-program (it writes one Python program per case against a generated client; Worldloom runs it and grades the calls it made)."),
+    program_timeout: float = typer.Option(300.0, "--program-timeout", help="With --harness-mode sdk-program: seconds the program may run per case before it is killed."),
 ) -> None:
     """Run one agent over the case set, one isolated connector state per case, and grade.
 
@@ -292,6 +294,13 @@ def run_command(
     $ANVIL_TOKEN, and the calls Anvil traced are replayed into the case's run,
     so every axis and stage is graded by the same code. Each case's state,
     traces and server logs are kept under `--out`/anvil.
+
+    `--harness-mode sdk-program` asks the `--exec` child once per case for a
+    Python program (a `worldloom.evalrun-program/v1` document on stdin, with a
+    generated client module and the tool endpoint), runs it in a subprocess
+    against the run's serving path (a local HTTP shim, or Anvil), and grades
+    the calls it made. The program and the plan read off its source are kept
+    on the ledger.
     """
     from ..cli import _refuse
     from .rater import GroundedRater
@@ -313,6 +322,13 @@ def run_command(
     )
 
     # Before the corpus: a typo in --harness should not wait on a build.
+    if harness_mode not in {"turns", "sdk-program"}:
+        _refuse("unknown_harness_mode", f"--harness-mode {harness_mode!r}; use turns or sdk-program")
+    if harness_mode == "sdk-program" and exec_command is None:
+        _refuse("missing_flag", "--harness-mode sdk-program needs --exec <command>: the child that writes the program"
+                + (" (the bundled --harness adapters speak the turn protocol)" if harness else ""))
+    if harness_mode == "sdk-program" and agent_pack is not None:
+        _refuse("cannot_combine", "--agent-pack shapes the turn protocol; it does not apply to --harness-mode sdk-program")
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     policy = _agent_pack(agent_pack, exec_command)
     shard_at: tuple[int, int] | None = None
@@ -335,16 +351,44 @@ def run_command(
             serving = AnvilServing(resolve_contracts(contract), command=anvil_cmd, workdir=out / "anvil")
         except AnvilError as error:
             _refuse("anvil_unavailable", str(error))
-    loaded, cases = _corpus_cases(corpus, limit)
+    loaded, every_case = _corpus_cases(corpus, None)
+    cases = every_case[:limit] if limit else every_case
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
+    # The proof gate, before any agent runs: the set's recorded proof holds
+    # only under the pins it was proved under. Moved pins re-prove the cases
+    # this run takes (deterministic, seconds) and refuse when they no longer
+    # prove; a set with no proof record is proved now and runs with a warning.
+    from .proof import definitions_for
+    from .proof import gate as proof_gate
+
+    verdict: Any = None
+    chosen = [case for case in cases if shard_at is None or shard_of(case.id, shard_at[1]) == shard_at[0] - 1]
+    try:
+        verdict = proof_gate(corpus, every_case, loaded.connector_data.records,
+                             definitions=definitions_for(every_case), anvil=serving, selected=chosen)
+    except Exception as error:  # a set that cannot be served at all: the service refusal below names it
+        typer.echo(f"warning: the case set could not be proved: {error}", err=True)
+    if verdict is not None:
+        for warning in verdict.warnings:
+            typer.echo(f"warning: {warning}", err=True)
+        if verdict.refusal is not None:
+            _refuse("proof_stale_unsolvable", verdict.refusal,
+                    fix="regenerate the case set against the current environment (its writer re-proves it), or "
+                        "`worldloom evalrun prove <cases> --record` once the cause is fixed")
     workers = concurrency if concurrency is not None else default_concurrency()
     if exec_command is not None:
         if agent != "reference":
             _refuse("cannot_combine", "--exec and --agent both name the agent under test; give one")
         from .harness import ExecAgent
 
-        under_test: Any = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=policy)
+        under_test: Any
+        if harness_mode == "sdk-program":
+            from .program import ProgramAgent
+
+            under_test = ProgramAgent(exec_command, timeout=timeout, shell=shell, program_timeout=program_timeout)
+        else:
+            under_test = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=policy)
     else:
         under_test = _agent(agent, cases)
     grader: Any = None
@@ -378,7 +422,8 @@ def run_command(
     # The identity this run will write (agent, principal, grader, agent pack),
     # read off an empty run so it is whatever `run_cases` itself records.
     identity = run_cases(service, (), under_test, principal=principal, clock=clock, rater=grader, anvil=serving)
-    identity = identity.model_copy(update={"case_set": case_set_digest(selected)})
+    identity = identity.model_copy(update={"case_set": case_set_digest(selected),
+                                           "pins": verdict.pins if verdict is not None else None})
     prior: list[Any] = []
     if resume:
         try:
@@ -421,6 +466,7 @@ def run_command(
         graded = {result.case_id: result for result in (*prior, *report.results)}
         report = report.model_copy(update={"case_set": identity.case_set,
                                            "results": tuple(graded[case.id] for case in selected)})
+    report = report.model_copy(update={"pins": identity.pins})
     summary = write_run(out, report)
     _print_summary(summary, json_output)
 
@@ -549,8 +595,13 @@ def summarize_command(
     run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Recompute a run's summary from its results ledger."""
+    """Recompute a run's summary from its results ledger.
+
+    Beside the summary, the failing findings' owners (`evalrun.ownership`:
+    agent, interface, world, grader) and each owner's share.
+    """
     from ..cli import _refuse
+    from .ownership import owner_line, ownership
     from .results import summarize
 
     try:
@@ -558,6 +609,10 @@ def summarize_command(
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", f"{run}: {error}")
     _print_summary(summarize(report), json_output)
+    if not json_output:
+        owned = ownership(report)
+        if owned.failing:
+            typer.echo(owner_line(owned))
 
 
 @app.command("compare")
@@ -570,9 +625,12 @@ def compare_command(
 
     Joined on case id, never on query text. Eval Studio's ±0.10 bands decide
     improvement and regression; a case graded on one side and errored on the
-    other is reported as a reliability change, not a score change.
+    other is reported as a reliability change, not a score change. The failing
+    findings' owners on each side (`evalrun.ownership`) are printed beside the
+    deltas.
     """
     from ..cli import _refuse
+    from .ownership import compare_ownership, ownership
     from .results import compare
 
     try:
@@ -585,6 +643,8 @@ def compare_command(
         return
     if not result.same_case_set:
         typer.echo("warning: the two runs were not over the same case set; deltas are per shared case id only", err=True)
+    for note in result.notes:
+        typer.echo(f"warning: {note}", err=True)
     typer.echo(f"{result.baseline_agent} -> {result.recent_agent}: {result.compared} shared case(s),"
                f" {len(result.improvements)} improved, {len(result.regressions)} regressed, {result.stable} stable;"
                f" mean delta {result.mean_delta}")
@@ -596,6 +656,11 @@ def compare_command(
         typer.echo("stage deltas: " + ", ".join(f"{stage} {value}" for stage, value in result.stage_deltas.items()))
     if result.newly_errored or result.newly_graded:
         typer.echo(f"reliability: {len(result.newly_errored)} newly errored, {len(result.newly_graded)} newly graded")
+    owners = compare_ownership(ownership(left), ownership(right))
+    if any(side["baseline"] or side["recent"] for side in owners.values()):
+        typer.echo("owners: " + ", ".join(f"{owner} {side['baseline']} -> {side['recent']} finding(s)"
+                                          f" (share {side['share_delta']:+})"
+                                          for owner, side in owners.items() if side["baseline"] or side["recent"]))
     for item in result.deltas:
         if item.verdict == "regression":
             moved = f" stages {item.stages}" if item.stages else ""
@@ -746,6 +811,10 @@ def autopsy_command(
     top: int = typer.Option(12, "--top", min=1, help="Clusters to report in full; the rest are counted."),
     out: Path | None = typer.Option(None, "--out", "-o", help="Write the autopsy as JSON here."),
     json_output: bool = typer.Option(False, "--json", help="Print the autopsy as JSON instead of the brief."),
+    owners: bool = typer.Option(True, "--owners/--no-owners", help="Attribute every failing finding to an owner (agent, interface, world or grader) and print the shares."),
+    reference_run: Path | None = typer.Option(None, "--reference-run", help="A reference-agent run over the same cases: a finding it shares is the world's."),
+    proofs: Path | None = typer.Option(None, "--proofs", help="The case set whose proof.json (written by `evalrun prove --record` or the case writer) says which cases are unsolvable: their findings are the world's."),
+    peer: list[Path] | None = typer.Option(None, "--peer", help="Another run over the same cases (a repeat): the identical trajectory scored differently is the grader's. Repeat per run."),
 ) -> None:
     """Cluster a run's failing cases by finding and print a brief an improver can act on.
 
@@ -754,16 +823,23 @@ def autopsy_command(
     report their share of the failures, the dimensions they concentrate in
     with lift against the whole run, and bounded evidence from one or two
     example cases. The brief is plain text, ready to hand an improving harness.
+    Every finding is also given an owner by deterministic rules
+    (`evalrun.ownership`): the agent, the interface it was served, the world
+    (the case or corpus), or the grader.
     """
     from ..cli import _refuse
     from ..corpus import write_json
     from .autopsy import autopsy, render_brief
+    from .ownership import read_proofs
 
     try:
         report = _read_run(run)
+        reference = _read_run(reference_run) if reference_run is not None else None
+        peers = [_read_run(item) for item in peer or ()]
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", f"{run}: {error}")
-    result = autopsy(report, top=top)
+    result = autopsy(report, top=top, attribute=owners, reference=reference, peers=peers,
+                     proofs=read_proofs(proofs) if proofs is not None else None)
     payload = result.model_dump(mode="json", by_alias=True)
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -964,6 +1040,11 @@ def improve_command(
     finalists: int | None = typer.Option(None, "--finalists", min=1, help="Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1)."),
     parents: str | None = typer.Option(None, "--parents", help="Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion)."),
     round_budget: int | None = typer.Option(None, "--round-budget", min=1, help="Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit)."),
+    levers: str | None = typer.Option(None, "--levers", help="What a round may change: agent (the policy pack; the default), interface (an Anvil manifest overlay per served connector), or agent,interface (the first candidate goes to the lever that owns more failing findings; --candidates mixes both). interface needs --contract."),
+    contract: list[str] | None = typer.Option(None, "--contract", help="With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface."),
+    anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
+    source_root: list[str] | None = typer.Option(None, "--source-root", help="CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it."),
+    transfer_agent: str | None = typer.Option(None, "--transfer-agent", help="A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
@@ -973,6 +1054,14 @@ def improve_command(
     lints clean), runs the candidate on the same cases, and only if it gains
     there runs both on the held-out cases the proposer never saw. The grader is
     pinned by digest for the whole loop. Every round leaves a receipt.
+
+    `--levers interface` (or `agent,interface`) also lets a round change the
+    interface the agent is served: an Anvil manifest overlay per `--contract`
+    bundle, proposed from the interface-owned findings, recompiled with
+    `anvil compile`, gated like an agent candidate and then on
+    `--transfer-agent`. A promoted overlay is written under
+    `--out`/interface/promoted as a manifest diff and a simulation-only
+    approvals record; approving it for production is a human step.
     """
     from ..cli import _refuse
     from ..packkit.authoring import run_exec_exchange
@@ -982,6 +1071,17 @@ def improve_command(
     from .runner import default_concurrency, run_cases, service_for
 
     _check_parents(parents)
+    from .interface import parse_levers
+
+    try:
+        chosen_levers = parse_levers(levers)
+    except ValueError as error:
+        _refuse("unknown_lever", str(error))
+    if "interface" not in chosen_levers and (contract or anvil_cmd or source_root or transfer_agent):
+        _refuse("cannot_combine", "--contract, --anvil-cmd, --source-root and --transfer-agent belong to the "
+                "interface lever; add --levers interface or --levers agent,interface")
+    if "interface" in chosen_levers and not contract:
+        _refuse("missing_flag", "--levers interface needs at least one --contract <bundle> to reshape")
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     if exec_command is None:
         _refuse("missing_flag", "the agent under test is an --exec or --harness child; a policy means nothing to the "
@@ -1038,6 +1138,41 @@ def improve_command(
     def agent_for(pack: Any) -> Any:
         return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
 
+    lever_options: dict[str, Any] = {}
+    if "interface" in chosen_levers:
+        from .anvil import AnvilError, resolve_contracts
+        from .interface import InterfaceLever
+
+        served: dict[str, Any] = {}
+
+        def serve(subset: Any, agent: Any, serving: Any) -> Any:
+            key = case_set_digest(subset)
+            if key not in served:
+                try:
+                    # Anvil's provider searches with the shared vendor query
+                    # evaluator, so the replay's service does too.
+                    served[key] = service_for(subset, held_records if key == held_key else records,
+                                              concurrency=workers, query_engine="native")
+                except Exception as error:  # ServingError and its causes are all refusals here
+                    _refuse("service_unbuildable", str(error))
+            return run_cases(served[key], subset, agent, principal=principal, rater=grader, concurrency=workers,
+                             anvil=serving)
+
+        roots: dict[str, str] = {}
+        for spec in source_root or ():
+            name, sep, where = spec.partition("=")
+            if not sep or not name or not where:
+                _refuse("missing_flag", f"--source-root takes CONNECTOR=DIR, not {spec!r}")
+            roots[name] = where
+        try:
+            lever_options["interface"] = InterfaceLever.from_contracts(
+                resolve_contracts(contract or []), serve=serve, out=out, command=anvil_cmd, source_roots=roots)
+        except AnvilError as error:
+            _refuse("anvil_unavailable", str(error))
+        lever_options["levers"] = chosen_levers
+        if transfer_agent is not None:
+            lever_options["transfer"] = ExecAgent(transfer_agent, timeout=timeout, shell=shell, max_turns=max_turns)
+
     try:
         report = improve(champion, cases, run=run, agent_for=agent_for,
                          exchange=run_exec_exchange(proposer, timeout=timeout, proposer=_proposer_policy(proposer_pack),
@@ -1045,7 +1180,7 @@ def improve_command(
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
                          ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
                          repeats=repeats, brief=brief, reference_run=reference, candidates=candidates, screen_cases=screen_cases, finalists=finalists,
-                         parents=parents, round_budget=round_budget)
+                         parents=parents, round_budget=round_budget, **lever_options)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
@@ -1069,6 +1204,16 @@ def improve_command(
                        f"{screen.cost} case-run(s); finalist(s): {', '.join(map(str, screen.finalists)) or 'none'}")
         if item.spent is not None:
             typer.echo(f"  spent {item.spent} case-run(s)")
+        if item.interface is not None:
+            transfer_state = item.interface.get("transfer") or {}
+            if "skipped" in transfer_state:
+                typer.echo(f"  transfer gate skipped: {transfer_state['skipped']}")
+            elif item.transfer is not None:
+                typer.echo(f"  transfer gate {'passed' if item.transfer.passed else 'failed'} "
+                           f"({item.transfer.mean_delta:+})")
+            if item.interface.get("promotion"):
+                typer.echo(f"  overlay written to {out / 'interface' / 'promoted' / f'{item.round:03d}'}: a manifest "
+                           "diff and a simulation-only approvals record; production approval is a human step")
     if report.spent is not None:
         typer.echo(f"{report.spent} case-run(s) spent across {len(report.rounds)} round(s)")
     typer.echo(f"champion: {report.champion['ref']}@{report.champion['digest'][:12]}"
@@ -1140,6 +1285,76 @@ def corners_command(
     if not batch.cases:
         typer.echo("gap: this world holds no event any selected template rests on, or none was solvable", err=True)
     typer.echo(f"{len(batch.cases)} corner case(s) written to {out}")
+
+
+@app.command("prove")
+def prove_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set (evalrun-cases.jsonl beside records.jsonl)."),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="Prove only the first N cases."),
+    record: bool = typer.Option(False, "--record", help="Write the proof record (proof.json, with its pins) into the case set directory, whatever the verdict."),
+    connectors: str = typer.Option("emulator", "--connectors", help="emulator (the default) or anvil: also serve each gold trajectory through `anvil simulate serve` over each --contract. Skipped, with the reason, when no Anvil CLI is found."),
+    contract: list[str] | None = typer.Option(None, "--contract", help="With --connectors anvil: a contract bundle, as CONNECTOR=PATH or a bare PATH. Repeat per connector."),
+    anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
+    json_output: bool = typer.Option(False, "--json", help="Emit the proof report as JSON."),
+) -> None:
+    """Prove every case solvable: replay its gold DAG and name the first node that is not.
+
+    Each case's gold DAG runs through the connector emulator under the vendor
+    query engine: every gold query must parse in its vendor grammar (a
+    structured predicate is compiled into the connector's language first),
+    every gold read must retrieve its evidence, every gold write must leave
+    the expected state, and the reference trajectory must score 1.0 on plan,
+    trajectory and outcomes and on each stage it is graded on. A case that
+    fails is unsolvable, with the first failing node and why. Exits 1 when
+    any case is unsolvable. `--record` writes proof.json, which `evalrun
+    run` checks its pins against.
+    """
+    from ..cli import _refuse
+    from .proof import prove_cases, render_proof, write_proof
+
+    loaded, cases = _corpus_cases(corpus, limit)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    serving: Any = None
+    skipped: str | None = None
+    if connectors not in {"emulator", "anvil"}:
+        _refuse("unknown_connectors", f"--connectors {connectors!r}; use emulator or anvil")
+    if connectors == "emulator" and (contract or anvil_cmd):
+        _refuse("cannot_combine", "--contract and --anvil-cmd serve connectors through Anvil; add --connectors anvil")
+    if connectors == "anvil":
+        from .anvil import AnvilError, AnvilServing, find_anvil, resolve_contracts
+
+        if not contract:
+            _refuse("missing_flag", "--connectors anvil needs at least one --contract <bundle>")
+        import shutil
+
+        command = find_anvil(anvil_cmd)
+        if command is None or shutil.which(command[0]) is None:
+            # Without Node and an Anvil CLI the in-process proof still stands;
+            # the Anvil half is reported as not run, never as passed.
+            skipped = "anvil: no Anvil CLI (pass --anvil-cmd or set $WORLDLOOM_ANVIL); proved in process only"
+        else:
+            try:
+                serving = AnvilServing(resolve_contracts(contract), command=anvil_cmd)
+            except AnvilError as error:
+                _refuse("anvil_unavailable", str(error))
+    try:
+        report = prove_cases(cases, loaded.connector_data.records, anvil=serving)
+    except Exception as error:  # ServingError and its causes: the set cannot even be served
+        _refuse("service_unbuildable", str(error))
+    if skipped is not None:
+        report = report.model_copy(update={"skipped": skipped})
+    if record:
+        write_proof(corpus, report)
+    if json_output:
+        typer.echo(json.dumps({**report.model_dump(mode="json", by_alias=True), "digest": report.digest},
+                              indent=2, sort_keys=True))
+    else:
+        typer.echo(render_proof(report))
+        if record:
+            typer.echo(f"proof recorded in {corpus / 'proof.json'}")
+    if report.unsolvable:
+        raise typer.Exit(1)
 
 
 @app.command("frontier")

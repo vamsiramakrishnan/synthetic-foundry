@@ -523,19 +523,22 @@ def test_results_are_identical_across_runs_and_independent_of_input_order_when_r
 # ---------------------------------------------------------------------------
 
 
-def test_the_default_emulator_keeps_the_historical_query_path() -> None:
+def test_the_default_emulator_reads_the_vendor_language_and_predicate_stays_selectable() -> None:
+    # The default flipped to `native`: a pilot's call errors were mostly
+    # valid vendor queries the historical conjunctive parser refused.
     records = _jira()
     default = ConnectorEmulator(load_connector_definition("jira"), records)
-    assert default.query_engine == "predicate"
-    # The historical conjunctive subset reads `OR` as part of a value and refuses `!~`;
-    # the default must still do exactly that, and only the opt-in reads JQL.
-    assert default.call("search_issues", query="project = PHX OR project = OPS")["total"] == 0
+    assert default.query_engine == "native"
+    assert default.call("search_issues", query="project = PHX OR project = OPS")["total"] == 8
+    assert default.call("search_issues", query="summary !~ checkout")["total"] == 4
+    assert default.fork().query_engine == "native"
+    # The historical subset reads `OR` as part of a value and refuses `!~`;
+    # it is still there for whoever selects it.
+    legacy = ConnectorEmulator(load_connector_definition("jira"), records, query_engine="predicate")
+    assert legacy.call("search_issues", query="project = PHX OR project = OPS")["total"] == 0
     with pytest.raises(ConnectorError, match="unsupported jql query clause"):
-        default.call("search_issues", query="summary !~ checkout")
-    native = ConnectorEmulator(load_connector_definition("jira"), records, query_engine="native")
-    assert native.call("search_issues", query="project = PHX OR project = OPS")["total"] == 8
-    assert native.call("search_issues", query="summary !~ checkout")["total"] == 4
-    assert default.fork().query_engine == "predicate"
+        legacy.call("search_issues", query="summary !~ checkout")
+    assert legacy.fork().query_engine == "predicate"
     with pytest.raises(ValueError, match="unknown query engine"):
         ConnectorEmulator(load_connector_definition("jira"), records, query_engine="fancy")
 

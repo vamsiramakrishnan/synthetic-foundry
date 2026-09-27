@@ -1,0 +1,31 @@
+# Worldloom exposure profile for SharePoint in Microsoft Graph v1.0.
+#
+# Document library items (the site's drive, addressed by drive id), list
+# items and their fields, and site pages, which the sharepoint connector's
+# tools model; and the neighbours an agent might reach for instead: the site
+# itself, whole lists and their columns, item permissions and sharing links,
+# checkin and checkout.
+profile: worldloom-sharepoint
+description: SharePoint files, list items and pages as the Worldloom sharepoint connector models them, with the neighbours an agent might misuse.
+select:
+  - path:
+      - "/sites"
+      - "/sites/{site-id}"
+      - "/sites/{site-id}/drive"
+      - "/drives/{drive-id}/items/{driveItem-id}"
+      - "/drives/{drive-id}/items/{driveItem-id}/children"
+      - "/drives/{drive-id}/items/{driveItem-id}/copy"
+      - "/drives/{drive-id}/items/{driveItem-id}/checkin"
+      - "/drives/{drive-id}/items/{driveItem-id}/checkout"
+      - "/drives/{drive-id}/items/{driveItem-id}/createLink"
+      - "/drives/{drive-id}/items/{driveItem-id}/permissions"
+      - "/drives/{drive-id}/search(q='{q}')"
+      - "/sites/{site-id}/lists"
+      - "/sites/{site-id}/lists/{list-id}"
+      - "/sites/{site-id}/lists/{list-id}/columns"
+      - "/sites/{site-id}/lists/{list-id}/items"
+      - "/sites/{site-id}/lists/{list-id}/items/{listItem-id}"
+      - "/sites/{site-id}/lists/{list-id}/items/{listItem-id}/fields"
+      - "/sites/{site-id}/pages"
+      - "/sites/{site-id}/pages/{baseSitePage-id}"
+unexposed: skip

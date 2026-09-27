@@ -193,9 +193,21 @@ def _docx(payload: bytes) -> Extract:
                 consume(max([1] + [math.ceil(len(c) / width) for c in cells]) + 0.25)
             consume(1.0)
     flush()
+    extra: dict[str, Any] = {"pages_are": "equivalent"}
+    properties = _custom_properties(payload)
+    if properties:
+        # Where a reader profile keeps provenance: never on the page, always
+        # in the file, so a connector's `get_file` still returns the lineage.
+        extra["properties"] = properties
     return Extract(format="docx", text="\n".join(texts), units=tuple(units), pages=pages,
                    tables=tables, headings=headings, comments=comments,
-                   extra={"pages_are": "equivalent"})
+                   extra=extra)
+
+
+def _custom_properties(payload: bytes) -> dict[str, str]:
+    from .render.ooxml import custom_properties
+
+    return custom_properties(payload)
 
 
 # -- PowerPoint --------------------------------------------------------------
@@ -257,9 +269,13 @@ def _pptx(payload: bytes) -> Extract:
                 notes_count += 1
             units.append(Unit("slide", _slide_number(name), title, "\n".join([title, *lines]).strip(), notes))
     text = "\n\n".join(u.text + (f"\nNotes: {u.notes}" if u.notes else "") for u in units)
+    extra: dict[str, Any] = {"slides": len(units), "charts": charts}
+    properties = _custom_properties(payload)
+    if properties:
+        extra["properties"] = properties
     return Extract(format="pptx", text=text, units=tuple(units), tables=tables,
                    headings=sum(1 for u in units if u.title), notes=notes_count,
-                   extra={"slides": len(units), "charts": charts})
+                   extra=extra)
 
 
 # -- Excel -------------------------------------------------------------------
@@ -363,8 +379,16 @@ def _pdf(payload: bytes) -> Extract:
                     lines.append(line)
         units.append(Unit("page", index, lines[0] if lines else "", "\n".join(lines)))
     outline = len(re.findall(rb"/Type\s*/Outlines\b", payload)) > 0
+    extra: dict[str, Any] = {"outline": outline}
+    # A reader-profile PDF carries its provenance in the document information
+    # dictionary (`/WorldloomFacts`, `/WorldloomProvenance`), where a viewer's
+    # Properties dialog shows it and the page does not.
+    info = {key.decode(): _unescape(value[1:-1]) for key, value in
+            re.findall(rb"/(Worldloom[A-Za-z]+)\s*(\((?:\\.|[^\\)])*\))", payload)}
+    if info:
+        extra["properties"] = info
     return Extract(format="pdf", text="\n\n".join(u.text for u in units), units=tuple(units),
-                   pages=len(units), extra={"outline": outline})
+                   pages=len(units), extra=extra)
 
 
 # -- Markdown and HTML -------------------------------------------------------

@@ -114,7 +114,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--policies` | Give the company its standing documents: core or full. These are the papers a company *has* rather than produces (a delegation of authority, an expense policy, a leave policy, an information security policy), as opposed to what a close or an incident emits. Without it an assistant asked what the approval threshold is has nothing to find, because the company has no rules. Money provisions scale off the company's own revenue, so two archetypes do not share a limit. Omit it and every existing corpus is byte-identical. |
 | `--priors` | Build under physics calibrated from data by `worldloom calibrate`: a prior snapshot whose spans replace the engine's ranges and whose receipt records how they were made and what privacy budget it cost. Only ranges cross the boundary: no row of the source is in the snapshot, so none can be in the corpus. Applied before --physics, which then overrides it range by range. |
-| `--realism` | How the world materialises into files. `enterprise` (the default for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled reports with cover, document control, contents, numbered sections, schedules from the pack's workbook, appendices, revision files and reviewer comments; decks on real layouts with speaker notes and native charts; intranet pages; wiki exports; pack indexes; and connector file records that carry their text. `legacy` reproduces the compact files every corpus built before this flag has, byte for byte. `ecology` is the artifact-ecology annotation. Recorded on the recipe, so a replay and a later `worldloom render` reproduce it; the world, its facts and its validation are the same under all three. |
+| `--realism` | How the world materialises into files. `enterprise` (`enterprise/v2`, the default for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled reports with cover, document control, contents, numbered sections, schedules from the pack's workbook, appendices, revision files and reviewer comments; decks on real layouts with speaker notes and native charts; intranet pages; wiki exports; pack indexes; and connector file records that carry their text. It is written for a reader: sections are asked for move by move, `--narrate` writes with the composing narrator, and the reader presentation profile applies unless another is named. `enterprise/v1` is the same files audit-presented and narrated by the contract fixture. `legacy` reproduces the compact files every corpus built before this flag has, byte for byte. `ecology` is the artifact-ecology annotation. Recorded on the recipe, so a replay and a later `worldloom render` reproduce it; the world, its facts and its validation are the same under all of them. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--reviews` | Review this many people per period. Each is a signed performance review countersigned by the manager's own manager, plus the running one-to-one note that fed it, at a lower authority and saying something slightly different. |
 | `--section-omission` | Per-mille chance that any one *optional* section is left out of any one document, so a type emits a subset of its outline rather than all of it every time. This is swarm testing applied to documents: sections compete for a reader's attention exactly as test features compete for room, and a corpus whose every close pack carries the same five headings teaches a retriever the headings. Sections are required unless a type says otherwise, so no required fact can ever be lost to it; an un-annotated corpus has nothing optional and is unaffected at any value. Pass 0 for the historical all-sections shape. |
@@ -204,6 +204,62 @@ worldloom compose requests <CORPUS>
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
 
+### `worldloom contracts`
+
+Fetch, verify, compile and measure the vendor contracts connectors are served behind through Anvil.
+
+### `worldloom contracts build`
+
+Compile a connector's contract under its profile with Anvil, approve the profile, and lint the mapping.
+
+```
+worldloom contracts build <CONNECTOR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--anvil-cmd` | The Anvil CLI, split like a shell command (default $WORLDLOOM_ANVIL, else anvil on PATH). |
+| `--cache` | Cache directory for sources and bundles. |
+| `--force` | Rebuild even when the cache holds this build. |
+| `--json` | Print the build receipt as JSON. |
+| `--spec` | Compile this source (a trim) under the connector's profile instead of the locked bytes. |
+
+### `worldloom contracts coverage`
+
+Per connector: vendor operations, operations the profile exposes, modelled and unmodelled, and provenance.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the rows as JSON. |
+
+### `worldloom contracts fetch`
+
+Download each locked vendor contract (or copy an authored one), verify its sha256, and refuse a mismatch.
+
+```
+worldloom contracts fetch <CONNECTORS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--cache` | Cache directory (default $WORLDLOOM_CONTRACTS_CACHE, else ~/.cache/worldloom/contracts). |
+| `--json` | Print what was fetched as JSON. |
+
+### `worldloom contracts trim`
+
+Cut a contract to the operations its profile exposes and the schemas they reach, for a small test fixture.
+
+```
+worldloom contracts trim <CONNECTOR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--anvil-cmd` | The Anvil CLI, split like a shell command. |
+| `--cache` | Cache directory for sources and bundles. |
+| `--source` | The full source (default: the fetched, locked bytes). A large YAML source reads faster converted to JSON. |
+| `-o`, `--out` | Where to write the gzipped trim. |
+
 ### `worldloom demo`
 
 Build a bundled demo corpus, validate it, and export it.
@@ -257,7 +313,7 @@ Plan, generate, and validate multi-connector enterprise agent evaluations.
 
 ### `worldloom enterprise-evals build`
 
-Plan, materialize, validate, export, and optionally render a connector corpus.
+Plan, materialize, validate, prove, export, and optionally render a connector corpus.
 
 ```
 worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
@@ -266,6 +322,7 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 | Option | Purpose |
 | --- | --- |
 | `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
+| `--drop-unsolvable` | Leave out cases the gold-plan proof finds unsolvable, recording each with its first failing node in proof.json, instead of refusing to write the corpus. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -424,6 +481,10 @@ worldloom evalrun autopsy <RUN>
 | --- | --- |
 | `--json` | Print the autopsy as JSON instead of the brief. |
 | `--out`, `-o` | Write the autopsy as JSON here. |
+| `--owners` | Attribute every failing finding to an owner (agent, interface, world or grader) and print the shares. |
+| `--peer` | Another run over the same cases (a repeat): the identical trajectory scored differently is the grader's. Repeat per run. |
+| `--proofs` | The case set whose proof.json (written by `evalrun prove --record` or the case writer) says which cases are unsolvable: their findings are the world's. |
+| `--reference-run` | A reference-agent run over the same cases: a finding it shares is the world's. |
 | `--top` | Clusters to report in full; the rest are counted. |
 
 ### `worldloom evalrun campaign`
@@ -611,15 +672,18 @@ worldloom evalrun improve <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--anvil-cmd` | The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH). |
 | `--brief` | What the proposer is shown: summary (the failure clusters) or traces (also the connectors' own error messages, the arguments behind them, the tools' contracts and failing trajectories). Default: policy `evalrun.improve.brief`, summary. |
 | `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
+| `--contract` | With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface. |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
 | `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
 | `--json` | Emit improve.json on stdout. |
+| `--levers` | What a round may change: agent (the policy pack; the default), interface (an Anvil manifest overlay per served connector), or agent,interface (the first candidate goes to the lever that owns more failing findings; --candidates mixes both). interface needs --contract. |
 | `--limit` | Use only the first N cases of CORPUS. |
 | `--max-turns` |  |
 | `--no-ablate` | Send the candidate to the holdout whole, without taking out hunks that carry nothing. |
@@ -637,7 +701,9 @@ worldloom evalrun improve <CORPUS>
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--source-root` | CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
+| `--transfer-agent` | A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
 
 ### `worldloom evalrun improve-proposer`
@@ -711,6 +777,23 @@ worldloom evalrun plan <CORPUS>
 | `--shell` | Run the --exec command through the shell. |
 | `--timeout` | Seconds the --exec child may run per case. |
 
+### `worldloom evalrun prove`
+
+Prove every case solvable: replay its gold DAG and name the first node that is not.
+
+```
+worldloom evalrun prove <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--anvil-cmd` | The Anvil CLI (default: $WORLDLOOM_ANVIL, else `anvil` on PATH). |
+| `--connectors` | emulator (the default) or anvil: also serve each gold trajectory through `anvil simulate serve` over each --contract. Skipped, with the reason, when no Anvil CLI is found. |
+| `--contract` | With --connectors anvil: a contract bundle, as CONNECTOR=PATH or a bare PATH. Repeat per connector. |
+| `--json` | Emit the proof report as JSON. |
+| `--limit` | Prove only the first N cases. |
+| `--record` | Write the proof record (proof.json, with its pins) into the case set directory, whatever the verdict. |
+
 ### `worldloom evalrun requests`
 
 Write every case as a request a harness can answer offline: query, persona, tools.
@@ -744,11 +827,13 @@ worldloom evalrun run <CORPUS>
 | `--contract` | With --connectors anvil: a contract bundle (or its air.json) to serve, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
+| `--harness-mode` | How the --exec child acts: turns (one call per turn, the default) or sdk-program (it writes one Python program per case against a generated client; Worldloom runs it and grades the calls it made). |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
 | `--max-turns` | Turns the --exec child may take per case (default: the agent pack's max_turns, else policy `evalrun.max_turns`, 64). |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
+| `--program-timeout` | With --harness-mode sdk-program: seconds the program may run per case before it is killed. |
 | `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |
 | `--rater` | grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam). |
 | `--rater-timeout` | Seconds an exec: rater child may run per answer. |
@@ -1058,6 +1143,88 @@ worldloom inspect <CORPUS>
 | `--facts` | List facts. |
 | `--lore` | List lore commitments. |
 
+### `worldloom interview`
+
+Interview a harness (or a script) layer by layer into a company, its people, processes, paperwork, history and evals; then build it.
+
+### `worldloom interview answer`
+
+Judge one reply to the question in progress and record the round; refused replies name every finding.
+
+```
+worldloom interview answer <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--reply` | The reply JSON: {request_id, answer} or {request_id, questions}. |
+
+### `worldloom interview build`
+
+Build, narrate, render and validate the interviewed world, then generate and prove its eval cases per level.
+
+```
+worldloom interview build <DIRECTORY> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--model-id` | Who wrote the prose; recorded in the ledger. |
+| `--narrate-exec` | A writer adapter for narration (the `narrate loop --exec` contract); default is the deterministic writer. |
+| `--narrate-harness` | An installed coding harness as the writer, by the name `narrate loop --harness` takes. |
+| `--prove` | Run the reference agent over every level's case set and refuse a case it cannot pass. |
+| `--seed` |  |
+| `-f`, `--format` | Formats to render (default docx, xlsx, pptx, markdown). |
+
+### `worldloom interview measure`
+
+Print what an interviewed world holds: employees by level, systems, records, documents, revisions, events, cases.
+
+```
+worldloom interview measure <OUTPUT>
+```
+
+### `worldloom interview next`
+
+The request for the question in progress: answer it and pass the reply to `interview answer`.
+
+```
+worldloom interview next <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `-o`, `--output` | Write the request here instead of stdout. |
+
+### `worldloom interview run`
+
+Interview until every layer is settled, refusing each answer with findings until it lints clean.
+
+```
+worldloom interview run <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exec` | Your own adapter: one request JSON on stdin, one reply JSON on stdout. |
+| `--harness` | An installed coding harness as the interviewee, by the name `narrate loop --harness` takes. |
+| `--max-rounds` | Attempts per question before stopping (policy world.interview.max_rounds). |
+| `--script` | A scripted interviewee: fixture answers per question (offline, deterministic). |
+| `--stop-after` | Settle at most this many questions, then pause; run again to resume. |
+| `--timeout` | Seconds a harness may take per question. |
+
+### `worldloom interview status`
+
+What is settled, what is next, and the findings holding the question in progress.
+
+```
+worldloom interview status <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the status as JSON. |
+
 ### `worldloom mcp`
 
 Serve Worldloom's readings and gates as MCP tools, over stdio.
@@ -1101,7 +1268,7 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Consecutive periods per world. |
 | `--probe` | Take the axes from a settled probe instead of this engine's defaults. The probe decides what varies and between which bounds; the algorithm still decides which N. Every parameter the probe bound becomes an axis over the interval it argued for, and axes it said nothing about keep their defaults. |
-| `--realism` | How each world materialises into files: `enterprise` (the default for new builds), `legacy` (byte-identical to earlier mosaics) or `ecology`. See `worldloom build --realism`. |
+| `--realism` | How each world materialises into files: `enterprise` (the default for new builds, reader-grade and written by the composing narrator), `enterprise/v1`, `legacy` (byte-identical to earlier mosaics) or `ecology`. See `worldloom build --realism`. |
 | `--resume` | Resume this exact plan from validated worlds and section checkpoints. |
 | `--seed`, `-s` | Base seed. World N uses seed+N-1. |
 | `--shard-count` | Deterministic number of batch shards. |
@@ -1643,7 +1810,7 @@ worldloom render <CORPUS>
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
 | `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
-| `--realism` | Which files the corpus materialises into: `enterprise` (long-form controlled documents, decks, intranet pages, revisions and packs), `legacy` (the compact files, byte-identical to every earlier render) or `ecology`. Omit it to keep what the corpus's recipe records; a corpus that records none is `legacy`. |
+| `--realism` | Which files the corpus materialises into: `enterprise` (long-form controlled documents, decks, intranet pages, revisions and packs, presented for a reader; `enterprise/v1` for the audit-presented first version), `legacy` (the compact files, byte-identical to every earlier render) or `ecology`. Omit it to keep what the corpus's recipe records; a corpus that records none is `legacy`. |
 
 ### `worldloom seams`
 

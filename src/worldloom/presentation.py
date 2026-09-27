@@ -54,6 +54,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
+from . import figures as _figures
+from . import titles as _titles
 from .cascade import CascadeModel, Finding, load, refuse
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -61,7 +63,14 @@ if TYPE_CHECKING:  # pragma: no cover
 
 __all__ = [
     "AUDIT",
+    "CITATIONS",
+    "LAYOUTS",
+    "DECKS",
     "DEFAULT",
+    "NOTES",
+    "SLIDE_BUDGETS",
+    "SPELLINGS",
+    "TITLES",
     "PROFILES",
     "READER",
     "Presentation",
@@ -126,6 +135,78 @@ MAGNITUDES = ("ledger", "scaled")
 #: slack to the widest remaining column.
 TABLE_FITS = ("fixed", "measured")
 
+#: Where the per-section provenance of a long document goes: the "Key
+#: figures" and "Figures cited" tables with their fact ids and the "Source:
+#: Fact ledger" captions.
+#:
+#: ``inline`` is what enterprise/v1 shipped: every numbered section is
+#: followed by a table restating the figures its prose cites, one row per
+#: fact id. Right for a validator, which wants the lineage beside the claim;
+#: wrong for a reader, for whom a memo's third section is two sentences and
+#: then a table of the same two sentences. ``appendix`` gathers the same rows
+#: into one "Sources of figures" appendix (section, measure, value, fact id),
+#: keeps the lineage appendix, and writes the cited fact ids into the file's
+#: own properties (Word and PowerPoint custom properties, the PDF info
+#: dictionary), so a grader or a connector's text extraction still sees
+#: every id and a reader sees none in the body.
+CITATIONS = ("inline", "appendix")
+
+#: How a long document is laid out. ``plain`` is the shipped layout: a cover
+#: that is a title and a document grid over a page that is mostly white, and
+#: tables that break wherever the frame ends, so a two-row spill of a review
+#: record can sit alone on a page. ``designed`` is a layout a design team
+#: would sign off: a cover with a classification band, a title block, a
+#: summary box carrying the document's own opening paragraph, a distribution
+#: list and the reference block; headings and captions kept with what follows
+#: them; small tables kept whole; widow and orphan control on body text.
+#: Word and PDF both.
+LAYOUTS = ("plain", "designed")
+
+#: How a deck is built. ``ledger`` is the shipped deck: every schedule as a
+#: Title Only table slide, speaker notes that name the ledger entries on the
+#: slide. ``presenter`` is the deck somebody stands up and gives: bullets
+#: that are the argument, two-content comparisons, charts under a takeaway
+#: title written from the facts they plot, and tables in the appendix unless
+#: the slide's point is the table.
+DECKS = ("ledger", "presenter")
+
+#: What a slide's speaker notes say. ``provenance`` names where the slide
+#: came from; ``talk`` is what the presenter says: the point, the evidence
+#: behind it and the line into the next slide, from the notes move set in
+#: `rhetoric`.
+NOTES = ("provenance", "talk")
+
+#: How many slides a deck may run to. Named rather than numeric so a profile
+#: says what the deck is for; `SLIDE_BUDGET_SLIDES` is the arithmetic.
+SLIDE_BUDGETS = ("unbounded", "board", "briefing")
+
+#: The slide cap each budget stands for. ``unbounded`` is the renderer's own
+#: hard stop, which is what every deck before budgets had.
+SLIDE_BUDGET_SLIDES: dict[str, int] = {"unbounded": 60, "board": 24, "briefing": 14}
+
+#: How a figure is spelled inside a sentence. ``exact`` is the ledger's own
+#: figure, or its exact promotion under ``magnitudes: scaled``, which is what
+#: every rendering before this knob printed: "AUD 93.421m" two lines under
+#: "AUD 617.2m", "AUD 958 thousands adverse", "AUD 0 thousands". ``reader``
+#: rounds money to the places a memo prints per magnitude, keeps one
+#: precision per unit within a sentence, writes "k" and "nil" and "%", and
+#: spells dates and recorded enum values in words. The rules are data
+#: (``_data/presentation/spelling.json``, read by `figures`), so a house
+#: style is a rulebook entry, not a renderer change; a rounding is a
+#: spelling and never a value, and `figures.agrees` is how every check that
+#: compares a reader's copy against the ledger accepts it.
+SPELLINGS: tuple[str, ...] = _figures.spellings()
+
+#: How a presenter deck's slide titles are fitted. ``free`` is the shipped
+#: fitting: a 92-character budget, cut at a clause boundary or with an
+#: ellipsis, which on a live writer's prose titled a slide "The confirmed
+#: cause of the failure was Stale legacy-to-new product hierarchy mapping in
+#: the" and an ellipsis. ``reader`` bounds a title in words and characters, never cuts one
+#: mid-clause (a shorter clause, else the lead fact's template), and prints
+#: no dash or ellipsis in it. The styles are data
+#: (``_data/presentation/titles.json``, read by `titles`).
+TITLES: tuple[str, ...] = _titles.styles()
+
 
 @dataclass(frozen=True)
 class Presentation:
@@ -141,6 +222,13 @@ class Presentation:
     provenance: str = "footer"
     magnitudes: str = "ledger"
     table_fit: str = "fixed"
+    citations: str = "inline"
+    layout: str = "plain"
+    deck: str = "ledger"
+    notes: str = "provenance"
+    slide_budget: str = "unbounded"
+    spelling: str = "exact"
+    titles: str = "free"
 
     #: Doctypes this profile treats differently from its own defaults, by
     #: artifact type. Present because "a reader profile" is rarely uniform: a
@@ -159,6 +247,11 @@ class Presentation:
         object.__setattr__(self, "overrides", {
             str(doctype): dict(knobs) for doctype, knobs in dict(self.overrides or {}).items()
         })
+
+    @property
+    def slide_cap(self) -> int:
+        """The most slides a deck under this profile may run to."""
+        return SLIDE_BUDGET_SLIDES.get(self.slide_budget, SLIDE_BUDGET_SLIDES["unbounded"])
 
     def for_doctype(self, artifact_type: str | None) -> Presentation:
         """This profile as it applies to one artifact type.
@@ -187,6 +280,13 @@ READER = Presentation(
     provenance="properties",
     magnitudes="scaled",
     table_fit="measured",
+    citations="appendix",
+    layout="designed",
+    deck="presenter",
+    notes="talk",
+    slide_budget="board",
+    spelling="reader",
+    titles="reader",
 )
 
 #: Citations in a sibling file rather than in the document or nowhere: the shape
@@ -198,6 +298,13 @@ FILING = Presentation(
     provenance="properties",
     magnitudes="scaled",
     table_fit="measured",
+    citations="appendix",
+    layout="designed",
+    deck="presenter",
+    notes="talk",
+    slide_budget="board",
+    spelling="reader",
+    titles="reader",
 )
 
 PROFILES: dict[str, Presentation] = {
@@ -293,6 +400,13 @@ class PresentationSeed(CascadeModel):
     provenance: str = "footer"
     magnitudes: str = "ledger"
     table_fit: str = "fixed"
+    citations: str = "inline"
+    layout: str = "plain"
+    deck: str = "ledger"
+    notes: str = "provenance"
+    slide_budget: str = "unbounded"
+    spelling: str = "exact"
+    titles: str = "free"
     # RUF012 cannot see that CascadeModel is a pydantic BaseModel, which
     # copies mutable defaults per instance; a real shared-dict hazard
     # needs a plain class attribute, and this is a validated field.
@@ -313,7 +427,20 @@ KNOBS: dict[str, tuple[str, ...]] = {
     "provenance": PROVENANCES,
     "magnitudes": MAGNITUDES,
     "table_fit": TABLE_FITS,
+    "citations": CITATIONS,
+    "layout": LAYOUTS,
+    "deck": DECKS,
+    "notes": NOTES,
+    "slide_budget": SLIDE_BUDGETS,
+    "spelling": SPELLINGS,
+    "titles": TITLES,
 }
+
+#: The knobs a recipe carried before provenance placement, layout and decks
+#: were profile-driven. Always written; every later knob is written only when
+#: it differs from its default, so a recipe that names a profile keeps the
+#: bytes it had (see `recipe.with_presentation`).
+ORIGINAL_KNOBS = ("appendix", "provenance", "magnitudes", "table_fit")
 
 
 def brief(doctypes: Sequence[str] = ()) -> dict[str, Any]:
@@ -456,11 +583,8 @@ def resolve(seed: PresentationSeed) -> Presentation:
     """
     return Presentation(
         name=seed.name,
-        appendix=seed.appendix,
-        provenance=seed.provenance,
-        magnitudes=seed.magnitudes,
-        table_fit=seed.table_fit,
         overrides=seed.overrides,
+        **{knob: getattr(seed, knob) for knob in KNOBS},
     )
 
 

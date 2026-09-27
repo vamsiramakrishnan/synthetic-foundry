@@ -1,0 +1,192 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "outlook",
+  "service": "outlook",
+  "contract": "Microsoft Graph v1.0 OpenAPI (msgraph-metadata openapi/v1.0/openapi.yaml), compiled under profiles/outlook.yaml with --service outlook",
+  "error_body": {"error": {"code": "{errorCode}", "message": "{text}"}},
+  "operations": {
+    "outlook.messages.list.direct": {
+      "route": "GET /me/messages",
+      "vendor": "me.ListMessages",
+      "tool": "list_messages",
+      "args": {
+        "query": {"object": {"$filter": "query.$filter", "$search": "query.$search", "$orderby": "query.$orderby"},
+                  "transform": "odata"},
+        "fields": {"from": "query.$select", "transform": "csv"},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "next_link": "https://graph.microsoft.com/v1.0/me/messages?$skiptoken={cursor}",
+                 "envelope": {"@odata.nextLink": "$next_link", "value": "$items"}}
+    },
+    "outlook.messages.list.mail_folders": {
+      "route": "GET /me/mailFolders/{mailFolder-id}/messages",
+      "vendor": "me.mailFolders.ListMessages",
+      "tool": "list_messages",
+      "args": {
+        "folder": {"from": "path.mailFolder-id", "required": true},
+        "query": {"object": {"$filter": "query.$filter", "$search": "query.$search", "$orderby": "query.$orderby"},
+                  "transform": "odata"},
+        "fields": {"from": "query.$select", "transform": "csv"},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "outlook.messages.get": {
+      "route": "GET /me/messages/{message-id}",
+      "vendor": "me.GetMessages",
+      "tool": "get_message",
+      "args": {
+        "id": {"from": "path.message-id", "required": true},
+        "fields": {"from": "query.$select", "transform": "csv"}
+      },
+      "result": "record"
+    },
+    "outlook.messages.create.direct": {
+      "route": "POST /me/messages",
+      "vendor": "me.CreateMessages",
+      "tool": "create_draft",
+      "args": {
+        "entity": {"value": "message"},
+        "name": {"from": "body.subject"},
+        "fields": {"from": "body", "transform": "fields", "required": true,
+                   "rename": {"toRecipients": "recipients", "isRead": "is_read", "from": "sender"}}
+      },
+      "result": "record"
+    },
+    "outlook.messages.update": {
+      "route": "PATCH /me/messages/{message-id}",
+      "vendor": "me.UpdateMessages",
+      "tool": "update_message",
+      "args": {
+        "id": {"from": "path.message-id", "required": true},
+        "fields": {"from": "body", "transform": "fields", "required": true,
+                   "rename": {"toRecipients": "recipients", "isRead": "is_read", "from": "sender"}}
+      },
+      "result": "record"
+    },
+    "outlook.messages.delete": {
+      "route": "DELETE /me/messages/{message-id}",
+      "vendor": "me.DeleteMessages",
+      "tool": "delete_message",
+      "args": {"id": {"from": "path.message-id", "required": true}},
+      "result": "empty"
+    },
+    "outlook.send_mail.create": {
+      "route": "POST /me/sendMail",
+      "vendor": "me.sendMail",
+      "tool": "send_message",
+      "args": {
+        "entity": {"value": "message"},
+        "name": {"from": ["body.Message.subject", "body.message.subject"]},
+        "fields": {"from": ["body.Message", "body.message"], "transform": "fields", "required": true,
+                   "rename": {"toRecipients": "recipients", "isRead": "is_read", "from": "sender"}}
+      },
+      "result": "empty"
+    },
+    "outlook.reply.create": {
+      "route": "POST /me/messages/{message-id}/reply",
+      "vendor": "me.messages.message.reply",
+      "tool": "reply_message",
+      "args": {
+        "id": {"from": "path.message-id", "required": true},
+        "body": {"from": ["body.Comment", "body.comment"]}
+      },
+      "result": "empty"
+    },
+    "outlook.forward.create": {
+      "route": "POST /me/messages/{message-id}/forward",
+      "vendor": "me.messages.message.forward",
+      "tool": "forward_message",
+      "args": {
+        "id": {"from": "path.message-id", "required": true},
+        "to": {"from": ["body.ToRecipients", "body.toRecipients"], "transform": "flatten", "required": true},
+        "body": {"from": ["body.Comment", "body.comment"]}
+      },
+      "result": "empty"
+    },
+    "outlook.move.create": {
+      "route": "POST /me/messages/{message-id}/move",
+      "vendor": "me.messages.message.move",
+      "tool": "move_message",
+      "args": {
+        "id": {"from": "path.message-id", "required": true},
+        "parent": {"from": ["body.DestinationId", "body.destinationId"], "required": true}
+      },
+      "result": "record"
+    },
+    "outlook.mail_folders.list": {
+      "route": "GET /me/mailFolders",
+      "vendor": "me.ListMailFolders",
+      "tool": "list_folders",
+      "args": {
+        "query": {"object": {"$filter": "query.$filter", "$orderby": "query.$orderby"}, "transform": "odata"},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "outlook.mail_folders.get": {
+      "route": "GET /me/mailFolders/{mailFolder-id}",
+      "vendor": "me.GetMailFolders",
+      "tool": "get_folder",
+      "args": {"id": {"from": "path.mailFolder-id", "required": true}},
+      "result": "record"
+    },
+    "outlook.mail_folders.create": {
+      "route": "POST /me/mailFolders",
+      "vendor": "me.CreateMailFolders",
+      "tool": "create_folder",
+      "args": {
+        "entity": {"value": "mail_folder"},
+        "name": {"from": "body.displayName", "required": true},
+        "fields": {"object": {"name": "body.displayName"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "outlook.attachments.list": {
+      "route": "GET /me/messages/{message-id}/attachments",
+      "vendor": "me.messages.ListAttachments",
+      "tool": "list_attachments",
+      "args": {"id": {"from": "path.message-id", "required": true}},
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "outlook.attachments.get": {
+      "route": "GET /me/messages/{message-id}/attachments/{attachment-id}",
+      "vendor": "me.messages.GetAttachments",
+      "tool": "get_attachment",
+      "args": {"id": {"from": "path.attachment-id", "required": true}},
+      "result": "record"
+    },
+    "outlook.attachments.create": {
+      "route": "POST /me/messages/{message-id}/attachments",
+      "vendor": "me.messages.CreateAttachments",
+      "tool": "add_attachment",
+      "args": {
+        "entity": {"value": "attachment"},
+        "parent": {"from": "path.message-id", "required": true},
+        "name": {"from": "body.name", "required": true},
+        "fields": {"object": {"name": "body.name", "content_type": "body.contentType"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "outlook.attachments.delete": {
+      "route": "DELETE /me/messages/{message-id}/attachments/{attachment-id}",
+      "vendor": "me.messages.DeleteAttachments",
+      "tool": "delete_attachment",
+      "args": {"id": {"from": "path.attachment-id", "required": true}},
+      "result": "empty"
+    },
+    "outlook.messages.create.mail_folders": {"route": "POST /me/mailFolders/{mailFolder-id}/messages", "vendor": "me.mailFolders.CreateMessages", "unmodelled": "a draft is created in the drafts folder; creating one in another folder is not modelled"},
+    "outlook.mail_folders.update": {"route": "PATCH /me/mailFolders/{mailFolder-id}", "vendor": "me.UpdateMailFolders", "unmodelled": "the outlook definition declares no folder update"},
+    "outlook.mail_folders.delete": {"route": "DELETE /me/mailFolders/{mailFolder-id}", "vendor": "me.DeleteMailFolders", "unmodelled": "the outlook definition declares no folder delete"},
+    "outlook.child_folders.list": {"route": "GET /me/mailFolders/{mailFolder-id}/childFolders", "vendor": "me.mailFolders.ListChildFolders", "unmodelled": "the folder tree is not modelled; folders are listed flat"},
+    "outlook.child_folders.create": {"route": "POST /me/mailFolders/{mailFolder-id}/childFolders", "vendor": "me.mailFolders.CreateChildFolders", "unmodelled": "the folder tree is not modelled; folders are created flat"},
+    "outlook.copy.create": {"route": "POST /me/messages/{message-id}/copy", "vendor": "me.messages.message.copy", "unmodelled": "copying a message is not modelled; move is"},
+    "outlook.create_reply.create": {"route": "POST /me/messages/{message-id}/createReply", "vendor": "me.messages.message.createReply", "unmodelled": "a reply is sent, not drafted, in the outlook definition"},
+    "outlook.reply_all.create": {"route": "POST /me/messages/{message-id}/replyAll", "vendor": "me.messages.message.replyAll", "unmodelled": "reply-all is not modelled; reply is"},
+    "outlook.messages.send": {"route": "POST /me/messages/{message-id}/send", "vendor": "me.messages.message.send", "unmodelled": "sending an existing draft by id is not modelled; sendMail sends a new message"}
+  }
+}

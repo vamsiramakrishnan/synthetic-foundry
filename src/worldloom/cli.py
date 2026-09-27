@@ -112,8 +112,10 @@ evals_app.add_typer(calibration_app, name="calibration")
 evals_app.add_typer(dataset_app, name="dataset")
 
 # Keep operational generation in its own command module, not this monolith.
+from .contracts_cli import app as contracts_app
 from .evalrun.cli import app as evalrun_app
 from .gemini_enterprise.cli import app as gemini_enterprise_app
+from .interview_cli import app as interview_app
 from .packkit_cli import install_commands as _install_pack_commands
 from .seams_cli import seams_command
 from .studio_cli import studio_app
@@ -125,6 +127,8 @@ app.add_typer(studio_app, name="studio")
 _install_pack_commands(pack_app)
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 app.add_typer(evalrun_app, name="evalrun")
+app.add_typer(contracts_app, name="contracts")
+app.add_typer(interview_app, name="interview")
 
 
 @enterprise_evals_app.command("space")
@@ -394,8 +398,17 @@ def enterprise_evals_build(
     shard_count: int | None = typer.Option(None, "--shard-count"),
     dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground."),
     render_limit: int = typer.Option(0, "--render-limit", min=0),
+    drop_unsolvable: bool = typer.Option(False, "--drop-unsolvable", help="Leave out cases the gold-plan proof finds unsolvable, recording each with its first failing node in proof.json, instead of refusing to write the corpus."),
 ) -> None:
-    """Plan, materialize, validate, export, and optionally render a connector corpus."""
+    """Plan, materialize, validate, prove, export, and optionally render a connector corpus.
+
+    Before anything is written, every case is proved solvable
+    (`worldloom evalrun prove`): its gold DAG replayed through the connector
+    emulator under the vendor query engine. A corpus with an unsolvable case
+    is refused, naming each case's first failing node, unless
+    `--drop-unsolvable` leaves those cases out. The proof and its pins are
+    written to proof.json beside the corpus.
+    """
     from .enterprise_artifacts import render_corpus_artifacts
     from .enterprise_corpus import materialize_corpus, validate_corpus
     from .enterprise_dag import resolve_shapes
@@ -438,7 +451,29 @@ def enterprise_evals_build(
         for finding in findings:
             typer.echo(finding, err=True)
         raise typer.Exit(1)
+    from .evalrun.contract import cases_from_corpus
+    from .evalrun.proof import Unsolvable, prove_for_writing, write_proof
+
+    try:
+        proof, kept = prove_for_writing(cases_from_corpus(corpus), corpus.connector_data.records,
+                                        drop=drop_unsolvable)
+    except Unsolvable as error:
+        _refuse("cases_unsolvable", str(error), fix="fix the planner or the connector data the named node rests on, "
+                "or pass --drop-unsolvable to leave those cases out with the reason recorded",
+                unsolvable=error.report.unsolvable, reasons=error.report.reasons)
+    except ValueError as error:
+        _refuse("cases_uncompilable", str(error))
+    if proof.dropped:
+        corpus = corpus.model_copy(update={
+            "queries": tuple(query for query in corpus.queries if query.id in kept),
+            "fixtures": tuple(fixture for fixture in corpus.fixtures if fixture.query_id in kept),
+        })
+        for item in proof.dropped:
+            assert item.failure is not None
+            typer.echo(f"dropped {item.case_id}: node {item.failure.node}, {item.failure.check}: {item.failure.reason}",
+                       err=True)
     export_corpus(corpus, output)
+    write_proof(output, proof)
     rendered = render_corpus_artifacts(
         corpus, output / "artifacts", limit=render_limit
     ) if render_limit else ()
@@ -453,6 +488,7 @@ def enterprise_evals_build(
                 "queries": len(corpus.queries),
                 "records": len(corpus.connector_data.records),
                 "rendered_artifacts": len(rendered),
+                "proof": {"solvable": proof.solvable, "dropped": len(proof.dropped), "digest": proof.digest},
                 "coverage": _coverage_summary(report) if report else None,
             },
             sort_keys=True,
@@ -693,6 +729,8 @@ _REFUSALS: dict[str, str] = {
     "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",
     "dataset_rejected": "dataset plan, source or checkpoint was refused; detail names the contract",
     "studio_rejected": "company project, harness proposal or run was refused; detail names the contract",
+    "interview_refused": "a world interview answer, transcript or realisation was refused; data.findings names each rule",
+    "interview_incomplete": "the world interview stopped before every question was settled; the directory resumes it",
     "dataset_incomplete": "dataset quotas, diversity or split obligations remain; the run can be inspected or resumed",
     "doctor_unhealthy": "this installation cannot do everything the docs promise",
     "duplicate_facet": "one facet dimension was given two values",
@@ -761,7 +799,11 @@ _REFUSALS: dict[str, str] = {
     "unknown_rater": "the --rater value is not one this package ships",
     "unknown_harness": "the --harness value is not a coding harness this package adapts",
     "unknown_connectors": "the --connectors value is not emulator or anvil",
+    "unknown_harness_mode": "the --harness-mode value is not turns or sdk-program",
+    "unknown_lever": "the --levers value names something other than agent and interface",
     "anvil_unavailable": "Anvil cannot serve the run: no Anvil CLI, an unreadable contract, or a contract its connector's mapping does not cover",
+    # `worldloom contracts`.
+    "contract_refused": "the contract lock does not read, a source's sha256 is not the locked one, Anvil refused the compile, or the mapping does not cover the bundle",
     "no_writer": "the command needs a writer and none was named",
     "script_unreadable": "the scripted agent's JSON file cannot be read",
     "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",
@@ -774,6 +816,8 @@ _REFUSALS: dict[str, str] = {
     "shards_unmergeable": "the shard directories are not one complete sharded run; the message names what differs or is missing",
     "results_unreadable": "an external harness's results file cannot be read",
     "case_set_unreadable": "the case set directory's cases or records cannot be read",
+    "proof_stale_unsolvable": "the case set's proof no longer matches the live environment and re-proving it found cases no agent can solve; the message names the pins that moved and the first failing node",
+    "cases_unsolvable": "the generated cases include some no agent can solve, so nothing was written; the message names each case's first failing node, and --drop-unsolvable drops them with the reason recorded",
     "unknown_corner_template": "a --templates value names no corner-case template; the message lists the known ones",
     "holdout_overlap": "the frontier search was pointed at seeds or cases held out for judging; nothing was searched",
     "schema_version": "the corpus's schema version cannot be carried to this engine's by the migration chain",
@@ -794,7 +838,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_messiness": "no messiness level is registered under that name",
     "unknown_parameter": "no physics parameter starts with that prefix",
     "unknown_profile": "no presentation profile is registered under that name",
-    "unknown_realism": "no realism profile has that name: legacy, ecology or enterprise",
+    "unknown_realism": "no realism profile has that name: legacy, ecology, enterprise (enterprise/v2) or enterprise/v1",
     "unknown_timeline": "--timeline names no known density",
     "unknown_value": "the facet exists but has no such value",
     "unknown_world": "the mosaic has no world with that index",
@@ -1495,17 +1539,21 @@ def build(
     realism: str | None = typer.Option(
         None, "--realism",
         help=(
-            "How the world materialises into files. `enterprise` (the default"
-            " for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled"
+            "How the world materialises into files. `enterprise` (`enterprise/v2`,"
+            " the default for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled"
             " reports with cover, document control, contents, numbered sections,"
             " schedules from the pack's workbook, appendices, revision files and"
             " reviewer comments; decks on real layouts with speaker notes and"
             " native charts; intranet pages; wiki exports; pack indexes; and"
-            " connector file records that carry their text. `legacy` reproduces"
+            " connector file records that carry their text. It is written for a"
+            " reader: sections are asked for move by move, `--narrate` writes"
+            " with the composing narrator, and the reader presentation profile"
+            " applies unless another is named. `enterprise/v1` is the same"
+            " files audit-presented and narrated by the contract fixture. `legacy` reproduces"
             " the compact files every corpus built before this flag has, byte for"
             " byte. `ecology` is the artifact-ecology annotation. Recorded on the"
             " recipe, so a replay and a later `worldloom render` reproduce it;"
-            " the world, its facts and its validation are the same under all three."
+            " the world, its facts and its validation are the same under all of them."
         ),
     ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
@@ -2997,9 +3045,24 @@ def build(
 
         world = world.run(ConversationRefresh())
 
+    # The realism profile is decided before narration, because a reader-grade
+    # corpus (`enterprise/v2`) is *asked* for its prose differently: its
+    # requests carry the moves each section makes. A replay keeps the profile
+    # its source recorded unless one is asked for.
+    recorded_realism = (realism_profiles.of(replay_source if replay_source is not None else _load(str(replay)))
+                        if replay is not None else None)
+    if realism is None:
+        realism = recorded_realism if recorded_realism is not None else realism_profiles.DEFAULT_FOR_NEW_BUILDS
+    # A replay narrates under the profile its ledger was recorded under, so
+    # every request asks what it asked then and every key hits; a different
+    # profile asked for on the command line re-materialises the files after.
+    world = world.extend(recipe=realism_profiles.with_realism(
+        world.recipe, recorded_realism if recorded_realism is not None else realism))
+
     if narrate or replay is not None:
         from . import recipe as recipe_module
         from .narrative import (
+            ComposedProvider,
             DeterministicProvider,
             NarrationError,
             ProviderError,
@@ -3007,7 +3070,11 @@ def build(
         )
 
         ledger = ()
-        provider = DeterministicProvider()
+        # A reader-grade corpus is written by the composing narrator; every
+        # other profile keeps the contract fixture, so its prose and ledger
+        # are the ones it always had.
+        provider = (ComposedProvider.for_world(world) if realism_profiles.reader_grade(world)
+                    else DeterministicProvider())
         if replay is not None:
             source = replay_source if replay_source is not None else _load(str(replay))
             ledger = source._ledger
@@ -3096,18 +3163,14 @@ def build(
             f", {rejected} rejected\n"
         )
 
-    # The realism profile rides the recipe, like the presentation profile:
-    # recorded before rendering so the files and the record of how they were
-    # made cannot disagree, and absent under `legacy` so a legacy build's
-    # world.json is the one every earlier build wrote.
-    # A replay keeps the profile its source recorded unless one is asked
-    # for; the replay comparison ignores the key, so defaulting to enterprise
-    # here would silently re-materialise a legacy corpus. New builds default
-    # to enterprise.
-    if realism is None:
-        realism = (realism_profiles.of(replay_source if replay_source is not None else _load(str(replay)))
-                   if replay is not None else realism_profiles.ENTERPRISE)
     world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
+    # The realism profile rides the recipe, like the presentation profile:
+    # recorded (above, before narration) so the files and the record of how
+    # they were made cannot disagree, and absent under `legacy` so a legacy
+    # build's world.json is the one every earlier build wrote. A replay keeps
+    # the profile its source recorded unless one is asked for; the replay
+    # comparison ignores the key, so defaulting here would silently
+    # re-materialise a legacy corpus.
     if formats:
         from .render import RenderError
 
@@ -4064,8 +4127,9 @@ def render(
         None, "--realism",
         help=(
             "Which files the corpus materialises into: `enterprise` (long-form"
-            " controlled documents, decks, intranet pages, revisions and packs),"
-            " `legacy` (the compact files, byte-identical to every earlier"
+            " controlled documents, decks, intranet pages, revisions and packs,"
+            " presented for a reader; `enterprise/v1` for the audit-presented"
+            " first version), `legacy` (the compact files, byte-identical to every earlier"
             " render) or `ecology`. Omit it to keep what the corpus's recipe"
             " records; a corpus that records none is `legacy`."
         ),
@@ -4242,7 +4306,8 @@ def mosaic(
     realism: str = typer.Option(
         "enterprise", "--realism",
         help=("How each world materialises into files: `enterprise` (the default"
-              " for new builds), `legacy` (byte-identical to earlier mosaics) or"
+              " for new builds, reader-grade and written by the composing"
+              " narrator), `enterprise/v1`, `legacy` (byte-identical to earlier mosaics) or"
               " `ecology`. See `worldloom build --realism`."),
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit the plan as data."),
@@ -4413,6 +4478,10 @@ def mosaic(
             timeout=narrate_timeout,
             shell=narrate_shell,
         )
+    elif realism == realism_profiles.ENTERPRISE_V2:
+        from .narrative import ComposedProvider
+
+        provider = ComposedProvider()
     else:
         provider = DeterministicProvider()
 
@@ -4485,6 +4554,10 @@ def mosaic(
         # evidence lives in unwritten prose as a failure, and five worlds of
         # them read as a hard benchmark.
         sections = 0
+        # Recorded before narration: a reader-grade world's requests carry the
+        # moves its sections make, so the profile has to be on the recipe the
+        # requests are built from.
+        world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
         if narrate or narrate_exec:
             checkpoint = batch_module.Checkpoint(out, variant.index)
             try:
@@ -4494,7 +4567,8 @@ def mosaic(
                         f"checkpoint {checkpoint.path} already exists; pass --resume"
                     )
                 world = world.narrate(
-                    provider,
+                    # The composing narrator speaks for each world's own engine.
+                    provider.for_world(world) if hasattr(provider, "for_world") else provider,
                     ledger=checkpoint_ledger,
                     concurrency=narration_concurrency,
                     on_accepted=checkpoint.append,
@@ -5840,6 +5914,14 @@ def diversity(
                           str(row["slides_max"]), str(row["notes_max"]), str(row["sections_max"]),
                           str(row["tables_max"]), str(row["revisions"]))
         console.print(table)
+        prose = reading["prose"]
+        console.print(
+            f"Prose: {prose['sections']} narrated section(s), template openers"
+            f" {prose['template_opener_rate']:.2f}, repeated sentences {prose['repeated_sentence_rate']:.2f},"
+            f" slug leaks {prose['slug_leaks']}, {prose['mean_sentences_per_section']} sentence(s) and"
+            f" {prose['mean_paragraphs_per_section']} paragraph(s) per section,"
+            f" {prose['mean_paragraph_words']} words per paragraph"
+            + (f"; below the reader-grade floor: {'; '.join(prose['failures'])}" if prose["failures"] else ""))
         return
     if not world.artifact_irs:
         try:

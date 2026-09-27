@@ -1,0 +1,12 @@
+# Worldloom exposure profile for the authored ServiceNow contract
+# (contracts/servicenow.openapi.json).
+#
+# The Table API, which the servicenow connector's tools model over its
+# incident, change, problem, knowledge, request and CMDB tables, and the
+# neighbours an agent might reach for instead: the Aggregate API for a count,
+# and the Attachment API. The contract was authored to this scope, so the
+# profile selects all of it.
+profile: worldloom-servicenow
+description: ServiceNow tables as the Worldloom servicenow connector models them, with the neighbours an agent might misuse.
+select: all
+unexposed: skip

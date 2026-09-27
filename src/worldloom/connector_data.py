@@ -537,7 +537,7 @@ def generate_artifact_projection(
     # Legacy records are unchanged, byte for byte.
     from . import realism_profiles
 
-    carries_content = realism_profiles.of(world) == realism_profiles.ENTERPRISE
+    carries_content = realism_profiles.is_enterprise(world)
     revisions = _revision_files(world) if carries_content else {}
     pages = rendered_files(world) if carries_content and container == "page" else {}
     artifacts = tuple(world.artifacts) or tuple(world.artifact_intents)

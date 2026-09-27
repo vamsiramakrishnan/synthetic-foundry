@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -202,6 +202,16 @@ class LongDocument:
     """Chaptered: each numbered section opens a page and a contents page
     precedes them. A one-page calendar is not a report and does not get one."""
     metadata: Mapping[str, str] = field(default_factory=dict)
+    abstract: str = ""
+    """The document's own opening paragraph, spelled: what a designed cover's
+    summary box carries. Empty when the document has no narrated prose."""
+    provenance: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """Numbered part to the fact ids its prose and tables cite. What a reader
+    profile writes into the file's own properties instead of printing a
+    "Figures cited" table under every section."""
+    citations: str = "inline"
+    """Where this plan put the per-section figure tables: ``inline`` or
+    ``appendix`` (`presentation.CITATIONS`)."""
 
     def all_parts(self) -> tuple[Part, ...]:
         return self.parts + self.appendices
@@ -470,15 +480,21 @@ def _prose(text: str, resolve: _Resolver, canonical: Mapping[str, CanonicalFact]
            locale: Locale, presentation: Presentation) -> tuple[str, tuple[tuple[str, str | None], ...]]:
     """*text* with every reference spelled, and the tracked segments if any
     reference resolved to a different fact than the canonical document's."""
+    from .figures import spell_all
+
     segments: list[tuple[str, str | None]] = []
     changed = False
     cursor = 0
-    for match in references.REFERENCE.finditer(text):
+    # Spelled together, so a reader spelling can hold one precision per
+    # sentence; under an exact spelling each is `render_value`, as before.
+    spelled = spell_all(text, resolve, locale=locale, presentation=presentation)
+    for position, match in enumerate(references.REFERENCE.finditer(text)):
         fid = match.group("id")
         segments.append((text[cursor:match.start()], None))
         stated = resolve(fid)
         base = canonical.get(fid)
-        new_text = _spell(stated, locale, presentation) if base is not None or stated is not None else f"[missing {fid}]"
+        new_text = ((spelled[position] or _TBC) if base is not None or stated is not None
+                    else f"[missing {fid}]")
         if base is not None and (stated is None or stated.id != base.id):
             old_text = _spell(base, locale, presentation)
             if resolve.amendment:
@@ -835,7 +851,14 @@ def document(
     created = _minute(documents.written_at(intent, facts if isinstance(facts, dict) else dict(facts)))
     company = world.company.name
 
-    hidden_ok = presentation.for_doctype(intent.artifact_type).appendix == "append"
+    profile = presentation.for_doctype(intent.artifact_type)
+    hidden_ok = profile.appendix == "append"
+    # Where the per-section provenance goes. Inline, every section is followed
+    # by a table restating its figures with their fact ids; in the appendix,
+    # the same rows are gathered into one "Sources of figures" appendix and the
+    # body carries the argument alone.
+    inline = profile.citations == "inline"
+    sourced: list[tuple[str, str]] = []
     visible = [s for s in ir.sections if not s.hidden]
     hidden = [s for s in ir.sections if s.hidden]
 
@@ -872,7 +895,8 @@ def document(
         children: list[Part] = []
         numeric = [f for f in summary_section.fact_ids if _numeric(facts.get(f))]
         table = _cited_table("key_figures", "Key figures", numeric, resolve, names, systems, locale, presentation)
-        if table is not None:
+        sourced.extend((num, f) for f in summary_section.fact_ids if f in facts)
+        if table is not None and inline:
             children.append(Part(number=f"{num}.1", heading="Key figures", blocks=(Block(
                 kind="table", table=table, number=f"{num}.1", caption=f"Key figures: {summary_section.heading}",
                 source=f"{ir.title} ({ir.id}), fact ledger"),)))
@@ -900,7 +924,8 @@ def document(
                 blocks.append(Block(kind="figure", chart=chart, table=table, number=f"{num}.{sub}",
                                     caption=chart.title, source=f"{ir.title} ({ir.id})"))
         cited = [f for f in section.fact_ids if f in facts]
-        if section.body and cited:
+        sourced.extend((num, f) for f in cited if section.body)
+        if section.body and cited and inline:
             table = _cited_table(f"cited_{num}", f"Figures cited in section {num}", cited,
                                  resolve, names, systems, locale, presentation)
             if table is not None:
@@ -943,12 +968,27 @@ def document(
                                             caption=chart.title,
                                             source=f"{workbook.title} ({workbook.id}), sheet {section.heading}"))
                 body_children.append(Part(number=f"{num}.{sub}", heading=section.heading, blocks=tuple(blocks)))
-            if body_children:
+            if body_children and inline:
                 parts.append(Part(number=num, heading=f"Financial schedules from {workbook.title}",
                                   blocks=(Block(kind="note", text=(
                                       f"Schedules incorporated from {workbook.title} ({workbook.id}),"
                                       " the workbook this paper rests on. Every figure is the workbook's own cell.")),),
                                   children=tuple(body_children)))
+            elif body_children:
+                # A reader's paper argues in its body and keeps the schedules
+                # it rests on behind it: the same tables, as an appendix, so
+                # a thirty-page document is thirty pages of paper and
+                # schedule rather than schedule wearing a paper's cover.
+                number -= 1
+                code = next(letter)
+                appendices.append(Part(
+                    number=code, heading=f"Financial schedules from {workbook.title}", appendix=True,
+                    blocks=(Block(kind="note", text=(
+                        f"The schedules this paper rests on, as {workbook.title} states them.")),),
+                    children=tuple(
+                        replace(child, number=f"{code}.{i}", blocks=tuple(
+                            replace(block, number=f"{code}.{i}") for block in child.blocks))
+                        for i, child in enumerate(body_children, start=1))))
             else:
                 number -= 1
             for section in workbook.sections:
@@ -974,6 +1014,35 @@ def document(
                       source=f"{ir.title} ({ir.id})"))))
 
     cited_all = [f for f in ir.fact_ids() if f in facts]
+    if not inline and sourced:
+        # The figures each section cites, with their fact ids, gathered where a
+        # reader who wants them looks for them: behind the paper, not under
+        # every paragraph of it.
+        code = next(letter)
+        headings = {part.number: part.heading for part in parts}
+        source_rows: list[Row] = []
+        seen_rows: set[tuple[str, str]] = set()
+        for part_number, fid in sourced:
+            if (part_number, fid) in seen_rows:
+                continue
+            seen_rows.add((part_number, fid))
+            base = facts[fid]
+            stated = resolve(fid)
+            source_rows.append(Row(key=f"{part_number}:{fid}", label=f"{part_number} {headings.get(part_number, '')}".strip(),
+                                   cells={
+                                       "measure": Cell(value=fact_label(base)),
+                                       "subject": Cell(value=names.get(base.subject, base.subject)),
+                                       "value": Cell(value=_spell(stated, locale, presentation),
+                                                     fact_id=stated.id if stated is not None else None),
+                                       "reference": Cell(value=stated.id if stated is not None else fid),
+                                   }))
+        appendices.append(Part(number=code, heading="Sources of figures", appendix=True, blocks=(
+            Block(kind="note", text="Every figure the sections of this document cite, the section that cites it, and the ledger entry it is."),
+            Block(kind="table", number=f"{code}.1", caption="Figures cited, by section", source="Fact ledger",
+                  table=Table(key="sources_of_figures", title="Section", columns=[
+                      Column(key="measure", label="Measure"), Column(key="subject", label="Subject"),
+                      Column(key="value", label="Value"), Column(key="reference", label="Fact")],
+                      rows=source_rows)))))
     lineage_rows: list[Row] = []
     for fid in cited_all:
         stated = resolve(fid)
@@ -1056,8 +1125,8 @@ def document(
                           "title": Cell(value=r.title), "type": Cell(value=genre_label(r.artifact_type)),
                           "role": Cell(value=r.role)}) for r in related])),)))
 
-    parts = [_number_figures(part) for part in parts]
-    appendices = [_number_figures(part) for part in appendices]
+    parts = [_state_units(_number_figures(part), facts, profile) for part in parts]
+    appendices = [_state_units(_number_figures(part), facts, profile) for part in appendices]
     reviewers = tuple(p for p in (reviewer,) if p is not None and (approver is None or p.id != approver.id))
     review_at = next((r.at for r in history if r.status == "Reviewed"), revision.at)
     comments = () if revision.status == "Draft" else _comments(
@@ -1066,6 +1135,18 @@ def document(
     labels = tuple(dict.fromkeys(
         label for label in (intent.domain, intent.artifact_type.replace("_", "-"), _period_of(ir, world),
                             family.key if family else "") if label))
+    provenance_map: dict[str, tuple[str, ...]] = {}
+    for part_number, fid in sourced:
+        provenance_map[part_number] = (*provenance_map.get(part_number, ()), fid)
+    # The summary box on a designed cover: the document's own opening
+    # paragraphs, up to about ninety words, so a reader who stops at the
+    # cover has the headline and its first qualification.
+    opening_parts: list[str] = []
+    for part in parts[:1]:
+        for block in part.blocks:
+            if block.kind == "prose" and len(" ".join(opening_parts).split()) < 60:
+                opening_parts.append(block.text)
+    opening = " ".join(opening_parts)
     return LongDocument(
         artifact_id=ir.id,
         artifact_type=intent.artifact_type,
@@ -1093,7 +1174,34 @@ def document(
         draft=draft,
         long=intent.size_profile != "small" or intent.artifact_type in _INCORPORATES_SCHEDULES,
         metadata=dict(ir.metadata),
+        abstract=opening,
+        provenance={k: tuple(dict.fromkeys(v)) for k, v in provenance_map.items()},
+        citations=profile.citations,
     )
+
+
+def _state_units(part: Part, facts: Mapping[str, CanonicalFact], presentation: Presentation) -> Part:
+    """Every table of money in *part* stating its unit (`figures.unit_caption`):
+    a schedule prints the ledger's own cells, in thousands, and a reader
+    cannot know that from "617,200" alone. Nothing changes under the exact
+    spelling, so every audit rendering keeps its bytes."""
+    from . import figures
+
+    if figures.rules_for(presentation) is None:
+        return part
+
+    def state(blocks: tuple[Block, ...]) -> tuple[Block, ...]:
+        out = []
+        for block in blocks:
+            if block.kind == "table" and block.table is not None:
+                caption, table = figures.unit_caption(block.caption, block.table, facts, presentation)
+                if caption != block.caption or table is not block.table:
+                    block = replace(block, caption=caption, table=table)
+            out.append(block)
+        return tuple(out)
+
+    return replace(part, blocks=state(part.blocks),
+                   children=tuple(_state_units(child, facts, presentation) for child in part.children))
 
 
 def _number_figures(part: Part) -> Part:
