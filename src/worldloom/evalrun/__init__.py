@@ -257,6 +257,15 @@ if TYPE_CHECKING:
     from .program import (
         declared_from_program as declared_from_program,
     )
+    from .proof import (
+        ProofReport as ProofReport,
+    )
+    from .proof import (
+        environment_pins as environment_pins,
+    )
+    from .proof import (
+        prove_cases as prove_cases,
+    )
     from .rater import (
         RATING_SCHEMA as RATING_SCHEMA,
     )
@@ -520,6 +529,9 @@ _EXPORTS: dict[str, str] = {
     'grade_queries': '.stages',
     'grade_plan_nodes': '.stages',
     'grade_output': '.stages',
+    'ProofReport': '.proof',
+    'environment_pins': '.proof',
+    'prove_cases': '.proof',
     'DagGrade': '.lineage',
     'DeclaredDivergence': '.lineage',
     'ExecutedDag': '.lineage',
@@ -696,6 +708,10 @@ __all__ = [
     "grade_queries",
     "grade_plan_nodes",
     "grade_output",
+    # Solvability: the gold-plan proof and the pins it rests on.
+    "ProofReport",
+    "environment_pins",
+    "prove_cases",
     # Plans as data flow: the executed DAG from lineage, graded edge by edge; the sdk-program harness mode.
     "DagGrade",
     "DeclaredDivergence",

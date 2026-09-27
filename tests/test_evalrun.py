@@ -1211,8 +1211,10 @@ def test_an_external_agents_own_arguments_attribute_by_shape(grammar_corpus: Any
 
     def explorer(task: Any, tools: Any) -> AgentResponse:
         # A refusal at the right tool: the agent's own mistake, not the plan step.
+        # (Bare words are not a refusal: ServiceNow drops a condition it cannot
+        # read and answers the rest, so the refusal is a negative offset.)
         try:
-            tools.call("servicenow.search_records", entity="incident", query="stock availability")
+            tools.call("servicenow.search_records", entity="incident", query="stock availability", start_at=-1)
         except Exception:
             pass
         # A search that misses the record the node is for reads something else.

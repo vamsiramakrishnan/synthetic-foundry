@@ -22,7 +22,11 @@ turn with this on stdin:
     {"name": "jira.search_issues", "op": "search", "entities": ["epic", "story", "bug", "task", "subtask"],
      "params": {"query": "string?", "predicate": "object?", "fields": "array?", "max_results": "int?", "start_at": "int?", "entity": "string?"},
      "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
-     "risk": "none", "idempotency": "natural"}
+     "risk": "none", "idempotency": "natural",
+     "query": {"language": "jql", "argument": "query", "name": "JQL (Jira Query Language)",
+               "grammar": "clauses `field OP value` joined by AND, OR, NOT …", "free_text": "text ~ \"words\" …",
+               "examples": ["project = OPS AND status = open ORDER BY created DESC", "…"],
+               "fields": ["assignee", "cf[10231]", "created", "…"]}}
   ],
   "transcript": [
     {"tool": "jira.search_issues", "arguments": {"max_results": 5}, "result": {"items": [{"id": "PROJ-12", "…": "…"}], "is_last": true}},
@@ -66,6 +70,15 @@ or, to finish:
   `serving`. It reached no connector, so it is not a span, but it is a
   refused attempt: it costs trajectory precision and its pass, and it is on
   the ledger as `refusals`.
+- `query` on a search tool says what its `query` argument is written in: the
+  vendor language (JQL, SOQL, a ServiceNow encoded query, OData, CQL, KQL,
+  Drive `q`, Slack search) with a grammar summary, examples in that syntax,
+  the field names the connector knows and the free-text form (ServiceNow
+  `123TEXTQUERY321=`, Jira and Confluence `text ~`, Drive `fullText contains`,
+  KQL bare terms; SOQL has none, so `LIKE '%word%'`). The query runs through
+  the vendor evaluator, and a query the vendor would refuse comes back with
+  the vendor's own error. `"argument": "predicate"` means the tool reads no
+  vendor language: pass `predicate` as `{"where": [{"field", "op", "value"}]}`.
 - `annotations.destructiveHint` marks a call that cannot be undone; a
   destructive call on a record no earlier call read is `destructive_without_read`.
 - Ask when the request is ambiguous, a required parameter is missing, or a

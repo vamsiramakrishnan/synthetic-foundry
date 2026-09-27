@@ -130,21 +130,28 @@ format. Missing calls, incorrect order and wrong target state remain visible.
 The surface grades the compiled assertions; it does not evaluate the quality
 of a prose answer or treat an agent's claim of refusal as observed behavior.
 
-## Native vendor queries (opt-in)
+## Native vendor queries (the default)
 
-By default a search tool's `query` string is read as the historical
-conjunctive subset (`field = value AND ...`) and compiled to a Worldloom
-predicate. Set the policy `connectors.query.engine` to `native` (or construct
-`ConnectorEmulator(..., query_engine="native")`) and the same argument runs as
-the vendor's own query language through `worldloom.connectors.query`. The
-default is `predicate`, and under it every emulator answer is byte-identical
-to what it was before the evaluator existed.
+A search tool's `query` string runs as the vendor's own query language through
+`worldloom.connectors.query`: the policy `connectors.query.engine` is `native`
+by default. The historical conjunctive subset (`field = value AND ...`,
+compiled to a Worldloom predicate) is still there as `predicate`, for a run
+that must reproduce a ledger written before the default changed: set the
+policy to `predicate`, or construct `ConnectorEmulator(..., query_engine="predicate")`.
+The default moved because a pilot's call errors were mostly valid vendor
+queries the historical parser refused (SOQL `ORDER BY ... LIMIT`, ServiceNow
+`ORDERBY`, JQL `OR`).
 
-A policy pack that opts a run in:
+Every search tool's catalog entry (`tools[*].query`) and its MCP description
+say which language its `query` is read in, with a grammar summary, examples in
+that vendor's syntax and the free-text form; see `docs/eval-execution.md`,
+*Solvability and pins*.
+
+A policy pack that selects the historical parser:
 
 ```json
-{"schema": "worldloom.pack/v1", "kind": "policy", "name": "native",
- "body": {"values": {"connectors.query.engine": "native"}}}
+{"schema": "worldloom.pack/v1", "kind": "policy", "name": "legacy-queries",
+ "body": {"values": {"connectors.query.engine": "predicate"}}}
 ```
 
 Which language a tool reads is its connector's `query_language`, except that

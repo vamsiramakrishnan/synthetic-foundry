@@ -97,6 +97,24 @@ class _Run:
     ended: bool = False
 
 
+def _entities_meet(definition: ConnectorDefinition, node_entity: str, asked: str) -> bool:
+    """Whether a call's ``entity`` names the node's entity, either way round an alias.
+
+    An entity the connector does not declare meets nothing. It used to raise
+    ``KeyError`` out of attribution, which crashed the agent's turn on a call
+    the emulator answers with its own ``Unknown entity`` validation error: an
+    agent that guessed a plural table name (``incidents``) lost the case to a
+    grader exception instead of seeing the vendor's refusal.
+    """
+    for requested, actual in ((node_entity, asked), (asked, node_entity)):
+        try:
+            if definition.entity_matches(requested, actual):
+                return True
+        except KeyError:
+            continue
+    return False
+
+
 class ConnectorEvaluationService:
     """Synchronous SDK for isolated runs over compiled eval rows.
 
@@ -465,9 +483,8 @@ class ConnectorEvaluationService:
                                    or not condition_matches(node.condition, outputs)):
                 continue
             wanted_entity = arguments.get("entity")
-            if wanted_entity and str(wanted_entity) != node.entity and not (
-                    definition.entity_matches(node.entity, str(wanted_entity))
-                    or definition.entity_matches(str(wanted_entity), node.entity)):
+            if wanted_entity and str(wanted_entity) != node.entity and not _entities_meet(
+                    definition, node.entity, str(wanted_entity)):
                 continue
             if node.operation not in {"search", "create", "send", "post", "upload"} and called_op != "search":
                 if fid is None:
@@ -726,6 +743,7 @@ class ConnectorEvaluationService:
         destructive and idempotent hints the same classification derives.
         """
         from ..evalrun.safety import classify_tool, tool_annotations
+        from .query.docs import query_help
 
         with self._held(principal, run_id) as run:
             out = []
@@ -750,6 +768,13 @@ class ConnectorEvaluationService:
                 }
                 if required:
                     entry["required_on_create"] = required
+                # What the tool's `query` (or `predicate`) is written in, with
+                # a grammar summary and examples in the vendor's own syntax: a
+                # pilot's call errors were mostly queries the agent had no way
+                # to know the grammar of.
+                help = query_help(definition, tool)
+                if help is not None:
+                    entry["query"] = help
                 out.append(entry)
             return tuple(out)
 
@@ -898,6 +923,8 @@ def create_connector_app(
         from pydantic import ConfigDict, create_model
     except ImportError as error:
         raise ServingError("install `pip install 'worldloom[mcp]'` (MCP SDK >=2.2,<3)") from error
+    from .query.docs import describe, query_help
+
     tokens = dict(bearer_tokens or {})
     if any(not name or len(secret) < 24 for name, secret in tokens.items()):
         raise ServingError("bearer_tokens need named principals and secrets of at least 24 characters")
@@ -972,7 +999,8 @@ def create_connector_app(
 
         tools.append(register(name, params, operation,
                               f"{definition.vendor_product}: {tool.op} {', '.join(tool.entities)}. "
-                              "Acts only in the named evaluation run.", tool.op in _READ_OPS))
+                              "Acts only in the named evaluation run." + describe(query_help(definition, tool_name)),
+                              tool.op in _READ_OPS))
     server = MCPServer("worldloom-connectors", tools=tools)
     public_hosts = tuple(allowed_hosts)
     security = TransportSecuritySettings(

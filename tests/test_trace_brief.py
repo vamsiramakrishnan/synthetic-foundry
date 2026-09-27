@@ -1,8 +1,10 @@
 """The trace-level brief: the connectors' own messages, the arguments behind them, and what worked instead.
 
 The agent under test here is a scripted one that makes the mistakes a live
-baseline made: a ServiceNow search in a query syntax the connector does not
-accept, an email search in the wrong dialect (with a different value every
+baseline made: a ServiceNow search against a table the instance does not
+have (its encoded query, `priority=N^ORDERBYnumber`, is valid ServiceNow and
+is no longer refused now that the vendor evaluator is the default engine),
+an email search in the wrong dialect (with a different value every
 case, so grouping has to normalise), an undeclared argument the surface
 refuses, and a draft without the field a create requires. Every error in the
 brief is one the service really returned. The reference agent's run over the
@@ -70,7 +72,8 @@ def _script(index: int, case: Any) -> ScriptedAgent:
     connectors = sorted({node.connector for node in case.plan.nodes if node.kind != "transform"})
     calls: list[tuple[str, dict[str, Any]]] = []
     if "servicenow" in connectors:
-        calls += [("servicenow.search_records", {"query": f"priority={index % 4 + 1}^ORDERBYnumber"}),
+        calls += [("servicenow.search_records", {"query": f"priority={index % 4 + 1}^ORDERBYnumber",
+                                                  "entity": "incidents"}),
                   ("servicenow.search_records", {"query": "stock", "limit": 5})]
     if "email" in connectors:
         calls += [("email.search_messages", {"query": f"subject:stock-{index}"}),
@@ -117,11 +120,11 @@ def test_the_catalogue_groups_real_errors_with_the_failing_args_and_an_accepted_
     assert servicenow >= 4
 
     search = _group(evidence, "servicenow.search_records", "validation_error")
-    # Four different priorities, one grammar mistake: one group.
+    # Four different priorities, one wrong table: one group.
     assert search.count == servicenow and search.cases == servicenow
-    assert search.pattern == "unsupported encoded query clause <value>"
-    assert search.message == "unsupported encoded query clause 'ORDERBYnumber'"
-    assert search.arg_names == (("query",),)
+    assert search.pattern == "Unknown entity <value>"
+    assert search.message == "Unknown entity 'incidents'"
+    assert search.arg_names == (("entity", "query"),)
     assert any("^ORDERBYnumber" in example for example in search.examples)
     reference = [shape for shape in search.accepted if shape.source == "reference"]
     assert reference and "predicate" in reference[0].names and "<id>" in reference[0].example
@@ -130,7 +133,7 @@ def test_the_catalogue_groups_real_errors_with_the_failing_args_and_an_accepted_
     # A different value in every case, still one group: the quoted value is masked.
     email = _group(evidence, "email.search_messages", "validation_error")
     assert email.count == len(world["train"])
-    assert email.pattern == "unsupported odata query clause <value>"
+    assert email.pattern == "Invalid filter clause: Syntax error at position <n> in <value>."
     assert len(email.examples) == 3
 
     refused = _group(evidence, "servicenow.search_records", "refused")
@@ -151,7 +154,7 @@ def test_the_catalogue_groups_real_errors_with_the_failing_args_and_an_accepted_
     assert contracts["email.create_draft"].required_on_create == {"message": ("subject",)}
 
     text = render_evidence(evidence, 20000)
-    assert "message: unsupported encoded query clause 'ORDERBYnumber'" in text
+    assert "message: Unknown entity 'incidents'" in text
     assert "params: query string?, predicate object?" in text
     assert "accepted from the reference agent" in text
     assert "Not shown for length" not in text
@@ -267,7 +270,7 @@ def test_a_traces_loop_shows_the_proposer_evidence_and_no_held_out_case(world: d
     assert report.rounds[0].brief_digest is not None
     message = seen[0]["message"]
     assert len(message) <= MAX_MESSAGE
-    assert "unsupported encoded query clause" in message and "accepted from the reference agent" in message
+    assert "Unknown entity" in message and "accepted from the reference agent" in message
     sealed = sorted({case.id for case in held} - train_ids)
     assert sealed and not any(case_id in message for case_id in sealed)
     assert not any(case_id[:12] in message for case_id in sealed)

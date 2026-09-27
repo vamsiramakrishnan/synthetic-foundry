@@ -141,15 +141,10 @@ class Index:
         artifact_type = str(record.fields.get("artifact_type") or "")
         detail = self.resolution["documents"].get(artifact_type)
         fields: dict[str, Any] = {"period": self.artifact_period.get(artifact_id, "")}
-        # The served emulator names a record by its title
-        # (`connector_emulator._canonical_record`) while a compiled row's
-        # snapshot names it by `fields.name` (`enterprise_rows.runtime_records`),
-        # and a rendered file's `name` is its file name: every search over one
-        # graded `result_mismatch` for the reference agent itself. The file
-        # name is kept, as `file_name`, and `name` agrees with what is served.
-        if record.fields.get("name") not in (None, record.title):
-            fields["file_name"] = record.fields["name"]
-            fields["name"] = record.title
+        # A rendered file keeps its file name as `name`: the served emulator
+        # and the compiled row's snapshot both read `fields.name` now
+        # (`connector_emulator._canonical_record`), so the title no longer has
+        # to stand in for it here.
         history = record.fields.get("version_history")
         fields["revisions"] = len(history) if isinstance(history, list) else 1
         author = self.role_of_person.get(str(record.fields.get("author_id") or ""), "")

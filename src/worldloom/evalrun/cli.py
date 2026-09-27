@@ -351,9 +351,31 @@ def run_command(
             serving = AnvilServing(resolve_contracts(contract), command=anvil_cmd, workdir=out / "anvil")
         except AnvilError as error:
             _refuse("anvil_unavailable", str(error))
-    loaded, cases = _corpus_cases(corpus, limit)
+    loaded, every_case = _corpus_cases(corpus, None)
+    cases = every_case[:limit] if limit else every_case
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
+    # The proof gate, before any agent runs: the set's recorded proof holds
+    # only under the pins it was proved under. Moved pins re-prove the cases
+    # this run takes (deterministic, seconds) and refuse when they no longer
+    # prove; a set with no proof record is proved now and runs with a warning.
+    from .proof import definitions_for
+    from .proof import gate as proof_gate
+
+    verdict: Any = None
+    chosen = [case for case in cases if shard_at is None or shard_of(case.id, shard_at[1]) == shard_at[0] - 1]
+    try:
+        verdict = proof_gate(corpus, every_case, loaded.connector_data.records,
+                             definitions=definitions_for(every_case), anvil=serving, selected=chosen)
+    except Exception as error:  # a set that cannot be served at all: the service refusal below names it
+        typer.echo(f"warning: the case set could not be proved: {error}", err=True)
+    if verdict is not None:
+        for warning in verdict.warnings:
+            typer.echo(f"warning: {warning}", err=True)
+        if verdict.refusal is not None:
+            _refuse("proof_stale_unsolvable", verdict.refusal,
+                    fix="regenerate the case set against the current environment (its writer re-proves it), or "
+                        "`worldloom evalrun prove <cases> --record` once the cause is fixed")
     workers = concurrency if concurrency is not None else default_concurrency()
     if exec_command is not None:
         if agent != "reference":
@@ -400,7 +422,8 @@ def run_command(
     # The identity this run will write (agent, principal, grader, agent pack),
     # read off an empty run so it is whatever `run_cases` itself records.
     identity = run_cases(service, (), under_test, principal=principal, clock=clock, rater=grader, anvil=serving)
-    identity = identity.model_copy(update={"case_set": case_set_digest(selected)})
+    identity = identity.model_copy(update={"case_set": case_set_digest(selected),
+                                           "pins": verdict.pins if verdict is not None else None})
     prior: list[Any] = []
     if resume:
         try:
@@ -443,6 +466,7 @@ def run_command(
         graded = {result.case_id: result for result in (*prior, *report.results)}
         report = report.model_copy(update={"case_set": identity.case_set,
                                            "results": tuple(graded[case.id] for case in selected)})
+    report = report.model_copy(update={"pins": identity.pins})
     summary = write_run(out, report)
     _print_summary(summary, json_output)
 
@@ -619,6 +643,8 @@ def compare_command(
         return
     if not result.same_case_set:
         typer.echo("warning: the two runs were not over the same case set; deltas are per shared case id only", err=True)
+    for note in result.notes:
+        typer.echo(f"warning: {note}", err=True)
     typer.echo(f"{result.baseline_agent} -> {result.recent_agent}: {result.compared} shared case(s),"
                f" {len(result.improvements)} improved, {len(result.regressions)} regressed, {result.stable} stable;"
                f" mean delta {result.mean_delta}")
@@ -787,7 +813,7 @@ def autopsy_command(
     json_output: bool = typer.Option(False, "--json", help="Print the autopsy as JSON instead of the brief."),
     owners: bool = typer.Option(True, "--owners/--no-owners", help="Attribute every failing finding to an owner (agent, interface, world or grader) and print the shares."),
     reference_run: Path | None = typer.Option(None, "--reference-run", help="A reference-agent run over the same cases: a finding it shares is the world's."),
-    proofs: Path | None = typer.Option(None, "--proofs", help="A directory holding solvability proof records (proofs.jsonl or solvability.jsonl): a case they prove unsolvable is the world's."),
+    proofs: Path | None = typer.Option(None, "--proofs", help="The case set whose proof.json (written by `evalrun prove --record` or the case writer) says which cases are unsolvable: their findings are the world's."),
     peer: list[Path] | None = typer.Option(None, "--peer", help="Another run over the same cases (a repeat): the identical trajectory scored differently is the grader's. Repeat per run."),
 ) -> None:
     """Cluster a run's failing cases by finding and print a brief an improver can act on.
@@ -1259,6 +1285,76 @@ def corners_command(
     if not batch.cases:
         typer.echo("gap: this world holds no event any selected template rests on, or none was solvable", err=True)
     typer.echo(f"{len(batch.cases)} corner case(s) written to {out}")
+
+
+@app.command("prove")
+def prove_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set (evalrun-cases.jsonl beside records.jsonl)."),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="Prove only the first N cases."),
+    record: bool = typer.Option(False, "--record", help="Write the proof record (proof.json, with its pins) into the case set directory, whatever the verdict."),
+    connectors: str = typer.Option("emulator", "--connectors", help="emulator (the default) or anvil: also serve each gold trajectory through `anvil simulate serve` over each --contract. Skipped, with the reason, when no Anvil CLI is found."),
+    contract: list[str] | None = typer.Option(None, "--contract", help="With --connectors anvil: a contract bundle, as CONNECTOR=PATH or a bare PATH. Repeat per connector."),
+    anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
+    json_output: bool = typer.Option(False, "--json", help="Emit the proof report as JSON."),
+) -> None:
+    """Prove every case solvable: replay its gold DAG and name the first node that is not.
+
+    Each case's gold DAG runs through the connector emulator under the vendor
+    query engine: every gold query must parse in its vendor grammar (a
+    structured predicate is compiled into the connector's language first),
+    every gold read must retrieve its evidence, every gold write must leave
+    the expected state, and the reference trajectory must score 1.0 on plan,
+    trajectory and outcomes and on each stage it is graded on. A case that
+    fails is unsolvable, with the first failing node and why. Exits 1 when
+    any case is unsolvable. `--record` writes proof.json, which `evalrun
+    run` checks its pins against.
+    """
+    from ..cli import _refuse
+    from .proof import prove_cases, render_proof, write_proof
+
+    loaded, cases = _corpus_cases(corpus, limit)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    serving: Any = None
+    skipped: str | None = None
+    if connectors not in {"emulator", "anvil"}:
+        _refuse("unknown_connectors", f"--connectors {connectors!r}; use emulator or anvil")
+    if connectors == "emulator" and (contract or anvil_cmd):
+        _refuse("cannot_combine", "--contract and --anvil-cmd serve connectors through Anvil; add --connectors anvil")
+    if connectors == "anvil":
+        from .anvil import AnvilError, AnvilServing, find_anvil, resolve_contracts
+
+        if not contract:
+            _refuse("missing_flag", "--connectors anvil needs at least one --contract <bundle>")
+        import shutil
+
+        command = find_anvil(anvil_cmd)
+        if command is None or shutil.which(command[0]) is None:
+            # Without Node and an Anvil CLI the in-process proof still stands;
+            # the Anvil half is reported as not run, never as passed.
+            skipped = "anvil: no Anvil CLI (pass --anvil-cmd or set $WORLDLOOM_ANVIL); proved in process only"
+        else:
+            try:
+                serving = AnvilServing(resolve_contracts(contract), command=anvil_cmd)
+            except AnvilError as error:
+                _refuse("anvil_unavailable", str(error))
+    try:
+        report = prove_cases(cases, loaded.connector_data.records, anvil=serving)
+    except Exception as error:  # ServingError and its causes: the set cannot even be served
+        _refuse("service_unbuildable", str(error))
+    if skipped is not None:
+        report = report.model_copy(update={"skipped": skipped})
+    if record:
+        write_proof(corpus, report)
+    if json_output:
+        typer.echo(json.dumps({**report.model_dump(mode="json", by_alias=True), "digest": report.digest},
+                              indent=2, sort_keys=True))
+    else:
+        typer.echo(render_proof(report))
+        if record:
+            typer.echo(f"proof recorded in {corpus / 'proof.json'}")
+    if report.unsolvable:
+        raise typer.Exit(1)
 
 
 @app.command("frontier")

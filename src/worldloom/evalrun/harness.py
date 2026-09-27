@@ -19,6 +19,13 @@ something that is not the asked-for document, or overruns the timeout ends
 the case as an error row carrying its stderr tail, per the seam's rule that a
 dead subprocess leaves exactly one artifact behind.
 
+Each search tool in ``tools`` carries ``query``: the vendor language its
+``query`` argument is read in (JQL, SOQL, a ServiceNow encoded query, OData,
+CQL, KQL, Drive ``q``, Slack search), a grammar summary, examples in that
+syntax, the field names the connector knows and the free-text form, or, for a
+tool that reads no vendor language, how to pass a ``predicate``
+(``connectors.query.docs``).
+
 ``requests_document`` and ``load_responses`` are the file form of the same
 contract, on the pattern of ``narrate requests`` / ``narrate accept``: a
 harness that cannot be called back reads the cases and their tool catalogs,

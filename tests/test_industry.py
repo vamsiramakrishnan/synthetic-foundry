@@ -1132,7 +1132,8 @@ def test_record_requests_run_as_evalrun_cases_over_the_companys_records(tmp_path
     result = runner.invoke(app, ["evalrun", "run", str(tmp_path / "programme"), "--out", str(tmp_path / "run"),
                                  "--limit", "2", "--rater", "grounded", "--json"])
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output)["cases"] == 2
+    # stdout alone: a set with no proof record is proved first, with a warning on stderr.
+    assert json.loads(result.stdout)["cases"] == 2
 
 
 # -- a function is not an industry ------------------------------------------

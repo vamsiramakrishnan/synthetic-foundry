@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from .campaign import CampaignLoop
     from .curriculum import Curriculum, Escalation
     from .improve import ImproveReport
+    from .proof import ProofReport
     from .rater import Rater
 
 #: A run named by its label in the session, by the directory ``write_run``
@@ -372,6 +373,17 @@ class EvalSession:
         report = plan_cases(self.service(), self.cases, planner, principal=self.principal)
         self.runs[label or planner.name] = report
         return report
+
+    def prove(self, *, anvil: AnvilServing | None = None, rater: Rater | None = None) -> ProofReport:
+        """Prove every case solvable: the gold DAG replayed under the vendor engine (``proof.prove_cases``).
+
+        Each unsolvable case names its first failing node and why; the
+        report's ``pins`` say what the proof rests on. With ``anvil``, each
+        gold trajectory is also served through Anvil.
+        """
+        from .proof import prove_cases
+
+        return prove_cases(self.cases, self._records, definitions=self._definitions or None, rater=rater, anvil=anvil)
 
     def reference(self, **options: Any) -> RunReport:
         """The executable ceiling: the reference agent through the same surface."""

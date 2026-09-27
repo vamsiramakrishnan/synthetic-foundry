@@ -5,7 +5,8 @@ axes. It is the loop Gemini Enterprise Eval Studio has and Worldloom did not,
 with the grading a fact-derived corpus can support and Eval Studio cannot.
 
 ```bash
-worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --drop-unsolvable
+worldloom evalrun prove ./cases                     # every case solvable? first failing node and why
 worldloom evalrun cases ./cases                     # what the set can grade, per axis
 worldloom evalrun run ./cases -o ./runs/reference   # the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
@@ -151,6 +152,114 @@ older one; `compare` judges the three axes on the digest without that part,
 so older ledgers still compare, and reports stage deltas only between runs
 graded by the same stage grader. With every stage off, the ledger, summary and
 digest are byte-identical to what they were before stages existed.
+
+## Solvability and pins
+
+A grade means something only when full marks were possible. A pilot's call
+errors were mostly valid vendor queries the emulator's old predicate parser
+refused (SOQL `ORDER BY ... LIMIT`, ServiceNow `ORDERBY`, JQL `OR`), so part of
+what it measured was the emulator. Two things close that: the vendor query
+evaluator is the default engine (policy `connectors.query.engine`, `native`;
+`predicate` still selects the historical parser), and every case set is proved
+solvable before an agent is graded on it.
+
+```bash
+worldloom evalrun prove ./cases                   # one verdict per case, first failing node and why
+worldloom evalrun prove ./cases --json --record   # the report as JSON; proof.json written beside the cases
+worldloom evalrun prove ./cases --connectors anvil --contract jira=./contracts/jira   # also served through Anvil
+```
+
+**What the proof checks.** Each case's gold DAG is replayed through the
+connector emulator under the vendor engine, through the tool surface an agent
+gets (`evalrun.proof.prove_cases`; `EvalSession.prove()`):
+
+| Check | Fails when |
+| --- | --- |
+| `query.parse`, `query.field` | the node's gold query, or its structured predicate compiled into the connector's language, does not parse in the vendor grammar or names a field the vendor does not have; the reason is the vendor's own error |
+| `query.evidence` | that vendor query, run by the evaluator, does not return the node's evidence. An identity lookup is restated on the vendor's identity (the Jira key, the Salesforce Id, the ServiceNow number); Drive `q`, KQL and Slack search have no identity clause, so an identity lookup there is not checked in vendor form |
+| `read.error`, `read.evidence` | a gold read fails, or does not retrieve its evidence (`expected_reads`, `reads_contain`, else its fixture) |
+| `write.error`, `write.state` | a gold write fails (a target that does not exist), or does not leave the expected state diff |
+| `node.unexecuted` | the reference could not execute the node (an unbound argument, a blocked parent) |
+| `trajectory.safety` | the gold trajectory itself breaks a safety law |
+| `axis.*`, `stage.*`, `assertions` | the reference does not score 1.0 on plan, trajectory or outcomes, or on a stage it is graded on (queries, plan nodes, output), or the row's assertions fail |
+| `anvil.unmapped`, `anvil.divergence` | with `--connectors anvil`: a gold call has no modelled contract operation, or Anvil served it differently from the emulator |
+
+A case that fails any check is unsolvable. The verdict names the first failing
+node in gold order and why; `prove` exits 1 when any case is unsolvable. Under
+`--connectors anvil` without Node and an Anvil CLI the Anvil half is reported
+as skipped, never as passed, and the in-process verdict stands.
+
+**Writers refuse unsolvable sets.** `enterprise-evals build`, `evalrun
+corners` and the case-set writer (`corners.write_case_set`) prove the cases
+before anything is written. The default is to refuse, naming each case's first
+failing node (refusal `cases_unsolvable`); `enterprise-evals build
+--drop-unsolvable` (and `write_case_set(..., drop_unsolvable=True)`) writes the
+solvable cases instead and lists every dropped case, with its node and reason,
+under `dropped` in `proof.json`. Corner cases were always drawn only where the
+reference solves them; they now use the same proof, so a dropped corner case
+names its node too. Refusal is the default because a writer that quietly
+shipped an unsolvable case hands every agent a zero it did not earn.
+
+**Pins.** `proof.json` records what the proof rests on, as digests
+(`evalrun.proof.environment_pins`):
+
+| Pin | What it names |
+| --- | --- |
+| `corpus` | the records and the case rows |
+| `connectors.<name>` | each connector definition the cases use |
+| `query_engine`, `query_data` | the engine, and the vendor field names and error bodies it reads (`_data/connectors/_query.json`) |
+| `grader` | the grading code, grading policy and stage graders (`grader_identity`, without a rater) |
+| `serving` | `emulator`, or under Anvil the contract digests, any exposure profiles the serving carries, the provider mapping digests and the Anvil version |
+
+`evalrun run` computes the live pins before any agent runs. Equal pins: the
+recorded proof stands. Any difference makes the proof stale: the cases the run
+takes (all of them, or its `--limit` or `--shard`) are proved again under the engine the run will use (deterministic, seconds for a
+few hundred cases) and the run is refused (`proof_stale_unsolvable`) when a
+case the record proved solvable no longer is, naming the pins that moved and
+the first failing node. A set with no proof record (every set written before
+this) is proved at the start of the run and runs with a warning, never a
+refusal. The run records `pins` in `run.json`: the live pins plus `proof`,
+the recorded proof's digest when the pins match it, `reproved:<digest>` when
+they moved and the run's cases proved again, `unrecorded` for a set with no
+record; `--resume` and `evalrun merge` refuse a
+ledger under other pins, and `evalrun compare` treats two runs under different
+pins as it treats two runs under different graders: deltas are reported, no
+case is judged, and `pins_mismatch` names what moved.
+
+**Measured.** `enterprise-evals build <world> ./cases --exhaustive --limit 200
+--dag-shape '*'` over the worlds of `--seed 8128 --incident` and `--seed 4242
+--incident`, with no profile and with each of the four shipped profiles
+(`examples/enterprise-evals/*.json`): 116 of 1,000 cases unsolvable per seed
+(the two seeds plan the same shapes), 28 of 200 with no profile, 28
+`financial-services`, 22 `omnichannel-retailer`, 20 `back-office`, 18
+`mutual-bank`. Two causes, both in the gold plan or its grader, none in any
+agent:
+
+- 65 per seed are `trajectory.safety`: the gold DAG replies to or sends an
+  email (`email.reply_message`, `email.send_message`, which the safety table
+  classes as irreversible sends) without reading its target first, so the
+  reference itself breaks `destructive_without_read`. The planner reads a
+  target first only for deletes and moves.
+- 51 per seed are `stage.output`: a diamond DAG joins two projections of one
+  record, so the write carries `evidence_count` 2 where the output stage
+  expects the one evidence record.
+
+Corner cases over the same seeds: 6 of 10 drafted per seed are dropped, every
+`restated_figure` case on banking and insurance, because the answer states the
+lodged and current figures and no record an agent can read carries them
+(`output.ungrounded_fact`). `--drop-unsolvable` builds the rest.
+
+**Every search tool states its query language.** The tool catalog an agent
+gets (`tools[*].query` in the turn document, and the MCP tool description)
+carries, for each search tool, the vendor language its `query` is read in, a
+grammar summary, two or three examples in that vendor's syntax, the field
+names the connector knows, and the free-text form where the real product has
+one: ServiceNow `123TEXTQUERY321=`, Jira and Confluence `text ~`, Drive
+`fullText contains`, KQL bare terms, OData `$search`, Slack bare terms. SOQL
+has none, so it says to use `LIKE` with `%` wildcards. A tool whose language
+the evaluator does not read (GraphQL, Rovo, the system of record) says to pass
+a structured `predicate`. The words are data (`_data/connectors/_query_docs.json`)
+and every example is executed by the tests.
 
 ## Plans as data flow
 
@@ -622,6 +731,16 @@ write_run("./runs/mine", mine)
 A `CallableAgent` receives `(task, tools)` and returns an `AgentResponse`
 with the answer, any `ProducedArtifact`s (name, text, and the record ids it
 cites), and optionally the DAG it planned and its first-token latencies.
+
+The proof is one call, and its report carries the pins:
+
+```python
+from worldloom.evalrun import prove_cases
+
+proof = prove_cases(cases, corpus.connector_data.records)   # or EvalSession.open("./cases").prove()
+for item in proof.unsolvable_cases():
+    print(item.case_id, item.failure.node, item.failure.check, item.failure.reason)
+```
 
 [studio]: https://github.com/GoogleCloudPlatform/gemini-enterprise-eval-studio
 [anvil]: https://github.com/vamsiramakrishnan/anvil

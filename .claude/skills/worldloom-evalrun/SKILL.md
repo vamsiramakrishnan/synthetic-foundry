@@ -14,7 +14,8 @@ Read `docs/eval-execution.md` for the contracts; this skill is the procedure.
 ## The loop
 
 ```bash
-worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*' --drop-unsolvable
+worldloom evalrun prove ./cases                     # 0. is every case solvable at all
 worldloom evalrun cases ./cases                     # 1. what the set can grade
 worldloom evalrun run ./cases -o ./runs/reference   # 2. the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py"   # 3. the agent under test
@@ -23,6 +24,15 @@ worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py" 
 worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300   # a hero use case: organise my drive
 ```
 
+0. **Know the set is solvable.** The build proves every case (its gold DAG
+   replayed under the vendor query engine) and refuses a set with an
+   unsolvable one; `--drop-unsolvable` writes the rest and lists each dropped
+   case with its first failing node in `proof.json`. `evalrun prove` prints the
+   verdicts for any set; `evalrun run` checks the set's pins (corpus, connector
+   definitions, query engine, grader, serving) against the live environment,
+   re-proves when one moved and refuses when the set no longer proves. Report
+   the unsolvable count beside any pass rate: a case no agent can pass is a
+   finding about the case. See `docs/eval-execution.md`, *Solvability and pins*.
 1. **Read the coverage before running anything.** `cases` prints counts per
    axis and names every zero (`gap: no case grades deletes`). A set that
    grades no updates cannot show an agent updates correctly; say so in the

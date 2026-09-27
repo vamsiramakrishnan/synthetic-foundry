@@ -19,10 +19,10 @@ worldloom enterprise-evals plan examples/retail-close queries.jsonl --exhaustive
 
 # The whole catalogue, on a corpus with enough evidence for the two that need it.
 worldloom enterprise-evals plan examples/retail-close queries.jsonl --exhaustive --limit 100 --dag-shape '*'
-worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape map_read --dag-shape conditional
+worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape map_read --dag-shape conditional --drop-unsolvable
 
 # The single-write trajectory the grammar produced before shapes existed.
-worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape none
+worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape none --drop-unsolvable
 ```
 
 A mapped source requires at least two records. The materializer supplies them
