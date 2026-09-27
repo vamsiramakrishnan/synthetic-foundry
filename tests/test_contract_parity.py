@@ -105,7 +105,7 @@ class Session:
         self.landing = Landing()
 
     def http(self, method: str, path: str, body: Any = None, *, query: dict[str, Any] | None = None,
-             form: bool = False) -> tuple[int, Any]:
+             form: bool = False, headers: dict[str, str] | None = None) -> tuple[int, Any]:
         target = self.url + path + ("?" + urllib.parse.urlencode(query) if query else "")
         if body is None:
             data = None
@@ -117,7 +117,7 @@ class Session:
             data = json.dumps(body).encode("utf-8")
             content = "application/json"
         request = urllib.request.Request(target, method=method, data=data,
-                                         headers={"Content-Type": content, "Authorization": "Bearer admin"})
+                                         headers={"Content-Type": content, "Authorization": "Bearer admin", **(headers or {})})
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 return response.status, json.loads(response.read().decode("utf-8") or "null")
@@ -424,4 +424,95 @@ def _confluence(s: Session) -> None:
 @needs_anvil
 def test_confluence_parity_through_the_vendor_v2_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("confluence", _confluence_records(), cache, tmp_path, _confluence)
+    session.landing.settle()
+
+
+# -- Slack (the vendor's Web API contract) --------------------------------------------------
+
+
+#: Anvil pages Slack's lists and writes the envelope itself: the items and a top-level `next_cursor`,
+#: without Slack's `ok`, `has_more` and `response_metadata.next_cursor`.
+SLACK_ENVELOPE = "Anvil cursor paging: the page envelope does not carry Slack's ok and response_metadata.next_cursor yet"
+#: search.messages nests its matches (`messages.matches`) and pages by page number; Anvil writes a flat `items`.
+SLACK_SEARCH = "Anvil page-number paging: a nested items field (search.messages' messages.matches) is written as a flat items"
+#: conversations.info and users.info are not paged in the AIR, but the simulator pages them.
+SLACK_READ = "Anvil paging classification: single-record reads without a path id (conversations.info, users.info) are served as pages"
+
+
+def _found(body: Any, *paths: str) -> Any:
+    """The items at the first of *paths* the body has (``a.b`` nests)."""
+
+    for path in paths:
+        node = body
+        for part in path.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if node is not None:
+            return node
+    return None
+
+
+def _slack_records() -> list[ConnectorRecord]:
+    channels = [ConnectorRecord(id=f"sl-c{n}", connector="slack", entity="channel", external_id=f"C0{n}",
+                                title=name, fields={"name": name}) for n, name in enumerate(("ops", "finance"), start=1)]
+    messages = [ConnectorRecord(id=f"sl-m{n}", connector="slack", entity="message", external_id=f"17000000{n}.000100",
+                                title=text, fields={"channel": channel, "text": text, "sender": "U01",
+                                                    "created_at": f"2026-09-0{n}T09:00:00+08:00"})
+                for n, (channel, text) in enumerate((("C01", "Deploy window moved to Friday"),
+                                                     ("C01", "Vendor invoice approved"),
+                                                     ("C02", "Close checklist is out"),
+                                                     ("C01", "Deploy done")), start=1)]
+    users = [ConnectorRecord(id="sl-u1", connector="slack", entity="user", external_id="U01", title="alice",
+                             fields={"name": "alice"})]
+    return [*channels, *messages, *users]
+
+
+def _slack(s: Session) -> None:
+    # The spec declares the token: in the query of a read, in a `token` header of a write.
+    def get(path: str, **query: Any) -> tuple[int, Any]:
+        return s.http("GET", path, query={"token": "admin", **query})
+
+    def post(path: str, form: dict[str, Any]) -> tuple[int, Any]:
+        return s.http("POST", path, form, form=True, headers={"token": "admin"})
+
+    status, body = get("/search.messages", query="deploy in:C01")
+    mine = s.local("search_messages", query="deploy in:C01")[1]
+    assert status == 200 and _found(body, "messages.matches", "items") == mine["items"] and len(mine["items"]) == 2
+    s.landing.expect(_found(body, "messages.matches") is not None, SLACK_SEARCH)
+    status, body = get("/conversations.history", channel="C01", limit=2)
+    mine = s.local("search_messages", query="in:C01", max_results=2)[1]
+    assert status == 200 and body["messages"] == mine["items"]
+    s.landing.expect(body.get("ok") is True and _found(body, "response_metadata.next_cursor") == "2", SLACK_ENVELOPE)
+    status, rest = get("/conversations.history", channel="C01", limit=2,
+                       cursor=_found(body, "response_metadata.next_cursor", "next_cursor"))
+    assert status == 200 and rest["messages"] == s.local("search_messages", query="in:C01", max_results=2, start_at=2)[1]["items"]
+    status, body = get("/conversations.list", limit=10)
+    assert status == 200 and body["channels"] == s.local("list_conversations", max_results=10)[1]["items"]
+    for path, query, key, tool, ident in (("/conversations.info", {"channel": "C02"}, "channel", "get_conversation", "C02"),
+                                          ("/users.info", {"user": "U01"}, "user", "get_user", "U01")):
+        status, body = get(path, **query)
+        record = s.local(tool, id=ident)[1]
+        # Anvil pages these single-record reads and writes the record as a one-item array under the key.
+        assert status == 200 and body[key] in (record, [record])
+        s.landing.expect(body == {"ok": True, key: record}, SLACK_READ)
+    # Post, edit, delete, as the form body Slack takes.
+    status, posted = post("/chat.postMessage", {"channel": "C02", "text": "Books closed"})
+    mine = s.local("post_message", entity="message", fields={"channel": "C02", "text": "Books closed"})[1]
+    assert status in (200, 201) and posted == {"ok": True, "channel": mine["channel"], "ts": mine["ts"], "message": mine}
+    status, edited = post("/chat.update", {"channel": "C01", "ts": "170000002.000100", "text": "Invoice paid"})
+    mine = s.local("update_message", id="170000002.000100", fields={"text": "Invoice paid"})[1]
+    assert status in (200, 201) and edited == {"ok": True, "channel": "C01", "ts": mine["ts"], "text": mine["text"]}
+    status, deleted = post("/chat.delete", {"channel": "C01", "ts": "170000004.000100"})
+    s.local("delete_message", id="170000004.000100")
+    assert status in (200, 201) and deleted == {"ok": True, "ts": "170000004.000100"}
+    # Slack answers its errors with 200 and ok false, on both sides.
+    assert get("/conversations.info", channel="C99") == s.local("get_conversation", id="C99")
+    assert post("/chat.update", {"channel": "C01", "ts": "1.000000", "text": "x"}) == s.local(
+        "update_message", id="1.000000", fields={"text": "x"})
+    status, _ = post("/reactions.add", {"channel": "C01", "timestamp": "170000001.000100", "name": "eyes"})
+    assert status >= 400
+
+
+@needs_anvil
+def test_slack_parity_through_the_vendor_web_api_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("slack", _slack_records(), cache, tmp_path, _slack)
     session.landing.settle()

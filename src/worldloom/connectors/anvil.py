@@ -623,6 +623,19 @@ def _slack_in(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping
     return f"in:{value}"
 
 
+def _slack_ts(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    """A Slack message timestamp as its string, six decimals.
+
+    Slack's own spec types chat.delete's ``ts`` as a number, so a form body
+    arrives parsed as a float and ``1700000004.000100`` loses its zeros; the
+    timestamp is an identifier, always written with six decimals.
+    """
+
+    if isinstance(value, float | int) and not isinstance(value, bool):
+        return f"{value:.6f}"
+    return value
+
+
 def locator(query: Any, offset: int) -> str:
     """A continuation that carries its query (Salesforce's ``nextRecordsUrl``): the query, base64url, then the offset."""
 
@@ -653,6 +666,7 @@ TRANSFORMS: Mapping[str, Callable[[Any, Any, AnvilMapping], Any]] = {
     "locator_query": _locator_query,
     "odata": _odata,
     "slack_in": _slack_in,
+    "slack_ts": _slack_ts,
     "text": _text,
     "transition": _transition,
 }
@@ -816,6 +830,13 @@ def answer(mapping: AnvilMapping, backend: Backend, request: Mapping[str, Any]) 
     try:
         result = backend.call(planned.tool, planned.args)
         response = _shape(mapping, entry, backend, request, planned, result)
+        if isinstance(request.get("page"), Mapping) and response.get("ok") and "items" not in response:
+            # Anvil asked for a page of an operation the mapping answers with
+            # one body (it pages some single-record reads): the body is the
+            # page's one item, so the record still reaches the caller. The item
+            # is the record itself: Anvil writes the envelope around it.
+            body = result if entry.result.get("shape") == "record" else response.get("result")
+            response = {"ok": True, "items": [] if body is None else [body], "nextCursor": None}
     except ConnectorError as error:
         response = _connector_error(mapping, error)
     except ServingError as error:

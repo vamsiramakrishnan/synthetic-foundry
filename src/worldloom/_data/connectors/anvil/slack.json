@@ -1,0 +1,153 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "slack",
+  "service": "slack",
+  "contract": "Slack Web API (slack_web_openapi_v2.json, Swagger 2.0), compiled under profiles/slack.yaml with --service slack",
+  "error_body": {"ok": false, "error": "{message}"},
+  "operations": {
+    "slack.conversations.list": {
+      "route": "GET /conversations.list",
+      "vendor": "conversations_list",
+      "tool": "list_conversations",
+      "args": {"max_results": {"from": "query.limit", "transform": "int"}},
+      "cursor": "query.cursor",
+      "result": {"shape": "list", "envelope": {"ok": true, "channels": "$items", "response_metadata": {"next_cursor": "$next"}}}
+    },
+    "slack.conversations.info": {
+      "route": "GET /conversations.info",
+      "vendor": "conversations_info",
+      "tool": "get_conversation",
+      "args": {"id": {"from": "query.channel", "required": true}},
+      "result": {"shape": "record", "envelope": {"ok": true, "channel": "$record"}}
+    },
+    "slack.conversations.history": {
+      "route": "GET /conversations.history",
+      "vendor": "conversations_history",
+      "tool": "search_messages",
+      "args": {
+        "query": {"from": "query.channel", "transform": "slack_in", "required": true},
+        "max_results": {"from": "query.limit", "transform": "int"}
+      },
+      "cursor": "query.cursor",
+      "result": {"shape": "list", "envelope": {"ok": true, "messages": "$items", "has_more": "$has_more",
+                                               "response_metadata": {"next_cursor": "$next"}}}
+    },
+    "slack.conversations.replies": {
+      "route": "GET /conversations.replies",
+      "vendor": "conversations_replies",
+      "tool": "get_thread",
+      "args": {
+        "id": {"from": "query.ts", "transform": "slack_ts", "required": true},
+        "max_results": {"from": "query.limit", "transform": "int"}
+      },
+      "cursor": "query.cursor",
+      "result": {"shape": "list", "envelope": {"ok": true, "messages": "$items", "has_more": "$has_more",
+                                               "response_metadata": {"next_cursor": "$next"}}}
+    },
+    "slack.conversations.create": {
+      "route": "POST /conversations.create",
+      "vendor": "conversations_create",
+      "tool": "create_conversation",
+      "args": {
+        "entity": {"value": "channel"},
+        "name": {"from": "body.name", "required": true},
+        "fields": {"object": {"name": "body.name", "is_private": "body.is_private"}, "transform": "fields"}
+      },
+      "result": {"shape": "record", "envelope": {"ok": true, "channel": "$record"}}
+    },
+    "slack.conversations.archive": {
+      "route": "POST /conversations.archive",
+      "vendor": "conversations_archive",
+      "tool": "archive_conversation",
+      "args": {
+        "id": {"from": "body.channel", "required": true},
+        "state": {"value": "archived"}
+      },
+      "result": {"shape": "empty", "envelope": {"ok": true}}
+    },
+    "slack.chat.post_message": {
+      "route": "POST /chat.postMessage",
+      "vendor": "chat_postMessage",
+      "tool": "post_message",
+      "args": {
+        "entity": {"value": "message"},
+        "fields": {"object": {"channel": "body.channel", "text": "body.text", "thread_ts": "body.thread_ts"},
+                   "transform": "fields", "required": true}
+      },
+      "result": {"shape": "record", "envelope": {"ok": true, "channel": "$record.channel", "ts": "$record.ts", "message": "$record"}}
+    },
+    "slack.chat.update": {
+      "route": "POST /chat.update",
+      "vendor": "chat_update",
+      "tool": "update_message",
+      "args": {
+        "id": {"from": "body.ts", "transform": "slack_ts", "required": true},
+        "fields": {"object": {"text": "body.text"}, "transform": "fields", "required": true}
+      },
+      "result": {"shape": "record", "envelope": {"ok": true, "channel": "$record.channel", "ts": "$record.ts", "text": "$record.text"}}
+    },
+    "slack.chat.delete": {
+      "route": "POST /chat.delete",
+      "vendor": "chat_delete",
+      "tool": "delete_message",
+      "args": {"id": {"from": "body.ts", "transform": "slack_ts", "required": true}},
+      "result": {"shape": "empty", "envelope": {"ok": true, "ts": "$args.id"}}
+    },
+    "slack.search.messages": {
+      "route": "GET /search.messages",
+      "vendor": "search_messages",
+      "tool": "search_messages",
+      "args": {
+        "query": {"from": "query.query", "required": true},
+        "max_results": {"from": "query.count", "transform": "int"}
+      },
+      "result": {"shape": "list", "envelope": {"ok": true, "query": "$args.query",
+                                               "messages": {"matches": "$items", "total": "$total"}}}
+    },
+    "slack.files.list": {
+      "route": "GET /files.list",
+      "vendor": "files_list",
+      "tool": "list_files",
+      "args": {"max_results": {"from": "query.count", "transform": "int"}},
+      "result": {"shape": "list", "envelope": {"ok": true, "files": "$items", "paging": {"total": "$total"}}}
+    },
+    "slack.files.info": {
+      "route": "GET /files.info",
+      "vendor": "files_info",
+      "tool": "get_file",
+      "args": {"id": {"from": "query.file", "required": true}},
+      "result": {"shape": "record", "envelope": {"ok": true, "file": "$record"}}
+    },
+    "slack.users.list": {
+      "route": "GET /users.list",
+      "vendor": "users_list",
+      "tool": "list_users",
+      "args": {"max_results": {"from": "query.limit", "transform": "int"}},
+      "cursor": "query.cursor",
+      "result": {"shape": "list", "envelope": {"ok": true, "members": "$items", "response_metadata": {"next_cursor": "$next"}}}
+    },
+    "slack.users.info": {
+      "route": "GET /users.info",
+      "vendor": "users_info",
+      "tool": "get_user",
+      "args": {"id": {"from": "query.user", "required": true}},
+      "result": {"shape": "record", "envelope": {"ok": true, "user": "$record"}}
+    },
+    "slack.chat.post_ephemeral": {"route": "POST /chat.postEphemeral", "vendor": "chat_postEphemeral", "unmodelled": "an ephemeral message is seen by one user and never stored"},
+    "slack.chat.schedule_message": {"route": "POST /chat.scheduleMessage", "vendor": "chat_scheduleMessage", "unmodelled": "scheduled messages are not modelled; the emulator's clock does not advance"},
+    "slack.chat.get_permalink": {"route": "GET /chat.getPermalink", "vendor": "chat_getPermalink", "unmodelled": "permalinks are not part of a slack record"},
+    "slack.conversations.invite": {"route": "POST /conversations.invite", "vendor": "conversations_invite", "unmodelled": "channel membership is not modelled"},
+    "slack.conversations.kick": {"route": "POST /conversations.kick", "vendor": "conversations_kick", "unmodelled": "channel membership is not modelled"},
+    "slack.conversations.join": {"route": "POST /conversations.join", "vendor": "conversations_join", "unmodelled": "channel membership is not modelled"},
+    "slack.conversations.leave": {"route": "POST /conversations.leave", "vendor": "conversations_leave", "unmodelled": "channel membership is not modelled"},
+    "slack.conversations.members": {"route": "GET /conversations.members", "vendor": "conversations_members", "unmodelled": "channel membership is not modelled"},
+    "slack.conversations.rename": {"route": "POST /conversations.rename", "vendor": "conversations_rename", "unmodelled": "the slack definition declares no conversation update"},
+    "slack.conversations.set_topic": {"route": "POST /conversations.setTopic", "vendor": "conversations_setTopic", "unmodelled": "the slack definition declares no conversation update"},
+    "slack.conversations.unarchive": {"route": "POST /conversations.unarchive", "vendor": "conversations_unarchive", "unmodelled": "archiving is one-way in the slack definition's workflow"},
+    "slack.files.delete": {"route": "POST /files.delete", "vendor": "files_delete", "unmodelled": "the slack definition declares no file delete"},
+    "slack.files.upload": {"route": "POST /files.upload", "vendor": "files_upload", "unmodelled": "the slack definition declares no file upload"},
+    "slack.users.lookup_by_email": {"route": "GET /users.lookupByEmail", "vendor": "users_lookupByEmail", "unmodelled": "users are read by id; email lookup is not modelled"},
+    "slack.reactions.add": {"route": "POST /reactions.add", "vendor": "reactions_add", "unmodelled": "reactions are a field of a message, never written, in the slack definition"},
+    "slack.pins.add": {"route": "POST /pins.add", "vendor": "pins_add", "unmodelled": "pins are not modelled"}
+  }
+}
