@@ -760,6 +760,8 @@ _REFUSALS: dict[str, str] = {
     "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",
     "unknown_rater": "the --rater value is not one this package ships",
     "unknown_harness": "the --harness value is not a coding harness this package adapts",
+    "unknown_connectors": "the --connectors value is not emulator or anvil",
+    "anvil_unavailable": "Anvil cannot serve the run: no Anvil CLI, an unreadable contract, or a contract its connector's mapping does not cover",
     "no_writer": "the command needs a writer and none was named",
     "script_unreadable": "the scripted agent's JSON file cannot be read",
     "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",

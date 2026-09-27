@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import ConfigDict, Field
 
@@ -33,6 +33,9 @@ from .grader import grader_identity
 from .grading import CaseScore, grade_outcomes, grade_plan, grade_trajectory, score_case
 from .safety import OperationSafety, classify_definition
 from .stages import attach_stages
+
+if TYPE_CHECKING:
+    from .anvil import AnvilServing
 
 RUN_SCHEMA = "worldloom.eval-run/v1"
 
@@ -188,7 +191,10 @@ def run_case(
     clock: Clock | None = None,
     rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None = None,
     safety: Mapping[str, OperationSafety] | None = None,
+    anvil: AnvilServing | None = None,
 ) -> CaseResult:
+    """One case on its own fork. With ``anvil``, Anvil serves the case's connectors (``evalrun.anvil``)."""
+
     who = principal or case.principal
     try:
         begun = service.begin(who, case.id)
@@ -196,7 +202,23 @@ def run_case(
         return CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
                           agent=agent.name, status="error", error=f"begin: {error}")
     run_id = str(begun["run_id"])
-    tools = ToolSurface(service, who, run_id)
+    served = None
+    tools: ToolSurface
+    if anvil is not None:
+        from .anvil import AnvilError
+
+        try:
+            served = anvil.open(service, case, who, run_id)
+        except AnvilError as error:
+            try:
+                service.end(who, run_id)
+            except ServingError:
+                pass  # the run is being abandoned; its grade is not wanted
+            return CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
+                              agent=agent.name, status="error", error=f"anvil: {error}")
+        tools = served.surface
+    else:
+        tools = ToolSurface(service, who, run_id)
     before = service.snapshot(who, run_id)
     started = clock() if clock is not None else None
     response: AgentResponse | None = None
@@ -209,6 +231,16 @@ def run_case(
     if clock is not None and started is not None:
         elapsed = round(clock() - started, 4)
         latency = Latency(ttft=response.ttft if response else None, ttfa=response.ttfa if response else None, ttlt=elapsed)
+    if served is not None:
+        # The calls graded are the ones Anvil served: replayed into this run
+        # before its spans and post-state are read.
+        try:
+            divergences = served.close()
+        except Exception as error:  # an unreadable trace is this run's failure, not a score
+            divergences = ()
+            failure = failure or f"anvil: {type(error).__name__}: {error}"
+        if response is not None and divergences:
+            response = response.model_copy(update={"notes": (*response.notes, *divergences)})
     spans = service.spans(who, run_id)
     refusals = service.refusals(who, run_id)
     questions = tuple(dict(item) for item in service.questions(who, run_id))
@@ -255,6 +287,7 @@ def run_cases(
     rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None = None,
     on_result: Callable[[CaseResult], None] | None = None,
     concurrency: int = 1,
+    anvil: AnvilServing | None = None,
 ) -> RunReport:
     """Every case, each on its own fork, results in case order. ``on_result`` is the checkpoint hook.
 
@@ -266,7 +299,10 @@ def run_cases(
     case lands (completion order), one call at a time. Each worker runs in a
     copy of the caller's context, so the packs in force (policy, texts)
     are the caller's in every thread. The agent must be safe to call from
-    several threads at once; the shipped agents are.
+    several threads at once; the shipped agents are. ``anvil`` serves every
+    case's connectors through Anvil (``evalrun.anvil``); the report's
+    ``agent_identity`` then records the contracts, so such a run is never
+    compared with an in-process one unawares.
     """
 
     listed = list(cases)
@@ -276,18 +312,22 @@ def run_cases(
     if concurrency == 1 or len(listed) < 2:
         results: list[CaseResult] = []
         for case in listed:
-            result = run_case(service, case, agent, principal=principal, clock=clock, rater=rater, safety=safety)
+            result = run_case(service, case, agent, principal=principal, clock=clock, rater=rater, safety=safety,
+                              anvil=anvil)
             results.append(result)
             if on_result is not None:
                 on_result(result)
         ordered = tuple(results)
     else:
         ordered = _run_concurrently(service, listed, agent, principal=principal, clock=clock, rater=rater,
-                                    safety=safety, on_result=on_result, concurrency=concurrency)
+                                    safety=safety, on_result=on_result, concurrency=concurrency, anvil=anvil)
+    identity = fingerprint(agent)
+    if anvil is not None:
+        identity = {**identity, "serving": anvil.identity()}
     return RunReport(agent=agent.name, principal=principal or (listed[0].principal if listed else "agent"),
                      case_set=case_set_digest(listed), results=ordered,
                      agent_pack=getattr(agent, "pack_record", None), grader=grader_identity(rater),
-                     agent_identity=fingerprint(agent))
+                     agent_identity=identity)
 
 
 class ConcurrencyRefused(ServingError):
@@ -314,6 +354,7 @@ def _run_concurrently(
     safety: Mapping[str, OperationSafety],
     on_result: Callable[[CaseResult], None] | None,
     concurrency: int,
+    anvil: AnvilServing | None = None,
 ) -> tuple[CaseResult, ...]:
     import contextvars
     import threading
@@ -332,7 +373,8 @@ def _run_concurrently(
     landed = threading.Lock()
 
     def one(index: int, case: EvalCase) -> None:
-        result = run_case(service, case, agent, principal=principal, clock=clock, rater=rater, safety=safety)
+        result = run_case(service, case, agent, principal=principal, clock=clock, rater=rater, safety=safety,
+                          anvil=anvil)
         slots[index] = result
         if on_result is not None:
             with landed:

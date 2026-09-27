@@ -197,3 +197,145 @@ target = target_for(definition, records=records)
 result = execute(bind(query, target), records, target)
 [records[index]["ident"] for index in result.matches]  # ["PHX-1"]
 ```
+
+## Serving through Anvil
+
+Anvil compiles a vendor's published API spec into a contract and serves it
+with `anvil simulate serve`:
+the vendor's own paths and methods, auth scopes, idempotency replay, injected
+faults (`X-Anvil-Fault`), page envelopes and the contract's error statuses.
+With `--provider-cmd`, the records and what a query means come from a state
+provider speaking newline-delimited JSON-RPC 2.0 on stdio. Worldloom ships
+one:
+
+```sh
+anvil simulate serve --contract ./jira \
+  --provider-cmd "python -m worldloom.anvil_provider --corpus ./cases --connector jira" \
+  --port 0 --trace ./calls.jsonl
+```
+
+The provider answers `initialize` (it refuses any `protocolVersion` but 1,
+and any contract its mapping does not cover), `invoke` (one normalized
+request per call that passed Anvil's surface gates) and `shutdown`. Stdout
+carries protocol lines only; diagnostics go to stderr, which Anvil forwards.
+
+| Option | Meaning |
+|---|---|
+| `--corpus DIR` | A case set (`records.jsonl` beside `evalrun-cases.jsonl`), an enterprise export (`connector-data.json`), or a bare `records.jsonl` |
+| `--connector NAME` | The connector whose records and mapping serve the contract |
+| `--as-of TIME` | The ISO time relative query dates resolve against (default: the definition's `clock`) |
+| `--actor NAME` | Who a write is recorded as (default `agent`) |
+| `--snapshot-out FILE` | At shutdown, every record by fid: the post-state of a state diff |
+| `--mapping FILE` | A mapping other than the shipped one |
+| `--lint CONTRACT` | Check the mapping against a bundle, its `air.json`, or a saved `initialize` operation table, and exit non-zero on an unmapped operation |
+
+Reads and lists come from the connector's records; a search passes its query
+parameter (Jira's `jql`) through the shared vendor query evaluator
+(`connector_search`, the `native` engine above), so a malformed or unknown
+field is refused with the vendor's own status and body. Writes go through the
+emulator's state, so the diff between the corpus and `--snapshot-out` is the
+state diff. A domain error is a provider error: Anvil's code (`not_found`,
+`validation_error`, ...), the connector's error kind as `upstreamCode`, the
+vendor's status, and the vendor's error body. Cursors are the decimal offset
+of the next item, so paging is deterministic.
+
+### The mapping
+
+Each contract's operations map onto the connector definition's tools in
+`worldloom/_data/connectors/anvil/<connector>.json`
+(`worldloom.anvil-mapping/v1`). Jira ships, for the Jira Cloud platform v3
+spec trimmed to the 26 operations of Anvil's Jira backtest and compiled with
+`--service jira`:
+
+```json
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "jira",
+  "service": "jira",
+  "error_body": {"errorMessages": ["{message}"], "errors": {}},
+  "transitions": [{"id": "31", "name": "In Review", "to": "review"}],
+  "operations": {
+    "jira.jql.search": {
+      "route": "POST /rest/api/2/search/jql",
+      "vendor": "searchAndReconsileIssuesUsingJqlPost",
+      "tool": "search_issues",
+      "args": {"query": {"from": "body.jql", "required": true},
+               "max_results": {"from": "body.maxResults", "transform": "int"}},
+      "cursor": "body.nextPageToken",
+      "result": {"shape": "token_page", "items": "issues", "next": "nextPageToken", "last": "isLast"}
+    },
+    "jira.transitions.create": {
+      "route": "POST /rest/api/2/issue/{issueIdOrKey}/transitions",
+      "tool": "transition_issue",
+      "args": {"id": {"from": "path.issueIdOrKey", "required": true},
+               "state": {"from": "body.transition", "transform": "transition", "required": true}},
+      "result": "empty"
+    },
+    "jira.issue.delete": {"route": "DELETE /rest/api/2/issue/{issueIdOrKey}",
+                          "unmodelled": "the jira definition declares no delete tool; issues are closed by transition"}
+  }
+}
+```
+
+- An entry is keyed by Anvil's `operationId`; `route` matches it when the
+  contract was compiled under another service id, and `vendor` (the spec's own
+  operationId) matches it in a lint over the contract's AIR.
+- `args` read from `body.*`, `path.*`, `query.*`, `header.*` or `page.*`,
+  through a named `transform`: `int`, `csv` (a field list; `*all` means all),
+  `text` (Atlassian Document Format to text), `entity` (a vendor type name to
+  the definition's entity), `jira_fields` (a REST `fields` object to record
+  fields: option objects to their scalar, `customfield_*` to the definition's
+  custom field name, a status name to its workflow state), `assignee`, and
+  `transition` (a transition id or name to the state it leads to).
+- `result` shapes the answer: `record`, `pick` (named keys, as a create's
+  `{id, key, self}`), `empty` (Jira's 204 edits and transitions), `page` (Anvil
+  paging), `token_page` (a vendor continuation token in the body), and the
+  derived `comments` and `transitions` lists read from the record.
+- An operation the connector has no state for is marked `unmodelled` with a
+  reason and answered `unsupported_operation`.
+
+The lint refuses a mapping that leaves an exposed operation neither mapped nor
+marked unmodelled, or names a tool or argument the definition does not
+declare. It runs at the handshake, so Anvil refuses to serve an uncovered
+contract rather than answer some operations from nowhere, and it runs before
+any case in the runner mode below.
+
+### An eval run through Anvil
+
+`worldloom evalrun run --connectors anvil --contract <bundle>` (repeat
+`--contract CONNECTOR=PATH` for more connectors; `--anvil-cmd`, else
+`$WORLDLOOM_ANVIL`, else `anvil` on `PATH`) starts one `anvil simulate serve`
+per connector per case, with the provider holding that case's compiled row and
+records in an evaluation service run, so node attribution and the case's
+designed failures apply as they do in process. The agent under test finds
+`ANVIL_BASE_URL`, `ANVIL_<CONNECTOR>_BASE_URL` and `ANVIL_TOKEN` in its
+environment (the exec seam, `.claude/skills/worldloom-evalrun/references/protocol.md`)
+and calls the vendor API. When it answers, the servers stop and each trace is
+replayed, in the order the providers answered, through the same mapping into
+the case's in-process run: the spans, refusals and state diff the grader and
+the stages read are exactly what the in-process run would have recorded for
+those calls. A call Anvil answered itself is a refusal. A replay that answers
+differently from what the agent was served is noted on the result as
+`anvil_divergence`. The run's `agent_identity.serving` names the contracts by
+digest, so an Anvil run is never merged or compared with an in-process one
+unawares. The default stays the in-process emulator.
+
+From Python, `EvalSession.run(agent, anvil=AnvilServing({"jira": "./jira"}))`
+does the same; the agent's surface carries `base_urls`, `token` and
+`environment`.
+
+`tests/test_anvil_provider.py` compiles the trimmed Jira contract, replays
+one sequence (JQL search over two pages, get, projected get, create, update,
+transition by the vendor's transition id, comment, and three domain errors)
+through the emulator under the `native` engine and through Anvil and the
+provider, and asserts identical returned records, identical errors and an
+identical state diff; it also grades one case both ways and requires the same
+spans and the same score. It is skipped when neither `node` with an Anvil
+checkout nor `$WORLDLOOM_ANVIL` is available.
+
+Limits: a status name in JQL (`status = "In Progress"`) is compared with the
+stored workflow state (`open`), not its display name; an Anvil server serves
+one contract, so a case across several connectors runs several servers, and a
+node-scoped designed failure that depends on another connector's calls may be
+attributed differently by the provider than by the replay (noted as
+`anvil_divergence`, graded from the replay).

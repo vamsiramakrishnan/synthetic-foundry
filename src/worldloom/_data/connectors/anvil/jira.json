@@ -1,0 +1,121 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "jira",
+  "service": "jira",
+  "contract": "Jira Cloud platform REST API v3 spec, trimmed to the 26 operations of Anvil's backtest (docs/backtesting/reproduce/curated/jira-ops.txt), compiled with --service jira",
+  "error_body": {"errorMessages": ["{message}"], "errors": {}},
+  "transitions": [
+    {"id": "11", "name": "To Do", "to": "todo"},
+    {"id": "21", "name": "In Progress", "to": "open"},
+    {"id": "31", "name": "In Review", "to": "review"},
+    {"id": "41", "name": "Done", "to": "done"},
+    {"id": "51", "name": "Blocked", "to": "blocked"}
+  ],
+  "operations": {
+    "jira.jql.search": {
+      "route": "POST /rest/api/2/search/jql",
+      "vendor": "searchAndReconsileIssuesUsingJqlPost",
+      "tool": "search_issues",
+      "args": {
+        "query": {"from": "body.jql", "required": true},
+        "max_results": {"from": "body.maxResults", "transform": "int"},
+        "fields": {"from": "body.fields", "transform": "csv"}
+      },
+      "cursor": "body.nextPageToken",
+      "result": {"shape": "token_page", "items": "issues", "next": "nextPageToken", "last": "isLast"}
+    },
+    "jira.issue.get": {
+      "route": "GET /rest/api/2/issue/{issueIdOrKey}",
+      "vendor": "getIssue",
+      "tool": "get_issue",
+      "args": {
+        "id": {"from": "path.issueIdOrKey", "required": true},
+        "fields": {"from": "query.fields", "transform": "csv"}
+      },
+      "result": "record"
+    },
+    "jira.issue.create": {
+      "route": "POST /rest/api/2/issue",
+      "vendor": "createIssue",
+      "tool": "create_issue",
+      "args": {
+        "entity": {"from": "body.fields.issuetype", "transform": "entity"},
+        "name": {"from": "body.fields.summary", "transform": "text"},
+        "parent": {"from": "body.fields.parent.key"},
+        "fields": {"from": "body.fields", "transform": "jira_fields"}
+      },
+      "result": {"shape": "pick", "keys": ["id", "key", "self"]}
+    },
+    "jira.issue.replace": {
+      "route": "PUT /rest/api/2/issue/{issueIdOrKey}",
+      "vendor": "editIssue",
+      "tool": "update_issue",
+      "args": {
+        "id": {"from": "path.issueIdOrKey", "required": true},
+        "fields": {"from": "body.fields", "transform": "jira_fields", "required": true}
+      },
+      "result": "empty"
+    },
+    "jira.assignee.replace": {
+      "route": "PUT /rest/api/2/issue/{issueIdOrKey}/assignee",
+      "vendor": "assignIssue",
+      "tool": "update_issue",
+      "args": {
+        "id": {"from": "path.issueIdOrKey", "required": true},
+        "fields": {"from": "body", "transform": "assignee", "required": true}
+      },
+      "result": "empty"
+    },
+    "jira.transitions.list": {
+      "route": "GET /rest/api/2/issue/{issueIdOrKey}/transitions",
+      "vendor": "getTransitions",
+      "tool": "get_issue",
+      "args": {"id": {"from": "path.issueIdOrKey", "required": true}},
+      "result": {"shape": "transitions", "items": "transitions"}
+    },
+    "jira.transitions.create": {
+      "route": "POST /rest/api/2/issue/{issueIdOrKey}/transitions",
+      "vendor": "doTransition",
+      "tool": "transition_issue",
+      "args": {
+        "id": {"from": "path.issueIdOrKey", "required": true},
+        "state": {"from": "body.transition", "transform": "transition", "required": true}
+      },
+      "result": "empty"
+    },
+    "jira.comment.list": {
+      "route": "GET /rest/api/2/issue/{issueIdOrKey}/comment",
+      "vendor": "getComments",
+      "tool": "get_issue",
+      "args": {"id": {"from": "path.issueIdOrKey", "required": true}},
+      "result": {"shape": "comments", "items": "comments"}
+    },
+    "jira.comment.create": {
+      "route": "POST /rest/api/2/issue/{issueIdOrKey}/comment",
+      "vendor": "addComment",
+      "tool": "add_comment",
+      "args": {
+        "id": {"from": "path.issueIdOrKey", "required": true},
+        "body": {"from": "body.body", "transform": "text", "required": true}
+      },
+      "result": "comment"
+    },
+    "jira.issue.delete": {"route": "DELETE /rest/api/2/issue/{issueIdOrKey}", "vendor": "deleteIssue", "unmodelled": "the jira definition declares no delete tool; issues are closed by transition"},
+    "jira.comment.replace": {"route": "PUT /rest/api/2/issue/{issueIdOrKey}/comment/{id}", "vendor": "updateComment", "unmodelled": "comments are appended to an issue, never edited, in the jira definition"},
+    "jira.comment.delete": {"route": "DELETE /rest/api/2/issue/{issueIdOrKey}/comment/{id}", "vendor": "deleteComment", "unmodelled": "comments are appended to an issue, never removed, in the jira definition"},
+    "jira.watchers.list": {"route": "GET /rest/api/2/issue/{issueIdOrKey}/watchers", "vendor": "getIssueWatchers", "unmodelled": "watchers are not part of a jira record"},
+    "jira.watchers.create": {"route": "POST /rest/api/2/issue/{issueIdOrKey}/watchers", "vendor": "addWatcher", "unmodelled": "watchers are not part of a jira record"},
+    "jira.watchers.delete": {"route": "DELETE /rest/api/2/issue/{issueIdOrKey}/watchers", "vendor": "removeWatcher", "unmodelled": "watchers are not part of a jira record"},
+    "jira.worklog.list": {"route": "GET /rest/api/2/issue/{issueIdOrKey}/worklog", "vendor": "getIssueWorklog", "unmodelled": "worklogs are not part of a jira record"},
+    "jira.worklog.create": {"route": "POST /rest/api/2/issue/{issueIdOrKey}/worklog", "vendor": "addWorklog", "unmodelled": "worklogs are not part of a jira record"},
+    "jira.issue_link.create": {"route": "POST /rest/api/2/issueLink", "vendor": "linkIssues", "unmodelled": "issue links are not a jira entity the definition declares"},
+    "jira.issue_link.delete": {"route": "DELETE /rest/api/2/issueLink/{linkId}", "vendor": "deleteIssueLink", "unmodelled": "issue links are not a jira entity the definition declares"},
+    "jira.issue_link_type.list": {"route": "GET /rest/api/2/issueLinkType", "vendor": "getIssueLinkTypes", "unmodelled": "issue link types are not a jira entity the definition declares"},
+    "jira.project.list": {"route": "GET /rest/api/2/issuetype/project", "vendor": "getIssueTypesForProject", "unmodelled": "projects are a field of an issue, not a record, in the jira definition"},
+    "jira.project.search": {"route": "GET /rest/api/2/project/search", "vendor": "searchProjects", "unmodelled": "projects are a field of an issue, not a record, in the jira definition"},
+    "jira.project.get": {"route": "GET /rest/api/2/project/{projectIdOrKey}", "vendor": "getProject", "unmodelled": "projects are a field of an issue, not a record, in the jira definition"},
+    "jira.components.list": {"route": "GET /rest/api/2/project/{projectIdOrKey}/components", "vendor": "getProjectComponents", "unmodelled": "project components are not modelled"},
+    "jira.versions.list": {"route": "GET /rest/api/2/project/{projectIdOrKey}/versions", "vendor": "getProjectVersions", "unmodelled": "project versions are not modelled"},
+    "jira.field.search": {"route": "GET /rest/api/2/field/search", "vendor": "getFieldsPaginated", "unmodelled": "the field catalogue is the definition's schema, not records"}
+  }
+}

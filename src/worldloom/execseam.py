@@ -38,7 +38,7 @@ import json
 import os
 import shlex
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -137,8 +137,13 @@ def run_exec(
     *,
     timeout: float = DEFAULT_TIMEOUT,
     shell: bool = False,
+    env: Mapping[str, str] | None = None,
 ) -> ExecReply:
     """Run *command* once: *payload* as JSON on stdin, one JSON object back.
+
+    ``env`` adds variables to the child's environment (the parent's is kept):
+    ``evalrun run --connectors anvil`` hands an agent ``ANVIL_BASE_URL`` and
+    ``ANVIL_TOKEN`` this way. Unset, the child inherits exactly the parent's.
 
     No shell by default: the command is split with `shlex.split` and executed
     as an argv, so a corpus path with a space in it cannot become word
@@ -167,6 +172,7 @@ def run_exec(
             text=True,
             timeout=timeout,
             shell=shell,
+            env={**os.environ, **env} if env else None,
         )
     except subprocess.TimeoutExpired as exc:
         raise ExecTimeout(

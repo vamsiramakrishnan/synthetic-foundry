@@ -86,6 +86,38 @@ or, to finish:
 - `planned_dag`, `ttft` and `ttfa` are optional and only ever graded
   against what was observed.
 
+### Served through Anvil (`--connectors anvil`)
+
+`worldloom evalrun run ./cases --exec "<command>" --connectors anvil --contract <bundle>`
+serves each case's connectors through `anvil simulate serve` instead of the
+in-process emulator: the agent calls the vendor's real REST paths (Jira's
+`POST /rest/api/2/search/jql`, `GET /rest/api/2/issue/{key}`, ...) over HTTP.
+The command's environment carries, on every turn:
+
+| Variable | Value |
+|---|---|
+| `ANVIL_BASE_URL` | The server of the case's first connector (alphabetically); for a one-connector case, the only one |
+| `ANVIL_<CONNECTOR>_BASE_URL` | Each connector's server, e.g. `ANVIL_JIRA_BASE_URL` |
+| `ANVIL_CONNECTORS` | The case's connectors, comma-separated |
+| `ANVIL_TOKEN` | The bearer token to send (`Authorization: Bearer $ANVIL_TOKEN`); `admin`, Anvil's principal holding every scope |
+
+The turn document gains `"anvil": {"base_urls": {"jira": "http://127.0.0.1:…"},
+"base_url_env": "ANVIL_BASE_URL", "token_env": "ANVIL_TOKEN"}`. `tools` still
+describes the connectors, but a `call` document is refused with kind
+`serving` (`anvil_mode: …`) and recorded as a refusal: the calls graded are
+the ones Anvil served. An agent typically makes its HTTP calls inside one turn
+and answers; `ask` works as it does in process.
+
+When the case ends, the servers stop and their JSONL traces are replayed into
+the case's run, so plan, trajectory, outcomes and every stage are graded by
+the same code as an in-process run. A call Anvil answered itself (auth, an
+`X-Anvil-Fault`, an idempotent replay) is a refusal; an operation the mapping
+marks unmodelled answers `unsupported_operation` and is a refusal too.
+Each case's state, traces and server logs stay under `--out`/anvil. The Anvil
+CLI is `--anvil-cmd`, else `$WORLDLOOM_ANVIL`, else `anvil` on `PATH`.
+`docs/connector-serving.md` ("Serving through Anvil") has the mapping and the
+provider.
+
 ## The requests document (`worldloom.evalrun-requests/v1`)
 
 `worldloom evalrun requests ./cases -o requests.json`. In a responses

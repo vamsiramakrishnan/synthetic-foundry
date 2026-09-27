@@ -11,6 +11,49 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Serving connectors through Anvil
+
+- **An Anvil state provider.** `python -m worldloom.anvil_provider --corpus
+  <dir> --connector <name>` speaks Anvil's stdio JSON-RPC provider protocol
+  (`initialize` at protocol version 1, `invoke`, `shutdown`) behind `anvil
+  simulate serve --provider-cmd`. Reads and lists come from the corpus's
+  records, searches run their vendor query (Jira's `jql`) through the shared
+  query evaluator, writes go through the emulator's state (`--snapshot-out`
+  writes the post-state for a diff), and domain errors carry the vendor's
+  status, code and error body. Cursors are offsets, so paging is
+  deterministic; stdout carries protocol lines only.
+- **One mapping file per contract.** `_data/connectors/anvil/<connector>.json`
+  (`worldloom.anvil-mapping/v1`) maps each contract operation to a connector
+  tool, its arguments to request locations through named transforms, and its
+  answer to a result shape, or marks it `unmodelled` with a reason. The lint
+  refuses an exposed operation that is neither; it runs at the handshake and
+  before an eval run starts. Jira ships, covering all 26 operations of Anvil's
+  trimmed Jira Cloud v3 contract (9 modelled, 17 unmodelled).
+- **`evalrun run --connectors anvil --contract <bundle>`** (and
+  `EvalSession.run(..., anvil=AnvilServing(...))`) serves each case through
+  Anvil: the agent gets `ANVIL_BASE_URL`, `ANVIL_<CONNECTOR>_BASE_URL` and
+  `ANVIL_TOKEN` (the exec seam passes them in the child's environment, and the
+  turn document gains an `anvil` block), calls the vendor API, and the Anvil
+  traces are replayed into the case's run so plan, trajectory, outcomes and
+  stages grade unchanged. A replay that differs from what the agent was served
+  is noted as `anvil_divergence`; `agent_identity.serving` records the
+  contracts. The default stays the in-process emulator, byte-identical.
+- **Stages read queries through the shared evaluator.** The query stage's
+  filter fields, entity and window clauses now come from the vendor
+  evaluator's parse, bound to the record keys the search compared (JQL
+  `created` is the record's `created_at`, OData `receivedDateTime` its
+  `received_at`), and from the historical conjunctive parser only for a query
+  the evaluator does not read. A relative bound such as `created >= -7d` is
+  now a time relative to the connector clock, so its window is checked; JQL
+  `OR`, native date functions and OData expressions are read rather than
+  dropped as unknown, so `query.missing_filter` and `query.wrong_window` fire
+  on them; a disjunction still names the fields it constrains.
+- **Parity.** `tests/test_anvil_provider.py` replays one Jira call sequence
+  (JQL search over two pages, get, create, edit, transition, comment, three
+  domain errors) through the emulator and through Anvil and the provider, and
+  requires identical records, errors and state diff, and one case graded
+  identically both ways. Skipped without Node and an Anvil CLI.
+
 ### Connector searches in the vendor's own language
 
 - **One query evaluator for every connector language.**
