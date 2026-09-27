@@ -162,10 +162,11 @@ def test_the_grader_digest_is_stable_and_names_what_graded() -> None:
 
 
 def test_an_exec_raters_credentials_never_reach_the_identity() -> None:
-    command = "OPENAI_API_KEY=sk-live-1 judge --token abc --api-key=sk-2 --model gemini"
+    # Secrets that cannot occur inside a hex digest, so a digest never matches one by chance.
+    command = "OPENAI_API_KEY=sk-live-1 judge --token tok-xyz --api-key=sk-2 --model gemini"
     identity = grader_identity(exec_rater(command))
     text = json.dumps(identity)
-    assert "sk-live-1" not in text and "abc" not in text and "sk-2" not in text
+    assert "sk-live-1" not in text and "tok-xyz" not in text and "sk-2" not in text
     assert identity["rater"]["command"] == "OPENAI_API_KEY=REDACTED judge --token REDACTED --api-key=REDACTED --model gemini"
     assert redact_command("judge --model 'a b'") == "judge --model 'a b'"
     # A Windows path keeps its backslashes: the identity names the judge that ran.
