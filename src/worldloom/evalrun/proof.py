@@ -460,11 +460,11 @@ def _run_failures(case: EvalCase, result: CaseResult) -> list[ProofFailure]:
     for finding in score.trajectory.safety:
         out.append(ProofFailure(node=by_span.get(finding.span_id, CASE_NODE), check="trajectory.safety",
                                 reason=f"{finding.law} at {finding.tool}: {finding.detail}"))
-    out.extend(_axis_failures(result))
+    out.extend(_axis_failures(result, frozenset(node.id for node in case.plan.nodes)))
     return out
 
 
-def _axis_failures(result: CaseResult) -> list[ProofFailure]:
+def _axis_failures(result: CaseResult, nodes: frozenset[str] = frozenset()) -> list[ProofFailure]:
     from .autopsy import finding_keys
     from .stages import stage_scores
 
@@ -484,8 +484,18 @@ def _axis_failures(result: CaseResult) -> list[ProofFailure]:
             out.append(ProofFailure(node=_stage_node(score, stage), check=f"stage.{stage}",
                                     reason=f"score {value}" + (f": {', '.join(named[:4])}" if named else "")))
     if score.assertion_status == "fail":
-        out.append(ProofFailure(node=CASE_NODE, check="assertions",
-                                reason="; ".join(score.assertion_fails[:3]) or "failed"))
+        # A row assertion names its node second (`result_mismatch:read-0:<fid>`):
+        # the failure is filed at that node, so the first failing node is the
+        # one the trace grader blamed.
+        by_node: dict[str, list[str]] = {}
+        for fail in score.assertion_fails:
+            parts = str(fail).split(":")
+            owner = parts[1] if len(parts) > 1 and parts[1] in nodes else CASE_NODE
+            by_node.setdefault(owner, []).append(str(fail))
+        for owner, fails in by_node.items():
+            out.append(ProofFailure(node=owner, check="assertions", reason="; ".join(fails[:3])))
+        if not by_node:
+            out.append(ProofFailure(node=CASE_NODE, check="assertions", reason="failed"))
     return out
 
 

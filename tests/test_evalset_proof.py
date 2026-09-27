@@ -391,3 +391,45 @@ def test_the_gold_trajectory_proves_through_anvil_as_it_does_in_process(tmp_path
     broken = prove_cases((unmapped,), _records(), anvil=serving).cases[0]
     assert not broken.solvable, broken
     assert any(item.check == "anvil.unmapped" and item.node == "move" for item in broken.failures), broken.failures
+
+
+
+# -- one identity for a rendered file --------------------------------------------------------
+
+
+def test_a_rendered_file_is_served_under_the_name_its_snapshot_carries() -> None:
+    """A Drive or SharePoint file's `name` is its file name, served and snapshotted alike.
+
+    The served emulator used to name a `ConnectorRecord` by its title while a
+    compiled row's snapshot named it by `fields.name`; on a rendered file the
+    two differ, so every search over one graded `result_mismatch` for the
+    reference agent itself.
+    """
+    record = ConnectorRecord(id="CONN-DRIVE-1", connector="drive", entity="docx", external_id="d1",
+                             title="Close calendar", fields={"name": "art-0001-close-calendar.docx", "format": "docx"})
+    served = ConnectorEmulator(load_connector_definition("drive"), [record]).call("get_file", id="CONN-DRIVE-1")
+    assert served["name"] == runtime_records([record])[0]["name"] == "art-0001-close-calendar.docx"
+    untitled = record.model_copy(update={"fields": {"format": "docx"}})
+    assert ConnectorEmulator(load_connector_definition("drive"), [untitled]).call("get_file", id="CONN-DRIVE-1")["name"] \
+        == "Close calendar"
+
+
+def test_cases_over_a_rendered_world_prove_without_a_result_mismatch() -> None:
+    from worldloom import RetailWorld
+    from worldloom.enterprise_sdk import EnterpriseEvalHarness
+    from worldloom.evalrun import cases_from_corpus
+    from worldloom.scenarios import MonthEndClose
+
+    world = (RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-03", include_operational_incident=True))
+             .render("docx", "xlsx"))
+    built, _ = EnterpriseEvalHarness.from_world(world).take(200).with_dag_grammar().build()
+    renamed = {record.id for record in built.connector_data.records
+               if record.connector in {"drive", "sharepoint"} and record.fields.get("name") not in (None, record.title)}
+    cases = cases_from_corpus(built)
+    reading = [case for case in cases for snapshot in case.row.get("input_snapshots", {}).values()
+               if renamed & set(snapshot)]
+    assert renamed and reading, "the build must read a rendered file for this to test anything"
+    report = prove_cases(cases, built.connector_data.records)
+    mismatched = [(item.case_id, failure.reason) for item in report.cases for failure in item.failures
+                  if "result_mismatch" in failure.reason]
+    assert mismatched == []

@@ -87,6 +87,18 @@ first written up, before the waves above it landed.
   declare (`incidents` for `incident`) crashed the agent's turn with a
   `KeyError` from node attribution; it now gets the emulator's `Unknown
   entity` validation error, as the vendor would answer.
+- **Fixed: one name for a rendered file.** The served emulator named a
+  `ConnectorRecord` by its title while a compiled row's snapshot named it by
+  `fields.name`; on a rendered SharePoint or Drive file (whose `name` is its
+  file name, `art-0001-close-calendar.docx`) the two differ, so every read or
+  search over one graded `result_mismatch` for the reference agent itself.
+  The proof found it: on `--seed 8128 --incident` rendered to docx, pdf and
+  xlsx, 15 of 200 non-exhaustive cases. The emulator now keeps a record's own
+  `fields.name` and falls back to the title only for a record with none, so
+  the served answer and the snapshot agree; the interview projection's
+  workaround (renaming the file to its title and keeping `file_name`) is
+  gone. Emulator answers change only for records whose `fields.name` differs
+  from their title.
 
 ### Plans as data flow
 

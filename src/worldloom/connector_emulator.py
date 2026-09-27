@@ -96,7 +96,14 @@ def _canonical_record(record: ConnectorRecord | Mapping[str, Any]) -> dict[str, 
             "entity": record.entity,
             "ident": record.external_id,
             "external_id": record.external_id,
-            "name": record.title,
+            # A record that names itself (a rendered SharePoint or Drive file:
+            # `fields.name` is its file name, as the products' `name` is) keeps
+            # that name; the title is the name only of a record with none. The
+            # compiled row's snapshot reads the same key
+            # (`enterprise_rows.runtime_records`), and when this overwrote it
+            # with the title every search over a rendered file graded
+            # `result_mismatch` for the reference agent itself.
+            "name": record.fields.get("name") or record.title,
             "title": record.title,
             "fact_ids": list(record.fact_ids),
             "event_ids": list(record.event_ids),
