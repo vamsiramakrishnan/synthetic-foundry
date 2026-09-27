@@ -82,6 +82,7 @@ from typing import TYPE_CHECKING, Any
 from .. import packkit
 from ..connector_emulator import ConnectorError
 from ..connectors.serving import ConnectorEvaluationService, ServingError
+from ..connectors.surface import error_document
 from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
 from .agents import AgentResponse, AgentTask, ProducedArtifact, ToolCall, ToolSurface
 from .contract import EvalCase
@@ -245,7 +246,7 @@ class ExecAgent:
                 try:
                     entry["result"] = tools.call(call["tool"], **dict(arguments))
                 except ConnectorError as failure:
-                    entry["error"] = {"code": failure.code, "kind": failure.kind, "message": failure.message}
+                    entry["error"] = error_document(failure)
                 except ServingError as failure:
                     entry["error"] = {"code": 400, "kind": "serving", "message": str(failure)}
                 transcript.append(entry)

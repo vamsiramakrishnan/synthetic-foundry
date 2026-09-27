@@ -853,7 +853,9 @@ class ServiceBackend:
         return self.service.definitions[self.connector]
 
     def call(self, tool: str, args: Mapping[str, Any]) -> Any:
-        return self.service.call(self.principal, self.run_id, f"{self.connector}.{tool}", args)
+        # The connector tool itself, whatever surface the run presents: a
+        # mapped operation is graded as the connector call it becomes.
+        return self.service.call_connector(self.principal, self.run_id, f"{self.connector}.{tool}", args)
 
     def record(self, reference: Any) -> Mapping[str, Any] | None:
         return self.service.lookup(self.principal, self.run_id, self.connector, reference)
@@ -964,6 +966,250 @@ def _connector_error(mapping: AnvilMapping, error: ConnectorError) -> dict[str, 
     # Slack answers its errors with 200 and `{"ok": false}`: the vendor status is the one served.
     status = error.code if 200 <= error.code < 600 and error.code != 207 else None
     return _refusal(code, error.message, upstream=error.kind, mapping=mapping, status=status, body=body)
+
+
+# -- one request, whichever transport carried it -------------------------------------------
+
+
+def request_argument_names(request: Mapping[str, Any]) -> list[str]:
+    """The argument names a normalized request carried: its body's keys and its query's."""
+
+    body = request.get("body")
+    names = list(body) if isinstance(body, Mapping) else []
+    names.extend((request.get("params") or {}).get("query") or {})
+    return sorted(set(map(str, names)))
+
+
+def refusal_tool(mapping: AnvilMapping, operation_id: str | None, fallback: Any = None) -> str:
+    """``connector.tool`` a refused operation counts against: the tool it maps to, where it maps to one."""
+
+    mapped = mapping.entry(str(operation_id)) if operation_id else None
+    tool = mapped.tool if mapped is not None and mapped.tool else fallback
+    return f"{mapping.connector}.{tool}"
+
+
+def refusal_message(error: Mapping[str, Any]) -> str:
+    """How a refusal Anvil's surface or the mapping answered reads in a run's refusals."""
+
+    return f"anvil_{error.get('code', 'refused')}: {error.get('message', '')}".rstrip()
+
+
+#: Where a request no connector tool ran for is recorded: ``(tool, argument names, message)``.
+Refuse = Callable[[str, Sequence[str], str], None]
+
+
+def run_request(mapping: AnvilMapping, backend: Backend, request: Mapping[str, Any], *,
+                refuse: Refuse | None = None) -> Answer:
+    """One normalized request through the mapping: the single dispatch every transport shares.
+
+    The stdio provider answers Anvil's requests with it, the runner's replay
+    of an Anvil trace re-runs them with it, and the in-process contract
+    surface (``connectors.surface``) dispatches an agent's call with it. A
+    request no connector tool ran for (unmodelled, refused before the tool)
+    is reported to *refuse*, named as the tool the operation maps to.
+    """
+
+    result = answer(mapping, backend, request)
+    if not result.called and refuse is not None:
+        error = result.response.get("error") or {}
+        refuse(refusal_tool(mapping, str(request.get("operationId") or ""), result.tool or request.get("toolName")),
+               request_argument_names(request), refusal_message(error))
+    return result
+
+
+# -- a connector call, as the operation that carries it ------------------------------------
+
+
+@dataclass(frozen=True)
+class Placement:
+    """Where one connector call's arguments sit in a mapped operation's request.
+
+    The inverse of ``plan_call``, before it is checked: ``params`` by
+    location and wire name, the ``body``, and the offset a continuation
+    carries. A placement is only a candidate until ``plan_call`` over the
+    request it makes gives back the same call.
+    """
+
+    entry: OperationMap
+    params: Mapping[str, Mapping[str, Any]]
+    body: Any
+    start_at: int = 0
+    #: Arguments of a search the operation has no place for and leaves to the
+    #: vendor: the type its query names (``entity``), the page size it
+    #: chooses (``max_results``).
+    dropped: tuple[str, ...] = ()
+
+    def request(self) -> dict[str, Any]:
+        method, _, path = (self.entry.route or " ").partition(" ")
+        return {"operationId": self.entry.operation_id, "method": method or None, "pathTemplate": path or None,
+                "params": {where: dict(values) for where, values in self.params.items()}, "body": self.body}
+
+
+def expressible(definition: ConnectorDefinition, tool: str, args: Mapping[str, Any]) -> dict[str, Any]:
+    """A connector call as a vendor API can carry it.
+
+    A structured predicate becomes the vendor query it compiles to: a vendor
+    API takes no predicate.
+    """
+
+    from ..connector_emulator import _coerce_predicate
+    from ..connector_query import compile_native
+
+    arguments = {key: value for key, value in args.items() if value is not None}
+    if "predicate" in arguments and "query" not in arguments:
+        # An alias that names every type the tool serves (Jira's `issue`)
+        # restricts nothing, and no vendor has a type by that name to query.
+        entity = arguments.get("entity")
+        if entity in definition.entity_aliases and set(definition.entity_aliases[entity]) >= set(
+                definition.tool(definition.canonical_tool(tool)).entities):
+            entity = None
+        predicate = _coerce_predicate(arguments.pop("predicate"), entity=entity)
+        if entity is None and predicate.entity is not None and predicate.entity in definition.entity_aliases:
+            predicate = predicate.model_copy(update={"entity": None})
+        arguments["query"] = compile_native(definition, predicate, entity=entity)
+    return arguments
+
+
+#: What a vendor search leaves to itself when its operation has no place for it.
+_SEARCH_DROPPABLE = ("entity", "max_results")
+
+
+def invert(transform: str | None, value: Any, mapping: AnvilMapping,
+           definition: ConnectorDefinition | None = None) -> Any:
+    """The request value a mapping transform turns into *value*; ``ValueError`` when none does."""
+
+    if transform in (None, "text", "flatten", "fields", "slack_ts"):
+        return value
+    if transform == "jira_fields":
+        if definition is None or not isinstance(value, Mapping):
+            return value
+        return {definition.custom_fields.get(str(key), str(key)): item for key, item in value.items()}
+    if transform == "int":
+        return int(value)
+    if transform == "csv":
+        return ",".join(str(item) for item in value) if isinstance(value, list | tuple) else value
+    if transform == "entity":
+        return {"name": value}
+    if transform == "assignee":
+        return {"accountId": (value or {}).get("assignee") if isinstance(value, Mapping) else value}
+    if transform == "transition":
+        for item in mapping.transitions:
+            if str(item.get("to")) == str(value):
+                return {"id": str(item.get("id"))}
+        raise ValueError(f"no transition leads to {value!r}")
+    if transform == "slack_in":
+        text = str(value)
+        if not text.startswith("in:") or " " in text:
+            raise ValueError(f"{value!r} is not a channel scope")
+        return text[3:]
+    if transform == "odata":
+        parts = [item.partition("=") for item in str(value).split("&") if item]
+        if not parts or any(not sep for _, sep, _ in parts):
+            raise ValueError(f"{value!r} is not a set of query options")
+        return {key: item for key, _, item in parts}
+    raise ValueError(f"cannot invert the {transform!r} transform")
+
+
+def _place(params: dict[str, dict[str, Any]], holder: dict[str, Any], source: str, value: Any) -> None:
+    where, _, rest = source.partition(".")
+    if where in {"path", "query", "header"}:
+        params.setdefault(where, {})[rest] = value
+        return
+    if where != "body":
+        raise ValueError(f"cannot place an argument at {source!r}")
+    if not rest:
+        if isinstance(value, Mapping) and isinstance(holder.get("body"), Mapping):
+            holder["body"] = {**value, **holder["body"]}
+        else:
+            holder["body"] = value
+        return
+    body = holder["body"] if isinstance(holder.get("body"), dict) else {}
+    cursor = body
+    keys = rest.split(".")
+    for key in keys[:-1]:
+        nested = cursor.get(key)
+        if not isinstance(nested, dict):
+            nested = cursor[key] = {}
+        cursor = nested
+    if isinstance(value, Mapping) and isinstance(cursor.get(keys[-1]), Mapping):
+        cursor[keys[-1]] = {**cursor[keys[-1]], **value}
+    else:
+        cursor[keys[-1]] = value
+    holder["body"] = body
+
+
+def placements(mapping: AnvilMapping, tool: str, args: Mapping[str, Any], *,
+               definition: ConnectorDefinition | None = None,
+               cursor: Callable[[OperationMap], str | None] | None = None) -> tuple[list[Placement], list[str]]:
+    """Every modelled operation that could carry ``tool(**args)``, placed; and why each other one cannot.
+
+    *args* is the call as ``expressible`` leaves it. An offset (``start_at``)
+    rides the operation's continuation: the mapping's ``cursor`` location, or
+    the one *cursor* names for the operation (the contract's own).
+    """
+
+    arguments = dict(args)
+    start_at = int(arguments.pop("start_at", 0) or 0)
+    found: list[Placement] = []
+    reasons: list[str] = []
+    for entry in mapping.operations.values():
+        if entry.unmodelled is not None:
+            continue
+        if tool not in entry.tools:
+            continue
+        paged = entry.result.get("shape") == "page"
+        missing = [name for name, spec in entry.args.items() if spec.required and name not in arguments]
+        searching = tool.startswith(("search", "query")) and "query" in arguments
+        dropped = tuple(name for name in _SEARCH_DROPPABLE
+                        if searching and name in arguments and name not in entry.args and not (paged and name == "max_results"))
+        extra = [name for name in arguments if name not in entry.args and name not in dropped
+                 and not (paged and name == "max_results")]
+        if missing or extra:
+            reasons.append(f"{entry.operation_id} needs {missing or 'nothing more'}, cannot carry {extra or 'nothing'}")
+            continue
+        params: dict[str, dict[str, Any]] = {}
+        holder: dict[str, Any] = {"body": None}
+        try:
+            # A whole-body argument first, so the fields read from inside it land on it.
+            ordered = sorted(entry.args.items(), key=lambda item: 0 if item[1].source == "body" else 1)
+            for name, spec in ordered:
+                if name not in arguments:
+                    continue
+                value = arguments[name]
+                if spec.values is not None:
+                    reverse = {str(target): source for source, target in spec.values.items()}
+                    value = reverse.get(str(value), value)
+                if spec.rename is not None and isinstance(value, Mapping):
+                    back = {target: source for source, target in spec.rename.items()}
+                    value = {back.get(key, key): item for key, item in value.items()}
+                if spec.parts is not None:
+                    unwrapped = invert(spec.transform, value, mapping, definition)
+                    if not isinstance(unwrapped, Mapping):
+                        raise ValueError(f"{name} is assembled from parts, and {value!r} is not an object")
+                    for key, location in spec.parts.items():
+                        if not isinstance(location, Mapping) and key in unwrapped:
+                            _place(params, holder, location, unwrapped[key])
+                    continue
+                if spec.source is None:
+                    continue  # a constant: the forward check holds the call to it
+                _place(params, holder, spec.source, invert(spec.transform, value, mapping, definition))
+            if entry.tool_by is not None and tool != entry.tool and not entry.tool_by[0].startswith("record."):
+                keys = [key for key, target in entry.tool_by[1].items() if target == tool and key != "*"]
+                if keys:
+                    _place(params, holder, entry.tool_by[0], keys[0])
+            location = entry.cursor or (cursor(entry) if cursor is not None else None)
+            if start_at and location is not None:
+                # With nowhere to carry it the offset is left off, and the
+                # forward check says whether the call still comes back whole.
+                _place(params, holder, location, str(start_at))
+        except (ValueError, TypeError) as error:
+            reasons.append(f"{entry.operation_id}: {error}")
+            continue
+        found.append(Placement(entry, params, holder["body"], start_at, dropped))
+    if not found:
+        reasons.extend(f"{entry.operation_id} unmodelled: {entry.unmodelled}" for entry in mapping.operations.values()
+                       if entry.unmodelled is not None and entry.tool == tool)
+    return found, reasons
 
 
 # -- shaping the answer --------------------------------------------------------------------
@@ -1136,10 +1382,14 @@ __all__ = [
     "MappingError",
     "OperationMap",
     "OperationRefused",
+    "Placement",
     "PlannedCall",
+    "Refuse",
     "ServiceBackend",
     "adf_text",
     "answer",
+    "expressible",
+    "invert",
     "locator",
     "lint_mapping",
     "load_mapping",
@@ -1147,10 +1397,15 @@ __all__ = [
     "operations_from_air",
     "operations_from_table",
     "parse_mapping",
+    "placements",
     "plan_call",
     "read_air",
     "read_arg",
     "read_location",
+    "refusal_message",
+    "refusal_tool",
+    "request_argument_names",
+    "run_request",
     "shipped_mappings",
     "vendor_value",
 ]

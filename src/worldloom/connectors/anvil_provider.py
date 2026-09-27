@@ -46,12 +46,12 @@ from .anvil import (
     EmulatorBackend,
     MappingError,
     ServiceBackend,
-    answer,
     lint_mapping,
     load_mapping,
     operations_from_air,
     operations_from_table,
     read_air,
+    run_request,
 )
 
 STATE_SCHEMA = "worldloom.anvil-case/v1"
@@ -130,7 +130,7 @@ def case_backend(state: Mapping[str, Any]) -> ServiceBackend:
     if records is None and state.get("records_file"):
         records = json.loads(Path(str(state["records_file"])).read_text(encoding="utf-8"))
     records = [_record(item) for item in records or ()]
-    service = ConnectorEvaluationService([row], records or (), definitions=definitions or None,
+    service = ConnectorEvaluationService([row], records or (), definitions=definitions or None, surface="native",
                                          query_engine=str(state.get("query_engine") or "native"))
     principal = str(state["principal"])
     begun = service.begin(principal, str(row["id"]))
@@ -184,7 +184,7 @@ class Provider:
                 os.write(descriptor, line.encode("utf-8"))
             finally:
                 os.close(descriptor)
-        return answer(self.mapping, self.backend, params).response
+        return run_request(self.mapping, self.backend, params).response
 
 
 def serve(provider: Provider, stdin: Iterable[str], stdout: IO[str]) -> int:

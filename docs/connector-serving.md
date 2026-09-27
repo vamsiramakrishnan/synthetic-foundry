@@ -466,3 +466,122 @@ must agree. Where a paging behaviour is still landing in Anvil, only that
 assertion is recorded, and the test xfails naming the capability after
 every other assertion held. `tests/test_contracts.py` holds the lock, the
 trims and the mappings to each other without Node.
+
+## One surface from the contract
+
+A pilot scored most of its "agent failures" on an interface nobody would
+ship: the in-process connector tools were hand-written (a search took a bare
+`query: string` with no grammar), while the same connector served through
+Anvil exposed the vendor's real operations. Two serving paths presented two
+surfaces. `--surface contract` makes them one: in process, a contracted
+connector presents exactly the tools Anvil's generated MCP server lists for
+its contract, and each call goes through the same mapping the Anvil provider
+runs.
+
+```sh
+worldloom evalrun prove ./cases --surface contract
+worldloom evalrun run ./cases -o ./runs/contract --exec "<command>" --surface contract
+worldloom evalrun improve ./cases -o ./loop --exec "<command>" --proposer "<command>" \
+  --levers interface --contract jira=<bundle> --surface contract
+worldloom contracts surface --spec-dir tests/fixtures/anvil/contracts --check
+```
+
+**The surface.** `worldloom.connectors.surface` reads a compiled bundle.
+`anvil_surface.mjs` builds the bundle's MCP server with Anvil's own
+`buildMcpServer` (flat disclosure: every approved operation, no ladder lane
+cards) and converts each tool's input schema with the MCP SDK's own
+converter, one tool at a time, so each tool's `name`, `title`,
+`description`, `inputSchema`, `annotations` and `_meta` are what Anvil's
+`tools/list` serves. Beside each tool it records, with Anvil's own
+functions, how a call reaches the wire: every argument's wire name and
+location, the body's projection, whether the simulator pages the operation
+and at what size, the declared response (for the page envelope and its
+fixed fields), the declared success statuses and errors, and the safety
+keys. The document (`worldloom.contract-surface/v1`) is cached under the
+contracts cache by the bundle's AIR digest. The package ships one per
+locked connector (`_data/connectors/anvil/surfaces/<connector>.json.gz`),
+projected from the committed trims, so the contract surface needs neither
+Node nor Anvil to serve; `worldloom contracts surface --write` refreshes
+them and `--check` exits 1 when a projection has drifted.
+
+**The dispatch.** A call on the surface does in process what Anvil's MCP
+runtime, its simulator and the Worldloom provider do between them: the
+reserved `anvil_dry_run` answers with the request it would send; arguments
+the schema does not name are stripped and values it does not admit are
+refused (as the MCP server's validation does; with `jsonschema` installed),
+as is a write without its `confirm`; the arguments are split into the
+normalized provider request (parameters by wire name and location, the
+body, the page and its size) and run through
+`connectors.anvil.run_request`, the one mapping dispatch the stdio provider
+and the replay of an Anvil trace also run. The answer is shaped as the
+simulator shapes it (the declared success status, the contract's page
+envelope with its continuation, page markers and fixed fields) and the
+agent gets what Anvil's MCP server returns: the response body, or Anvil's
+error envelope (`{"error": {code, message, retryable, safe_to_retry,
+operation, upstream}}`), which carries the contract's declared message for
+the status and never the vendor's prose. The connector tool the mapping
+chose runs in the run as that tool, so the span, the grade and the state
+diff are the ones any other path leaves. A call no connector tool ran for
+(unmodelled, refused by the schema or the confirmation gate) is a refusal
+counted against the tool it maps to.
+
+The turn document, the `sdk-program` client (one method per operation,
+named as Anvil's own SDK names it: the tool name without its service
+prefix) and the MCP server `worldloom enterprise-evals serve --surface contract`
+builds (each tool taking the `run_id` every evaluation tool takes) all present
+the surface. A search tool whose mapped call reads a vendor query carries
+that language's grammar and examples against the argument that carries it
+(`query.argument`, e.g. `body.jql`). A connector with no locked contract
+(`email`, `rovo`, `teamwork_graph`, `sor`) keeps its own tools.
+`anvil_projection` is not served in process (it is refused, not ignored).
+The native surface stays the default (policy `connectors.surface`).
+
+**Gold plans.** A gold plan names connector tools. The reference agent
+carries each node on the contract surface (`ContractSurface.carry`): the
+mapping run backwards (`connectors.anvil.placements`, the inverse the Anvil
+proof also uses), each placement turned into the exposed operation's
+arguments and checked by running the same mapping forward, so a node is
+carried only by an operation that gives back exactly its call. A plan's
+predicate becomes the vendor query it compiles to; a record the plan names
+by the corpus's id is named by its vendor handle where the contract needs
+one (a Confluence page's numeric id, a Jira key); a coordinate the mapping
+never reads (ServiceNow's table, Salesforce's sObject type) is the addressed
+record's. A node no exposed operation carries is a `contract.gap`, named.
+Grading reads a search made through a vendor query by what it read, not by
+the text of the plan's predicate.
+
+**Measured.** The standard build (`--seed 8128 --incident`,
+`enterprise-evals build --exhaustive --limit 100 --dag-shape '*'`) proves
+100 of 100 on the native surface and 32 of 100 under `--surface contract`.
+Every one of the 68 is the gold plan asking for something the contract has
+no place for, none an interface defect:
+
+| Cases | First failing gold call | Why no exposed operation carries it |
+|---:|---|---|
+| 21 | `sharepoint.update_file` | the plan writes its evidence as record fields (`evidence`, `evidence_count`); Graph's driveItem `PATCH` carries a name, a description and a parent, and its schema requires `@odata.type` |
+| 18 | `confluence.update_page` | the same evidence fields; Confluence's page `PUT` carries a title and a storage body |
+| 14 | `sharepoint.create_file` | the same evidence fields on a created driveItem |
+| 7 | `salesforce.update_record` | the same evidence fields; the sObject `PATCH` body declares its fields |
+| 4 | `salesforce.query` (graded `result_mismatch`) | SOQL returns only the fields it selects; the plan reads whole records |
+| 2 | `confluence.search` | the plan selects pages by record id; the v2 listing's filters are title and status |
+| 2 | `drive.search` (`Invalid Value`) | the plan selects files by record id; Drive's `q` has no id term |
+
+`tests/test_contract_surface.py` holds it: without Anvil, each shipped
+surface against its mapping and the service against the surface; with
+Anvil, each committed trim compiled and listed by Anvil's own MCP server
+(every lane opened) against the in-process tools (names, titles,
+descriptions, input schemas, annotations: equal for nine connectors), and
+one call sequence per connector run in process and through Anvil's MCP
+server over `anvil simulate serve` and the provider, with the same results
+(trace and request ids, and a link's host, aside; a refusal by the input
+schema compared as a refusal, since each validator words it its own way).
+Anvil's MCP server cannot list Drive's file lane (its zod converter
+refuses the Discovery schemas' duplicate `id`s), so that listing is
+recorded against the capability rather than passed; in process those four
+tools carry the schema Anvil assembles before conversion.
+
+**The interface lever.** `--levers interface --surface contract` serves
+each candidate in process: its recompiled bundle is projected once (cached
+by AIR digest) and the loop's runs present that surface, so an overlay that
+rewrites a tool's description changes the description the agent reads
+exactly as it changes Anvil's, with no Anvil server per case.

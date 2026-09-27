@@ -245,6 +245,24 @@ worldloom contracts fetch <CONNECTORS>
 | `--cache` | Cache directory (default $WORLDLOOM_CONTRACTS_CACHE, else ~/.cache/worldloom/contracts). |
 | `--json` | Print what was fetched as JSON. |
 
+### `worldloom contracts surface`
+
+Project each contract's tools exactly as Anvil's MCP server lists them: the surface `--surface contract` serves in process.
+
+```
+worldloom contracts surface <CONNECTORS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--anvil-cmd` | The Anvil CLI, split like a shell command. |
+| `--bundle` | Project this compiled bundle instead of building one, as CONNECTOR=PATH. Repeat per connector. |
+| `--cache` | Cache directory for sources and bundles. |
+| `--check` | Exit 1 when a projection differs from the shipped surface: the drift gate. |
+| `--json` | Print one row per connector as JSON. |
+| `--spec-dir` | Compile each connector's trim <DIR>/<connector>.spec.json.gz instead of the locked bytes (the committed trims are tests/fixtures/anvil/contracts). |
+| `--write` | Write each projection as the package's shipped surface (_data/connectors/anvil/surfaces/<connector>.json.gz). |
+
 ### `worldloom contracts trim`
 
 Cut a contract to the operations its profile exposes and the schemas they reach, for a small test fixture.
@@ -415,6 +433,7 @@ worldloom enterprise-evals serve <CORPUS_PATH>
 | `--max-runs` | Runs open at once (default: policy `connectors.serving.max_runs`). |
 | `--port` |  |
 | `--query-id` | Serve only these query IDs; repeat to select more. |
+| `--surface` | The tools served: native (each connector definition's own, the default: policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP). |
 | `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
 | `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
 | `--worker-id` | Prefix every run id with this worker's name (w3 mints w3-run-1), so ids from several server processes never collide. Each process keeps its own runs: route every call for a run id to the process that began it. |
@@ -676,7 +695,7 @@ worldloom evalrun improve <CORPUS>
 | `--brief` | What the proposer is shown: summary (the failure clusters) or traces (also the connectors' own error messages, the arguments behind them, the tools' contracts and failing trajectories). Default: policy `evalrun.improve.brief`, summary. |
 | `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
-| `--contract` | With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface. |
+| `--contract` | With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface, or in process on the contract surface its bundles project with --surface contract (no Anvil server per case). |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
@@ -702,6 +721,7 @@ worldloom evalrun improve <CORPUS>
 | `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--source-root` | CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it. |
+| `--surface` | The tools the agent is shown: native (each connector definition's own tools; the default, policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping). |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
 | `--transfer-agent` | A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
@@ -793,6 +813,7 @@ worldloom evalrun prove <CORPUS>
 | `--json` | Emit the proof report as JSON. |
 | `--limit` | Prove only the first N cases. |
 | `--record` | Write the proof record (proof.json, with its pins) into the case set directory, whatever the verdict. |
+| `--surface` | The tools the agent is shown: native (each connector definition's own tools; the default, policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping). |
 
 ### `worldloom evalrun requests`
 
@@ -840,6 +861,7 @@ worldloom evalrun run <CORPUS>
 | `--resume` | Keep the ledger already in --out when its run.json names this agent, principal and case set (and shard); grade only the cases it lacks. |
 | `--shard` | Run only shard i of n (1-based, e.g. 2/4), a partition by a stable hash of case id; `evalrun merge` joins the shard directories. |
 | `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
+| `--surface` | The tools the agent is shown: native (each connector definition's own tools; the default, policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping). |
 | `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
 | `--timeout` | Seconds the --exec child may run per turn before it is killed. |
 

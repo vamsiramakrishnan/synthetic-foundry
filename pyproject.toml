@@ -246,6 +246,7 @@ module = [
     "anyio.*",
     "docx.*",
     "huggingface_hub.*",
+    "jsonschema.*",
     "lxml.*",
     "mcp.*",
     "model2vec.*",

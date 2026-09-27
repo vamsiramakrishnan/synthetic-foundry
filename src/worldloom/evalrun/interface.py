@@ -555,7 +555,30 @@ class Compiled:
 # -- the lever -----------------------------------------------------------------------
 
 
-ServeRunner = Callable[[Sequence[Any], Any, AnvilServing], Any]
+ServeRunner = Callable[[Sequence[Any], Any, Any], Any]
+#: How the lever serves a run: through Anvil, or in process on the contract surface.
+INTERFACE_SERVING: tuple[str, ...] = ("anvil", "contract")
+
+
+@dataclass(frozen=True)
+class ContractServing:
+    """A variant served in process: its bundles' contract surfaces, one per connector.
+
+    What a lever's ``serve`` runner receives when it serves on the contract
+    surface: build the case set's service with ``surface=serving.surfaces``
+    and run it without Anvil.
+    """
+
+    projected: Mapping[str, Any]
+
+    @property
+    def surfaces(self) -> Any:
+        from ..connectors.surface import ContractSurfaces
+
+        return ContractSurfaces(dict(self.projected))
+
+    def identity(self) -> dict[str, Any]:
+        return self.surfaces.identity()
 
 
 @dataclass
@@ -574,6 +597,11 @@ class InterfaceLever:
     out: Path
     command: tuple[str, ...]
     token: str = "admin"
+    #: ``anvil`` serves each run through Anvil (``SurfacedServing``: a server
+    #: per connector per case); ``contract`` serves it in process on the
+    #: contract surface the variant's bundles project (``connectors.surface``),
+    #: through the same mappings, with no Anvil process per case.
+    surface: str = "anvil"
     _compiled: dict[str, Compiled] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -581,14 +609,17 @@ class InterfaceLever:
     def from_contracts(cls, contracts: Mapping[str, str | Path], *, serve: ServeRunner, out: str | Path,
                        command: Sequence[str] | str | None = None,
                        source_roots: Mapping[str, str | Path] | None = None,
-                       profiles: Mapping[str, str | Path] | None = None) -> InterfaceLever:
+                       profiles: Mapping[str, str | Path] | None = None,
+                       surface: str = "anvil") -> InterfaceLever:
         resolved = find_anvil(command) if isinstance(command, str) or command is None else tuple(command)
         if not resolved:
             raise AnvilError("no Anvil CLI: pass --anvil-cmd, set $WORLDLOOM_ANVIL, or put `anvil` on PATH")
         sources = {name: inspect_bundle(name, path, command=resolved, source_root=(source_roots or {}).get(name),
                                         profile=(profiles or {}).get(name))
                    for name, path in sorted(contracts.items())}
-        return cls(sources=sources, serve=serve, out=Path(out), command=tuple(resolved))
+        if surface not in INTERFACE_SERVING:
+            raise AnvilError(f"surface: one of {', '.join(INTERFACE_SERVING)}, not {surface!r}")
+        return cls(sources=sources, serve=serve, out=Path(out), command=tuple(resolved), surface=surface)
 
     @property
     def root(self) -> Path:
@@ -741,13 +772,32 @@ class InterfaceLever:
     def identity(self, variant: InterfaceVariant) -> dict[str, Any]:
         """What a run under *variant* records: the overlay digests and the recompiled contract digests."""
         compiled = self.compile(variant)
-        return {"lever": "interface", "variant": variant.digest, "overlays": overlay_digests(self.base, variant),
-                "contracts": dict(sorted(compiled.digests.items()))}
+        identity = {"lever": "interface", "variant": variant.digest, "overlays": overlay_digests(self.base, variant),
+                    "contracts": dict(sorted(compiled.digests.items()))}
+        if self.surface == "contract":
+            identity["serving"] = "contract-surface"
+        return identity
 
-    def serving(self, variant: InterfaceVariant) -> SurfacedServing:
+    def serving(self, variant: InterfaceVariant) -> Any:
+        """What serves a run under *variant*: Anvil's servers, or the contract surfaces its bundles project.
+
+        On the contract surface each recompiled bundle is projected once
+        (``connectors.surface.bundle_surface``, cached by the bundle's AIR
+        digest), so an overlay changes the tools the in-process run presents
+        exactly as it changes the ones Anvil's MCP server lists.
+        """
         compiled = self.compile(variant)
         if compiled.findings:
             raise AnvilError("; ".join(compiled.findings[:3]))
+        if self.surface == "contract":
+            from ..connectors.surface import SurfaceError, bundle_surface
+
+            try:
+                return ContractServing({name: bundle_surface(path, name, anvil=self.command,
+                                                             cache_root=self.root)
+                                        for name, path in sorted(compiled.contracts.items())})
+            except SurfaceError as error:
+                raise AnvilError(str(error)) from error
         return SurfacedServing(compiled.contracts, command=self.command, token=self.token,
                                workdir=self.root / "served" / variant.digest[:16])
 
@@ -1076,6 +1126,8 @@ __all__ = [
     "InterfaceVariant",
     "OverlayVerdict",
     "SurfacedServing",
+    "ContractServing",
+    "INTERFACE_SERVING",
     "accept_overlay",
     "air_findings",
     "author_overlay",

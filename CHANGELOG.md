@@ -11,6 +11,61 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### One surface from the contract
+
+Serving and grading; nothing a seed generates changes.
+
+- **`--surface contract`** (policy `connectors.surface`, `native` by
+  default) on `evalrun run`, `evalrun prove`, `evalrun improve` and
+  `enterprise-evals serve`: a connector with a locked contract presents, in
+  process, exactly the tools Anvil's generated MCP server lists for it
+  (names, titles, descriptions, input schemas, annotations), and each call
+  is split into the provider request Anvil's simulator builds and answered
+  through the connector's Anvil mapping, as Anvil's MCP server would answer
+  it (the response body, or Anvil's error envelope). The turn document, the
+  `sdk-program` client and the MCP server all present it
+  (`worldloom.connectors.surface`, `docs/connector-serving.md`, "One
+  surface from the contract").
+- **`worldloom contracts surface`** projects each contract with Anvil's own
+  MCP projection, one tool at a time, beside the wire bindings read with
+  Anvil's functions; `--write` refreshes the surfaces the package ships
+  (`_data/connectors/anvil/surfaces/`, projected from the committed trims)
+  and `--check` exits 1 on drift.
+- **One mapping, two transports.** `connectors.anvil.run_request` is the
+  single dispatch the stdio provider, the replay of an Anvil trace and the
+  in-process contract surface run; the inverse (`placements`) is shared by
+  the Anvil proof and the contract surface's gold-plan carrier, each
+  placement checked by running the mapping forward.
+- **Gold plans on the contract surface.** The reference agent carries each
+  gold node by the exposed operation whose mapping gives back exactly its
+  call, and `evalrun prove` names a node no operation carries as a
+  `contract.gap`, with a per-call tally. The standard build (seed 8128,
+  limit 100, every DAG shape) proves 100 of 100 natively and 32 of 100 on
+  the contract surface: 62 of the 68 are gold writes of evidence fields
+  (`evidence`, `evidence_count`) that Graph's driveItem, Confluence's page
+  and Salesforce's sObject operations have no place for, 4 are SOQL reads
+  that return only the fields they select, and 4 are searches by the
+  corpus's record id that Confluence's v2 listing and Drive's `q` cannot
+  express.
+- **The interface lever serves in process.** With `--surface contract`,
+  each interface candidate's recompiled bundle is projected once (cached by
+  its AIR digest) and the loop's runs present that surface, with no Anvil
+  server per case.
+- **The default stays native.** The surfaces and the calls are proved equal
+  to Anvil's (nine connectors listed identically; Anvil's MCP server cannot
+  list Drive's file lane, which its converter refuses), but two thirds of
+  the standard build's gold plans write what no contract carries, so an
+  agent graded on the contract surface would be graded partly on the plans.
+  The default flips when the planner writes evidence where the vendor keeps
+  it.
+- **A search made through a vendor query is graded by what it read.** The
+  grammar grader no longer compares a search's structured predicate with a
+  call that carries a vendor `query` instead (no vendor API takes a
+  predicate); its reads are graded as before, and attribution falls to the
+  shape rule, kept only when the call read the node's evidence. A vendor
+  query that names no type also finds records stored under an alias the
+  tool's types make up (a Jira `issue`), as the vendor's would.
+
 ### Real vendor contracts behind every served connector
 
 Serving only; nothing a seed generates changes.

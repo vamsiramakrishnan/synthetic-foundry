@@ -100,6 +100,25 @@ or, to finish:
 - `planned_dag`, `ttft` and `ttfa` are optional and only ever graded
   against what was observed.
 
+### The contract surface, in process (`--surface contract`)
+
+`worldloom evalrun run ./cases --exec "<command>" --surface contract` keeps the
+run in process but shows the agent each contracted connector's real
+operations, exactly as Anvil's MCP server lists them for its contract: each
+entry in `tools` is Anvil's tool (`name` such as `jira_get_issue`, `title`,
+`description`, `inputSchema`, `annotations`) plus `connector`, `operation`,
+`method`, `path`, `params` (the argument names), `examples` and, for a tool
+whose mapped call reads a vendor query, `query` with its `argument` (e.g.
+`body.jql`). A `call` names that tool with those arguments (a write that
+needs confirmation takes `"confirm": true`), and the result is the vendor's
+response body; a refused call's `error` also carries `envelope`, Anvil's
+`{"error": {code, message, ...}}`. A connector with no locked contract keeps
+its own `connector.tool` entries. The same flag proves a case set on that
+surface (`worldloom evalrun prove ./cases --surface contract`, naming each
+gold call no operation carries as a `contract.gap`), and
+`worldloom contracts surface` refreshes or checks the surfaces the package
+ships (`docs/connector-serving.md`, "One surface from the contract").
+
 ### Served through Anvil (`--connectors anvil`)
 
 `worldloom evalrun run ./cases --exec "<command>" --connectors anvil --contract <bundle>`

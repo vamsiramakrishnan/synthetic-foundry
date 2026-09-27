@@ -27,6 +27,7 @@ what the low-level functions return.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -195,6 +196,10 @@ class ImproveLoop:
     contracts: Mapping[str, str | Path] | None = None
     anvil_cmd: Sequence[str] | str | None = None
     source_roots: Mapping[str, str | Path] | None = None
+    #: How the interface lever serves a run: ``anvil`` (a server per connector
+    #: per case) or ``contract`` (in process, on the contract surface the
+    #: variant's bundles project; ``evalrun.interface.ContractServing``).
+    interface_serving: str = "anvil"
     transfer: AgentUnderTest | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
@@ -230,19 +235,25 @@ class ImproveLoop:
         The service searches with the native vendor evaluator, as Anvil's
         provider does, so the replay of each served call answers as it did.
         """
+        from .interface import ContractServing
         from .runner import case_set_digest
 
-        key = "anvil\0" + case_set_digest(cases)
+        # On the contract surface each variant is its own set of tools, so
+        # its service is too; through Anvil the service only replays.
+        in_process = isinstance(serving, ContractServing)
+        key = ("contract\0" + json.dumps(serving.identity(), sort_keys=True) if in_process else "anvil") \
+            + "\0" + case_set_digest(cases)
         service = self._services.get(key)
         if service is None:
             held = (self._holdout_records is not None and self.holdout is not None
                     and case_set_digest(cases) == case_set_digest(self.holdout))
             records = self._holdout_records if held and self._holdout_records is not None else self._records
             service = service_for(cases, records, concurrency=self.concurrency,
-                                  definitions=self.session._definitions or None, query_engine="native")
+                                  definitions=self.session._definitions or None, query_engine="native",
+                                  **({"surface": serving.surfaces} if in_process else {}))
             self._services[key] = service
         return run_cases(service, cases, agent, principal=self.session.principal, rater=self.rater,
-                         concurrency=self.concurrency, anvil=serving)
+                         concurrency=self.concurrency, anvil=None if in_process else serving)
 
     def interface(self) -> Any:
         """The ``InterfaceLever`` over ``contracts``, or ``None`` when the loop has no interface lever."""
@@ -253,7 +264,8 @@ class ImproveLoop:
         if not self.contracts:
             raise ValueError("the interface lever needs contracts: {connector: served bundle}")
         return InterfaceLever.from_contracts(self.contracts, serve=self.serve_cases, out=self.out,
-                                             command=self.anvil_cmd, source_roots=self.source_roots)
+                                             command=self.anvil_cmd, source_roots=self.source_roots,
+                                             surface=self.interface_serving)
 
     def run(self, champion: ResolvedPack | str, *, rounds: int | None = None) -> ImproveReport:
         """Run the loop from *champion*: a resolved ``agent`` pack, or a reference like ``agent:baseline``.
@@ -463,6 +475,7 @@ class EvalSession:
         anvil_cmd: Sequence[str] | str | None = None,
         source_roots: Mapping[str, str | Path] | None = None,
         transfer_agent: AgentUnderTest | None = None,
+        interface_serving: str = "anvil",
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -499,6 +512,10 @@ class EvalSession:
         reshape the interface the agent is served, an Anvil manifest overlay
         per connector (``evalrun.interface``); ``transfer_agent`` is the
         second agent such a candidate must not regress on the held-out cases.
+        ``interface_serving="contract"`` serves every run of the loop in
+        process on the contract surface each variant's bundles project, with
+        no Anvil process per case; ``"anvil"`` (the default) serves each case
+        through Anvil.
         """
         from .evidence import brief_mode
         from .interface import parse_levers
@@ -530,7 +547,7 @@ class EvalSession:
                            candidates=candidates, screen_cases=screen_cases, finalists=finalists,
                            parents=parents, round_budget=round_budget, levers=parse_levers(levers),
                            contracts=contracts, anvil_cmd=anvil_cmd, source_roots=source_roots,
-                           transfer=transfer_agent, _records=records,
+                           transfer=transfer_agent, interface_serving=interface_serving, _records=records,
                            _holdout_records=held_records)
 
     def campaign(

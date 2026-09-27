@@ -371,6 +371,14 @@ class ConnectorEmulator:
             pool_ids.extend(self.by_entity.get(requested_entity, ()))
             for member in members:
                 pool_ids.extend(self.by_entity.get(member, ()))
+        if entity is None:
+            # A search that names no type (a vendor's JQL through its
+            # contract takes none) covers every record the tool handles,
+            # those stored under an alias the tool's types make up included:
+            # an `issue` record is a Jira issue whichever query finds it.
+            for alias, members in sorted(self.definition.entity_aliases.items()):
+                if set(members) <= allowed:
+                    pool_ids.extend(self.by_entity.get(alias, ()))
         seen: set[str] = set()
         visible: list[dict[str, Any]] = []
         for fid in pool_ids:
