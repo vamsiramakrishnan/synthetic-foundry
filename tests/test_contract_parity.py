@@ -128,10 +128,14 @@ class Session:
         """The in-process call, its error as the vendor's body the mapping writes."""
 
         from worldloom.connectors.anvil import _fill
+        from worldloom.connectors.query import QueryError
 
         try:
             return 200, _json(self.emulator.call(tool, **args))
         except ConnectorError as error:
+            cause = error.__cause__
+            if isinstance(cause, QueryError) and cause.body is not None:
+                return error.code, _json(cause.body)
             body = _fill(self.mapping.error_body, error.message) if self.mapping.error_body is not None else None
             return error.code, _json(body)
 
@@ -244,4 +248,60 @@ def _servicenow(s: Session) -> None:
 @needs_anvil
 def test_servicenow_parity_through_the_authored_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("servicenow", _servicenow_records(), cache, tmp_path, _servicenow)
+    session.landing.settle()
+
+
+# -- Salesforce (authored contract) --------------------------------------------------------
+
+
+def _salesforce_records() -> list[ConnectorRecord]:
+    # More accounts than one query batch holds, so the answer carries nextRecordsUrl.
+    accounts = [ConnectorRecord(id=f"sf-a{n}", connector="salesforce", entity="account", external_id=f"001{n:012d}AAA",
+                                title=f"Account {n:03d}",
+                                fields={"Name": f"Account {n:03d}", "region": "SG" if n % 2 else "MY"})
+                for n in range(1, 204)]
+    cases = [ConnectorRecord(id=f"sf-c{n}", connector="salesforce", entity="case", external_id=f"500{n:012d}AAA",
+                             title=f"Case {n}",
+                             fields={"Subject": f"Case {n}", "status": "open"}) for n in range(1, 3)]
+    return [*accounts, *cases]
+
+
+def _salesforce(s: Session) -> None:
+    base = "/services/data/v61.0"
+    soql = "SELECT Id, Name FROM Account"
+    status, first = s.http("GET", f"{base}/query", query={"q": soql})
+    mine = s.local("query", query=soql)[1]
+    assert status == 200 and first["records"] == mine["items"] and len(first["records"]) == 200
+    assert first["done"] is False and first["totalSize"] == 203 and first["nextRecordsUrl"].startswith(f"{base}/query/")
+    status, rest = s.http("GET", first["nextRecordsUrl"])
+    mine = s.local("query", query=soql, start_at=200)[1]
+    assert status == 200 and rest["records"] == mine["items"] and len(rest["records"]) == 3
+    assert rest["done"] is True and "nextRecordsUrl" not in rest
+    filtered = "SELECT Id, Name FROM Account WHERE BillingCountry = 'MY' ORDER BY Name DESC LIMIT 3"
+    status, body = s.http("GET", f"{base}/query", query={"q": filtered})
+    assert status == 200 and body["records"] == s.local("query", query=filtered)[1]["items"]
+    # Create, read back whole and projected, update.
+    status, created = s.http("POST", f"{base}/sobjects/Case", {"Subject": "Login fails", "Status": "New"})
+    mine = s.local("create_record", entity="case", fields={"Subject": "Login fails", "Status": "New"})[1]
+    assert (status, created) == (201, {"id": mine["Id"], "success": True, "errors": []})
+    assert s.http("GET", f"{base}/sobjects/Case/{created['id']}") == s.local("get_record", id=created["id"])
+    assert s.http("GET", f"{base}/sobjects/Case/{created['id']}", query={"fields": "Subject,Status"}) == s.local(
+        "get_record", id=created["id"], fields=["Subject", "Status"])
+    account = first["records"][0]["Id"]
+    status, body = s.http("PATCH", f"{base}/sobjects/Account/{account}", {"Name": "Account renamed"})
+    assert status in (200, 204) and body is None
+    s.local("update_record", id=account, fields={"Name": "Account renamed"})
+    # Domain errors carry Salesforce's body on both sides.
+    assert s.http("GET", f"{base}/sobjects/Account/001000000000000AAA") == s.local("get_record", id="001000000000000AAA")
+    assert s.http("GET", f"{base}/query", query={"q": "SELECT Id FROM Account WHERE"}) == s.local(
+        "query", query="SELECT Id FROM Account WHERE")
+    assert s.http("POST", f"{base}/sobjects/Case", {"Status": "New"}) == s.local(
+        "create_record", entity="case", fields={"Status": "New"})
+    status, _ = s.http("DELETE", f"{base}/sobjects/Account/{account}")
+    assert status >= 400
+
+
+@needs_anvil
+def test_salesforce_parity_through_the_authored_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("salesforce", _salesforce_records(), cache, tmp_path, _salesforce)
     session.landing.settle()

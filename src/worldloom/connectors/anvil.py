@@ -839,9 +839,20 @@ def _refusal(code: str, message: str, *, upstream: str | None = None, mapping: A
     return {"ok": False, "error": error}
 
 
+_CODED = re.compile(r"^([A-Z][A-Z_]+):\s*(.*)$", re.DOTALL)
+
+
 def _fill(template: Any, message: str) -> Any:
+    """*template* with ``{message}`` filled; ``{errorCode}`` and ``{text}`` split a ``CODE: text`` message.
+
+    Salesforce's messages carry their error code (``NOT_FOUND: The requested
+    resource does not exist``) and its body names the two apart.
+    """
+
     if isinstance(template, str):
-        return template.replace("{message}", message)
+        coded = _CODED.match(message)
+        code, text = (coded.group(1), coded.group(2)) if coded else ("", message)
+        return template.replace("{message}", message).replace("{errorCode}", code).replace("{text}", text)
     if isinstance(template, list):
         return [_fill(item, message) for item in template]
     if isinstance(template, Mapping):
