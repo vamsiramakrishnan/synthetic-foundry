@@ -257,8 +257,10 @@ def parse_mapping(document: Mapping[str, Any], *, origin: str = "mapping") -> An
         chosen_by: tuple[str, Mapping[str, str]] | None = None
         if tool_by is not None:
             if (not isinstance(tool_by, Mapping) or not isinstance(tool_by.get("from"), str)
-                    or tool_by["from"].split(".", 1)[0] not in _LOCATIONS or not isinstance(tool_by.get("map"), Mapping)):
-                raise MappingError(f"{where}: `tool_by` reads a request location (`from`) and maps its values to tools (`map`)")
+                    or tool_by["from"].split(".", 1)[0] not in (*_LOCATIONS, "record")
+                    or not isinstance(tool_by.get("map"), Mapping)):
+                raise MappingError(f"{where}: `tool_by` reads a request location or the addressed `record.<field>` "
+                                   "(`from`) and maps its values to tools (`map`)")
             chosen_by = (str(tool_by["from"]), {str(key): str(value) for key, value in tool_by["map"].items()})
         operations[operation_id] = OperationMap(
             operation_id, tool=tool, args={name: _arg(name, args[name], where) for name in sorted(args)},
@@ -426,6 +428,11 @@ def read_location(request: Mapping[str, Any], source: str) -> Any:
     else:
         current = (request.get("params") or {}).get(head)
     for part in rest.split(".") if rest else ():
+        if isinstance(current, list) and part.isdigit():
+            if int(part) >= len(current):
+                return _MISSING
+            current = current[int(part)]
+            continue
         if not isinstance(current, Mapping) or part not in current:
             return _MISSING
         current = current[part]
@@ -722,7 +729,7 @@ def plan_call(mapping: AnvilMapping, entry: OperationMap, request: Mapping[str, 
         if start_at and shape in {"page", "token_page", "list"}:
             args["start_at"] = start_at
     tool = entry.tool
-    if entry.tool_by is not None:
+    if entry.tool_by is not None and not entry.tool_by[0].startswith("record."):
         chosen = read_location(request, entry.tool_by[0])
         tool = entry.tool_by[1].get(str(chosen), tool) if chosen is not _MISSING else tool
     return PlannedCall(tool=tool, args=args, start_at=start_at)
@@ -827,6 +834,13 @@ def answer(mapping: AnvilMapping, backend: Backend, request: Mapping[str, Any]) 
     except OperationRefused as refused:
         return Answer(_refusal(refused.code, refused.message, upstream=refused.upstream, mapping=mapping),
                       called=False, tool=entry.tool)
+    if entry.tool_by is not None and entry.tool_by[0].startswith("record.") and planned.args.get("id") is not None:
+        # The tool depends on what the addressed record is (Drive's one PATCH
+        # route updates a Google Doc with one tool and an upload with another).
+        stored = backend.record(planned.args["id"])
+        value = stored.get(entry.tool_by[0].split(".", 1)[1]) if stored is not None else None
+        if value is not None and str(value) in entry.tool_by[1]:
+            planned = PlannedCall(tool=entry.tool_by[1][str(value)], args=planned.args, start_at=planned.start_at)
     try:
         result = backend.call(planned.tool, planned.args)
         response = _shape(mapping, entry, backend, request, planned, result)

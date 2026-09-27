@@ -516,3 +516,60 @@ def _slack(s: Session) -> None:
 def test_slack_parity_through_the_vendor_web_api_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("slack", _slack_records(), cache, tmp_path, _slack)
     session.landing.settle()
+
+
+# -- Google Drive (the vendor's Discovery document) ----------------------------------------
+
+
+#: Anvil pages files.list by pageToken and writes the envelope: `files` and `nextPageToken`, without `kind`.
+DRIVE_ENVELOPE = "Anvil cursor paging: the page envelope does not carry Drive's kind and incompleteSearch yet"
+
+GDOC = "application/vnd.google-apps.document"
+
+
+def _drive_records() -> list[ConnectorRecord]:
+    folder = ConnectorRecord(id="dr-f", connector="drive", entity="folder", external_id="fold1", title="Finance",
+                             fields={"name": "Finance"})
+    files = [ConnectorRecord(id=f"dr-{n}", connector="drive", entity=entity, external_id=f"file{n}", title=name,
+                             fields={"name": name, "folder": "fold1", "modified_at": f"2026-09-0{n}T09:00:00+08:00"})
+             for n, (entity, name) in enumerate((("gdoc", "Budget memo"), ("xlsx", "Budget workbook"),
+                                                 ("pdf", "Audit letter"), ("gdoc", "Budget notes")), start=1)]
+    return [folder, *files]
+
+
+def _drive(s: Session) -> None:
+    q = "name contains 'Budget' and trashed = false"
+    status, body = s.http("GET", "/files", query={"q": q, "pageSize": 2})
+    mine = s.local("search", query=q, max_results=2)[1]
+    assert status == 200 and body["files"] == mine["items"] and body["nextPageToken"] == "2"
+    s.landing.expect(body.get("kind") == "drive#fileList", DRIVE_ENVELOPE)
+    status, body = s.http("GET", "/files", query={"q": q, "pageSize": 2, "pageToken": body["nextPageToken"]})
+    mine = s.local("search", query=q, max_results=2, start_at=2)[1]
+    assert status == 200 and body["files"] == mine["items"] and "nextPageToken" not in body
+    assert s.http("GET", "/files/file1") == s.local("get_file", id="file1")
+    assert s.http("GET", "/files/fold1") == s.local("list_folder", id="fold1")
+    # Create a Google Doc and an upload; the mime type chooses the tool.
+    status, doc = s.http("POST", "/files", {"name": "Close plan", "mimeType": GDOC, "parents": ["fold1"]})
+    mine = s.local("create_doc", entity="gdoc", name="Close plan", parent="fold1", fields={"name": "Close plan"})[1]
+    assert (status, doc) == (200, mine)
+    status, upload = s.http("POST", "/files", {"name": "Q3.csv", "mimeType": "text/csv"})
+    assert (status, upload) == (200, s.local("upload_file", entity="csv", name="Q3.csv", fields={"name": "Q3.csv"})[1])
+    # An update routes by what the file is: a Google Doc and an upload take different tools.
+    assert s.http("PATCH", "/files/file1", {"name": "Budget memo v2"}) == s.local(
+        "update_doc", id="file1", fields={"name": "Budget memo v2"})
+    assert s.http("PATCH", "/files/file2", {"description": "Locked"}) == s.local(
+        "update_file", id="file2", fields={"description": "Locked"})
+    status, _ = s.http("DELETE", "/files/file3")
+    assert status in (200, 204)
+    s.local("delete_file", id="file3")
+    # Errors: a file that does not exist, a query Drive refuses.
+    assert s.http("GET", "/files/nope") == s.local("get_file", id="nope")
+    assert s.http("GET", "/files", query={"q": "name > 'x'"}) == s.local("search", query="name > 'x'")
+    status, _ = s.http("GET", "/files/file1/export", query={"mimeType": "application/pdf"})
+    assert status >= 400
+
+
+@needs_anvil
+def test_drive_parity_through_the_vendor_discovery_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("drive", _drive_records(), cache, tmp_path, _drive)
+    session.landing.settle()

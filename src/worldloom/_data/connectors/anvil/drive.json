@@ -1,0 +1,88 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "drive",
+  "service": "drive",
+  "contract": "Google Drive API v3 Discovery document, compiled under profiles/drive.yaml with --service drive",
+  "error_body": {"error": {"message": "{message}", "errors": [{"message": "{message}", "domain": "global"}]}},
+  "operations": {
+    "drive.files.list": {
+      "route": "GET /files",
+      "vendor": "drive.files.list",
+      "tool": "search",
+      "args": {
+        "query": "query.q",
+        "max_results": {"from": "query.pageSize", "transform": "int"}
+      },
+      "cursor": "query.pageToken",
+      "result": {"shape": "list", "envelope": {"kind": "drive#fileList", "incompleteSearch": false,
+                                               "nextPageToken": "$next", "files": "$items"}}
+    },
+    "drive.files.get": {
+      "route": "GET /files/{fileId}",
+      "vendor": "drive.files.get",
+      "tool": "get_file",
+      "tool_by": {"from": "record.entity", "map": {"folder": "list_folder"}},
+      "args": {"id": {"from": "path.fileId", "required": true}},
+      "result": "record"
+    },
+    "drive.files.create": {
+      "route": "POST /files",
+      "vendor": "drive.files.create",
+      "tool": "upload_file",
+      "tool_by": {"from": "body.mimeType", "map": {
+        "application/vnd.google-apps.document": "create_doc",
+        "application/vnd.google-apps.spreadsheet": "create_sheet",
+        "application/vnd.google-apps.presentation": "create_slides",
+        "application/vnd.google-apps.folder": "create_folder"}},
+      "args": {
+        "entity": {"from": "body.mimeType", "required": true, "map": {
+          "application/vnd.google-apps.document": "gdoc",
+          "application/vnd.google-apps.spreadsheet": "gsheet",
+          "application/vnd.google-apps.presentation": "gslides",
+          "application/vnd.google-apps.folder": "folder",
+          "application/pdf": "pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+          "text/csv": "csv",
+          "text/html": "html",
+          "text/markdown": "markdown"}},
+        "name": {"from": "body.name", "required": true},
+        "parent": {"from": "body.parents.0"},
+        "fields": {"object": {"name": "body.name", "description": "body.description"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "drive.files.update": {
+      "route": "PATCH /files/{fileId}",
+      "vendor": "drive.files.update",
+      "tool": "update_file",
+      "tool_by": {"from": "record.entity", "map": {"gdoc": "update_doc", "gsheet": "update_sheet", "gslides": "update_slides"}},
+      "args": {
+        "id": {"from": "path.fileId", "required": true},
+        "fields": {"from": "body", "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "drive.files.delete": {
+      "route": "DELETE /files/{fileId}",
+      "vendor": "drive.files.delete",
+      "tool": "delete_file",
+      "args": {"id": {"from": "path.fileId", "required": true}},
+      "result": "empty"
+    },
+    "drive.files.export": {"route": "GET /files/{fileId}/export", "vendor": "drive.files.export", "unmodelled": "the vendor's export streams the converted bytes and saves nothing; the connector's export_file saves a converted copy, a different effect"},
+    "drive.copy.create": {"route": "POST /files/{fileId}/copy", "vendor": "drive.files.copy", "unmodelled": "copies are not modelled; the definition's only derived file is a conversion"},
+    "drive.trash.delete": {"route": "DELETE /files/trash", "vendor": "drive.files.emptyTrash", "unmodelled": "the trash is not modelled; a delete removes the file"},
+    "drive.generate_ids.list": {"route": "GET /files/generateIds", "vendor": "drive.files.generateIds", "unmodelled": "ids are minted on create; pre-generated ids are not modelled"},
+    "drive.permissions.list": {"route": "GET /files/{fileId}/permissions", "vendor": "drive.permissions.list", "unmodelled": "sharing is the corpus's access control list, not records the connector writes"},
+    "drive.permissions.create": {"route": "POST /files/{fileId}/permissions", "vendor": "drive.permissions.create", "unmodelled": "sharing is the corpus's access control list, not records the connector writes"},
+    "drive.permissions.delete": {"route": "DELETE /files/{fileId}/permissions/{permissionId}", "vendor": "drive.permissions.delete", "unmodelled": "sharing is the corpus's access control list, not records the connector writes"},
+    "drive.comments.list": {"route": "GET /files/{fileId}/comments", "vendor": "drive.comments.list", "unmodelled": "file comments are not modelled"},
+    "drive.comments.create": {"route": "POST /files/{fileId}/comments", "vendor": "drive.comments.create", "unmodelled": "file comments are not modelled"},
+    "drive.replies.create": {"route": "POST /files/{fileId}/comments/{commentId}/replies", "vendor": "drive.replies.create", "unmodelled": "file comments are not modelled"},
+    "drive.revisions.list": {"route": "GET /files/{fileId}/revisions", "vendor": "drive.revisions.list", "unmodelled": "a file carries its current content, not its revision history"},
+    "drive.drives.list": {"route": "GET /drives", "vendor": "drive.drives.list", "unmodelled": "shared drives are the corpus's workspace layout, not records"},
+    "drive.about.list": {"route": "GET /about", "vendor": "drive.about.get", "unmodelled": "the user's quota and settings are not records"}
+  }
+}
