@@ -367,3 +367,61 @@ def _jira(s: Session) -> None:
 def test_jira_parity_through_the_vendor_v3_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("jira", _jira_records(), cache, tmp_path, _jira)
     session.landing.settle()
+
+
+# -- Confluence (the vendor's v2 contract) --------------------------------------------------
+
+
+#: Anvil pages Confluence's cursor lists and writes the envelope: `results`, and its own continuation field.
+CONFLUENCE_NEXT = "Anvil cursor paging: the page envelope does not carry Confluence's _links.next yet"
+
+
+def _confluence_records() -> list[ConnectorRecord]:
+    pages = [ConnectorRecord(id=f"cf-{n}", connector="confluence", entity="page", external_id=str(1000 + n),
+                             title=f"Runbook {n}", fields={"space": "OPS", "body": f"Step {n}"}) for n in range(1, 5)]
+    posts = [ConnectorRecord(id="cf-b1", connector="confluence", entity="blogpost", external_id="2001",
+                             title="Quarter close notes", fields={"space": "OPS", "body": "Closed on time"})]
+    return [*pages, *posts]
+
+
+def _confluence(s: Session) -> None:
+    # A title filter is the CQL it means; a listing pages through the rest.
+    status, body = s.http("GET", "/pages", query={"title": "Runbook 2"})
+    mine = s.local("search", entity="page", query='type = "page" AND title = "Runbook 2"')[1]
+    assert status == 200 and body["results"] == mine["items"] and len(mine["items"]) == 1
+    status, first = s.http("GET", "/pages", query={"limit": 3})
+    mine = s.local("search", entity="page", query='type = "page"', max_results=3)[1]
+    assert status == 200 and first["results"] == mine["items"] and len(mine["items"]) == 3
+    s.landing.expect(str(first.get("_links", {}).get("next", "")).startswith("/wiki/api/v2/pages?cursor="), CONFLUENCE_NEXT)
+    status, posts = s.http("GET", "/blogposts")
+    assert status == 200 and posts["results"] == s.local("search", entity="blogpost", query='type = "blogpost"')[1]["items"]
+    assert s.http("GET", "/pages/1001") == s.local("get_page", id="1001")
+    assert s.http("GET", "/blogposts/2001") == s.local("get_blogpost", id="2001")
+    # Create, retitle, replace, comment.
+    status, created = s.http("POST", "/pages", {"spaceId": "OPS", "status": "current", "title": "Escalation path",
+                                                "body": {"representation": "storage", "value": "Call the lead"}})
+    mine = s.local("create_page", entity="page", name="Escalation path",
+                   fields={"space": "OPS", "title": "Escalation path", "body": "Call the lead"})[1]
+    assert (status, created) == (200, mine)  # Confluence v2 declares 200 for a create, and Anvil serves the declared status
+    assert s.http("PUT", "/pages/1002/title", {"status": "current", "title": "Runbook two"}) == s.local(
+        "update_page", id="1002", fields={"title": "Runbook two"})
+    assert s.http("PUT", "/pages/1003", {"id": "1003", "status": "current", "title": "Runbook three",
+                                         "body": {"representation": "storage", "value": "New steps"},
+                                         "version": {"number": 2}}) == s.local(
+        "update_page", id="1003", fields={"title": "Runbook three", "body": "New steps"})
+    status, comment = s.http("POST", "/footer-comments", {"pageId": "1001", "body": {"representation": "storage",
+                                                                                    "value": "Reviewed"}})
+    s.local("add_comment", id="1001", body="Reviewed")
+    assert status == 201 and comment["body"] == "Reviewed"
+    # Errors: a page that does not exist, a create missing its space.
+    assert s.http("GET", "/pages/9999") == s.local("get_page", id="9999")
+    assert s.http("POST", "/pages", {"title": "Orphan", "body": {"representation": "storage", "value": "x"}}) == s.local(
+        "create_page", entity="page", name="Orphan", fields={"title": "Orphan", "body": "x"})
+    status, _ = s.http("DELETE", "/pages/1001")
+    assert status >= 400
+
+
+@needs_anvil
+def test_confluence_parity_through_the_vendor_v2_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("confluence", _confluence_records(), cache, tmp_path, _confluence)
+    session.landing.settle()

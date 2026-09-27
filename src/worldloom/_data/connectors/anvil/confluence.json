@@ -1,0 +1,151 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "confluence",
+  "service": "confluence",
+  "contract": "Confluence Cloud REST API v2 (openapi-v2.v3.json), compiled under profiles/confluence.yaml and manifests/confluence.yaml with --service confluence",
+  "error_body": {"errors": [{"title": "{message}", "detail": null}]},
+  "operations": {
+    "confluence.pages.list": {
+      "route": "GET /pages",
+      "vendor": "getPages",
+      "tool": "search",
+      "args": {
+        "entity": {"value": "page"},
+        "query": {"object": {"type": {"value": "page"}, "title": "query.title"}, "transform": "cql"},
+        "max_results": {"from": "query.limit", "transform": "int"}
+      },
+      "cursor": "query.cursor",
+      "result": {"shape": "list", "next_link": "/wiki/api/v2/pages?cursor={cursor}",
+                 "envelope": {"results": "$items", "_links": {"next": "$next_link"}}}
+    },
+    "confluence.pages.get": {
+      "route": "GET /pages/{id}",
+      "vendor": "getPageById",
+      "tool": "get_page",
+      "args": {"id": {"from": "path.id", "required": true}},
+      "result": "record"
+    },
+    "confluence.pages.create": {
+      "route": "POST /pages",
+      "vendor": "createPage",
+      "tool": "create_page",
+      "args": {
+        "entity": {"value": "page"},
+        "name": {"from": "body.title", "required": true},
+        "parent": {"from": "body.parentId"},
+        "fields": {"object": {"space": "body.spaceId", "title": "body.title", "body": "body.body.value"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "confluence.pages.replace": {
+      "route": "PUT /pages/{id}",
+      "vendor": "updatePage",
+      "tool": "update_page",
+      "args": {
+        "id": {"from": "path.id", "required": true},
+        "fields": {"object": {"title": "body.title", "body": "body.body.value"}, "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "confluence.title.replace": {
+      "route": "PUT /pages/{id}/title",
+      "vendor": "updatePageTitle",
+      "tool": "update_page",
+      "args": {
+        "id": {"from": "path.id", "required": true},
+        "fields": {"object": {"title": "body.title"}, "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "confluence.blogposts.list": {
+      "route": "GET /blogposts",
+      "vendor": "getBlogPosts",
+      "tool": "search",
+      "args": {
+        "entity": {"value": "blogpost"},
+        "query": {"object": {"type": {"value": "blogpost"}, "title": "query.title"}, "transform": "cql"},
+        "max_results": {"from": "query.limit", "transform": "int"}
+      },
+      "cursor": "query.cursor",
+      "result": {"shape": "list", "next_link": "/wiki/api/v2/blogposts?cursor={cursor}",
+                 "envelope": {"results": "$items", "_links": {"next": "$next_link"}}}
+    },
+    "confluence.blogposts.get": {
+      "route": "GET /blogposts/{id}",
+      "vendor": "getBlogPostById",
+      "tool": "get_blogpost",
+      "args": {"id": {"from": "path.id", "required": true}},
+      "result": "record"
+    },
+    "confluence.blogposts.create": {
+      "route": "POST /blogposts",
+      "vendor": "createBlogPost",
+      "tool": "create_blogpost",
+      "args": {
+        "entity": {"value": "blogpost"},
+        "name": {"from": "body.title", "required": true},
+        "fields": {"object": {"space": "body.spaceId", "title": "body.title", "body": "body.body.value"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "confluence.spaces.list": {
+      "route": "GET /spaces",
+      "vendor": "getSpaces",
+      "tool": "search",
+      "args": {
+        "entity": {"value": "space"},
+        "query": {"value": "type = space"},
+        "max_results": {"from": "query.limit", "transform": "int"}
+      },
+      "cursor": "query.cursor",
+      "result": {"shape": "list", "next_link": "/wiki/api/v2/spaces?cursor={cursor}",
+                 "envelope": {"results": "$items", "_links": {"next": "$next_link"}}}
+    },
+    "confluence.footer_comments.create": {
+      "route": "POST /footer-comments",
+      "vendor": "createFooterComment",
+      "tool": "add_comment",
+      "args": {
+        "id": {"from": "body.pageId", "required": true},
+        "body": {"from": "body.body.value", "required": true}
+      },
+      "result": "comment"
+    },
+    "confluence.footer_comments.list": {
+      "route": "GET /pages/{id}/footer-comments",
+      "vendor": "getPageFooterComments",
+      "tool": "get_page",
+      "args": {"id": {"from": "path.id", "required": true}},
+      "result": {"shape": "comments", "items": "results"}
+    },
+    "confluence.footer_comments.get": {
+      "route": "GET /footer-comments/{comment-id}",
+      "vendor": "getFooterCommentById",
+      "tool": "get_comments",
+      "args": {"id": {"from": "path.comment-id", "required": true}},
+      "result": "record"
+    },
+    "confluence.attachments.get": {
+      "route": "GET /attachments/{id}",
+      "vendor": "getAttachmentById",
+      "tool": "get_attachment",
+      "args": {"id": {"from": "path.id", "required": true}},
+      "result": "record"
+    },
+    "confluence.pages.delete": {"route": "DELETE /pages/{id}", "vendor": "deletePage", "unmodelled": "the confluence definition declares no delete tool; pages are archived or superseded, never removed"},
+    "confluence.blogposts.replace": {"route": "PUT /blogposts/{id}", "vendor": "updateBlogPost", "unmodelled": "the confluence definition declares no blog post update"},
+    "confluence.blogposts.delete": {"route": "DELETE /blogposts/{id}", "vendor": "deleteBlogPost", "unmodelled": "the confluence definition declares no delete tool"},
+    "confluence.footer_comments.replace": {"route": "PUT /footer-comments/{comment-id}", "vendor": "updateFooterComment", "unmodelled": "comments are appended to a page, never edited, in the confluence definition"},
+    "confluence.footer_comments.delete": {"route": "DELETE /footer-comments/{comment-id}", "vendor": "deleteFooterComment", "unmodelled": "comments are appended to a page, never removed, in the confluence definition"},
+    "confluence.attachments.list.direct": {"route": "GET /attachments", "vendor": "getAttachments", "unmodelled": "attachments are read by id; the definition's search does not cover them"},
+    "confluence.attachments.list.by_id": {"route": "GET /pages/{id}/attachments", "vendor": "getPageAttachments", "unmodelled": "a page's attachments are not listed by the definition"},
+    "confluence.attachments.delete": {"route": "DELETE /attachments/{id}", "vendor": "deleteAttachment", "unmodelled": "the confluence definition declares no delete tool"},
+    "confluence.spaces.get": {"route": "GET /spaces/{id}", "vendor": "getSpaceById", "unmodelled": "spaces are search results and a page's field; the definition declares no space read"},
+    "confluence.labels.list.direct": {"route": "GET /labels", "vendor": "getLabels", "unmodelled": "labels are a field of a page, not records"},
+    "confluence.labels.list.by_id": {"route": "GET /pages/{id}/labels", "vendor": "getPageLabels", "unmodelled": "labels are a field of a page, not records"},
+    "confluence.likes.list": {"route": "GET /pages/{id}/likes/count", "vendor": "getPageLikeCount", "unmodelled": "likes are not modelled"},
+    "confluence.versions.list": {"route": "GET /pages/{id}/versions", "vendor": "getPageVersions", "unmodelled": "a page carries its version number, not its version history"},
+    "confluence.children.list": {"route": "GET /pages/{id}/children", "vendor": "getChildPages", "unmodelled": "the page tree is a page's ancestors field, not a listing the definition declares"},
+    "confluence.ancestors.list": {"route": "GET /pages/{id}/ancestors", "vendor": "getPageAncestors", "unmodelled": "the page tree is a page's ancestors field, not a listing the definition declares"}
+  }
+}
