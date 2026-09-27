@@ -17,7 +17,16 @@ The mapping is data, one file per contract under
     Keyed by Anvil's ``operationId``. Each entry names a connector ``tool``,
     the ``args`` it takes (each read ``from`` a request location, ``body.*``,
     ``path.*``, ``query.*``, ``header.*`` or ``page.*``, optionally through a
-    named ``transform``), and the ``result`` shape. An entry may instead be
+    named ``transform``), and the ``result`` shape. An argument may instead be
+    a constant (``{"value": ...}``) or an ``object`` assembled from several
+    locations, and a read value may pass through a ``map`` of vendor values
+    to the definition's (a ServiceNow table name to its entity) and a
+    ``rename`` of an object's keys (a Graph property to the record's field).
+    A result may carry an ``envelope``: the vendor's response body as a
+    template whose ``$record``, ``$items``, ``$next``, ``$next_link``,
+    ``$total``, ``$is_last``, ``$has_more`` and ``$args.<name>`` strings are
+    filled in, and whose keys filled with a continuation that does not exist
+    (the last page) are left out. An entry may instead be
     ``{"unmodelled": "<why>"}``: an operation the contract exposes and the
     connector has no state for, answered ``unsupported_operation``. ``route``
     (``"POST /path/{id}"``) matches an operation whose id differs, as it does
@@ -44,6 +53,7 @@ is graded by exactly the code that grades one served in process.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -101,11 +111,19 @@ class OperationRefused(Exception):
 
 @dataclass(frozen=True)
 class Arg:
-    """One tool argument, read from the request."""
+    """One tool argument: read from the request (``source``), assembled (``parts``), or a constant."""
 
-    source: str
+    source: str | None
     transform: str | None = None
     required: bool = False
+    constant: Any = None
+    parts: Mapping[str, Any] | None = None
+    values: Mapping[str, Any] | None = None
+    rename: Mapping[str, str] | None = None
+
+    @property
+    def label(self) -> str:
+        return self.source.split(".")[-1] if self.source else "?"
 
 
 @dataclass(frozen=True)
@@ -141,18 +159,43 @@ class AnvilMapping:
         return found
 
 
+def _location(value: Any, what: str) -> None:
+    if isinstance(value, Mapping) and set(value) == {"value"}:
+        return
+    if not isinstance(value, str) or value.split(".", 1)[0] not in _LOCATIONS:
+        raise MappingError(f"{what} reads {value!r}; locations are {', '.join(_LOCATIONS)}, or a {{value}} constant")
+
+
 def _arg(name: str, raw: Any, where: str) -> Arg:
     if isinstance(raw, str):
         raw = {"from": raw}
-    if not isinstance(raw, Mapping) or not isinstance(raw.get("from"), str):
+    if not isinstance(raw, Mapping) or sum(1 for key in ("from", "value", "object") if key in raw) != 1:
+        raise MappingError(f"{where}: argument {name!r} needs one of `from`, `value` or `object`")
+    transform = raw.get("transform")
+    if transform is not None and transform not in TRANSFORMS:
+        raise MappingError(f"{where}: argument {name!r} names unknown transform {transform!r}; known: {', '.join(sorted(TRANSFORMS))}")
+    values, rename = raw.get("map"), raw.get("rename")
+    for key, value in (("map", values), ("rename", rename)):
+        if value is not None and not isinstance(value, Mapping):
+            raise MappingError(f"{where}: argument {name!r}: `{key}` is an object")
+    required = bool(raw.get("required", False))
+    chosen = dict(values) if values else None
+    renamed = dict(rename) if rename else None
+    if "value" in raw:
+        return Arg(source=None, constant=raw["value"], transform=transform, required=required, values=chosen, rename=renamed)
+    if "object" in raw:
+        parts = raw["object"]
+        if not isinstance(parts, Mapping) or not parts:
+            raise MappingError(f"{where}: argument {name!r}: `object` maps names to request locations")
+        for key, location in parts.items():
+            _location(location, f"{where}: argument {name!r}.{key}")
+        return Arg(source=None, parts=dict(parts), transform=transform, required=required, values=chosen, rename=renamed)
+    if not isinstance(raw["from"], str):
         raise MappingError(f"{where}: argument {name!r} needs a `from` location")
     source = str(raw["from"])
     if source.split(".", 1)[0] not in _LOCATIONS:
         raise MappingError(f"{where}: argument {name!r} reads {source!r}; locations are {', '.join(_LOCATIONS)}")
-    transform = raw.get("transform")
-    if transform is not None and transform not in TRANSFORMS:
-        raise MappingError(f"{where}: argument {name!r} names unknown transform {transform!r}; known: {', '.join(sorted(TRANSFORMS))}")
-    return Arg(source=source, transform=transform, required=bool(raw.get("required", False)))
+    return Arg(source=source, transform=transform, required=required, values=chosen, rename=renamed)
 
 
 def parse_mapping(document: Mapping[str, Any], *, origin: str = "mapping") -> AnvilMapping:
@@ -369,6 +412,21 @@ def read_location(request: Mapping[str, Any], source: str) -> Any:
     return _MISSING if current is None else current
 
 
+def read_arg(request: Mapping[str, Any], spec: Arg) -> Any:
+    """One argument's raw value: its location's, its constant, or the object its parts assemble."""
+
+    if spec.parts is not None:
+        out: dict[str, Any] = {}
+        for key, location in spec.parts.items():
+            value = location["value"] if isinstance(location, Mapping) else read_location(request, location)
+            if value is not _MISSING:
+                out[key] = value
+        return out if out else _MISSING
+    if spec.source is None:
+        return spec.constant
+    return read_location(request, spec.source)
+
+
 def adf_text(value: Any) -> str:
     """Plain text of an Atlassian Document Format node (or a string, as given)."""
 
@@ -480,12 +538,101 @@ def _transition(definition: ConnectorDefinition, value: Any, mapping: AnvilMappi
     return raw
 
 
+def vendor_value(value: Any) -> Any:
+    """A vendor's wrapped scalar as the scalar: a Graph recipient as its address, an item body as its content.
+
+    ``{"emailAddress": {"address": a}}`` is ``a``; ``{"contentType", "content"}``
+    is the content; a ServiceNow reference ``{"value", "display_value"}`` is its
+    value; a list is each of its items. Anything else is as given.
+    """
+
+    if isinstance(value, list):
+        return [vendor_value(item) for item in value]
+    if isinstance(value, Mapping):
+        if isinstance(value.get("emailAddress"), Mapping):
+            return value["emailAddress"].get("address")
+        if "content" in value and set(value) <= {"content", "contentType"}:
+            return value["content"]
+        if "value" in value and set(value) <= {"value", "display_value", "link"}:
+            return value["value"]
+    return value
+
+
+def _fields(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    """A vendor body object as the record's fields, each value unwrapped (``vendor_value``)."""
+
+    if not isinstance(value, Mapping):
+        raise OperationRefused("validation_error", "the request body must be an object", upstream="validation")
+    return {str(key): vendor_value(item) for key, item in value.items()}
+
+
+def _flatten(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    return vendor_value(value)
+
+
+def _odata(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    """Graph's query options (``$filter``, ``$search``, ``$orderby``, ``$select``) as one option string."""
+
+    if not isinstance(value, Mapping):
+        return str(value)
+    parts = [f"{key}={value[key]}" for key in value if value[key] not in (None, "")]
+    return "&".join(parts) if parts else _MISSING
+
+
+def _cql_literal(value: Any) -> str:
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _cql(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    """Confluence v2 list filters (``title``, ``status``, a constant ``type``) as the CQL the v1 search would take."""
+
+    if not isinstance(value, Mapping):
+        return str(value)
+    clauses = []
+    for key, item in value.items():
+        if isinstance(item, list):
+            clauses.append(f"{key} IN (" + ", ".join(_cql_literal(entry) for entry in item) + ")")
+        else:
+            clauses.append(f"{key} = {_cql_literal(item)}")
+    return " AND ".join(clauses)
+
+
+def _slack_in(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    """A channel id as the Slack search modifier that scopes to it: a channel's history is a search in it."""
+
+    return f"in:{value}"
+
+
+def locator(query: Any, offset: int) -> str:
+    """A continuation that carries its query (Salesforce's ``nextRecordsUrl``): the query, base64url, then the offset."""
+
+    encoded = base64.urlsafe_b64encode(str(query or "").encode("utf-8")).decode("ascii").rstrip("=")
+    return f"{encoded}-{offset}"
+
+
+def _locator_query(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    """The query a ``locator`` carries."""
+
+    encoded = str(value).rsplit("-", 1)[0]
+    try:
+        return base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode("utf-8")
+    except (ValueError, UnicodeDecodeError) as error:
+        raise OperationRefused("validation_error", f"The locator {value!r} is not one this service issued.",
+                               upstream="invalid_cursor") from error
+
+
 TRANSFORMS: Mapping[str, Callable[[Any, Any, AnvilMapping], Any]] = {
     "assignee": _assignee,
+    "cql": _cql,
     "csv": _csv,
     "entity": _entity,
+    "fields": _fields,
+    "flatten": _flatten,
     "int": _int,
     "jira_fields": _jira_fields,
+    "locator_query": _locator_query,
+    "odata": _odata,
+    "slack_in": _slack_in,
     "text": _text,
     "transition": _transition,
 }
@@ -509,12 +656,16 @@ def plan_call(mapping: AnvilMapping, entry: OperationMap, request: Mapping[str, 
                                f"{entry.operation_id} is not modelled by the {mapping.connector} connector: {entry.unmodelled}")
     args: dict[str, Any] = {}
     for name, spec in entry.args.items():
-        value = read_location(request, spec.source)
+        value = read_arg(request, spec)
         if value is not _MISSING and spec.transform is not None:
             value = TRANSFORMS[spec.transform](definition, value, mapping)
+        if value is not _MISSING and spec.values is not None and isinstance(value, str | int):
+            value = spec.values.get(str(value), value)
+        if value is not _MISSING and spec.rename is not None and isinstance(value, Mapping):
+            value = {spec.rename.get(key, key): item for key, item in value.items()}
         if value is _MISSING:
             if spec.required:
-                raise OperationRefused("validation_error", f"Field '{spec.source.split('.')[-1]}' is required.",
+                raise OperationRefused("validation_error", f"Field '{spec.label if spec.source else name}' is required.",
                                        upstream="validation")
             continue
         args[name] = value
@@ -526,22 +677,27 @@ def plan_call(mapping: AnvilMapping, entry: OperationMap, request: Mapping[str, 
         if shape == "page":
             args["start_at"] = start_at
             args["max_results"] = int(page.get("size") or 1)
+        elif shape in {"list", "token_page"} and start_at:
+            # Only what the client sent becomes an argument: a size Anvil
+            # defaulted is applied to the answer, so the call graded is the
+            # call an in-process agent sending the same request would make.
+            args["start_at"] = start_at
     elif entry.cursor is not None:
         token = read_location(request, entry.cursor)
         start_at = _offset(None if token is _MISSING else token)
-        if start_at and shape in {"page", "token_page"}:
+        if start_at and shape in {"page", "token_page", "list"}:
             args["start_at"] = start_at
     return PlannedCall(tool=entry.tool, args=args, start_at=start_at)
 
 
 def _offset(cursor: Any) -> int:
-    """A cursor this provider minted: the decimal offset of the next item."""
+    """A cursor this provider minted: the decimal offset of the next item, alone or ending a query locator."""
 
     if cursor in (None, ""):
         return 0
-    text = str(cursor)
+    text = str(cursor).rsplit("-", 1)[-1]
     if not text.isdigit():
-        raise OperationRefused("validation_error", f"The cursor {text!r} is not one this service issued.",
+        raise OperationRefused("validation_error", f"The cursor {str(cursor)!r} is not one this service issued.",
                                upstream="invalid_cursor")
     return int(text)
 
@@ -675,7 +831,8 @@ def _connector_error(mapping: AnvilMapping, error: ConnectorError) -> dict[str, 
     code = _STATUS_CODES.get(error.code, "upstream_unavailable" if error.code >= 500 or error.code == 207 else "validation_error")
     cause = error.__cause__
     body = cause.body if isinstance(cause, QueryError) else None
-    status = error.code if 400 <= error.code < 600 else None
+    # Slack answers its errors with 200 and `{"ok": false}`: the vendor status is the one served.
+    status = error.code if 200 <= error.code < 600 and error.code != 207 else None
     return _refusal(code, error.message, upstream=error.kind, mapping=mapping, status=status, body=body)
 
 
@@ -683,6 +840,14 @@ def _connector_error(mapping: AnvilMapping, error: ConnectorError) -> dict[str, 
 
 
 def _page_answer(items: list[Any], start: int, request: Mapping[str, Any], is_last: bool) -> dict[str, Any]:
+    """One page as the protocol wants it: at most ``page.size`` items, and the offset after them."""
+
+    page = request.get("page")
+    size = int(page.get("size") or 0) if isinstance(page, Mapping) else 0
+    if size and len(items) > size:
+        # The tool ran with the client's own size (or its default), which can
+        # exceed the page Anvil asked for; the rest stay reachable by cursor.
+        items, is_last = items[:size], False
     return {"ok": True, "items": items, "nextCursor": None if is_last else str(start + len(items))}
 
 
@@ -695,10 +860,69 @@ def _slice(items: list[Any], planned: PlannedCall, request: Mapping[str, Any], k
     return {"ok": True, "result": {key: items}}
 
 
+_DROP: Any = object()
+
+
+def _fill_envelope(template: Any, context: Mapping[str, Any]) -> Any:
+    """*template* with its ``$name`` strings replaced from *context*; a key whose value is dropped is left out."""
+
+    if isinstance(template, str) and template.startswith("$"):
+        name, _, path = template[1:].partition(".")
+        if name not in context:
+            return template
+        value = context[name]
+        for part in path.split(".") if path else ():
+            value = value.get(part, _DROP) if isinstance(value, Mapping) else _DROP
+        return value
+    if isinstance(template, list):
+        return [item for item in (_fill_envelope(item, context) for item in template) if item is not _DROP]
+    if isinstance(template, Mapping):
+        out = {}
+        for key, value in template.items():
+            filled = _fill_envelope(value, context)
+            if filled is not _DROP:
+                out[key] = filled
+        return out
+    return template
+
+
+def _list_body(spec: Mapping[str, Any], planned: PlannedCall, result: Mapping[str, Any]) -> dict[str, Any]:
+    items = list(result.get("items") or ())
+    start = int(result.get("start_at") or 0)
+    last = bool(result.get("is_last"))
+    after = start + len(items)
+    next_cursor: Any = _DROP if last else (locator(planned.args.get("query"), after)
+                                           if spec.get("cursor") == "locator" else str(after))
+    link = spec.get("next_link")
+    next_link: Any = _DROP
+    if not last and isinstance(link, str):
+        next_link = link.replace("{cursor}", str(next_cursor))
+    context = {"items": items, "total": result.get("total"), "is_last": last, "has_more": not last,
+               "next": next_cursor, "next_link": next_link, "args": dict(planned.args)}
+    envelope = spec.get("envelope") or {spec.get("items", "items"): "$items", "total": "$total"}
+    filled: dict[str, Any] = _fill_envelope(envelope, context)
+    return filled
+
+
 def _shape(mapping: AnvilMapping, entry: OperationMap, backend: Backend, request: Mapping[str, Any],
            planned: PlannedCall, result: Any) -> dict[str, Any]:
     spec = entry.result
     shape = spec.get("shape")
+    envelope = spec.get("envelope")
+    if shape in {"list", "token_page"}:
+        # Anvil pages an operation whose continuation it reads from the
+        # contract (a body token too, since it learned Jira's
+        # `nextPageToken`): it then asks for one page and writes the vendor's
+        # envelope itself.
+        if isinstance(request.get("page"), Mapping):
+            return _page_answer(list(result.get("items") or ()), int(result.get("start_at") or 0), request,
+                                bool(result.get("is_last")))
+        if shape == "list":
+            return {"ok": True, "result": _list_body(spec, planned, result)}
+    if envelope is not None and shape in {"record", "pick", "empty"}:
+        base = result if shape == "record" else (
+            {key: result.get(key) for key in spec.get("keys") or () if key in result} if shape == "pick" else None)
+        return {"ok": True, "result": _fill_envelope(envelope, {"record": base, "args": dict(planned.args)})}
     if shape == "page":
         items = list(result.get("items") or ())
         start = int(result.get("start_at") or 0)
@@ -765,7 +989,7 @@ def _transitions(mapping: AnvilMapping, definition: ConnectorDefinition, record:
             for item in mapping.transitions if str(item["to"]) in allowed]
 
 
-SHAPES = frozenset({"page", "token_page", "record", "pick", "empty", "comment", "comments", "transitions"})
+SHAPES = frozenset({"page", "list", "token_page", "record", "pick", "empty", "comment", "comments", "transitions"})
 
 
 __all__ = [
@@ -786,6 +1010,7 @@ __all__ = [
     "ServiceBackend",
     "adf_text",
     "answer",
+    "locator",
     "lint_mapping",
     "load_mapping",
     "mapping_path",
@@ -794,6 +1019,8 @@ __all__ = [
     "parse_mapping",
     "plan_call",
     "read_air",
+    "read_arg",
     "read_location",
     "shipped_mappings",
+    "vendor_value",
 ]
