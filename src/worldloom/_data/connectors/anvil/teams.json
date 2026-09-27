@@ -1,0 +1,263 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "teams",
+  "service": "teams",
+  "contract": "Microsoft Graph v1.0 OpenAPI (msgraph-metadata openapi/v1.0/openapi.yaml), compiled under profiles/teams.yaml with --service teams",
+  "error_body": {"error": {"code": "{errorCode}", "message": "{text}"}},
+  "operations": {
+    "teams.teams.list": {
+      "route": "GET /teams",
+      "vendor": "teams.team.ListTeam",
+      "tool": "list_teams",
+      "args": {
+        "query": {"object": {"$filter": "query.$filter", "$orderby": "query.$orderby"}, "transform": "odata"},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.joined_teams.list": {
+      "route": "GET /me/joinedTeams",
+      "vendor": "me.ListJoinedTeams",
+      "tool": "list_teams",
+      "args": {"max_results": {"from": "query.$top", "transform": "int"}},
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.teams.get": {
+      "route": "GET /teams/{team-id}",
+      "vendor": "teams.team.GetTeam",
+      "tool": "get_team",
+      "args": {"id": {"from": "path.team-id", "required": true}},
+      "result": "record"
+    },
+    "teams.channels.list": {
+      "route": "GET /teams/{team-id}/channels",
+      "vendor": "teams.ListChannels",
+      "tool": "list_channels",
+      "args": {
+        "id": {"from": "path.team-id", "required": true},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.channels.get": {
+      "route": "GET /teams/{team-id}/channels/{channel-id}",
+      "vendor": "teams.GetChannels",
+      "tool": "get_channel",
+      "args": {"id": {"from": "path.channel-id", "required": true}},
+      "result": "record"
+    },
+    "teams.channels.create": {
+      "route": "POST /teams/{team-id}/channels",
+      "vendor": "teams.CreateChannels",
+      "tool": "create_channel",
+      "args": {
+        "entity": {"value": "channel"},
+        "name": {"from": "body.displayName", "required": true},
+        "parent": {"from": "path.team-id", "required": true},
+        "fields": {"object": {"displayName": "body.displayName", "description": "body.description",
+                              "membership_type": "body.membershipType", "team": "path.team-id"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "teams.channels.update": {
+      "route": "PATCH /teams/{team-id}/channels/{channel-id}",
+      "vendor": "teams.UpdateChannels",
+      "tool": "update_channel",
+      "args": {
+        "id": {"from": "path.channel-id", "required": true},
+        "fields": {"object": {"displayName": "body.displayName", "description": "body.description"}, "transform": "fields",
+                   "required": true}
+      },
+      "result": "record"
+    },
+    "teams.channels.delete": {
+      "route": "DELETE /teams/{team-id}/channels/{channel-id}",
+      "vendor": "teams.DeleteChannels",
+      "tool": "delete_channel",
+      "args": {"id": {"from": "path.channel-id", "required": true}},
+      "result": "empty"
+    },
+    "teams.messages.list.teams": {
+      "route": "GET /teams/{team-id}/channels/{channel-id}/messages",
+      "vendor": "teams.channels.ListMessages",
+      "tool": "list_channel_messages",
+      "args": {
+        "id": {"from": "path.channel-id", "required": true},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.messages.get.teams": {
+      "route": "GET /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}",
+      "vendor": "teams.channels.GetMessages",
+      "tool": "get_channel_message",
+      "args": {"id": {"from": "path.chatMessage-id", "required": true}},
+      "result": "record"
+    },
+    "teams.messages.create.teams": {
+      "route": "POST /teams/{team-id}/channels/{channel-id}/messages",
+      "vendor": "teams.channels.CreateMessages",
+      "tool": "post_channel_message",
+      "args": {
+        "entity": {"value": "channel_message"},
+        "parent": {"from": "path.channel-id", "required": true},
+        "fields": {"object": {"body": "body.body.content", "channel": "path.channel-id", "team": "path.team-id"},
+                   "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "teams.messages.update.teams": {
+      "route": "PATCH /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}",
+      "vendor": "teams.channels.UpdateMessages",
+      "tool": "update_channel_message",
+      "args": {
+        "id": {"from": "path.chatMessage-id", "required": true},
+        "fields": {"object": {"body": "body.body.content"}, "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "teams.messages.delete.teams": {
+      "route": "DELETE /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}",
+      "vendor": "teams.channels.DeleteMessages",
+      "tool": "delete_channel_message",
+      "args": {"id": {"from": "path.chatMessage-id", "required": true}},
+      "result": "empty"
+    },
+    "teams.replies.create": {
+      "route": "POST /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies",
+      "vendor": "teams.channels.messages.CreateReplies",
+      "tool": "reply_channel_message",
+      "args": {
+        "id": {"from": "path.chatMessage-id", "required": true},
+        "body": {"from": "body.body.content", "required": true}
+      },
+      "result": "record"
+    },
+    "teams.chats.list": {
+      "route": "GET /chats",
+      "vendor": "chats.chat.ListChat",
+      "tool": "list_chats",
+      "args": {
+        "query": {"object": {"$filter": "query.$filter", "$orderby": "query.$orderby"}, "transform": "odata"},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.chats.get": {
+      "route": "GET /chats/{chat-id}",
+      "vendor": "chats.chat.GetChat",
+      "tool": "get_chat",
+      "args": {"id": {"from": "path.chat-id", "required": true}},
+      "result": "record"
+    },
+    "teams.chats.create": {
+      "route": "POST /chats",
+      "vendor": "chats.chat.CreateChat",
+      "tool": "create_chat",
+      "args": {
+        "entity": {"value": "chat"},
+        "name": "body.topic",
+        "fields": {"object": {"topic": "body.topic", "chat_type": "body.chatType", "members": "body.members"},
+                   "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "teams.messages.list.chats": {
+      "route": "GET /chats/{chat-id}/messages",
+      "vendor": "chats.ListMessages",
+      "tool": "list_chat_messages",
+      "args": {
+        "id": {"from": "path.chat-id", "required": true},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.messages.get.chats": {
+      "route": "GET /chats/{chat-id}/messages/{chatMessage-id}",
+      "vendor": "chats.GetMessages",
+      "tool": "get_chat_message",
+      "args": {"id": {"from": "path.chatMessage-id", "required": true}},
+      "result": "record"
+    },
+    "teams.messages.create.chats": {
+      "route": "POST /chats/{chat-id}/messages",
+      "vendor": "chats.CreateMessages",
+      "tool": "post_chat_message",
+      "args": {
+        "entity": {"value": "chat_message"},
+        "parent": {"from": "path.chat-id", "required": true},
+        "fields": {"object": {"body": "body.body.content", "chat": "path.chat-id"}, "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "teams.messages.update.chats": {
+      "route": "PATCH /chats/{chat-id}/messages/{chatMessage-id}",
+      "vendor": "chats.UpdateMessages",
+      "tool": "update_chat_message",
+      "args": {
+        "id": {"from": "path.chatMessage-id", "required": true},
+        "fields": {"object": {"body": "body.body.content"}, "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "teams.messages.delete.chats": {
+      "route": "DELETE /chats/{chat-id}/messages/{chatMessage-id}",
+      "vendor": "chats.DeleteMessages",
+      "tool": "delete_chat_message",
+      "args": {"id": {"from": "path.chatMessage-id", "required": true}},
+      "result": "empty"
+    },
+    "teams.members.list.teams_direct": {
+      "route": "GET /teams/{team-id}/members",
+      "vendor": "teams.ListMembers",
+      "tool": "list_members",
+      "args": {"id": {"from": "path.team-id", "required": true}},
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.members.list.channels": {
+      "route": "GET /teams/{team-id}/channels/{channel-id}/members",
+      "vendor": "teams.channels.ListMembers",
+      "tool": "list_members",
+      "args": {"id": {"from": "path.channel-id", "required": true}},
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.members.list.chats": {
+      "route": "GET /chats/{chat-id}/members",
+      "vendor": "chats.ListMembers",
+      "tool": "list_members",
+      "args": {"id": {"from": "path.chat-id", "required": true}},
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "teams.members.get": {
+      "route": "GET /teams/{team-id}/members/{conversationMember-id}",
+      "vendor": "teams.GetMembers",
+      "tool": "get_member",
+      "args": {"id": {"from": "path.conversationMember-id", "required": true}},
+      "result": "record"
+    },
+    "teams.teams.create": {"route": "POST /teams", "vendor": "teams.team.CreateTeam", "unmodelled": "the teams definition declares no team create; teams are the corpus's organisation"},
+    "teams.teams.update": {"route": "PATCH /teams/{team-id}", "vendor": "teams.team.UpdateTeam", "unmodelled": "the teams definition declares no team update"},
+    "teams.teams.delete": {"route": "DELETE /teams/{team-id}", "vendor": "teams.team.DeleteTeam", "unmodelled": "the teams definition declares no team delete"},
+    "teams.archive.create": {"route": "POST /teams/{team-id}/archive", "vendor": "teams.team.archive", "unmodelled": "archiving a team is not modelled"},
+    "teams.unarchive.create": {"route": "POST /teams/{team-id}/unarchive", "vendor": "teams.team.unarchive", "unmodelled": "archiving a team is not modelled"},
+    "teams.joined_teams.create": {"route": "POST /me/joinedTeams", "vendor": "me.CreateJoinedTeams", "unmodelled": "joining a team is membership, which the definition reads but does not write"},
+    "teams.members.create.teams_direct": {"route": "POST /teams/{team-id}/members", "vendor": "teams.CreateMembers", "unmodelled": "membership is read, never written, in the teams definition"},
+    "teams.members.create.channels": {"route": "POST /teams/{team-id}/channels/{channel-id}/members", "vendor": "teams.channels.CreateMembers", "unmodelled": "membership is read, never written, in the teams definition"},
+    "teams.members.create.chats": {"route": "POST /chats/{chat-id}/members", "vendor": "chats.CreateMembers", "unmodelled": "membership is read, never written, in the teams definition"},
+    "teams.members.update": {"route": "PATCH /teams/{team-id}/members/{conversationMember-id}", "vendor": "teams.UpdateMembers", "unmodelled": "membership is read, never written, in the teams definition"},
+    "teams.members.delete": {"route": "DELETE /teams/{team-id}/members/{conversationMember-id}", "vendor": "teams.DeleteMembers", "unmodelled": "membership is read, never written, in the teams definition"},
+    "teams.chats.update": {"route": "PATCH /chats/{chat-id}", "vendor": "chats.chat.UpdateChat", "unmodelled": "the teams definition declares no chat update"},
+    "teams.chats.delete": {"route": "DELETE /chats/{chat-id}", "vendor": "chats.chat.DeleteChat", "unmodelled": "the teams definition declares no chat delete"},
+    "teams.replies.list": {"route": "GET /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies", "vendor": "teams.channels.messages.ListReplies", "unmodelled": "replies are listed with their channel's messages, not per thread"},
+    "teams.soft_delete.create": {"route": "POST /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/softDelete", "vendor": "teams.team.channels.channel.messages.chatMessage.softDelete", "unmodelled": "a soft delete keeps the message recoverable; the definition's delete removes it, a different effect"}
+  }
+}

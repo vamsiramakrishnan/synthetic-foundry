@@ -768,3 +768,68 @@ def _sharepoint(s: Session) -> None:
 def test_sharepoint_parity_through_the_vendor_graph_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("sharepoint", _sharepoint_records(), cache, tmp_path, _sharepoint)
     session.landing.settle()
+
+
+# -- Microsoft Graph: Teams -----------------------------------------------------------------
+
+
+def _teams_records() -> list[ConnectorRecord]:
+    team = ConnectorRecord(id="tm-t1", connector="teams", entity="team", external_id="TEAM1", title="Finance",
+                           fields={"displayName": "Finance", "description": "Finance team"})
+    channels = [ConnectorRecord(id=f"tm-c{n}", connector="teams", entity="channel", external_id=f"19:chan{n}@thread.tacv2",
+                                title=name, fields={"displayName": name, "team": "TEAM1"})
+                for n, name in enumerate(("General", "Close"), start=1)]
+    messages = [ConnectorRecord(id=f"tm-m{n}", connector="teams", entity="channel_message", external_id=f"MSG{n}", title=text,
+                                fields={"body": text, "channel": "19:chan2@thread.tacv2", "team": "TEAM1", "sender": "alice",
+                                        "created_at": f"2026-09-0{n}T09:00:00Z"})
+                for n, text in enumerate(("Close starts Monday", "Accruals posted"), start=1)]
+    chat = ConnectorRecord(id="tm-ch1", connector="teams", entity="chat", external_id="19:chat1@unq.gbl.spaces",
+                           title="Audit prep", fields={"topic": "Audit prep", "members": ["alice", "bob"]})
+    return [team, *channels, *messages, chat]
+
+
+def _teams(s: Session) -> None:
+    team, channel = "/teams/TEAM1", "/teams/TEAM1/channels/19:chan2@thread.tacv2"
+    status, body = s.http("GET", "/teams", query={"$filter": "displayName eq 'Finance'"})
+    mine = s.local("list_teams", query="$filter=displayName eq 'Finance'")[1]
+    assert status == 200 and body["value"] == mine["items"] and len(mine["items"]) == 1
+    assert s.http("GET", team) == s.local("get_team", id="TEAM1")
+    status, body = s.http("GET", f"{team}/channels")
+    assert status == 200 and body["value"] == s.local("list_channels", id="TEAM1")[1]["items"]
+    assert s.http("GET", channel) == s.local("get_channel", id="19:chan2@thread.tacv2")
+    status, body = s.http("GET", f"{channel}/messages", query={"$top": 1})
+    assert status == 200 and body["value"] == s.local("list_channel_messages", id="19:chan2@thread.tacv2", max_results=1)[1]["items"]
+    assert s.http("GET", f"{channel}/messages/MSG1") == s.local("get_channel_message", id="MSG1")
+    # Post, reply, edit, delete in a channel; create a channel; post in a chat. Anvil serves
+    # some of Graph's creates 201 and some 200, so the status is either.
+    status, posted = s.http("POST", f"{channel}/messages", {"body": {"contentType": "text", "content": "Reconciliations due"}})
+    mine = s.local("post_channel_message", entity="channel_message", parent="19:chan2@thread.tacv2",
+                   fields={"body": "Reconciliations due", "channel": "19:chan2@thread.tacv2", "team": "TEAM1"})[1]
+    assert status in (200, 201) and posted == mine
+    status, reply = s.http("POST", f"{channel}/messages/MSG1/replies", {"body": {"content": "Confirmed"}})
+    assert status in (200, 201) and reply == s.local("reply_channel_message", id="MSG1", body="Confirmed")[1]
+    assert s.http("PATCH", f"{channel}/messages/MSG2", {"body": {"content": "Accruals posted and reviewed"}})[0] in (200, 204)
+    s.local("update_channel_message", id="MSG2", fields={"body": "Accruals posted and reviewed"})
+    assert s.http("DELETE", f"{channel}/messages/MSG1")[0] in (200, 204)
+    s.local("delete_channel_message", id="MSG1")
+    status, created = s.http("POST", f"{team}/channels", {"displayName": "Audit", "membershipType": "standard"})
+    mine = s.local("create_channel", entity="channel", name="Audit", parent="TEAM1",
+                   fields={"displayName": "Audit", "membership_type": "standard", "team": "TEAM1"})[1]
+    assert status in (200, 201) and created == mine
+    status, chat = s.http("POST", "/chats/19:chat1@unq.gbl.spaces/messages", {"body": {"content": "Files are in"}})
+    mine = s.local("post_chat_message", entity="chat_message", parent="19:chat1@unq.gbl.spaces",
+                   fields={"body": "Files are in", "chat": "19:chat1@unq.gbl.spaces"})[1]
+    assert status in (200, 201) and chat == mine
+    # Errors: a channel that does not exist, a message with no body.
+    assert s.http("GET", f"{team}/channels/19:nope@thread.tacv2") == s.local("get_channel", id="19:nope@thread.tacv2")
+    assert s.http("POST", f"{channel}/messages", {"subject": "no body"}) == s.local(
+        "post_channel_message", entity="channel_message", parent="19:chan2@thread.tacv2",
+        fields={"channel": "19:chan2@thread.tacv2", "team": "TEAM1"})
+    status, _ = s.http("POST", f"{team}/archive")
+    assert status >= 400
+
+
+@needs_anvil
+def test_teams_parity_through_the_vendor_graph_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("teams", _teams_records(), cache, tmp_path, _teams)
+    session.landing.settle()
