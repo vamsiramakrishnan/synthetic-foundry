@@ -122,13 +122,33 @@ def check(world: World, expansion: Expansion, responses: Sequence[ReaderResponse
                     fact = facts[fid]
                     expected = references.render_value(fact, locale=locale_of(world.recipe), presentation=presentation_of(world.recipe))
                     if (claim.kind == fact.kind and claim.subject == original.subjects.get(fid, fact.subject)
-                            and claim.value == expected):
+                            and (claim.value == expected or claim.value in _accepted(fact, world))):
                         recovered.add(fid)
         missing = set(original.required_fact_ids) - recovered
         findings.append(ReaderFinding(request_id=rid, recovered_fact_ids=tuple(sorted(recovered)),
                                       missing_fact_ids=tuple(sorted(missing)), invalid_quotes=invalid,
                                       passed=response is not None and not missing and not invalid))
     return tuple(findings)
+
+
+def _accepted(fact: CanonicalFact, world: World) -> tuple[str, ...]:
+    """Every correct reader spelling of *fact* other than its own, or ``()``
+    under an exact spelling, where only the exact value is the fact."""
+    from ..figures import rules_for, spellings_of
+
+    presentation = presentation_of(world.recipe)
+    if rules_for(presentation) is None:
+        return ()
+    return spellings_of(fact, locale=locale_of(world.recipe), presentation=presentation)
+
+
+def _presentation_view(presentation: Any) -> dict[str, Any]:
+    """The profile as the check context digests it: the spelling knob only
+    when it is not exact, so every earlier plan's context is unchanged."""
+    view = asdict(presentation)
+    if view.get("spelling") == "exact":
+        view.pop("spelling")
+    return view
 
 
 CONTRACT: Literal["reader/v2"] = "reader/v2"
@@ -152,6 +172,23 @@ class ReaderTarget(Model):
     critical: bool
     temporal_cutoff: str | None
     observer: str
+    accepted_values: tuple[str, ...] = ()
+    """Under a reader spelling, every other spelling of the fact a reader may
+    have copied: a sentence spells its figures together, so the passage can
+    print "AUD 1.0m adverse" where the fact alone reads "AUD 958k adverse".
+    Only correct roundings (`figures.spellings_of`), fixed when the plan is
+    made so a recorded review re-checks without the world. Left off the wire
+    when empty, so a plan under an exact spelling digests as it always did."""
+
+    @model_serializer(mode="wrap")
+    def _legacy_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = handler(self)
+        if not self.accepted_values:
+            data.pop("accepted_values", None)
+        return data
+
+    def matches(self, value: str) -> bool:
+        return value == self.expected_value or value in self.accepted_values
 
 
 class ReaderPlan(Model):
@@ -370,6 +407,7 @@ def plan(world: World, *, reader_id: str, critical_fact_ids: Sequence[str] = (),
                 request_id=rid, fact=facts[fid], subject=section.subjects.get(fid, facts[fid].subject),
                 expected_value=references.render_value(facts[fid], locale=locale_of(world.recipe),
                                                        presentation=presentation_of(world.recipe)),
+                accepted_values=_accepted(facts[fid], world),
                 critical=fid in critical, temporal_cutoff=section.cutoff, observer=section.observer,
             ))
     if not targets:
@@ -377,7 +415,7 @@ def plan(world: World, *, reader_id: str, critical_fact_ids: Sequence[str] = (),
     targets_digest = content_key(CONTRACT, tuple(target.model_dump(mode="json") for target in targets))
     context_digest = content_key(
         world.seed, configuration, asdict(locale_of(world.recipe)),
-        asdict(presentation_of(world.recipe)),
+        _presentation_view(presentation_of(world.recipe)),
         tuple((s.request_id, s.text, sorted(s.allowed), sorted(s.required), s.subjects,
                s.cutoff, s.observer) for s in sections),
         tuple(instance.model_dump(mode="json") for instance in instances), critical,
@@ -465,7 +503,7 @@ def _evaluate(planned: ReaderPlan, responses: Sequence[ReaderResponse], *,
                         continue
                     for target in expected:
                         if (claim.kind == target.fact.kind and claim.subject == target.subject
-                                and claim.value == target.expected_value):
+                                and target.matches(claim.value)):
                             recovered.add(target.fact.id)
         missing = {target.fact.id for target in expected} - recovered
         passed = bool(bound and expected and not missing and not invalid)

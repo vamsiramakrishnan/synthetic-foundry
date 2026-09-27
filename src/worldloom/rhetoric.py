@@ -14,7 +14,7 @@ So the moves are data, in three places, first match wins:
 
 1. ``SectionPlan.moves`` / a pack's ``sections[].moves``: what an authored
    doctype declares for one of its own sections;
-2. ``_data/rhetoric/moves@1.json`` ``doctypes``: what the shipped catalogue
+2. ``_data/rhetoric/moves@2.json`` ``doctypes``: what the shipped catalogue
    declares for an engine type, by section heading (``"*"`` for every section
    of the type);
 3. the same file's ``roles``: a default per semantic role, so a section
@@ -67,7 +67,7 @@ __all__ = [
 #: The shipped catalogue. Versioned in its name for the reason every file under
 #: ``_data/`` is: what it says is part of what a reader-grade build asks, and a
 #: change to it is a new version rather than an edit in place.
-CATALOGUE = "_data/rhetoric/moves@1.json"
+CATALOGUE = "_data/rhetoric/moves@2.json"
 
 
 @dataclass(frozen=True)
@@ -186,6 +186,10 @@ def _matches(kind: str, prefixes: Sequence[str]) -> int | None:
 #: than every figure the section holds.
 _LEADS = frozenset({"headline", "decision"})
 
+#: Moves whose facts are told in order ("first", "then"): a leftover fact
+#: joins another move where the section has one.
+_SEQUENCES = frozenset({"chronology", "procedure"})
+
 
 def plan(
     artifact_type: str,
@@ -240,7 +244,12 @@ def plan(
         # The last move that introduces facts takes what nobody claimed: it is
         # the body of the section (a comparison, an attribution), where a
         # stray figure reads as detail rather than diluting the headline.
-        last = next((i for i in range(len(built) - 1, -1, -1) if not built[i][1]), None)
+        # Not a sequence, though, where one exists besides: a chronology
+        # walks its facts "first, then, finally", and a context figure
+        # handed to it is read as a step in the story.
+        introducing = [i for i in range(len(built) - 1, -1, -1) if not built[i][1]]
+        last = next((i for i in introducing if built[i][0].name not in _SEQUENCES),
+                    introducing[0] if introducing else None)
         if last is None:
             built.insert(0, (MoveSpec(name="headline"), False, leftover))
         else:

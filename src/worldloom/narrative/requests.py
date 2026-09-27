@@ -76,7 +76,7 @@ class RequestMove(Model):
 #: Fields added after the request digest was fixed, and left out of it while
 #: empty, so a request that carries none digests exactly as it always did and
 #: every earlier ledger replays.
-ADDITIVE_FIELDS = ("moves", "display")
+ADDITIVE_FIELDS = ("moves", "display", "recurrence", "restated")
 
 
 class NarrativeRequest(Model):
@@ -143,6 +143,18 @@ class NarrativeRequest(Model):
     """Subject name to how a reader would name it in a sentence, where the two
     differ: a service recorded as ``inventory-valuation`` is "the inventory
     valuation service" in prose. Advisory, like terminology."""
+    recurrence: dict[str, int] = Field(default_factory=dict)
+    """Allowed fact ID to how many earlier sections of the corpus (in the
+    order the compiler walks them) were given a fact of its kind. A kind a
+    whole document family cites is stated a different way each time it comes
+    back: the offline narrator walks its alternatives by this count. Advisory
+    and never shown to a writer; reader-grade only, and left out of the
+    digest while empty, like ``moves``."""
+    restated: list[str] = Field(default_factory=list)
+    """Allowed facts an earlier section of the same document already carries,
+    where this section has facts of its own to add. Still allowed (a writer
+    may refer back); the offline narrator leaves them to the section that
+    said them. Reader-grade only, out of the digest while empty."""
     fact_digest: str = ""
     """Content address of the complete request and supplied fact records.
 

@@ -46,7 +46,10 @@ figures" appendix plus the ids in the file's custom properties), `layout`
 (`plain`, or `designed`: a real cover, keep-with-next, whole short tables,
 widow and orphan control), `deck` (`ledger` tables, or a `presenter` deck of
 takeaway titles and argument bullets), `notes` (talk track or provenance)
-and `slide_budget`. A new doctype gets all of them by being rendered, with
+and `slide_budget`; a sixth, `spelling`, decides how a figure reads in a
+sentence (`exact`, or `reader`: rounded per magnitude, one precision per
+sentence, `k` not "thousands", `nil` for a zero, recorded values in words).
+A new doctype gets all of them by being rendered, with
 nothing to declare; a doctype that must keep its citations on the page is an
 `overrides` entry, not a new profile.
 

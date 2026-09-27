@@ -54,6 +54,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
+from . import figures as _figures
 from .cascade import CascadeModel, Finding, load, refuse
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -67,6 +68,7 @@ __all__ = [
     "DEFAULT",
     "NOTES",
     "SLIDE_BUDGETS",
+    "SPELLINGS",
     "PROFILES",
     "READER",
     "Presentation",
@@ -180,6 +182,19 @@ SLIDE_BUDGETS = ("unbounded", "board", "briefing")
 #: hard stop, which is what every deck before budgets had.
 SLIDE_BUDGET_SLIDES: dict[str, int] = {"unbounded": 60, "board": 24, "briefing": 14}
 
+#: How a figure is spelled inside a sentence. ``exact`` is the ledger's own
+#: figure, or its exact promotion under ``magnitudes: scaled``, which is what
+#: every rendering before this knob printed: "AUD 93.421m" two lines under
+#: "AUD 617.2m", "AUD 958 thousands adverse", "AUD 0 thousands". ``reader``
+#: rounds money to the places a memo prints per magnitude, keeps one
+#: precision per unit within a sentence, writes "k" and "nil" and "%", and
+#: spells dates and recorded enum values in words. The rules are data
+#: (``_data/presentation/spelling.json``, read by `figures`), so a house
+#: style is a rulebook entry, not a renderer change; a rounding is a
+#: spelling and never a value, and `figures.agrees` is how every check that
+#: compares a reader's copy against the ledger accepts it.
+SPELLINGS: tuple[str, ...] = _figures.spellings()
+
 
 @dataclass(frozen=True)
 class Presentation:
@@ -200,6 +215,7 @@ class Presentation:
     deck: str = "ledger"
     notes: str = "provenance"
     slide_budget: str = "unbounded"
+    spelling: str = "exact"
 
     #: Doctypes this profile treats differently from its own defaults, by
     #: artifact type. Present because "a reader profile" is rarely uniform: a
@@ -256,6 +272,7 @@ READER = Presentation(
     deck="presenter",
     notes="talk",
     slide_budget="board",
+    spelling="reader",
 )
 
 #: Citations in a sibling file rather than in the document or nowhere: the shape
@@ -272,6 +289,7 @@ FILING = Presentation(
     deck="presenter",
     notes="talk",
     slide_budget="board",
+    spelling="reader",
 )
 
 PROFILES: dict[str, Presentation] = {
@@ -372,6 +390,7 @@ class PresentationSeed(CascadeModel):
     deck: str = "ledger"
     notes: str = "provenance"
     slide_budget: str = "unbounded"
+    spelling: str = "exact"
     # RUF012 cannot see that CascadeModel is a pydantic BaseModel, which
     # copies mutable defaults per instance; a real shared-dict hazard
     # needs a plain class attribute, and this is a validated field.
@@ -397,6 +416,7 @@ KNOBS: dict[str, tuple[str, ...]] = {
     "deck": DECKS,
     "notes": NOTES,
     "slide_budget": SLIDE_BUDGETS,
+    "spelling": SPELLINGS,
 }
 
 #: The knobs a recipe carried before provenance placement, layout and decks

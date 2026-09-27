@@ -8,13 +8,19 @@ fifty-two slides were tables, and nothing in its notes was sayable.
 
 This deck is built for the presenter profile (``deck: presenter``):
 
-* **Takeaway titles.** A slide's title is its point, written from the facts
-  it shows: the section's first sentence that carries a current figure, cut
-  to its claim ("Revenue finished AUD 13.3m adverse against budget"), or for
-  a chart the row the chart is about ("The widest revenue gap is Food, at AUD
-  10.2m adverse"). No title is typed here: each is a sentence the narrator
-  already wrote under claim validation, or a pack template filled with a cell
-  the chart plots.
+* **Takeaway titles.** A slide's title is its point, built from the lead
+  fact of the slide's lead move: the clause of the section that carries that
+  fact, when it is a claim ("Close for the period is now final"), else the
+  fact itself in a pack template ("Revenue finished AUD 13.3m adverse against
+  plan", ``render.deck.takeaway.fact.*``), or for a chart the row the chart
+  is about ("The widest revenue gap is Food, at AUD 10.2m adverse"). A
+  lead-in that points at a claim without making one ("What the committee
+  needs to note", ``render.deck.generic_titles``) is never a title, and
+  `lint_titles` refuses any content slide title that carries no fact.
+* **An agenda of the argument.** The agenda lists the sections the argument
+  runs through, one line per lead move in order (``render.deck.agenda.move.*``:
+  where the month landed, which division carried it, what drove it), not the
+  slide titles that follow it.
 * **Bullets that are the argument.** One bullet per paragraph of the
   section's prose (one per move), each the paragraph's first figure-bearing
   sentence with its connective dropped.
@@ -24,7 +30,13 @@ This deck is built for the presenter profile (``deck: presenter``):
 * **Talk-track notes.** What the presenter says: the point, the evidence
   behind it and the line into the next slide, from the notes moves the
   rhetoric catalogue declares and the prompts pack texts
-  ``render.deck.notes.<move>``. No fact id appears in a note.
+  ``render.deck.notes.<move>``. An alternative is not used twice in one deck
+  while another is unused, and the line into the next slide says why it
+  follows: the relation between this slide's lead move and the next one's
+  (``render.deck.notes.relation.<from>.<to>``, else ``...relation.to.<to>``),
+  so a headline hands on to its attribution as "which division carried it"
+  rather than "Next:". `prose_quality.notes_repetition` is the measure. No
+  fact id appears in a note.
 * **A slide budget** from the profile (`Presentation.slide_cap`): the closing
   slide is reserved, and the appendix takes what the budget leaves.
 
@@ -47,7 +59,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from . import Context
     from .pptx import _Deck
 
-__all__ = ["argument", "build", "chart_takeaway", "takeaway"]
+__all__ = ["argument", "build", "chart_takeaway", "lint_titles", "takeaway"]
 
 _BULLETS = 4
 #: A lead-in that only points at what follows its colon ("The remediation now
@@ -151,40 +163,97 @@ def evidence(raw: str, spelled: str, exclude: str, limit: int = 2) -> list[str]:
         for r, s in paragraph:
             cleaned = _clean(s)
             if (references.referenced(r) and exclude.rstrip(".").lower() not in cleaned.lower()
-                    and cleaned not in out):
+                    and cleaned not in out and not (": " in cleaned and _generic(cleaned.partition(": ")[0]))):
                 out.append(cleaned)
     return out[:limit]
 
 
-def takeaway(raw: str, spelled: str, fallback: str, facts: Mapping[str, CanonicalFact] | None = None) -> str:
-    """A slide title that is the slide's point: the first sentence of the
-    section that carries a current figure, cut to its claim. A sentence that
-    only retells a superseded belief is history, not a point."""
+def _generic_titles() -> tuple[str, ...]:
+    """Lead-ins that point at a claim without making one, from the pack."""
+    from ... import packkit
+
+    try:
+        raw = packkit.template("render.deck.generic_titles")
+    except KeyError:
+        return ()
+    return tuple(piece.strip().lower() for piece in raw.split(" | ") if piece.strip())
+
+
+def _generic(text: str) -> bool:
+    lowered = text.strip().lower()
+    return any(lowered.startswith(phrase) for phrase in _generic_titles())
+
+
+#: A clause shorter than this is a figure, not a claim: "AUD 13.3m adverse".
+_CLAIM_WORDS = 4
+
+
+def _clauses(raw: str, spelled: str) -> list[tuple[str, str]]:
+    """A sentence's clauses around a colon, raw and spelled side by side; the
+    whole sentence when the two do not split alike (a value with a colon)."""
+    raw_parts, spelled_parts = raw.split(": "), spelled.split(": ")
+    if len(raw_parts) != len(spelled_parts):
+        return [(raw, spelled)]
+    return list(zip(raw_parts, spelled_parts, strict=True))
+
+
+def takeaway(raw: str, spelled: str, fallback: str, facts: Mapping[str, CanonicalFact] | None = None,
+             fact_title: Any = None, titled: set[str] | None = None) -> str:
+    """A slide title that is the slide's point, built from its lead fact.
+
+    The lead fact is the first current fact the section cites. The title is
+    the clause that carries it when that clause is a claim; when it is only a
+    figure ("The group's position in one line: AUD 13.3m adverse") the title
+    is the fact itself in the pack's words (*fact_title*). A sentence that only
+    retells a superseded belief is history, not a point. A fact that already
+    titles an earlier slide (*titled*, updated here) does not title another:
+    two slides saying "Revenue finished AUD 13.3m adverse" are one slide.
+    """
     from ...narrative import references
+
+    titled = set() if titled is None else titled
 
     for paragraph in _pairs(raw, spelled):
         for raw_sentence, sentence in paragraph:
             ids = references.referenced(raw_sentence)
             if not ids:
                 continue
-            if facts is not None and all(getattr(facts.get(i), "valid_to", None) is not None for i in ids):
+            current = [i for i in ids if (facts is None or getattr(facts.get(i), "valid_to", None) is None)
+                       and i not in titled]
+            if not current:
                 continue
-            # "The month missed plan: revenue finished AUD 13.3m adverse" is
-            # titled by its figure; "The first theory did not survive the
-            # evidence: ERP logs show ..." by its claim.
-            head, _, tail = sentence.partition(": ")
-            if tail and any(ch.isdigit() for ch in tail) and len(tail) > 24:
-                claim = tail
-            elif tail and len(head) > 24 and not head.endswith(_POINTERS):
-                claim = head
-            elif tail:
-                claim = tail
-            else:
-                claim = sentence
-            claim = _clean(claim).rstrip(".")
-            claim = claim[:1].upper() + claim[1:]
-            return _shorten(claim, _TITLE_CHARS).rstrip(".")
+            for raw_clause, clause in _clauses(raw_sentence, sentence):
+                if not references.referenced(raw_clause):
+                    continue
+                claim = _clean(clause).rstrip(".")
+                if len(claim.split()) >= _CLAIM_WORDS and not _generic(claim):
+                    titled.update(references.referenced(raw_clause))
+                    claim = claim[:1].upper() + claim[1:]
+                    return _shorten(claim, _TITLE_CHARS).rstrip(".")
+                break
+            built = fact_title(current[0]) if fact_title is not None else ""
+            if built:
+                titled.add(current[0])
+                return built
     return fallback
+
+
+def lint_titles(titles: list[tuple[str, list[str]]]) -> list[str]:
+    """Findings on a deck plan's content slide titles, as sentences to act on.
+
+    *titles* pairs each content slide's title with the values of the facts it
+    shows, as spelled. A title must carry one of them (a figure, a recorded
+    value, a name the fact is about): a title with none is a label, not a
+    point. And no title may be a lead-in the pack lists as generic.
+    """
+    findings: list[str] = []
+    for title, values in titles:
+        lowered = title.lower()
+        if _generic(title):
+            findings.append(f"{title!r} is a lead-in, not a takeaway; title the slide with the claim it points at")
+        elif not any(value and value.lower() in lowered for value in values):
+            findings.append(f"{title!r} carries none of the slide's facts; build the title from its lead fact")
+    return findings
 
 
 def chart_takeaway(chart: Any, table: Table, ctx: Context, presentation: Any) -> str:
@@ -221,23 +290,70 @@ def chart_takeaway(chart: Any, table: Table, ctx: Context, presentation: Any) ->
 
 
 class Talk:
-    """Speaker notes as a talk track: point, evidence, transition."""
+    """Speaker notes as a talk track: point, evidence, transition.
 
-    def __init__(self, deck: _Deck, artifact_type: str, mode: str = "talk") -> None:
+    One per deck, because the no-repeat rule is a deck's: an alternative of a
+    pack text is not used twice while another is unused, walked from a start
+    chosen by content key, so the same deck always says the same thing and
+    two slides never open their notes alike while the pack has another way.
+    """
+
+    def __init__(self, deck: _Deck, artifact_type: str, mode: str = "talk", names: tuple[str, ...] = ()) -> None:
         from ... import rhetoric
 
+        self.names = tuple(sorted((n for n in names if n[:1].isupper()), key=len, reverse=True))
+        """Names that open a sentence as themselves: "Food carried the miss"
+        stays "Food" after "the point is that"."""
         self.deck = deck
         self.mode = mode
         """``talk`` (what the presenter says) or ``provenance`` (where the
         slide's content came from), from the profile's `notes` knob."""
         self.moves = rhetoric.notes_moves(artifact_type)
+        self.used: dict[str, set[int]] = {}
 
-    @staticmethod
-    def _lower(text: str) -> str:
-        return text if text[:2].isupper() else text[:1].lower() + text[1:]
+    def _lower(self, text: str) -> str:
+        if text[:2].isupper() or any(text.startswith(name) for name in self.names):
+            return text
+        return text[:1].lower() + text[1:]
+
+    def say(self, key: str, seed: str, **values: Any) -> str:
+        """One alternative of *key*, filled, not yet used in this deck if any
+        alternative is still unused."""
+        from ... import packkit
+        from ...packkit.models import PLACEHOLDER
+
+        try:
+            raw = packkit.template(key)
+        except KeyError:
+            return ""
+        options = [piece.strip() for piece in raw.split(" | ") if piece.strip()]
+        if not options:
+            return ""
+        used = self.used.setdefault(key, set())
+        if len(used) >= len(options):
+            used.clear()
+        start = int(content_key(key, seed), 16) % len(options)
+        index = next((start + step) % len(options) for step in range(len(options))
+                     if (start + step) % len(options) not in used)
+        used.add(index)
+        return PLACEHOLDER.sub(lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0),
+                               options[index])
+
+    def bridge(self, move: str, following: str, following_move: str, seed: str) -> str:
+        """The line into the next slide: why it follows, from the relation
+        between this slide's lead move and the next one's."""
+        target = self._lower(following).rstrip(".")
+        keys = [f"render.deck.notes.relation.{move}.{following_move}",
+                f"render.deck.notes.relation.from.{move}",
+                f"render.deck.notes.relation.to.{following_move}"] if following_move else []
+        for key in [*keys, "render.deck.notes.transition"]:
+            line = self.say(key, seed, next=target)
+            if line:
+                return line
+        return ""
 
     def notes(self, title: str, point: str, evidence: list[str], following: str, *,
-              said: str = "") -> list[str]:
+              said: str = "", move: str = "", following_move: str = "") -> list[str]:
         """The note for one slide. *said* replaces the point where the slide
         has something to say rather than a claim (the opening, the close)."""
         lines: list[str] = []
@@ -246,23 +362,45 @@ class Talk:
             source = f"{self.deck.doc.title} ({self.deck.doc.reference})"
             return [_text("render.deck.notes.provenance", seed, title=title, source=source)
                     or f"{title}: from {source}."]
-        for move in self.moves:
-            if move == "point":
+        for note_move in self.moves:
+            if note_move == "point":
                 if said:
                     lines.append(said)
                 elif point:
-                    lines.append(_text("render.deck.notes.point", seed, point=point.rstrip("."),
-                                       point_lower=self._lower(point).rstrip(".")))
-            elif move == "evidence" and evidence:
-                lines.append(_text("render.deck.notes.evidence", seed, evidence=" ".join(evidence)))
-            elif move == "transition" and following:
-                lines.append(_text("render.deck.notes.transition", seed, next=self._lower(following).rstrip(".")))
+                    lines.append(self.say("render.deck.notes.point", seed, point=point.rstrip("."),
+                                          point_lower=self._lower(point).rstrip(".")))
+            elif note_move == "evidence" and evidence:
+                joined = " ".join(evidence)
+                lines.append(self.say("render.deck.notes.evidence", seed, evidence=joined,
+                                      evidence_lower=self._lower(joined)))
+            elif note_move == "transition" and following:
+                lines.append(self.bridge(move, following, following_move, seed))
         return [line for line in lines if line]
 
 
-def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> None:
-    """Fill *deck* as a presenter's deck of *ir*, within the profile's budget."""
+def _lead_move(artifact_type: str, section: ArtifactSection) -> str:
+    """The first move a section makes, which is what its slide argues."""
+    from ... import rhetoric
+
+    specs = rhetoric.declared(artifact_type, section.heading, section.semantic_role or "")
+    return specs[0].name if specs else ""
+
+
+def _display(name: str) -> str:
+    """A subject a reader names: a slug (``inventory-valuation``) as words."""
+    if name and name == name.lower() and "-" in name and " " not in name:
+        words = name.replace("-", " ")
+        return f"the {words}" if words.endswith("service") else f"the {words} service"
+    return name
+
+
+def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> list[dict[str, Any]]:
+    """Fill *deck* as a presenter's deck of *ir*, within the profile's budget.
+
+    Returns the slide plan it drew, so a check can read what each slide was
+    built from."""
     from ...narrative import references
+    from ...narrative.composer import _parse, measure_noun
     from .pptx import (
         _LAYOUT_CONTENT,
         _LAYOUT_SECTION,
@@ -272,8 +410,10 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> None:
 
     doc = deck.doc
     facts = ctx.facts
-    talk = Talk(deck, doc.artifact_type, presentation.notes)
     irs = {item.id: item for item in ctx.world.artifact_irs}
+    names = ctx.world.entity_names()
+    talk = Talk(deck, doc.artifact_type, presentation.notes, tuple(names.values()))
+    company = ctx.world.company.id
     members: dict[str, ArtifactIR] = {}
     for family in ctx.families:
         if ir.id not in family.roles():
@@ -286,10 +426,53 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> None:
     def spell(section: ArtifactSection) -> str:
         return references.substitute(section.body or "", facts, locale=ctx.locale, presentation=presentation)
 
+    def alone(fact: CanonicalFact) -> str:
+        return references.render_value(fact, locale=ctx.locale, presentation=presentation)
+
+    def fact_title(fact_id: str) -> str:
+        """The lead fact as a claim, in the pack's words."""
+        fact = facts.get(fact_id)
+        if fact is None:
+            return ""
+        subject = _display(names.get(fact.subject, ""))
+        noun = measure_noun(fact.kind)
+        phrase = noun if fact.subject == company or not subject else f"{subject} {noun}"
+        value = alone(fact)
+        if fact.value is None:
+            if len(value.split()) >= _CLAIM_WORDS:
+                return _shorten(value[:1].upper() + value[1:], _TITLE_CHARS).rstrip(".")
+            key = "render.deck.takeaway.fact.text"
+        else:
+            facet = _parse(fact.kind)[2] or "value"
+            key = f"render.deck.takeaway.fact.{facet}"
+            if facet == "variance":
+                key += ".adverse" if fact.value.amount < 0 else ".favourable"
+        text = _text(key, fact_id, subject=phrase, value=value) or _text(
+            "render.deck.takeaway.fact.value", fact_id, subject=phrase, value=value)
+        return _shorten(text[:1].upper() + text[1:], _TITLE_CHARS).rstrip(".") if text else ""
+
+    def shown(section_raw: str) -> list[str]:
+        """What the slide's facts look like on it: their spellings, alone and
+        rounded, their recorded words, and the names they are about."""
+        from ...figures import spellings_of
+
+        values: list[str] = []
+        for fid in references.referenced(section_raw):
+            fact = facts.get(fid)
+            if fact is None:
+                continue
+            values.append(alone(fact).rstrip("."))
+            values.extend(spellings_of(fact, locale=ctx.locale, presentation=presentation))
+            if fact.value is None and fact.text_value:
+                values.append(" ".join(alone(fact).split()[:4]))
+            values.append(_display(names.get(fact.subject, "")))
+        return [v for v in values if v]
+
     # The slides, planned before any is drawn, so every note can name the
     # slide that follows it and the budget can be kept.
     plan: list[dict[str, Any]] = []
     titles_seen: set[str] = set()
+    titled: set[str] = set()
 
     def add(item: dict[str, Any]) -> None:
         if item["title"] in titles_seen:
@@ -297,17 +480,31 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> None:
         titles_seen.add(item["title"])
         plan.append(item)
 
-    def argue(section: ArtifactSection) -> None:
+    def argue(section: ArtifactSection, artifact_type: str) -> None:
         raw, spelled = section.body or "", spell(section)
         bullets = argument(raw, spelled)
         if not bullets:
             return
-        title = takeaway(raw, spelled, section.heading, facts)
-        add({"kind": "argument", "title": title, "bullets": bullets,
-             "evidence": evidence(raw, spelled, title), "section": section})
+        title = takeaway(raw, spelled, section.heading, facts, fact_title, titled)
+        # A bullet that only restates the title, or leads with a lead-in the
+        # pack calls generic, says nothing the title has not; the argument's
+        # other bullets carry the slide.
+        kept = [b for b in bullets if not (_generic(b.partition(": ")[0] if ": " in b else b)
+                                           or (title.lower() in b.lower() and len(b) - len(title) < 60))]
+        bullets = kept or bullets
+        values = shown(raw)
+        if lint_titles([(title, values)]):
+            # The clause read as a claim and carries no fact of its own: the
+            # lead fact titles the slide instead.
+            lead = next((i for i in references.referenced(raw) if facts.get(i) is not None
+                         and facts[i].valid_to is None), None)
+            title = (fact_title(lead) or title) if lead else title
+        add({"kind": "argument", "title": title, "bullets": bullets, "values": values,
+             "evidence": evidence(raw, spelled, title), "section": section,
+             "move": _lead_move(artifact_type, section)})
 
     for _heading, _body, section in _visible_prose(ir):
-        argue(section)
+        argue(section, doc.artifact_type)
 
     workbook = members.get("finance_workbook")
     memo = members.get("cfo_variance_memo")
@@ -323,40 +520,51 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> None:
             title = chart_takeaway(chart, section.table, ctx, presentation)
             if index == 0 and attribution is not None:
                 raw, spelled = attribution.body or "", spell(attribution)
-                add({"kind": "two", "title": title, "bullets": argument(raw, spelled)[:3],
-                     "evidence": evidence(raw, spelled, title), "chart": chart, "table": section.table})
+                add({"kind": "two", "title": title, "bullets": argument(raw, spelled)[:3], "values": [title],
+                     "evidence": evidence(raw, spelled, title), "chart": chart, "table": section.table,
+                     "move": "attribution"})
             else:
-                add({"kind": "chart", "title": title, "chart": chart, "table": section.table,
-                     "evidence": [f"{chart.title}, as the workbook plots it."]})
+                add({"kind": "chart", "title": title, "chart": chart, "table": section.table, "values": [title],
+                     "evidence": [f"{chart.title}, as the workbook plots it."], "move": "comparison"})
     for section in memo_sections:
         if section is attribution or section.semantic_role == "decision":
             continue
-        argue(section)
+        argue(section, "cfo_variance_memo")
     for section in [s for s in (rca.sections if rca else []) if s.body and not s.hidden][:2]:
-        argue(section)
+        argue(section, "incident_rca")
     for section in memo_sections:
         if section.semantic_role == "decision":
-            argue(section)
+            argue(section, "cfo_variance_memo")
 
     # The closing slide is always given; the appendix gets what the budget
     # leaves. Title, agenda and closing are three slides of it.
     body = plan[:max(0, presentation.slide_cap - 3)]
     closing_title = _text("render.deck.closing.title", doc.title) or "Questions and next steps"
     titles = [item["title"] for item in body] + [closing_title]
+    moves = [str(item.get("move", "")) for item in body] + ["close"]
 
     opening = _text("render.deck.notes.opening", doc.title, genre=doc.genre.lower(), period=doc.period)
-    deck.title_slide_notes = talk.notes(doc.title, "", [], "the agenda", said=opening)
+    deck.title_slide_notes = talk.notes(doc.title, "", [], "", said=opening)
     deck.title()
-    agenda_title = _text("render.deck.agenda.title", doc.title) or "What this deck covers"
+    # The agenda is the argument's sections in order, one line per lead move,
+    # never the slide titles that follow it.
+    agenda: list[str] = []
+    for item in body:
+        line = _text(f"render.deck.agenda.move.{item.get('move', '')}", doc.title) or (
+            item["section"].heading if item.get("section") is not None else "")
+        if line and line not in agenda:
+            agenda.append(line)
+    agenda_title = _text("render.deck.agenda.title", doc.title) or "Agenda"
     slide = deck.slide(_LAYOUT_CONTENT, agenda_title, talk.notes(
-        agenda_title, "", [], titles[0] if titles else "", said=_text("render.deck.notes.agenda", doc.title)))
+        agenda_title, "", [], titles[0] if titles else "", said=_text("render.deck.notes.agenda", doc.title),
+        move="agenda", following_move=moves[0] if moves else ""))
     if slide is not None:
-        deck._bullets(deck._body_placeholder(slide).text_frame,
-                      [_shorten(item["title"], 80) for item in body][:6], 18)
+        deck._bullets(deck._body_placeholder(slide).text_frame, agenda[:6], 18)
 
     for position, item in enumerate(body):
         following = titles[position + 1] if position + 1 < len(titles) else ""
-        notes = talk.notes(item["title"], item["title"], item.get("evidence", []), following)
+        notes = talk.notes(item["title"], item["title"], item.get("evidence", []), following,
+                           move=str(item.get("move", "")), following_move=moves[position + 1])
         if item["kind"] == "argument":
             slide = deck.slide(_LAYOUT_CONTENT, item["title"], notes)
             if slide is not None:
@@ -394,4 +602,5 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> None:
             if deck.room() < 1:
                 break
             deck.table(heading, table, source, layout=_LAYOUT_TITLE_ONLY, notes=[
-                _text("render.deck.notes.schedule", heading, schedule=heading, source=source)], max_chunks=1)
+                talk.say("render.deck.notes.schedule", heading, schedule=heading, source=source)], max_chunks=1)
+    return body

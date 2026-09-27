@@ -34,6 +34,21 @@ LOCKED_POLICY_PREFIXES: tuple[str, ...] = ("connectors.serving.",)
 #: prompts pack the operator chooses still may, knowing it forfeits parity.
 LOCKED_PROMPT_PREFIXES: tuple[str, ...] = ("rater.",)
 
+#: Prompts a pack may add rather than only override: the offline narrator's
+#: phrase bank, which it looks up by fact kind (``narrative.prose.fact.<kind>``,
+#: ``...implication.kind.<kind>``, ``...noun.<measure>``) and does without when
+#: a key is absent. An industry's sentences for its own fact kinds are exactly
+#: such keys, and the default pack cannot list every kind an engine mints. A
+#: new key is still linted: it may fill only the placeholders the narrator
+#: supplies (`PROSE_PLACEHOLDERS`).
+OPTIONAL_PROMPT_PREFIXES: tuple[str, ...] = ("narrative.prose.",)
+
+#: Every placeholder the offline narrator fills in a phrase-bank sentence.
+PROSE_PLACEHOLDERS = frozenset({
+    "actual", "adverse", "budget", "context", "count", "forecast", "held", "label", "measure", "missed",
+    "name", "noun", "prior", "ref", "step", "subject", "target", "total", "value", "values", "variance", "worst",
+})
+
 
 class IndustryExample(CascadeModel):
     """The example company a console or a preset starts from for this industry."""
@@ -159,6 +174,13 @@ def lint_prompts(body: PromptsPack, context: LintContext, *, where: str = "texts
             findings.append(f"{where}.{key}: empty; delete the key to keep the shipped text")
             continue
         if default is not None:
+            if key not in default.texts and key.startswith(OPTIONAL_PROMPT_PREFIXES):
+                extra = placeholders(text) - PROSE_PLACEHOLDERS
+                if extra:
+                    findings.append(f"{where}.{key}: introduces {', '.join('{' + p + '}' for p in sorted(extra))};"
+                                    f" the narrator fills only {', '.join('{' + p + '}' for p in sorted(PROSE_PLACEHOLDERS))}")
+                findings.extend(_term_findings(f"{where}.{key}", text, known_terms))
+                continue
             if key not in default.texts:
                 close = sorted(k for k in default.texts if k.split(".")[0] == key.split(".")[0])[:5]
                 findings.append(f"{where}.{key}: no such prompt key" + (f"; this family has {', '.join(close)}" if close else ""))

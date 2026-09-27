@@ -103,6 +103,23 @@ def render_value(
     minus are table conventions, and a sentence that ended ``AUD (1,234)`` would
     be a table cell that had wandered into prose.
     """
+    if getattr(presentation, "spelling", "exact") != "exact":
+        # A reader spelling rounds and words a figure; `figures` owns those
+        # rules, and a fact spelled alone is a one-reference sentence.
+        from ..figures import spell_one
+
+        return spell_one(fact, locale=locale, presentation=presentation)
+    return exact_value(fact, locale=locale, presentation=presentation)
+
+
+def exact_value(
+    fact: CanonicalFact,
+    *,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
+) -> str:
+    """The fact as the ledger states it (or its exact promotion under
+    ``magnitudes: scaled``): ``render_value`` under an exact spelling."""
     if fact.value is None:
         return fact.text_value or ""
 
@@ -119,7 +136,11 @@ def render_value(
         return f"{locale.spell(amount, 0)} bps {'adverse' if amount < 0 else 'favourable'}"
     if _is_money(unit):
         currency, _, scale = unit.partition("_")
-        if presentation.magnitudes == "scaled":
+        if presentation.magnitudes == "scaled" and scale == "thousands":
+            # `suffix_for` names a promotion relative to a ledger held in
+            # thousands (a promotion by a thousand is `m`); a ledger held in
+            # millions promoted by a thousand is billions, not `m`, so a unit
+            # the labels do not fit keeps the ledger wording.
             # The one place a profile touches a figure, and the reason
             # `presentation.review` re-multiplies every promotion before it
             # will accept a profile: `AUD 5,372,800 thousands` is what the
@@ -227,6 +248,14 @@ def substitute(
     corpus's paragraphs re-spell under a locale exactly as its tables do — which
     is only true because the model was never allowed to type the number.
     """
+
+    if getattr(presentation, "spelling", "exact") != "exact":
+        # A reader spelling decides a figure's precision with the rest of its
+        # sentence, so the references are spelled together, in order.
+        from ..figures import spell_all
+
+        spelled = iter(spell_all(text, facts.get, locale=locale, presentation=presentation))
+        return REFERENCE.sub(lambda m: next(spelled) or f"[missing {m.group('id')}]", text)
 
     def replace(match: re.Match[str]) -> str:
         fact = facts.get(match.group("id"))

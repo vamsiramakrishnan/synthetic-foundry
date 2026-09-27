@@ -39,10 +39,10 @@ pass decides that, once, in order.
 from __future__ import annotations
 
 import contextvars
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .. import packkit, realism_profiles, rhetoric, sizing
 from ..ids import content_key, format_id, highest_numeric_suffix
@@ -245,20 +245,117 @@ def _hierarchy(world: World, cited: list[CanonicalFact], names: dict[str, str]) 
     return out
 
 
-def _request_for(
+#: A reader-grade section holding fewer allowed facts than this is thin, and
+#: may draw on context facts beside it.
+_THIN = 4
+#: The most context facts a thin section is given.
+_CONTEXT_FACTS = 3
+
+
+def _context_facts(
+    ir: ArtifactIR,
+    section: ArtifactSection,
+    allowed: list[str],
+    facts: dict[str, CanonicalFact],
+    *,
+    observer: str,
+    cutoff,  # type: ignore[no-untyped-def]
+    taken: frozenset[str] = frozenset(),
+) -> list[str]:
+    """Facts a thin section may draw on beside its own, for a reader-grade corpus.
+
+    A banking memo section handed one fact (a CET1 ratio) can say one thing
+    about it, and the composing narrator wrote it one sentence long; a person
+    writing it would set the ratio against the minimum the regulator sets and
+    the risk-weighted assets it is read against, because they sit in the same
+    return. Those are *context facts*: the same subject, the same kind family
+    and the same period as a fact the section already holds, a different
+    measure from any it holds, a figure (a recorded text is a finding and
+    belongs to the section that makes it), not carried by another section of this
+    document nor given to an earlier section of it as context (*taken*: a
+    context fact is the section's, not a repeat of its neighbour's), current
+    at the author's cut-off and visible to them. Every
+    one is a ledger fact the claim validator checks exactly as it checks the
+    section's own, so the section has more to say without a number being
+    invented. Allowed and never required; at most `_CONTEXT_FACTS`.
+    """
+    if len(allowed) >= _THIN:
+        return []
+    anchors = [facts[f] for f in allowed]
+    if not anchors:
+        return []
+    families = {(fact.subject, fact.kind.split(".", 1)[0]) for fact in anchors}
+    periods = {fact.period for fact in anchors}
+    kinds = {fact.kind for fact in anchors}
+    elsewhere = {fid for other in ir.sections if other is not section for fid in other.fact_ids} | set(taken)
+    held = set(allowed)
+    found: list[str] = []
+    # The latest record of a kind first: the figure as it stands for this
+    # author, not an earlier state of it that happens to sort first.
+    for fact in sorted(facts.values(), key=lambda f: (f.kind, f.subject, -f.valid_from.timestamp(), f.id)):
+        if (fact.id in held or fact.id in elsewhere or fact.kind in kinds or fact.period not in periods
+                or (fact.subject, fact.kind.split(".", 1)[0]) not in families):
+            continue
+        if (fact.value is None or superseded_for(fact, cutoff)
+                or not fact_available_to(fact, observer=observer, cutoff=cutoff)):
+            continue
+        found.append(fact.id)
+        kinds.add(fact.kind)
+        if len(found) >= _CONTEXT_FACTS:
+            break
+    return found
+
+
+def _recurrence(world: World, section: ArtifactSection, allowed: list[str],
+                facts: dict[str, CanonicalFact], memo: dict[int, list[str]] | None = None) -> dict[str, int]:
+    """Each allowed fact to how many sections before this one, across the
+    corpus in the order the compiler walks it, were given a fact of its kind.
+
+    By kind and not by fact, because what a reader hears as repetition is
+    the sentence, not the figure: three divisions' commentaries each stating
+    their own revenue in the same words is one template read three times. By
+    what each section was *given* (its context facts included), because a
+    context figure recurs as surely as a planned one. Read from the compiled
+    IR, which is what every request in one narration pass is built from
+    (nothing commits mid-pass), so the count is a property of the plan and
+    never of which section happened to be written first.
+    """
+    memo = {} if memo is None else memo
+    wanted = {facts[fact_id].kind for fact_id in allowed if fact_id in facts}
+    seen = dict.fromkeys(wanted, 0)
+    for other_ir in world._artifact_irs:
+        for other in other_ir.sections:
+            if other is section:
+                return {fact_id: seen[facts[fact_id].kind] for fact_id in allowed if fact_id in facts}
+            if not other.awaiting_prose:
+                continue
+            given = memo.get(id(other))
+            if given is None:
+                given = memo[id(other)] = _drawn(world, other_ir, other, facts, memo)[0]
+            for kind in {facts[f].kind for f in given if f in facts} & wanted:
+                seen[kind] += 1
+    return {fact_id: seen[facts[fact_id].kind] for fact_id in allowed if fact_id in facts}
+
+
+def _drawn(
     world: World,
     ir: ArtifactIR,
     section: ArtifactSection,
     facts: dict[str, CanonicalFact],
-) -> NarrativeRequest:
-    """Build the bounded request for one section."""
+    memo: dict[int, list[str]] | None = None,
+) -> tuple[list[str], list[str], list[str]]:
+    """``(allowed, required, restated)`` for one section, before prior-period
+    comparators.
+
+    Split from `_request_for` so a request can count what the sections before
+    it were given (``recurrence``) without building their whole requests;
+    *memo* holds each section's allowed facts, by identity, across a pass.
+    """
     intent = world.artifact_intents.by_id(ir.intent_id)
     author = world.people.by_id(intent.author_id)
-    persona = world.personas.get(author.persona_id) if author.persona_id else None
     manifest = world.artifacts.get(ir.id)
-
     allowed = [f for f in section.fact_ids if f in facts]
-    names = world.entity_names()
+    restated: list[str] = []
     # An author knows what had happened by the time they wrote. Using the
     # artifact's own timestamp as the cut-off is what stops a page written during
     # triage from citing a cause confirmed hours later — while still letting a
@@ -276,6 +373,63 @@ def _request_for(
         if fact_id in allowed
         and (cutoff is None or facts[fact_id].valid_from <= cutoff)
     ][:3]
+
+    if realism_profiles.reader_grade(world):
+        # A document says a thing once. A section whose facts an earlier
+        # section of the same document already carries is written from the
+        # ones it adds, where it adds any: the second-line memo's "Ruling"
+        # restating its "Finding" word for word is a template, not a memo.
+        # Those facts are marked *restated*, never withdrawn: a writer may
+        # still refer back to one (an email quoting the one before it), and
+        # the offline narrator leaves them to the section that said them. A
+        # fact the section is required to state is never restated.
+        earlier: set[str] = set()
+        for other in ir.sections:
+            if other is section:
+                break
+            earlier.update(other.fact_ids)
+        if any(fact_id not in earlier for fact_id in allowed):
+            restated = [fact_id for fact_id in allowed if fact_id in earlier and fact_id not in required]
+        # A thin section in a reader-grade corpus may also draw on the facts
+        # beside its own: allowed, never required, and every one a fact the
+        # author could see (see `_context_facts`).
+        taken: set[str] = set()
+        memo = {} if memo is None else memo
+        for other in ir.sections:
+            if other is section:
+                break
+            if other.awaiting_prose:
+                given = memo.get(id(other))
+                if given is None:
+                    given = memo[id(other)] = _drawn(world, ir, other, facts, memo)[0]
+                taken.update(given)
+        allowed = allowed + _context_facts(ir, section, allowed, facts, observer=author.id, cutoff=cutoff,
+                                           taken=frozenset(taken))
+    return allowed, required, restated
+
+
+def _request_for(
+    world: World,
+    ir: ArtifactIR,
+    section: ArtifactSection,
+    facts: dict[str, CanonicalFact],
+    memo: dict[int, list[str]] | None = None,
+) -> NarrativeRequest:
+    """Build the bounded request for one section.
+
+    *memo* carries what earlier sections were given across one pass over the
+    corpus (`_plan`, `handshake.pending`), so counting a fact kind's
+    recurrence costs a lookup per section rather than a rebuild.
+    """
+    intent = world.artifact_intents.by_id(ir.intent_id)
+    author = world.people.by_id(intent.author_id)
+    persona = world.personas.get(author.persona_id) if author.persona_id else None
+    manifest = world.artifacts.get(ir.id)
+    names = world.entity_names()
+    cutoff = manifest.created_at if manifest else None
+    allowed, required, restated = _drawn(world, ir, section, facts, memo)
+    if memo is not None:
+        memo[id(section)] = list(allowed)
 
     # The prior period's value of each measure, added to the allowed set so a
     # trend is written by citing two references rather than by restating a
@@ -344,6 +498,8 @@ def _request_for(
         request = request.model_copy(update={
             "moves": rhetoric.plan(intent.artifact_type, section, [facts[f] for f in allowed], comparators),
             "display": _display_names(world, [facts[f] for f in allowed], names),
+            "recurrence": _recurrence(world, section, allowed, facts, memo),
+            "restated": restated,
         })
     return request.model_copy(update={"fact_digest": content_key(
         "narration-request/v2", request.model_dump(mode="json", exclude=request.digest_fields()),
@@ -417,6 +573,7 @@ def _plan(
     if len(by_key) != len(ledger):
         raise NarrationError("duplicate narration ledger keys")
     ir_slots: list[list[_Slot]] = []
+    memo: dict[int, list[str]] = {}
     live_jobs: list[_Slot] = []
 
     for ir in world._artifact_irs:
@@ -426,7 +583,7 @@ def _plan(
                 slots.append(_Slot(section=section, kind="keep"))
                 continue
 
-            request = _request_for(world, ir, section, facts)
+            request = _request_for(world, ir, section, facts, memo)
             if not request.allowed_fact_ids:
                 # Nothing to say and nothing to say it with. Better an empty
                 # section than prose invented to fill it.
@@ -601,6 +758,9 @@ def narrate(
     prompt = prompts.get(prompt_name) if prompt_name else prompts.for_world(world)
     facts = {fact.id: fact for fact in world.facts}
     entity_names = claim_checks.known_entity_names(world)
+    from .handshake import spelling_context
+
+    spelled = spelling_context(world)
 
     ir_slots, live_jobs = _plan(world, facts, ledger, provider, prompt)
 
@@ -618,6 +778,7 @@ def narrate(
         narrative, attempts = _generate(
             provider, slot.request, prompt, facts,
             entity_names=entity_names, retries=retries,
+            spelled=spelled if getattr(provider, "writes_for_reader", True) else None,
         )
         if on_accepted is not None:
             on_accepted(
@@ -743,6 +904,7 @@ def _generate(
     *,
     entity_names: frozenset[str],
     retries: int,
+    spelled: Mapping[str, Any] | None = None,
 ) -> tuple[GeneratedNarrative, int]:
     """Call the provider until the result validates, or give up.
 
@@ -756,7 +918,7 @@ def _generate(
 
     while True:
         narrative = provider.complete(request, prompt, scoped_facts, feedback=feedback)
-        verdict = claim_checks.validate(request, narrative, facts, entity_names=entity_names)
+        verdict = claim_checks.validate(request, narrative, facts, entity_names=entity_names, **(spelled or {}))
         if verdict.accepted:
             return narrative, attempts
 

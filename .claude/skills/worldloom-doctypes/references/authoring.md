@@ -93,7 +93,7 @@ sentences.
 ```
 
 - A move is a name from the rhetoric catalogue
-  (`src/worldloom/_data/rhetoric/moves@1.json`): `headline`, `comparison`,
+  (`src/worldloom/_data/rhetoric/moves@2.json`): `headline`, `comparison`,
   `attribution`, `driver`, `cause`, `chronology`, `impact`, `status`,
   `decision`, `action`, `owner`, `risk`, `procedure`, `context`,
   `implication`, `transition`. Each declares the fact-kind prefixes it
