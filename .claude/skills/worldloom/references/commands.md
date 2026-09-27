@@ -204,6 +204,62 @@ worldloom compose requests <CORPUS>
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
 
+### `worldloom contracts`
+
+Fetch, verify, compile and measure the vendor contracts connectors are served behind through Anvil.
+
+### `worldloom contracts build`
+
+Compile a connector's contract under its profile with Anvil, approve the profile, and lint the mapping.
+
+```
+worldloom contracts build <CONNECTOR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--anvil-cmd` | The Anvil CLI, split like a shell command (default $WORLDLOOM_ANVIL, else anvil on PATH). |
+| `--cache` | Cache directory for sources and bundles. |
+| `--force` | Rebuild even when the cache holds this build. |
+| `--json` | Print the build receipt as JSON. |
+| `--spec` | Compile this source (a trim) under the connector's profile instead of the locked bytes. |
+
+### `worldloom contracts coverage`
+
+Per connector: vendor operations, operations the profile exposes, modelled and unmodelled, and provenance.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the rows as JSON. |
+
+### `worldloom contracts fetch`
+
+Download each locked vendor contract (or copy an authored one), verify its sha256, and refuse a mismatch.
+
+```
+worldloom contracts fetch <CONNECTORS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--cache` | Cache directory (default $WORLDLOOM_CONTRACTS_CACHE, else ~/.cache/worldloom/contracts). |
+| `--json` | Print what was fetched as JSON. |
+
+### `worldloom contracts trim`
+
+Cut a contract to the operations its profile exposes and the schemas they reach, for a small test fixture.
+
+```
+worldloom contracts trim <CONNECTOR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--anvil-cmd` | The Anvil CLI, split like a shell command. |
+| `--cache` | Cache directory for sources and bundles. |
+| `--source` | The full source (default: the fetched, locked bytes). A large YAML source reads faster converted to JSON. |
+| `-o`, `--out` | Where to write the gzipped trim. |
+
 ### `worldloom demo`
 
 Build a bundled demo corpus, validate it, and export it.

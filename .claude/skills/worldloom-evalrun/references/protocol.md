@@ -106,6 +106,13 @@ or, to finish:
 serves each case's connectors through `anvil simulate serve` instead of the
 in-process emulator: the agent calls the vendor's real REST paths (Jira's
 `POST /rest/api/2/search/jql`, `GET /rest/api/2/issue/{key}`, ...) over HTTP.
+The bundle is the vendor's real contract under Worldloom's profile:
+`worldloom contracts fetch` downloads the locked spec and refuses one whose
+sha256 moved, `worldloom contracts build jira` compiles and approves it with
+Anvil and prints the bundle path to pass as `--contract jira=<bundle>`, and
+`worldloom contracts coverage` says which operations each connector models
+(`docs/connector-serving.md`, "Real vendor contracts"). A maintainer's
+`worldloom contracts trim` cuts a small test fixture from a locked spec.
 The command's environment carries, on every turn:
 
 | Variable | Value |

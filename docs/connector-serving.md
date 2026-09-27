@@ -298,6 +298,27 @@ spec trimmed to the 26 operations of Anvil's Jira backtest and compiled with
   `{id, key, self}`), `empty` (Jira's 204 edits and transitions), `page` (Anvil
   paging), `token_page` (a vendor continuation token in the body), and the
   derived `comments` and `transitions` lists read from the record.
+- An argument may instead be a constant (`{"value": "page"}`), an `object`
+  assembled from several locations (`{"object": {"title": "body.title"}}`),
+  or a list of locations tried in order (Graph's contract spells an action
+  body `DestinationId` where its documentation writes `destinationId`); a
+  value may pass through a `map` (a ServiceNow table to its entity) and an
+  object through a `rename` (`toRecipients` to `recipients`). More
+  transforms: `fields` (a body as record fields, vendor-wrapped values
+  unwrapped), `odata` (Graph options as one option string), `cql` (Confluence
+  v2 filters as CQL), `slack_in`, `slack_ts`, `flatten`, `drive_item_entity`
+  and `locator_query`.
+- `tool_by` chooses the tool by a request location or by the addressed
+  record (`record.entity`): ServiceNow's one Table API route serves every
+  table, and Drive's one PATCH updates a Google Doc and an upload with
+  different tools. `*` matches any value present (a PATCH with a new
+  `parentReference` is a move).
+- `result` may carry an `envelope`, the vendor's body as a template:
+  `{"result": "$items"}` for ServiceNow, `{"totalSize": "$total", "done":
+  "$is_last", "nextRecordsUrl": "$next_link", "records": "$items"}` for
+  Salesforce. A key whose continuation does not exist (the last page) is
+  left out. When Anvil pages the operation itself, the provider answers the
+  protocol's `items` and `nextCursor` instead and Anvil writes the envelope.
 - An operation the connector has no state for is marked `unmodelled` with a
   reason and answered `unsupported_operation`.
 
@@ -346,3 +367,88 @@ one contract, so a case across several connectors runs several servers, and a
 node-scoped designed failure that depends on another connector's calls may be
 attributed differently by the provider than by the replay (noted as
 `anvil_divergence`, graded from the replay).
+
+## Real vendor contracts
+
+A connector served through Anvil is only as realistic as the contract Anvil
+compiles. Worldloom locks one per connector in
+`worldloom/_data/connectors/_contracts.json` (`worldloom.contract-lock/v1`):
+the URL the vendor publishes it at (or, for an authored contract, its path in
+the package), its format (`openapi3`, `swagger2`, `discovery`), the sha256
+and size of the exact bytes, the version and the date it was locked, its
+provenance, the Worldloom exposure profile Anvil compiles it under
+(`_data/connectors/anvil/profiles/<connector>.yaml`: the operations the
+connector's tools model plus the neighbours an agent is likely to reach for
+by mistake), the manifest when the contract needs one (Jira and Confluence
+declare two auth alternatives, which blocks every operation until one is
+chosen), the vendor's operation count and the profile's, and Anvil's
+snapshot hash for the locked bytes.
+
+```sh
+worldloom contracts fetch                 # download every locked source, verify its sha256
+worldloom contracts build jira            # compile + approve under the profile; prints the bundle
+worldloom evalrun run ./cases -o ./runs/anvil --exec "<command>" \
+  --connectors anvil --contract jira=<bundle>
+worldloom contracts coverage              # what each connector exposes and models
+```
+
+`fetch` writes into a cache (`--cache`, else `$WORLDLOOM_CONTRACTS_CACHE`,
+else `~/.cache/worldloom/contracts`) and refuses bytes that hash to anything
+but the lock, naming both digests: a vendor that republished its spec is a
+review, never a silent upgrade. `build` compiles with `anvil compile
+--profile --manifest --service`, approves with `anvil approve --profile
+--reviewer worldloom-contracts`, checks Anvil read the locked bytes as the
+locked snapshot, lints the connector's mapping against what the bundle
+exposes, and writes a `build.json` receipt beside the bundle. The build is
+cached under a key of the source digest, the profile, the manifest, the
+mapping and the Anvil version. `--spec` compiles another source under the
+same profile (the receipt says it is not the locked bytes).
+
+Full specs are never committed; the Microsoft Graph one is 44MB. The tests
+compile small gzipped trims in `tests/fixtures/anvil/contracts/`, cut with
+`worldloom contracts trim CONNECTOR -o OUT`: the operations the built bundle
+exposes and every schema they reach, compiled again under the same profile
+and refused unless it exposes exactly the same operations. A YAML source is
+read with PyYAML (a minute for Graph); converting it to JSON first is faster.
+
+| Connector | Provenance | Source | Vendor operations | Profiled | Modelled | Unmodelled |
+|---|---|---|---:|---:|---:|---:|
+| jira | vendor | Jira Cloud platform REST API v3 (OpenAPI 3) | 619 | 26 | 9 | 17 |
+| confluence | vendor | Confluence Cloud REST API v2 (OpenAPI 3) | 218 | 28 | 13 | 15 |
+| slack | vendor | Slack Web API (Swagger 2.0) | 174 | 30 | 14 | 16 |
+| drive | vendor | Google Drive API v3 (Discovery) | 64 | 18 | 5 | 13 |
+| outlook | vendor | Microsoft Graph v1.0 (OpenAPI 3) | 17,870 | 26 | 17 | 9 |
+| onedrive | vendor | Microsoft Graph v1.0 | 17,870 | 20 | 8 | 12 |
+| sharepoint | vendor | Microsoft Graph v1.0 | 17,870 | 36 | 12 | 24 |
+| teams | vendor | Microsoft Graph v1.0 | 17,870 | 41 | 26 | 15 |
+| servicenow | authored | Table, Aggregate and Attachment APIs | 10 | 10 | 5 | 5 |
+| salesforce | authored | REST API v61.0: query, search, describe, sObjects, limits | 11 | 11 | 5 | 6 |
+
+ServiceNow and Salesforce publish no full OpenAPI document for these APIs, so
+their contracts are authored from the vendors' REST references and committed
+in the pack (`_data/connectors/anvil/contracts/`) with provenance `authored`
+and the documentation URLs they were written from: ServiceNow's Table API
+(`GET`, `POST`, `PATCH`, `PUT`, `DELETE /api/now/table/{tableName}[/{sys_id}]`
+with `sysparm_query`, `sysparm_limit`, `sysparm_offset`, `sysparm_fields`,
+`sysparm_display_value`, the `{"result": ...}` envelope and ServiceNow's
+error body), and Salesforce's SOQL query with `nextRecordsUrl` continuation,
+queryAll, SOSL search, the describes, sObject rows and limits. `email`,
+`rovo`, `teamwork_graph` and `sor` have no vendor contract to lock (a
+provider-neutral mailbox, no published Rovo REST contract, an early-access
+GraphQL API, the generic system of record); the lock says so and coverage
+reports them as `none`.
+
+Unmodelled operations are exposed on purpose: an agent that deletes a Jira
+issue instead of transitioning it, or soft-deletes a Teams message, meets the
+vendor's route and a refusal (`unsupported_operation`) rather than a 404 for
+a path that does not exist. Each carries its reason in the mapping.
+
+`tests/test_contract_parity.py` compiles each committed trim through
+`contracts.build`, serves it with the provider, and runs one call sequence
+per connector over HTTP and against an in-process emulator over the same
+records: searches with the vendor's own query language, pages, reads,
+projections, writes, domain errors in the vendor's body, and the state diff
+must agree. Where a paging behaviour is still landing in Anvil, only that
+assertion is recorded, and the test xfails naming the capability after
+every other assertion held. `tests/test_contracts.py` holds the lock, the
+trims and the mappings to each other without Node.

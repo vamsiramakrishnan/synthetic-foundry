@@ -11,6 +11,52 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Real vendor contracts behind every served connector
+
+Serving only; nothing a seed generates changes.
+
+- **A contract lock.** `_data/connectors/_contracts.json`
+  (`worldloom.contract-lock/v1`) pins, per connector, the source URL (or the
+  package path of an authored contract), its format, the sha256 and size of
+  the exact bytes, the version and lock date, the provenance (`vendor` or
+  `authored`), the Worldloom exposure profile and manifest Anvil compiles it
+  under (`_data/connectors/anvil/profiles/`, `manifests/`), the vendor's and
+  the profile's operation counts, and Anvil's snapshot hash. `email`,
+  `rovo`, `teamwork_graph` and `sor` say why they have none. (Underscored
+  because every other JSON file beside the connector definitions is read as
+  one.)
+- **`worldloom contracts fetch | build | trim | coverage`.** `fetch`
+  downloads and verifies each source and refuses a digest mismatch; `build`
+  compiles and approves under the profile with Anvil, checks the snapshot,
+  lints the mapping, and caches the bundle by source, profile, manifest,
+  mapping and Anvil version, with a `build.json` receipt; `trim` cuts a
+  source to the profile's operations and the schemas they reach and proves
+  the cut exposes the same surface; `coverage` reports vendor, profiled,
+  modelled and unmodelled operations per connector.
+- **Authored ServiceNow and Salesforce contracts.** Neither vendor publishes
+  a full OpenAPI document, so the Table, Aggregate and Attachment APIs and
+  the REST API v61.0 query, search, describe, sObject and limits resources
+  are authored from the vendors' references and committed with their
+  documentation URLs.
+- **Mappings for ten connectors.** Jira, Confluence, Slack, Drive, Outlook,
+  OneDrive, SharePoint, Teams, ServiceNow and Salesforce each map every
+  operation their profile exposes to a tool or to `unmodelled` with a reason,
+  and pass their vendor query language through the shared evaluator. The
+  mapping format gained constant, assembled and fallback arguments, value
+  maps and key renames, `tool_by` (by a request location or the addressed
+  record), result envelopes, query locators (Salesforce's `nextRecordsUrl`),
+  and vendor error codes split from the message. Anvil now pages Jira's
+  body-token search and some single-record reads itself; the provider
+  answers those with the protocol's page, and a size Anvil defaulted is not
+  recorded as the agent's argument.
+- **Parity per connector.** `tests/test_contract_parity.py` compiles the
+  committed trims and runs one call sequence per connector through Anvil
+  and in process: records, errors and state diffs agree. The assertions on
+  envelope fields still landing in Anvil (Jira's `isLast`, Confluence's
+  `_links.next`, Slack's `response_metadata.next_cursor` and
+  `messages.matches`, Drive's `kind`, single-record reads served as pages)
+  xfail naming the capability.
+
 ### Reader-grade documents: four edges a live narration showed
 
 Read off a live-narrated `enterprise/v2` corpus of seed 8128; `legacy` and

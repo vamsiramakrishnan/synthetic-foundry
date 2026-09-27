@@ -418,7 +418,7 @@ def trim(document: Mapping[str, Any], exposed: Iterable[tuple[str | None, str | 
         if "parameters" in document:
             out["parameters"] = document["parameters"]
         schemas = document.get("schemas") or {}
-        pending = set()
+        pending: set[str] = set()
         _refs(body, pending)
         _refs(document.get("parameters") or {}, pending)
         keep: set[str] = set()
