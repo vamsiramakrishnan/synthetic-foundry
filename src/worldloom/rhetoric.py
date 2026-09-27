@@ -14,7 +14,7 @@ So the moves are data, in three places, first match wins:
 
 1. ``SectionPlan.moves`` / a pack's ``sections[].moves``: what an authored
    doctype declares for one of its own sections;
-2. ``_data/rhetoric/moves@2.json`` ``doctypes``: what the shipped catalogue
+2. ``_data/rhetoric/moves@3.json`` ``doctypes``: what the shipped catalogue
    declares for an engine type, by section heading (``"*"`` for every section
    of the type);
 3. the same file's ``roles``: a default per semantic role, so a section
@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
     from .models import ArtifactSection, CanonicalFact
-    from .narrative.requests import RequestMove
+    from .narrative.requests import RequestMove, SectionFloor
 
 __all__ = [
     "CATALOGUE",
@@ -57,6 +57,7 @@ __all__ = [
     "catalogue",
     "declared",
     "definition",
+    "floor",
     "instruction",
     "lint_moves",
     "move_names",
@@ -67,7 +68,7 @@ __all__ = [
 #: The shipped catalogue. Versioned in its name for the reason every file under
 #: ``_data/`` is: what it says is part of what a reader-grade build asks, and a
 #: change to it is a new version rather than an edit in place.
-CATALOGUE = "_data/rhetoric/moves@2.json"
+CATALOGUE = "_data/rhetoric/moves@3.json"
 
 
 @dataclass(frozen=True)
@@ -196,6 +197,7 @@ def plan(
     section: ArtifactSection,
     allowed: Sequence[CanonicalFact],
     comparators: Mapping[str, str] | None = None,
+    restated: Sequence[str] = (),
 ) -> list[RequestMove]:
     """The section's moves, each with the fact ids it may draw on.
 
@@ -265,6 +267,12 @@ def plan(
                 rebuilt.append((move, False, ids))
         built = rebuilt
 
+    by_id = {fact.id: fact for fact in allowed}
+    # A fact an earlier section of the document already carries may be
+    # referred back to, but it is not new material this section owes a
+    # sentence for.
+    said = set(restated)
+
     def with_priors(ids: list[str]) -> list[str]:
         out: list[str] = []
         for fid in ids:
@@ -274,8 +282,56 @@ def plan(
                 out.append(prior)
         return out
 
-    return [RequestMove(name=move.name, instruction=instruction(move), fact_ids=with_priors(ids), derived=derived)
+    return [RequestMove(name=move.name, instruction=instruction(move), fact_ids=with_priors(ids), derived=derived,
+                        sentences=_move_sentences(move.name, derived, [i for i in ids if i not in said], by_id))
             for move, derived, ids in built if ids]
+
+
+def _floors() -> Mapping[str, Any]:
+    floors: Mapping[str, Any] = catalogue().get("floors", {})
+    return floors
+
+
+def _move_sentences(name: str, derived: bool, ids: Sequence[str], facts: Mapping[str, CanonicalFact]) -> int:
+    """The fewest sentences a move says: one per thing it measures, up to the
+    catalogue's cap (a move's own ``sentences`` overrides it); a derived move
+    the derived minimum.
+
+    A thing measured is a subject's measure, not a fact: revenue's actual,
+    budget and variance for one division are one sentence ("Food came in at
+    AUD 393.3m against a budget of AUD 403.5m"), and a floor that counted
+    them as three would ask for padding. A prior-period comparator is not
+    counted either: it is said in the sentence of the figure it is the prior
+    of."""
+    from .narrative.composer import _parse
+
+    floors = _floors()
+    if derived:
+        return int(floors.get("derived_sentences", 1))
+    cap = int(catalogue()["moves"].get(name, {}).get("sentences", floors.get("sentences_per_move", 2)))
+    measured = {(facts[f].subject, *_parse(facts[f].kind)[:2]) if f in facts else (f,) for f in ids}
+    return max(1, min(cap, len(measured)))
+
+
+def floor(moves: Sequence[RequestMove], facts: int) -> SectionFloor:
+    """How much a section with *moves* and *facts* allowed facts must say.
+
+    The sum of its moves' sentences, and paragraphs for a share of its
+    introducing moves (the catalogue's ``floors``). A section given fewer
+    facts than it has moves is exempt, with the reason recorded: every
+    paragraph a writer added to reach the floor would be filler.
+    """
+    import math
+
+    from .narrative.requests import SectionFloor
+
+    if facts < len(moves):
+        return SectionFloor(exempt=f"{facts} fact(s) for {len(moves)} move(s): a paragraph per move would be"
+                                   " filler, so no floor applies")
+    introducing = sum(1 for move in moves if not move.derived)
+    share = float(_floors().get("paragraphs_per_move", 0.5))
+    return SectionFloor(sentences=sum(move.sentences for move in moves),
+                        paragraphs=max(1, math.ceil(introducing * share)) if moves else 0)
 
 
 def notes_moves(artifact_type: str = "") -> tuple[str, ...]:

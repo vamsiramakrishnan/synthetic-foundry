@@ -1125,8 +1125,8 @@ def document(
                           "title": Cell(value=r.title), "type": Cell(value=genre_label(r.artifact_type)),
                           "role": Cell(value=r.role)}) for r in related])),)))
 
-    parts = [_number_figures(part) for part in parts]
-    appendices = [_number_figures(part) for part in appendices]
+    parts = [_state_units(_number_figures(part), facts, profile) for part in parts]
+    appendices = [_state_units(_number_figures(part), facts, profile) for part in appendices]
     reviewers = tuple(p for p in (reviewer,) if p is not None and (approver is None or p.id != approver.id))
     review_at = next((r.at for r in history if r.status == "Reviewed"), revision.at)
     comments = () if revision.status == "Draft" else _comments(
@@ -1178,6 +1178,30 @@ def document(
         provenance={k: tuple(dict.fromkeys(v)) for k, v in provenance_map.items()},
         citations=profile.citations,
     )
+
+
+def _state_units(part: Part, facts: Mapping[str, CanonicalFact], presentation: Presentation) -> Part:
+    """Every table of money in *part* stating its unit (`figures.unit_caption`):
+    a schedule prints the ledger's own cells, in thousands, and a reader
+    cannot know that from "617,200" alone. Nothing changes under the exact
+    spelling, so every audit rendering keeps its bytes."""
+    from . import figures
+
+    if figures.rules_for(presentation) is None:
+        return part
+
+    def state(blocks: tuple[Block, ...]) -> tuple[Block, ...]:
+        out = []
+        for block in blocks:
+            if block.kind == "table" and block.table is not None:
+                caption, table = figures.unit_caption(block.caption, block.table, facts, presentation)
+                if caption != block.caption or table is not block.table:
+                    block = replace(block, caption=caption, table=table)
+            out.append(block)
+        return tuple(out)
+
+    return replace(part, blocks=state(part.blocks),
+                   children=tuple(_state_units(child, facts, presentation) for child in part.children))
 
 
 def _number_figures(part: Part) -> Part:

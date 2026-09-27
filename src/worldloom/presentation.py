@@ -55,6 +55,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from . import figures as _figures
+from . import titles as _titles
 from .cascade import CascadeModel, Finding, load, refuse
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -69,6 +70,7 @@ __all__ = [
     "NOTES",
     "SLIDE_BUDGETS",
     "SPELLINGS",
+    "TITLES",
     "PROFILES",
     "READER",
     "Presentation",
@@ -195,6 +197,16 @@ SLIDE_BUDGET_SLIDES: dict[str, int] = {"unbounded": 60, "board": 24, "briefing":
 #: compares a reader's copy against the ledger accepts it.
 SPELLINGS: tuple[str, ...] = _figures.spellings()
 
+#: How a presenter deck's slide titles are fitted. ``free`` is the shipped
+#: fitting: a 92-character budget, cut at a clause boundary or with an
+#: ellipsis, which on a live writer's prose titled a slide "The confirmed
+#: cause of the failure was Stale legacy-to-new product hierarchy mapping in
+#: the" and an ellipsis. ``reader`` bounds a title in words and characters, never cuts one
+#: mid-clause (a shorter clause, else the lead fact's template), and prints
+#: no dash or ellipsis in it. The styles are data
+#: (``_data/presentation/titles.json``, read by `titles`).
+TITLES: tuple[str, ...] = _titles.styles()
+
 
 @dataclass(frozen=True)
 class Presentation:
@@ -216,6 +228,7 @@ class Presentation:
     notes: str = "provenance"
     slide_budget: str = "unbounded"
     spelling: str = "exact"
+    titles: str = "free"
 
     #: Doctypes this profile treats differently from its own defaults, by
     #: artifact type. Present because "a reader profile" is rarely uniform: a
@@ -273,6 +286,7 @@ READER = Presentation(
     notes="talk",
     slide_budget="board",
     spelling="reader",
+    titles="reader",
 )
 
 #: Citations in a sibling file rather than in the document or nowhere: the shape
@@ -290,6 +304,7 @@ FILING = Presentation(
     notes="talk",
     slide_budget="board",
     spelling="reader",
+    titles="reader",
 )
 
 PROFILES: dict[str, Presentation] = {
@@ -391,6 +406,7 @@ class PresentationSeed(CascadeModel):
     notes: str = "provenance"
     slide_budget: str = "unbounded"
     spelling: str = "exact"
+    titles: str = "free"
     # RUF012 cannot see that CascadeModel is a pydantic BaseModel, which
     # copies mutable defaults per instance; a real shared-dict hazard
     # needs a plain class attribute, and this is a validated field.
@@ -417,6 +433,7 @@ KNOBS: dict[str, tuple[str, ...]] = {
     "notes": NOTES,
     "slide_budget": SLIDE_BUDGETS,
     "spelling": SPELLINGS,
+    "titles": TITLES,
 }
 
 #: The knobs a recipe carried before provenance placement, layout and decks

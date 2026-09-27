@@ -151,7 +151,7 @@ def test_a_legacy_request_carries_no_moves_and_digests_as_it_always_did() -> Non
     section = next(s for s in ir.sections if s.awaiting_prose)
     request = _request_for(world, ir, section, facts)
     assert request.moves == [] and request.display == {} and request.recurrence == {} and request.restated == []
-    assert request.digest_fields() == {"fact_digest", "moves", "display", "recurrence", "restated"}
+    assert request.digest_fields() == {"fact_digest", "moves", "display", "recurrence", "restated", "floor"}
     document = handshake.requests_document(world)
     assert document["prompt_version"] == prompts.SECTION_PROSE.key
     assert not any("moves" in r for r in document["requests"])

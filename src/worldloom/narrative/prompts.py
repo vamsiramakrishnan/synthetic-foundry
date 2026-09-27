@@ -85,7 +85,14 @@ def _moves_text(request: NarrativeRequest) -> str:
         ordinal = words[index] if index < len(words) else "Next"
         cites = (", reasoning from facts already cited: " if move.derived else ", drawing on: ") + (
             ", ".join(move.fact_ids) or "nothing new")
-        out.append(f"  {ordinal} paragraph ({move.name}){cites}.\n    {move.instruction}")
+        least = f" At least {move.sentences} sentence(s)." if move.sentences else ""
+        out.append(f"  {ordinal} paragraph ({move.name}){cites}.\n    {move.instruction}{least}")
+    floor = request.floor
+    if floor is not None and floor.exempt:
+        out.append(f"  No length floor: {floor.exempt}.")
+    elif floor is not None and floor.sentences:
+        out.append(f"  The section as a whole: at least {floor.sentences} sentences in at least"
+                   f" {floor.paragraphs} paragraph(s); shorter is refused as section_floor.")
     return "\n".join(out) or "  (none declared; write to the purpose)"
 
 

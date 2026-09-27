@@ -163,9 +163,14 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact],
         # document is byte-identical to the one this contract always wrote.
         **({"moves": [
             {"move": move.name, "instruction": move.instruction, "facts": list(move.fact_ids),
-             **({"derived": True} if move.derived else {})}
+             **({"derived": True} if move.derived else {}),
+             **({"sentences": move.sentences} if move.sentences else {})}
             for move in request.moves
         ]} if request.moves else {}),
+        # How much the section must say for its moves, or why it need not:
+        # the floor `section_floor` refuses below, stated before writing.
+        **({"floor": request.floor.model_dump(mode="json", exclude_defaults=True)}
+           if request.floor is not None else {}),
         **({"display_names": dict(request.display)} if request.display else {}),
         "facts": [
             _fact_payload(

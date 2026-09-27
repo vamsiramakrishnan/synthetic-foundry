@@ -40,6 +40,16 @@ what the ledger holds:
 ``slug_leak``
     A recorded identifier in the writer's own words: a slug, a recorded enum
     value, a snake_case token. The finding names the words to use instead.
+
+And one for a request that states a floor (a reader-grade section's moves):
+
+``section_floor``
+    The section says less than its moves ask for: fewer sentences than the
+    sum of its moves' ``sentences``, or fewer paragraphs than its ``floor``.
+    A live writer averaged 3.23 sentences a section against a 3.5 floor the
+    offline narrator was measured against and nobody else was; the floor is
+    in the brief, so the refusal is the brief kept, not a new rule. A section
+    given fewer facts than moves carries its exemption instead.
 """
 
 from __future__ import annotations
@@ -286,6 +296,7 @@ def validate(
     if presentation is not None and rules_for(presentation) is not None:
         violations.extend(_spelling_violations(narrative.text, facts, presentation, locale))
         violations.extend(_identifier_violations(request, narrative.text, facts))
+        violations.extend(_floor_violations(request, narrative.text))
 
     return Verdict(accepted=not violations, violations=violations)
 
@@ -309,6 +320,31 @@ def _spelling_violations(text: str, facts: dict[str, CanonicalFact], presentatio
                              " direction), so write the sentence around it and add no unit, currency or"
                              " direction word of your own")
             for defect in figures.defects(spelled, rules_for(presentation))]
+
+
+def _floor_violations(request: NarrativeRequest, text: str) -> list[Violation]:
+    """``section_floor``: the section says less than its moves ask for.
+
+    Counted as `prose_quality.measure` counts (sentences split where a writer
+    ends one, paragraphs at a blank line), and named move by move so the fix
+    is in the finding: which moves, how many sentences each, one paragraph
+    per move.
+    """
+    from ..prose_quality import shape
+
+    floor = request.floor
+    if floor is None or floor.exempt or not request.moves:
+        return []
+    sentences, paragraphs = shape(text)
+    if sentences >= floor.sentences and paragraphs >= floor.paragraphs:
+        return []
+    asked = ", ".join(f"{move.name} {move.sentences}" for move in request.moves)
+    return [Violation(code="section_floor",
+                      detail=f"the section has {sentences} sentence(s) in {paragraphs} paragraph(s); its moves"
+                             f" ask for at least {floor.sentences} sentence(s) in {floor.paragraphs} paragraph(s)"
+                             f" (sentences per move: {asked}). Write one paragraph per move, separated by a blank"
+                             " line, and give each move a sentence for every fact it draws on: what moved, against"
+                             " what, why, what it means")]
 
 
 #: A snake_case token: how a record names a value, never how a reader does.

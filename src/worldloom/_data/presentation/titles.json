@@ -1,0 +1,25 @@
+{
+  "schema": "worldloom.titles/v1",
+  "about": "How a presenter deck's slide titles are fitted, by the presentation profile's `titles` knob. `free` is the shipped fitting: a title cut at a clause boundary past a character budget, else at a word with an ellipsis. A named style bounds a title in words and characters and never truncates one mid-clause: a title that does not fit is shortened by choosing a shorter clause of the same sentence, or by cutting a trailing phrase that carries no figure, and when nothing fits the slide is titled from its lead fact's template. It also sets typographic rules: characters a title may not carry and what replaces them. `presenter.lint_titles` refuses a title that breaks its style.",
+  "styles": {
+    "free": {
+      "about": "The shipped titles: up to 92 characters, cut at a clause boundary or with an ellipsis."
+    },
+    "reader": {
+      "about": "At most twelve words and eighty characters; no dash or ellipsis (a dash between clauses reads as a colon, or as a comma when the title already has one); never truncated.",
+      "max_words": 12,
+      "max_chars": 80,
+      "min_words": 4,
+      "replace": [
+        {"from": " \u2014 ", "to": ": ", "else": ", "},
+        {"from": " \u2013 ", "to": ": ", "else": ", "},
+        {"from": "\u2014", "to": ", ", "else": ", "}
+      ],
+      "forbid": ["\u2014", "\u2013", "\u2026", "..."],
+      "clause_marks": ["; ", " \u2014 ", " \u2013 ", ": ", ", which ", ", with ", ", and ", ", but ", ", while ", ", "],
+      "standalone_after": ["; ", " \u2014 ", " \u2013 ", ": ", ", and ", ", but "],
+      "phrase_cuts": [" against ", " for the ", " in the ", " on the ", " at the ", " across ", " during ", " after ", " since ", " because ", " while ", " with ", " from ", " in ", " on ", " for ", " at ", " as ", " and "],
+      "dangling": ["a", "an", "the", "of", "in", "on", "at", "for", "to", "by", "from", "with", "and", "or", "but", "as", "is", "was", "were", "are", "that", "which", "its", "their", "against", "than", "not"]
+    }
+  }
+}

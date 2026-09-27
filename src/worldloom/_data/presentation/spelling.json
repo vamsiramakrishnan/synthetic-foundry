@@ -20,7 +20,14 @@
       },
       "percent": {"units": ["percent", "pct"], "places": 2},
       "dates": true,
-      "enums": true
+      "enums": true,
+      "tables": {
+        "about": "A table prints the ledger's own cells (AUD 617,200 in thousands), not the sentence spelling, so a table of money states its unit once: in the caption when every money column shares one, else in each money column's header. A table with a unit column states it per row already.",
+        "unit": "{currency} {scale}",
+        "caption": "{caption} ({unit})",
+        "header": "{label} ({unit})",
+        "unit_columns": ["unit", "units"]
+      }
     }
   }
 }

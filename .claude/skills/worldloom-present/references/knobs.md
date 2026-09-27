@@ -22,6 +22,7 @@ behind each knob.
 | `notes` | `provenance` | `talk` | `talk` |
 | `slide_budget` | `unbounded` | `board` | `board` |
 | `spelling` | `exact` | `reader` | `reader` |
+| `titles` | `free` | `reader` | `reader` |
 
 `audit` is byte-for-byte what every corpus rendered before this layer existed
 got, and what a corpus that names no profile gets under `legacy` and
@@ -55,8 +56,17 @@ What the knobs do:
   in that magnitude: a gap of `AUD 1.0m adverse` beside revenue of `AUD
   617.2m`), writes `k` and never "thousands", a zero as `nil`, a `pct` unit as
   `%`, an ISO date as `24 April 2026`, a recorded enum value in words
-  (`control failure: ...`), and drops "adverse" after a phrase that already
-  carries the direction ("a shortfall of"). The rules are data
+  (`control failure: ...`), and drops "adverse" where the figure's own clause
+  already says which way it went: a phrase ("a shortfall of") or a direction
+  word before or just after it ("missing revenue plan by", "fell", "overspent
+  by", "... below budget"; the lexicon is prompts pack text,
+  `render.figures.direction_words.adverse` and `.favourable`). A clause that
+  says the other way ("ahead of plan by" an adverse figure) keeps the word and
+  is refused at narration. A money table prints the ledger's own cells, so
+  under `reader` every money table states its unit once ("Business Unit P&L
+  (AUD thousands)", the rulebook's `tables` entry): in the caption when its
+  money columns share one, else in each money column's header, and not at all
+  when the table has a unit column of its own. The rules are data
   (`src/worldloom/_data/presentation/spelling.json`, read by `figures`); the
   words (`nil`, the direction phrases, month names) are prompts pack text
   under `render.figures.`. A rounding is a spelling, never a value: the IR
@@ -67,6 +77,19 @@ What the knobs do:
   shows each fact as it will print and states the spelling rules, and the
   claim validator refuses prose whose spelled figures read badly
   (`number_spelling`) or that types a recorded identifier (`slug_leak`).
+- **`titles`**: how a presenter deck's slide titles are fitted. `free` is the
+  shipped cut: 92 characters, at a clause boundary or with an ellipsis, which
+  on a live writer's prose titled a slide "The confirmed cause of the failure
+  was Stale legacy-to-new product hierarchy mapping in the" and an ellipsis.
+  `reader` holds a title to 12 words and 80 characters and never truncates
+  one: a long claim becomes a shorter clause of the same sentence that still
+  carries a figure (or loses a trailing phrase that carries none), and when
+  nothing complete fits the slide is titled from its lead fact's template. A
+  dash between clauses prints as a colon (a comma when the title has one);
+  no dash or ellipsis survives. The styles are data
+  (`src/worldloom/_data/presentation/titles.json`, read by `titles`), and
+  `presenter.lint_titles` names a title over its length, carrying a
+  forbidden character or ending mid-clause.
 - **`table_fit`**: `fixed` divides a PDF table's frame evenly; `measured`
   sizes each column to its widest unbreakable token and shrinks the type if
   even that will not fit. On the shipped fact table `fixed` produces 112

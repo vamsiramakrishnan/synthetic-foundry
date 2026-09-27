@@ -32,6 +32,33 @@ def world() -> World:
     ).compile()
 
 
+def _to_the_floor(request: dict, picked: list[dict], claims: list[dict]) -> str:
+    """A reader-grade request's section as its brief asks: a paragraph per
+    move, each at least the sentences its move states (`section_floor`)."""
+    by_id = {fact["id"]: fact for fact in request["facts"]}
+    cited: set[str] = set()
+    paragraphs = []
+    for move in request["moves"]:
+        lines = []
+        for index in range(max(1, move.get("sentences", 1))):
+            fid = move["facts"][index] if index < len(move["facts"]) else None
+            if move.get("derived") or fid is None or fid in cited:
+                lines.append("That is the part of the position the period turns on.")
+                continue
+            lead = "It was recorded at the time as" if by_id[fid]["superseded"] else "The position was"
+            sentence = f"{lead} {{{{fact:{fid}}}}}."
+            lines.append(sentence)
+            cited.add(fid)
+            claims.append({"text": sentence, "supporting_fact_ids": [fid]})
+        paragraphs.append(" ".join(lines))
+    rest = [f for f in picked if f["id"] not in cited]
+    for fact in rest:
+        lead = "It was recorded at the time as" if fact["superseded"] else "The position was"
+        paragraphs[-1] += f" {lead} {{{{fact:{fact['id']}}}}}."
+    claims[:] = [c for i, c in enumerate(claims) if c not in claims[:i]]
+    return "\n\n".join(paragraphs)
+
+
 def answer(document: dict, *, restate: bool = False, invent: bool = False) -> dict:
     """Answer every request the way a compliant agent would."""
     responses = []
@@ -44,6 +71,8 @@ def answer(document: dict, *, restate: bool = False, invent: bool = False) -> di
             sentences.append(sentence)
             claims.append({"text": sentence, "supporting_fact_ids": [fact["id"]]})
         text = " ".join(sentences)
+        if (request.get("floor") or {}).get("sentences"):
+            text = _to_the_floor(request, picked, claims)
         if restate:
             text += " Revenue finished 2.48% below plan."
         if invent:
