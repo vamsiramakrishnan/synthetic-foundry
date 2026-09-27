@@ -585,6 +585,13 @@ class _Composer:
             template = self.words.pick(key, a.id)
             if template:
                 sentences.append(self.claim(_upper_first(_fill(template, {"subject": phrase})), [a.id, f.id]))
+        if not sentences and move.sentences:
+            # The brief asks this move for a sentence (`rhetoric.floor`), and
+            # no kind, verdict or forecast gave one: the pack's plain
+            # implication keeps the paragraph the brief asked for.
+            fallback = self.words.pick("implication.default", str(index))
+            if fallback:
+                sentences.append(fallback)
         if sentences and cautious:
             hedge = self.words.pick("hedge", str(index))
             if hedge:
@@ -686,12 +693,18 @@ class _Composer:
         # A move with one short sentence ("The risk margin policy is 12%.")
         # is not a paragraph a writer would leave standing alone; it joins the
         # paragraph before it, or the one after when it opens the section.
+        # Never below the paragraphs the brief's floor asks for
+        # (`rhetoric.floor`): the offline narrator is held to it like a live
+        # writer is, so a join that would take the section under it is not made.
+        floor = self.request.floor
+        merges = len(paragraphs) - (floor.paragraphs if floor is not None and not floor.exempt else 0)
         joined: list[str] = []
         for paragraph in paragraphs:
-            if joined and len(joined[-1].split()) < _SHORT_PARAGRAPH:
+            short = joined and (len(joined[-1].split()) < _SHORT_PARAGRAPH
+                                or len(paragraph.split()) < _SHORT_PARAGRAPH)
+            if short and merges > 0:
                 joined[-1] = f"{joined[-1]} {paragraph}"
-            elif joined and len(paragraph.split()) < _SHORT_PARAGRAPH:
-                joined[-1] = f"{joined[-1]} {paragraph}"
+                merges -= 1
             else:
                 joined.append(paragraph)
         paragraphs = joined

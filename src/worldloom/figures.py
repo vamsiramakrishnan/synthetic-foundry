@@ -26,9 +26,14 @@ So the spelling is a rulebook the presentation profile names (its
   where the ledger's unit is ``pct``; a unit recorded as ``loan_facilities``
   reads "loan facilities"; an ISO date reads "24 April 2026"; a recorded enum
   value (``control_failure: ...``) reads in words.
-* **The direction once.** A negative figure after a phrase that already says
-  it ("a shortfall of", prompts pack ``render.figures.direction_phrases``)
-  drops its "adverse".
+* **The direction once.** A negative figure whose clause already says it
+  went the wrong way drops its "adverse": after a phrase ("a shortfall of",
+  prompts pack ``render.figures.direction_phrases``) and, since a live board
+  deck printed "missing revenue plan by AUD 10.2m adverse", wherever a
+  direction word sits in the figure's clause (`direction`: a verb or noun
+  lexicon in ``render.figures.direction_words.*``, "missing", "fell",
+  "overspent", "below budget"). A clause that says the other way ("ahead of
+  plan by") keeps the word, and `defects` refuses the contradiction.
 
 **A rounding is a spelling, never a value.** The ledger figure does not
 move; the IR, the tables and the appendix of sources keep it. And because a
@@ -57,7 +62,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
     from .locales import Locale
-    from .models import CanonicalFact
+    from .models import CanonicalFact, Table
     from .presentation import Presentation
 
 __all__ = [
@@ -65,6 +70,7 @@ __all__ = [
     "Rules",
     "agrees",
     "defects",
+    "direction",
     "enum_values",
     "humanise",
     "rules_for",
@@ -72,6 +78,8 @@ __all__ = [
     "spell_one",
     "spellings_of",
     "spellings",
+    "table_units",
+    "unit_caption",
 ]
 
 DATA = "_data/presentation/spelling.json"
@@ -163,6 +171,74 @@ def _zero() -> str:
 def _direction_phrases() -> tuple[str, ...]:
     raw = _pack("render.figures.direction_phrases", "shortfall of | short by | gap of | miss of")
     return tuple(sorted((p.strip().lower() for p in raw.split(" | ") if p.strip()), key=len, reverse=True))
+
+
+def _lexicon(key: str) -> tuple[str, ...]:
+    raw = _pack(key, "")
+    return tuple(sorted((p.strip().lower() for p in raw.split(" | ") if p.strip()), key=len, reverse=True))
+
+
+def _direction_words() -> tuple[tuple[str, ...], tuple[str, ...], int]:
+    """``(adverse, favourable, window)``: the words that say which way a figure
+    went, from the prompts pack, and how many words before a figure are read."""
+    try:
+        window = int(_pack("render.figures.direction_window", "8"))
+    except ValueError:
+        window = 8
+    return (_lexicon("render.figures.direction_words.adverse"),
+            _lexicon("render.figures.direction_words.favourable"), max(1, window))
+
+
+#: Where a clause ends, for the purpose of asking what a figure's clause says:
+#: a comma, a semicolon, a colon, a bracket or a dash. "Food carried the
+#: shortfall, missing plan by X" reads "missing plan by" and not "shortfall".
+_CLAUSE_BREAK = re.compile(r"[,;:()\[\]\u2014\u2013]|\s-\s")
+
+
+_FIGURE_WORD = re.compile(r"(\d(?:k|m|bn|tn)?|\}\}|\bnil)\s+(?:adverse|favourable)\b")
+
+
+def _spans(words: str, lexicon: tuple[str, ...]) -> list[tuple[int, int]]:
+    """Where each lexicon entry occurs in *words*, as whole words."""
+    return [(found.start(), found.end()) for entry in lexicon
+            for found in re.finditer(rf"(?<![\w-]){re.escape(entry)}(?![\w-])", words)]
+
+
+def direction(before: str, after: str = "") -> str | None:
+    """Which way the words around a figure already say it went.
+
+    ``"adverse"`` when the figure's own clause carries the direction in words
+    before it ("missing revenue plan by", "a shortfall of", "the group missed
+    plan by") or straight after it ("AUD 10.2m below budget"); ``"favourable"``
+    when the nearest such word says the other way ("ahead of plan by"); ``None``
+    when the words say nothing about direction ("revenue of", "at"), and the
+    figure has to say it itself. Lexical, read on the clause only, and the
+    lexicon is prompts pack text (``render.figures.direction_words.*``), so an
+    industry pack that says "under water" adds it without code.
+    """
+    adverse, favourable, window = _direction_words()
+    # Another figure's own direction word ("AUD 7.0m adverse and Digital
+    # AUD 2.9m") belongs to that figure, not to this one's clause.
+    clause = _FIGURE_WORD.sub(r"\1", _CLAUSE_BREAK.split(before)[-1]).lower()
+    phrases = _direction_phrases()
+    if any(clause.rstrip().endswith(phrase) for phrase in phrases):
+        return "adverse"
+    tail = " ".join(clause.split()[-window:])
+    # The word nearest the figure decides: "Digital beat plan while Food
+    # missed by X" is a miss.
+    worse = max((end for _start, end in _spans(tail, adverse)), default=-1)
+    better = max((end for _start, end in _spans(tail, favourable)), default=-1)
+    if worse >= 0 or better >= 0:
+        return "adverse" if worse >= better else "favourable"
+    # Straight after the figure: "AUD 10.2m below budget". Its own "adverse"
+    # is the figure's word, not the clause's, and is skipped.
+    head = " ".join(_CLAUSE_BREAK.split(after)[0].lower().split()[:3])
+    head = head.removeprefix("adverse").strip()
+    if any(start == 0 for start, _end in _spans(head, adverse)):
+        return "adverse"
+    if any(start == 0 for start, _end in _spans(head, favourable)):
+        return "favourable"
+    return None
 
 
 def _months() -> tuple[str, ...]:
@@ -303,7 +379,6 @@ def spell_all(
                 for f in facts]
 
     out: list[str | None] = [None] * len(matches)
-    phrases = _direction_phrases()
     for start, end in _sentences(text):
         inside = [i for i, m in enumerate(matches) if start <= m.start() < end]
         money: list[_Money] = []
@@ -380,8 +455,13 @@ def spell_all(
                 shown = abs(item.base) / item.magnitude.factor
                 spelled = f"{item.currency} {locale.spell(shown, item.places)}{item.magnitude.suffix}"
             if item.base < 0:
-                before = text[start:matches[item.index].start()].rstrip().lower()
-                if not any(before.endswith(phrase) for phrase in phrases):
+                # The direction once: a clause that already says the figure
+                # went the wrong way ("missing plan by", "a shortfall of",
+                # "... below budget") leaves the figure bare. One that says
+                # the other way keeps it, so the contradiction stays on the
+                # page for `defects` to refuse rather than being hidden.
+                match = matches[item.index]
+                if direction(text[start:match.start()], text[match.end():end]) != "adverse":
                     spelled += " adverse"
             out[item.index] = spelled
         # Percentages: one number of places per sentence.
@@ -565,7 +645,6 @@ def defects(text: str, rules: Rules | None = None) -> list[str]:
         found.append(f"a raw timestamp: {match.group(0)!r}")
     for match in _DOUBLED.finditer(text):
         found.append(f"said twice: {match.group(0)!r}")
-    phrases = _direction_phrases()
     for start, end in _sentences(text):
         sentence = text[start:end]
         by_suffix: dict[str, set[int]] = {}
@@ -581,9 +660,14 @@ def defects(text: str, rules: Rules | None = None) -> list[str]:
                 if _count_significant(float(digits), decimals - 1) >= rules.min_significant:
                     found.append(f"over-precise: {match.group(0)!r}")
             tail = sentence[match.end():match.end() + 9]
-            before = sentence[:match.start()].rstrip().lower()
-            if tail.startswith(" adverse") and any(before.endswith(p) for p in phrases):
-                found.append(f"direction said twice: {sentence[max(0, match.start() - 16):match.end() + 8]!r}")
+            if tail.startswith(" adverse"):
+                said = direction(sentence[:match.start()], sentence[match.end() + 8:])
+                where = sentence[max(0, match.start() - 24):match.end() + 8]
+                if said == "adverse":
+                    found.append(f"direction said twice (the words already say it; drop one): {where!r}")
+                elif said == "favourable":
+                    found.append(f"direction contradicts the figure (the words say favourable, the figure"
+                                 f" is adverse): {where!r}")
         for suffix, spent in by_suffix.items():
             if len(spent) > 1:
                 found.append(f"mixed precision for {suffix!r} figures in one sentence: {sentence[:60]!r}")
@@ -600,3 +684,80 @@ def enum_values(facts: Sequence[CanonicalFact]) -> dict[str, str]:
         if found:
             out[found.group(1)] = found.group(1).replace("_", " ")
     return out
+
+
+# ---------------------------------------------------------------------------
+# A table's unit
+# ---------------------------------------------------------------------------
+
+
+def _tables(name: str) -> Mapping[str, Any]:
+    entry = _book()["spellings"].get(name, {})
+    tables: Mapping[str, Any] = entry.get("tables", {})
+    return tables
+
+
+def table_units(table: Table, facts: Mapping[str, CanonicalFact], presentation: Presentation) -> dict[str, str]:
+    """Money column key to the unit its cells are held in, as a reader names it.
+
+    A table prints the ledger's own cells ("617,200" for AUD 617.2m held in
+    thousands), which is right for a schedule and meaningless without its
+    unit: the appendix schedules of a reader-spelled memo printed thousands
+    with nothing saying so. Read from the facts the cells cite (the ledger's
+    unit, never guessed from a header), and empty under the exact spelling
+    and for a table that carries a unit column of its own.
+    """
+    from .narrative.references import _is_money
+
+    rules = rules_for(presentation)
+    if rules is None:
+        return {}
+    spec = _tables(rules.name)
+    if not spec:
+        return {}
+    marks = {str(m).lower() for m in spec.get("unit_columns", ())}
+    if any(column.label.strip().lower() in marks for column in table.columns):
+        return {}
+    found: dict[str, set[str]] = {}
+    for row in table.rows:
+        for key, cell in row.cells.items():
+            fact = facts.get(cell.fact_id or "")
+            if fact is None or fact.value is None or not isinstance(cell.value, (int, float)):
+                continue
+            if _is_money(fact.value.unit):
+                found.setdefault(key, set()).add(fact.value.unit)
+    out: dict[str, str] = {}
+    template = str(spec.get("unit", "{currency} {scale}"))
+    for key, units in sorted(found.items()):
+        if len(units) != 1:
+            continue
+        currency, _, scale = next(iter(units)).partition("_")
+        out[key] = " ".join(template.format(currency=currency, scale=scale.replace("_", " ")).split())
+    return out
+
+
+def unit_caption(caption: str, table: Table, facts: Mapping[str, CanonicalFact],
+                 presentation: Presentation) -> tuple[str, Table]:
+    """*caption* and *table* stating the table's money unit, once.
+
+    In the caption when every money column shares one unit ("Business Unit
+    P&L (AUD thousands)"), else in each money column's header. Unchanged
+    under the exact spelling, so an audit rendering keeps its bytes.
+    """
+    units = table_units(table, facts, presentation)
+    if not units:
+        return caption, table
+    rules = rules_for(presentation)
+    assert rules is not None
+    spec = _tables(rules.name)
+    labels = set(units.values())
+    if len(labels) == 1:
+        unit = next(iter(labels))
+        if unit.lower() in caption.lower():
+            return caption, table
+        return str(spec.get("caption", "{caption} ({unit})")).format(caption=caption, unit=unit), table
+    header = str(spec.get("header", "{label} ({unit})"))
+    columns = [column.model_copy(update={"label": header.format(label=column.label, unit=units[column.key])})
+               if column.key in units and units[column.key].lower() not in column.label.lower() else column
+               for column in table.columns]
+    return caption, table.model_copy(update={"columns": columns})

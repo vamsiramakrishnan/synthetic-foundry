@@ -48,7 +48,10 @@ widow and orphan control), `deck` (`ledger` tables, or a `presenter` deck of
 takeaway titles and argument bullets), `notes` (talk track or provenance)
 and `slide_budget`; a sixth, `spelling`, decides how a figure reads in a
 sentence (`exact`, or `reader`: rounded per magnitude, one precision per
-sentence, `k` not "thousands", `nil` for a zero, recorded values in words).
+sentence, `k` not "thousands", `nil` for a zero, recorded values in words,
+a money table's unit in its caption); a seventh, `titles`, bounds a
+presenter slide's title (`reader`: 12 words, 80 characters, never truncated,
+no dash).
 A new doctype gets all of them by being rendered, with
 nothing to declare; a doctype that must keep its citations on the page is an
 `overrides` entry, not a new profile.

@@ -158,6 +158,12 @@
       "Counterparty": [{"move": "context", "kinds": ["p2p.contract_counterparty"]}, {"move": "status", "kinds": ["p2p."]}, "implication"]
     }
   },
+  "floors": {
+    "about": "How much a section must say for the moves it declares, stated in every reader-grade narration brief (each move's `sentences`, the section's `floor`) and refused as `section_floor` when a section falls below it, so a live writer is held to the floor the offline narrator is measured against. A move that introduces facts says at least one sentence per thing it measures (a subject's measure, however many facets; not a prior-period figure, not a fact an earlier section already said), up to `sentences_per_move` (a move's own `sentences` in the table above overrides the cap); a derived move says `derived_sentences`. The section's paragraphs are at least `paragraphs_per_move` of its introducing moves, rounded up. A section given fewer facts than it has moves is exempt, and the brief records why: a paragraph per move would have to be filler.",
+    "sentences_per_move": 3,
+    "derived_sentences": 1,
+    "paragraphs_per_move": 0.5
+  },
   "notes": {
     "moves": ["point", "evidence", "transition"],
     "about": "What a presenter says over a slide: the point it makes, the evidence behind it, and the line into the next slide. The sentences are the prompts pack texts `render.deck.notes.<move>`."

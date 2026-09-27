@@ -55,7 +55,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
 
-__all__ = ["NOTES_THRESHOLD", "THRESHOLDS", "ProseQuality", "failures", "measure", "notes_repetition"]
+__all__ = ["NOTES_THRESHOLD", "THRESHOLDS", "ProseQuality", "failures", "measure", "notes_repetition", "shape"]
 
 #: ``reading -> (bound, value)``: ``max`` readings must not exceed the value,
 #: ``min`` readings must reach it. Chosen against the composing narrator on
@@ -121,6 +121,15 @@ def failures(reading: ProseQuality, thresholds: dict[str, tuple[str, float]] | N
             word = "above" if bound == "max" else "below"
             out.append(f"{name} is {actual:g}, {word} the {bound} of {value:g}")
     return out
+
+
+def shape(text: str) -> tuple[int, int]:
+    """``(sentences, paragraphs)`` of narrated *text*, counted as `measure`
+    counts them, so the claim validator's ``section_floor`` and this reading
+    cannot disagree about how long a section is."""
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    sentences = [s for p in paragraphs for s in _SENTENCE.split(_REFERENCE.sub("<n>", p)) if s.strip()]
+    return len(sentences), len(paragraphs)
 
 
 def _mask(sentence: str, names: list[str]) -> str:

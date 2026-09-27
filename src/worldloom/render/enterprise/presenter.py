@@ -52,10 +52,14 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from ... import longform
+from ... import titles as title_style
 from ...ids import content_key
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Callable
+
     from ...models import ArtifactIR, ArtifactSection, CanonicalFact, Table
+    from ...titles import TitleRules
     from . import Context
     from .pptx import _Deck
 
@@ -124,6 +128,16 @@ def _shorten(text: str, limit: int) -> str:
         if cut > limit // 3:
             return text[:cut].rstrip(",;") + "."
     return text[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def _title(text: str, style: TitleRules | None, keep: Callable[[str], bool] | None = None) -> str:
+    """*text* fitted as a title: the shipped cut when the profile names no
+    style, else `titles.fit` (a shorter clause, never a truncation), and
+    ``""`` when nothing complete fits, so the caller titles the slide from
+    its lead fact instead."""
+    if style is None:
+        return _shorten(text, _TITLE_CHARS).rstrip(".")
+    return title_style.fit(text, style, keep) or ""
 
 
 def _pairs(raw: str, spelled: str) -> list[list[tuple[str, str]]]:
@@ -198,7 +212,8 @@ def _clauses(raw: str, spelled: str) -> list[tuple[str, str]]:
 
 
 def takeaway(raw: str, spelled: str, fallback: str, facts: Mapping[str, CanonicalFact] | None = None,
-             fact_title: Any = None, titled: set[str] | None = None) -> str:
+             fact_title: Any = None, titled: set[str] | None = None, style: TitleRules | None = None,
+             keep: Callable[[str], bool] | None = None) -> str:
     """A slide title that is the slide's point, built from its lead fact.
 
     The lead fact is the first current fact the section cites. The title is
@@ -208,6 +223,11 @@ def takeaway(raw: str, spelled: str, fallback: str, facts: Mapping[str, Canonica
     retells a superseded belief is history, not a point. A fact that already
     titles an earlier slide (*titled*, updated here) does not title another:
     two slides saying "Revenue finished AUD 13.3m adverse" are one slide.
+
+    Under a title *style* (the profile's ``titles`` knob) a claim that does
+    not fit is shortened to a shorter clause that still carries a figure
+    (*keep* says which pieces do), never cut mid-clause; when none fits, the
+    lead fact's template titles the slide.
     """
     from ...narrative import references
 
@@ -227,9 +247,11 @@ def takeaway(raw: str, spelled: str, fallback: str, facts: Mapping[str, Canonica
                     continue
                 claim = _clean(clause).rstrip(".")
                 if len(claim.split()) >= _CLAIM_WORDS and not _generic(claim):
-                    titled.update(references.referenced(raw_clause))
                     claim = claim[:1].upper() + claim[1:]
-                    return _shorten(claim, _TITLE_CHARS).rstrip(".")
+                    fitted = _title(claim, style, keep)
+                    if fitted:
+                        titled.update(references.referenced(raw_clause))
+                        return fitted
                 break
             built = fact_title(current[0]) if fact_title is not None else ""
             if built:
@@ -238,13 +260,16 @@ def takeaway(raw: str, spelled: str, fallback: str, facts: Mapping[str, Canonica
     return fallback
 
 
-def lint_titles(titles: list[tuple[str, list[str]]]) -> list[str]:
+def lint_titles(titles: list[tuple[str, list[str]]], style: TitleRules | None = None) -> list[str]:
     """Findings on a deck plan's content slide titles, as sentences to act on.
 
     *titles* pairs each content slide's title with the values of the facts it
     shows, as spelled. A title must carry one of them (a figure, a recorded
     value, a name the fact is about): a title with none is a label, not a
-    point. And no title may be a lead-in the pack lists as generic.
+    point. And no title may be a lead-in the pack lists as generic. Under a
+    title *style* (`titles`), a title must also be complete (no ellipsis, no
+    last word that leaves a clause open), within the style's words and
+    characters, and free of the characters the style does not print.
     """
     findings: list[str] = []
     for title, values in titles:
@@ -253,6 +278,7 @@ def lint_titles(titles: list[tuple[str, list[str]]]) -> list[str]:
             findings.append(f"{title!r} is a lead-in, not a takeaway; title the slide with the claim it points at")
         elif not any(value and value.lower() in lowered for value in values):
             findings.append(f"{title!r} carries none of the slide's facts; build the title from its lead fact")
+        findings.extend(title_style.lint(title, style))
     return findings
 
 
@@ -286,7 +312,8 @@ def chart_takeaway(chart: Any, table: Table, ctx: Context, presentation: Any) ->
     key = "render.deck.takeaway.widest" if variance is not None else "render.deck.takeaway.lowest"
     text = _text(key, chart.title, row=row.label, measure=measure.lower(), value=value, chart=chart.title)
     text = text[:1].upper() + text[1:]
-    return _shorten(text or chart.title, _TITLE_CHARS).rstrip(".")
+    style = title_style.rules_for(presentation)
+    return _title(text or chart.title, style, lambda piece: value.lower() in piece.lower()) or chart.title
 
 
 class Talk:
@@ -410,6 +437,7 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> list[
 
     doc = deck.doc
     facts = ctx.facts
+    style = title_style.rules_for(presentation)
     irs = {item.id: item for item in ctx.world.artifact_irs}
     names = ctx.world.entity_names()
     talk = Talk(deck, doc.artifact_type, presentation.notes, tuple(names.values()))
@@ -440,7 +468,10 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> list[
         value = alone(fact)
         if fact.value is None:
             if len(value.split()) >= _CLAIM_WORDS:
-                return _shorten(value[:1].upper() + value[1:], _TITLE_CHARS).rstrip(".")
+                head = " ".join(value.split()[:_CLAIM_WORDS]).lower()
+                fitted = _title(value[:1].upper() + value[1:], style, lambda piece: head in piece.lower())
+                if fitted:
+                    return fitted
             key = "render.deck.takeaway.fact.text"
         else:
             facet = _parse(fact.kind)[2] or "value"
@@ -449,7 +480,24 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> list[
                 key += ".adverse" if fact.value.amount < 0 else ".favourable"
         text = _text(key, fact_id, subject=phrase, value=value) or _text(
             "render.deck.takeaway.fact.value", fact_id, subject=phrase, value=value)
-        return _shorten(text[:1].upper() + text[1:], _TITLE_CHARS).rstrip(".") if text else ""
+        shown_value = value if fact.value is not None else " ".join(value.split()[:_CLAIM_WORDS])
+        return _title(text[:1].upper() + text[1:], style,
+                      lambda piece: shown_value.lower() in piece.lower()) if text else ""
+
+    def figured(section_raw: str) -> list[str]:
+        """The spellings of the section's facts a shortened title may keep:
+        its figures and the opening words of its recorded values."""
+        from ...figures import spellings_of
+
+        values: list[str] = []
+        for fid in references.referenced(section_raw):
+            fact = facts.get(fid)
+            if fact is None:
+                continue
+            spelled = alone(fact).rstrip(".")
+            values.append(spelled if fact.value is not None else " ".join(spelled.split()[:_CLAIM_WORDS]))
+            values.extend(spellings_of(fact, locale=ctx.locale, presentation=presentation))
+        return [v for v in values if v]
 
     def shown(section_raw: str) -> list[str]:
         """What the slide's facts look like on it: their spellings, alone and
@@ -485,7 +533,9 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> list[
         bullets = argument(raw, spelled)
         if not bullets:
             return
-        title = takeaway(raw, spelled, section.heading, facts, fact_title, titled)
+        grounds = [v.lower() for v in figured(raw)]
+        title = takeaway(raw, spelled, section.heading, facts, fact_title, titled, style,
+                         lambda piece: any(v in piece.lower() for v in grounds))
         # A bullet that only restates the title, or leads with a lead-in the
         # pack calls generic, says nothing the title has not; the argument's
         # other bullets carry the slide.
@@ -493,7 +543,7 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> list[
                                            or (title.lower() in b.lower() and len(b) - len(title) < 60))]
         bullets = kept or bullets
         values = shown(raw)
-        if lint_titles([(title, values)]):
+        if lint_titles([(title, values)], style):
             # The clause read as a claim and carries no fact of its own: the
             # lead fact titles the slide instead.
             lead = next((i for i in references.referenced(raw) if facts.get(i) is not None
@@ -598,9 +648,14 @@ def build(ctx: Context, ir: ArtifactIR, deck: _Deck, presentation: Any) -> list[
             body_placeholder = deck._body_placeholder(section_slide)
             if body_placeholder is not None:
                 body_placeholder.text = "Supporting schedules"
+        from ...figures import unit_caption
+
         for heading, table, source in appendix_tables:
             if deck.room() < 1:
                 break
+            # A schedule prints the ledger's cells, in thousands: its title
+            # says so, as the memo's caption does.
+            heading, table = unit_caption(heading, table, facts, presentation)
             deck.table(heading, table, source, layout=_LAYOUT_TITLE_ONLY, notes=[
                 talk.say("render.deck.notes.schedule", heading, schedule=heading, source=source)], max_chunks=1)
     return body

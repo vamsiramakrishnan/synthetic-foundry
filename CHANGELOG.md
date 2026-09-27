@@ -11,6 +11,52 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Reader-grade documents: four edges a live narration showed
+
+Read off a live-narrated `enterprise/v2` corpus of seed 8128; `legacy` and
+`enterprise/v1` corpora (and every `audit` rendering) are byte-identical.
+
+- **The direction once, read from a lexicon.** "missing revenue plan by AUD
+  10.2m adverse": a negative figure drops its "adverse" wherever its own
+  clause already says which way it went, a phrase ("a shortfall of") or a
+  direction word before or just after it ("missing", "fell", "overspent",
+  "... below budget"), from prompts pack text
+  `render.figures.direction_words.adverse` / `.favourable` and
+  `render.figures.direction_window` (`figures.direction`). Decided when the
+  page is spelled, so offline and live prose both read once and the ledger
+  keeps exactly what the writer wrote; a writer who types "adverse" after such
+  a clause, or writes "ahead of plan by" an adverse figure, is refused as
+  `number_spelling` (`direction said twice`, `direction contradicts`).
+- **Titles bounded, complete, dashless.** A presentation knob, `titles`
+  (`free`, the shipped cut; `reader`, 12 words and 80 characters, never
+  truncated, a dash between clauses as a colon or comma), from
+  `_data/presentation/titles.json` (`worldloom.titles`). The title chooser
+  takes a shorter clause that still carries a figure, else the lead fact's
+  template; `presenter.lint_titles` names a title over length, carrying a
+  forbidden character or ending mid-clause. `reader` and `filing` use it.
+- **Every money table states its unit.** Under a reader spelling a schedule
+  of ledger cells captions its unit from the facts its cells cite ("Business
+  Unit P&L (AUD thousands)"), in DOCX, PDF, Markdown, HTML and the presenter
+  deck's appendix; per column header when the columns differ; not at all
+  when the table has a unit column (`figures.unit_caption`, the spelling
+  rulebook's `tables` entry).
+- **The length floor reaches live writers (Generation).** The rhetoric
+  catalogue is `moves@3.json`, adding `floors`: each move states the fewest
+  `sentences` it says (one per thing it measures, up to three; a derived move
+  one) and each reader-grade request a `floor` (sentences, paragraphs, or the
+  recorded `exempt` reason when it has fewer facts than moves). Both are in
+  the brief (the handshake payload and the `section_moves` prompt), and a
+  section below its floor is refused as `section_floor`. The offline narrator
+  keeps the paragraphs its floor asks for and says a plain implication
+  (`narrative.prose.implication.default`) where no kind gave one; two new
+  implication texts (`ops_feed_status`, `ops_incident_opened`). What changes:
+  every reader-grade request digest (so ledger keys) and the offline prose
+  of the sections those texts reach. Seven sections of the reference
+  narration (`examples/grocery-close/narration.json`) were below their new
+  floor and are rewritten to it (a paragraph per move, a sentence per thing
+  measured), and the reference adapter `tools/exec_agent.py` writes a
+  paragraph per move at the length each move states.
+
 ### Solvable case sets
 
 - **The shipped generators prove solvable (Generation).** `evalrun prove`

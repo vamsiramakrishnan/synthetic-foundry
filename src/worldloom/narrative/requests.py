@@ -71,12 +71,30 @@ class RequestMove(Model):
     instruction: str
     fact_ids: list[str] = Field(default_factory=list)
     derived: bool = False
+    sentences: int = 0
+    """The fewest sentences this move's paragraph says (`rhetoric.floor`):
+    one per thing it measures up to the catalogue's cap, or the derived
+    minimum. Zero where no floor was stated."""
+
+
+class SectionFloor(Model):
+    """How much a section must say for its moves, and why it is exempt if it is.
+
+    From `rhetoric.floor`. ``sentences`` and ``paragraphs`` are the least the
+    claim validator accepts (``section_floor``); ``exempt`` is the recorded
+    reason a section is held to neither (fewer facts than moves), and then
+    both are zero.
+    """
+
+    sentences: int = 0
+    paragraphs: int = 0
+    exempt: str = ""
 
 
 #: Fields added after the request digest was fixed, and left out of it while
 #: empty, so a request that carries none digests exactly as it always did and
 #: every earlier ledger replays.
-ADDITIVE_FIELDS = ("moves", "display", "recurrence", "restated")
+ADDITIVE_FIELDS = ("moves", "display", "recurrence", "restated", "floor")
 
 
 class NarrativeRequest(Model):
@@ -150,6 +168,10 @@ class NarrativeRequest(Model):
     back: the offline narrator walks its alternatives by this count. Advisory
     and never shown to a writer; reader-grade only, and left out of the
     digest while empty, like ``moves``."""
+    floor: SectionFloor | None = None
+    """How much the section must say for its moves (`rhetoric.floor`), or the
+    recorded reason it is exempt. Reader-grade only, out of the digest while
+    unset, like ``moves``."""
     restated: list[str] = Field(default_factory=list)
     """Allowed facts an earlier section of the same document already carries,
     where this section has facts of its own to add. Still allowed (a writer

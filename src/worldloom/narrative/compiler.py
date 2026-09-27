@@ -495,8 +495,13 @@ def _request_for(
         # with the facts it may draw on, and the names a reader would use for
         # subjects recorded as slugs. Every other corpus asks what it always
         # asked, and `digest_fields` keeps its digest byte-identical.
+        moves = rhetoric.plan(intent.artifact_type, section, [facts[f] for f in allowed], comparators, restated)
         request = request.model_copy(update={
-            "moves": rhetoric.plan(intent.artifact_type, section, [facts[f] for f in allowed], comparators),
+            "moves": moves,
+            # How much the section must say for those moves, stated in the
+            # brief and refused as `section_floor` below it, so a live writer
+            # is held to the floor the offline narrator is measured against.
+            "floor": rhetoric.floor(moves, len(allowed)) if moves else None,
             "display": _display_names(world, [facts[f] for f in allowed], names),
             "recurrence": _recurrence(world, section, allowed, facts, memo),
             "restated": restated,
