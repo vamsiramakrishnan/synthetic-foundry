@@ -11,8 +11,195 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Serving connectors through Anvil
+
+- **An Anvil state provider.** `python -m worldloom.anvil_provider --corpus
+  <dir> --connector <name>` speaks Anvil's stdio JSON-RPC provider protocol
+  (`initialize` at protocol version 1, `invoke`, `shutdown`) behind `anvil
+  simulate serve --provider-cmd`. Reads and lists come from the corpus's
+  records, searches run their vendor query (Jira's `jql`) through the shared
+  query evaluator, writes go through the emulator's state (`--snapshot-out`
+  writes the post-state for a diff), and domain errors carry the vendor's
+  status, code and error body. Cursors are offsets, so paging is
+  deterministic; stdout carries protocol lines only.
+- **One mapping file per contract.** `_data/connectors/anvil/<connector>.json`
+  (`worldloom.anvil-mapping/v1`) maps each contract operation to a connector
+  tool, its arguments to request locations through named transforms, and its
+  answer to a result shape, or marks it `unmodelled` with a reason. The lint
+  refuses an exposed operation that is neither; it runs at the handshake and
+  before an eval run starts. Jira ships, covering all 26 operations of Anvil's
+  trimmed Jira Cloud v3 contract (9 modelled, 17 unmodelled).
+- **`evalrun run --connectors anvil --contract <bundle>`** (and
+  `EvalSession.run(..., anvil=AnvilServing(...))`) serves each case through
+  Anvil: the agent gets `ANVIL_BASE_URL`, `ANVIL_<CONNECTOR>_BASE_URL` and
+  `ANVIL_TOKEN` (the exec seam passes them in the child's environment, and the
+  turn document gains an `anvil` block), calls the vendor API, and the Anvil
+  traces are replayed into the case's run so plan, trajectory, outcomes and
+  stages grade unchanged. A replay that differs from what the agent was served
+  is noted as `anvil_divergence`; `agent_identity.serving` records the
+  contracts. The default stays the in-process emulator, byte-identical.
+- **Stages read queries through the shared evaluator.** The query stage's
+  filter fields, entity and window clauses now come from the vendor
+  evaluator's parse, bound to the record keys the search compared (JQL
+  `created` is the record's `created_at`, OData `receivedDateTime` its
+  `received_at`), and from the historical conjunctive parser only for a query
+  the evaluator does not read. A relative bound such as `created >= -7d` is
+  now a time relative to the connector clock, so its window is checked; JQL
+  `OR`, native date functions and OData expressions are read rather than
+  dropped as unknown, so `query.missing_filter` and `query.wrong_window` fire
+  on them; a disjunction still names the fields it constrains.
+- **Parity.** `tests/test_anvil_provider.py` replays one Jira call sequence
+  (JQL search over two pages, get, create, edit, transition, comment, three
+  domain errors) through the emulator and through Anvil and the provider, and
+  requires identical records, errors and state diff, and one case graded
+  identically both ways. Skipped without Node and an Anvil CLI.
+
+### Connector searches in the vendor's own language
+
+- **One query evaluator for every connector language.**
+  `worldloom.connectors.query` parses JQL, SOQL, ServiceNow encoded queries,
+  OData (`$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$search`), CQL,
+  KQL, Drive `q` and Slack search modifiers into one frozen filter tree,
+  resolves every relative date against the corpus clock (never the wall
+  clock), binds vendor field names to record keys from the connector
+  definition's `query_fields` and field manifests plus the per-language
+  vendor names in `_data/connectors/_query.json`, and ranks free text with the
+  repository's BM25, ties by record id. Anything outside the supported grammar
+  gets the vendor's own status, message and response body (Jira's `Field 'x'
+  does not exist or you do not have permission to view it.`, Salesforce's
+  `INVALID_FIELD` with its row and column, Graph's `Invalid filter clause`,
+  Drive's `Invalid Value`); ServiceNow drops an unknown field and SharePoint
+  searches an unknown property as text, as those products do. The same
+  `parse`, `QueryTarget` and `execute` serve an out-of-process provider.
+- **Opt-in in the emulator.** The policy `connectors.query.engine` (default
+  `predicate`) or `ConnectorEmulator(query_engine="native")` makes a search
+  tool's `query` string run through the evaluator: SharePoint's and
+  OneDrive's search tools read KQL, the rest their connector's
+  `query_language`; GraphQL, Rovo and the system of record keep the historical
+  path. With the default, every emulator answer is byte-identical to before.
+  `docs/connector-serving.md` has the grammar and the opt-in.
+### Documents the size companies keep them (Generation)
+
+- **New default: `enterprise/v1`.** `worldloom build`, `worldloom mosaic` and
+  `sdk.Blueprint.build` now record `artifact_realism: enterprise/v1` on the
+  recipe and render long-form documents: Word and PDF controlled reports
+  (cover, document control with version, owner, approver, reviewers and
+  classification, revision history, approvals, review record, contents,
+  numbered sections and subsections, a "figures cited" table per section,
+  the pack workbook's schedules and native charts, appendices for supporting
+  facts, lineage, measures, chronology and related documents, running heads
+  and `Page X of Y`); PDFs add bookmarks, a multi-pass contents page with page
+  numbers, tables that repeat their header across pages and a sign-off form.
+  Decks are assembled from the pack on the template's real layouts (title,
+  agenda, section header, content, two content, comparison, title only with
+  native charts and tables), with footer, date and slide number and speaker
+  notes on every slide. Markdown is a wiki export (front matter, numbered
+  headings, lineage as a YAML block, related pages, attachments, page
+  history); HTML is an intranet page (site navigation, breadcrumbs, metadata
+  and labels, attachments, related pages, history, comments) with a site
+  home page. Measured on `--seed 8128 --incident --narrate`: the board paper
+  went from 237 words to about 4,600 and 26 page-equivalents, the variance
+  paper PDF from 6 pages to 37, the deck from 7 blank slides to 52 with 52
+  sets of notes and 4 native charts.
+- **Revisions and packs.** Controlled documents get separate revision files
+  under `artifacts/revisions/`: a v0.1 draft dated inside the window its
+  citations open (figures not yet true are TBC, superseded ones state the
+  predecessor), a v0.2 reviewed version with native Word comments from the
+  author's manager or approver, and a v1.x amendment for each later fact that
+  superseded a cited one, as tracked changes. Packs (month-end close,
+  executive committee, incident) get `artifacts/families/<pack>/index.md`,
+  and the executive committee pack an `agenda.docx`.
+- **Connector files carry their text.** Under `enterprise/v1` a SharePoint or
+  Drive file record carries `content` (so `get_file` returns the document's
+  text), `structure` (pages, slides or sections) and the revision files as
+  `version_history`; Confluence pages carry their page text.
+- **Measured.** `worldloom diversity ./corpus --sizes` (and `measure_corpus`,
+  under `documents`) reports words, pages, slides, notes, sections, tables and
+  revision files per document type and format, read from the files
+  (`worldloom.artifact_text`, standard library only).
+- **`legacy` is byte-identical.** `--realism legacy`, `Blueprint.realism("legacy")`
+  and `Built.render(realism="legacy")` write no key and reproduce the old files
+  byte for byte; a recipe without the key (every existing corpus, the golden
+  `retail-close`) is `legacy`, so re-rendering and replay do not move.
+  `worldloom render --realism` switches an existing corpus without a rebuild.
+  The IR, the facts and the validation report are identical under every
+  profile: length comes from structure, and every figure is a fact spelled
+  as prose spells it or an IR cell, attributed to its source.
+- **Build time.** The same standard build (all six formats) takes about
+  6.5s under `enterprise/v1` against about 2.5s before (and under `legacy`).
+
 ### Closing the loop: agents that improve against the corpus
 
+- **Query, plan-node and output stages.** `worldloom evalrun` now grades the
+  stages inside its three axes (`worldloom.evalrun.stages`): every search or
+  list call against the gold evidence of the node it served, by what the
+  emulator returned (evidence recall and precision, over-fetch, pages, zero
+  results, errors, and structural checks for scope, language and time window
+  against the as-of clock), attached as `TrajectoryGrade.queries`; the
+  agent's declared or implied DAG against the gold DAG node by node
+  (`PlanGrade.nodes`); and the output's field values, format, sections and
+  grounded facts (`OutcomeGrade.output`; cases compiled from a corpus now
+  carry the planned artifact's `sections`). New finding keys (`query.*`,
+  `plan.node_*`, `output.*`) cluster in the autopsy and a query section
+  joins the trace brief; `summarize` and `compare` report them as `stages`
+  and `stage_deltas`. No existing axis score, pass or verdict moves. Policies
+  `evalrun.grade.queries`, `.plan_nodes` and `.output` (on by default) and
+  `evalrun.grade.overfetch_ratio`. With a stage on, the grader identity gains
+  a `stages` part (stage grader version 1), so a new run's grader digest
+  differs from an older run's and a loop pinned before this change refuses to
+  continue under it; `compare` judges the axes on the digest without that
+  part, so older ledgers stay readable and comparable. With every stage off,
+  ledgers, summaries and the digest are byte-identical to before.
+- **Trace-level brief.** `worldloom evalrun improve --brief traces` (SDK
+  `brief="traces"`, policy `evalrun.improve.brief`; `worldloom evalrun
+  campaign --brief`) shows the proposer, below the autopsy summary, an error
+  catalogue of each tool, error code and normalised message with a raw
+  message, the failing arguments and the accepted shapes of the same tool;
+  the declared contracts of those tools; and failing trajectories turn by
+  turn (`worldloom.evalrun.evidence`). `--reference-run DIR` (SDK
+  `reference_run=`) adds the reference agent's accepted calls and
+  trajectories, ids masked and write payloads reduced to field names, and is
+  refused when it holds a held-out case. Sections are fitted to the
+  interview message, dropping whole items and saying so. The default
+  `summary` brief is byte-identical to before.
+- **Wide search.** `worldloom evalrun improve --candidates N --screen-cases M
+  --finalists F --parents champion|archive --round-budget B` (SDK keywords
+  of the same names, policies `evalrun.improve.candidates`, `.screen_cases`,
+  `.finalists`, `.parents`, `.round_budget`; `evalrun campaign` takes the
+  flags too) asks for N proposals a round, each told it is candidate i of N
+  and shown the earlier ones by summary and diff size, dedupes identical
+  bodies, and screens the rest on training cases by successive halving:
+  a stratified, seeded order of the training cases, one run each on the
+  first M, the better half advancing by paired mean delta against the
+  champion's existing runs while the prefix doubles, until F finalists go
+  through the unchanged training gate, ablation and holdout. Every policy
+  evaluated in full is archived under `archive/` with per-case and
+  per-failure-cluster scores; `--parents archive` draws each round's parent
+  from the archive's Pareto frontier, weighted toward a high mean and few
+  visits by a seeded draw, so a near miss becomes a stepping stone.
+  Receipts record the parent, every screening stage and the case-runs spent;
+  an interrupted round resumes with its proposals and finished screens. At
+  the defaults receipts and run directories are byte-identical to before.
+- **Noise-aware gates.** `worldloom evalrun improve --repeats K` (SDK
+  `repeats=`, policy `evalrun.improve.repeats`, default 1) runs each policy K
+  times per case set, each repeat an ordinary pinned run under
+  `runs/<pack>@<digest>/<label>/rep-<i>`, cached and resumed on its own. The
+  gates then judge a paired comparison over per-case means: a deterministic
+  paired bootstrap interval (seeded from the case-set digest and the two
+  policies' digests; `evalrun.improve.confidence` 0.95,
+  `evalrun.improve.bootstrap_resamples` 2000) with the t interval beside it.
+  Training passes when the mean reaches the delta band and the lower bound
+  reaches `evalrun.improve.min_train_ci` (0.0); the holdout when the lower
+  bound is above `evalrun.improve.min_holdout_delta`; an axis fails only when
+  its upper bound is below minus the band; a case is newly errored only when
+  it errored in most candidate repeats and no champion repeat. Receipts record
+  the interval, the standard error and each side's noise floor, and ablation
+  drops a hunk only when its contribution's upper bound is below the
+  tolerance. At K = 1 every rule, receipt and run directory is byte-identical
+  to before. **`worldloom evalrun noise RUN_DIR...`** (`evalrun.noise.noise`)
+  reports one policy's run-to-run spread and the minimum detectable effect
+  for N cases at K repeats (power `evalrun.improve.power`, 0.8), so an
+  experiment can be sized before it is paid for.
 - **`worldloom evalrun improve`** runs a champion `agent` pack over the
   training cases, clusters its failures, and asks a proposing harness for a
   revision through the pack interview. The candidate is kept only if it gains
@@ -33,6 +220,19 @@ first written up, before the waves above it landed.
   the holdout. Generated code lives only in the pack's `skills/` tree.
   `worldloom pack tree`, `pack from-tree` and `pack diff` move a pack between
   JSON and a directory.
+- **The improver is improvable.** The proposing harness runs under an
+  `agent` pack of its own (`agent:proposer-baseline` ships, restating
+  today's proposer): `evalrun improve --proposer-pack` puts its standing
+  instruction and skills ahead of the pack interview inside the same
+  digest-derived fence the agent under test gets, and each round's authoring
+  log records its reference and digest. `worldloom evalrun improve-proposer`
+  scores a proposer policy by the held-out gain of the agents it improves
+  across a set of tasks, has the proposer revise its own pack by diff, and
+  promotes a revision only when it gains on the training tasks and then on
+  meta-held-out tasks the brief never describes; receipts land in
+  `meta/rounds/`. The SDK form is `evalrun.meta.improve_proposer` and
+  `EvalSession.improver(..., proposer_pack=...)`. Without a proposer pack
+  every request, prompt and receipt is byte-identical to before.
 - **The grader is frozen by digest.** Every run records the rater, the
   `rater.*` prompts, the rubrics and the grading policy as one digest;
   `evalrun compare` calls nothing an improvement across two graders, and the
@@ -64,6 +264,18 @@ first written up, before the waves above it landed.
 - **Recorded, not generated.** A run's `run.json` now names its grader, and
   refused calls in a case's ledger carry the position where they fell. What a
   seed generates is unchanged.
+- **Campaigns.** `worldloom evalrun campaign` keeps improving past
+  `no_failures`: a sequence of stages, each a fresh training set and a sealed
+  held-out set from seeds the campaign never used, each running the improve
+  loop until it stops. A saturated or plateaued stage escalates to harder
+  slices (`escalate`, or the corner frontier); a failing one gets a curriculum
+  aimed at its autopsy. A held-out case never reaches a later training set
+  (refused as `held_out_overlap`), and after every stage the original and the
+  current champion both run its held-out cases, so `campaign.json` reports the
+  gain over the starting policy stage by stage on cases neither trained on.
+  Stage builders are injectable (`StageBuilder`; `DatasetStageBuilder`,
+  `CornerStageBuilder`), completed stages are read back rather than rerun, and
+  the SDK form is `EvalSession.campaign(...)`.
 
 ### Scale, live harnesses, and the last literals
 

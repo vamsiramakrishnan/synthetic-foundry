@@ -43,7 +43,9 @@ if TYPE_CHECKING:
     from ..packkit.authoring import Exchange
     from ..packkit.resolve import ResolvedPack
     from .agreement import AgreementReport
+    from .anvil import AnvilServing
     from .autopsy import Autopsy
+    from .campaign import CampaignLoop
     from .curriculum import Curriculum, Escalation
     from .improve import ImproveReport
     from .rater import Rater
@@ -170,6 +172,19 @@ class ImproveLoop:
     #: training and held-out cases and their records).
     value: bool = False
     ablate: bool | None = None
+    #: Runs of each policy per case set; ``None`` is the policy ``evalrun.improve.repeats``.
+    repeats: int | None = None
+    #: What the proposer is shown, ``summary`` or ``traces``; ``None`` is the policy ``evalrun.improve.brief``.
+    brief: str | None = None
+    #: A reference-agent run over the training cases, for a ``traces`` brief's accepted calls.
+    reference_run: RunReport | None = None
+    #: Wide search; ``None`` reads each ``evalrun.improve.*`` policy (``candidates``,
+    #: ``screen_cases``, ``finalists``, ``parents``, ``round_budget``).
+    candidates: int | None = None
+    screen_cases: int | None = None
+    finalists: int | None = None
+    parents: str | None = None
+    round_budget: int | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
@@ -223,7 +238,10 @@ class ImproveLoop:
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
                        max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
-                       holdout_values=holdout_values)
+                       holdout_values=holdout_values, repeats=self.repeats, brief=self.brief,
+                       reference_run=self.reference_run, candidates=self.candidates,
+                       screen_cases=self.screen_cases, finalists=self.finalists, parents=self.parents,
+                       round_budget=self.round_budget)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -281,20 +299,28 @@ class EvalSession:
             return cls.from_export(source, **options)
         return cls.from_corpus(source, **options)
 
-    def service(self, *, concurrency: int = 1) -> ConnectorEvaluationService:
+    def service(self, *, concurrency: int = 1, query_engine: str | None = None) -> ConnectorEvaluationService:
         """A fresh service over the session's rows and records. Runs do not share state."""
 
         return service_for(self.cases, self._records, concurrency=concurrency,
-                           definitions=self._definitions or None)
+                           definitions=self._definitions or None, query_engine=query_engine)
 
     def coverage(self) -> AxisCoverage:
         return axis_coverage(self.cases)
 
     def run(self, agent: AgentUnderTest, *, clock: Clock | None = None,
             rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None = None,
-            label: str | None = None, concurrency: int = 1) -> RunReport:
-        report = run_cases(self.service(concurrency=concurrency), self.cases, agent, principal=self.principal,
-                           clock=clock, rater=rater, concurrency=concurrency)
+            label: str | None = None, concurrency: int = 1, anvil: AnvilServing | None = None) -> RunReport:
+        """Run *agent* over every case. With ``anvil``, Anvil serves the connectors (``evalrun.anvil``).
+
+        The agent then reaches the vendor API over HTTP at the URLs its
+        surface carries (``tools.base_urls``, ``tools.environment``), and the
+        run's searches use the shared vendor query evaluator, as the
+        provider behind Anvil does.
+        """
+        service = self.service(concurrency=concurrency, query_engine="native" if anvil is not None else None)
+        report = run_cases(service, self.cases, agent, principal=self.principal,
+                           clock=clock, rater=rater, concurrency=concurrency, anvil=anvil)
         self.runs[label or agent.name] = report
         return report
 
@@ -369,6 +395,15 @@ class EvalSession:
         max_axis_regression: float | None = None,
         value: bool = False,
         ablate: bool | None = None,
+        proposer_pack: str | ResolvedPack | None = None,
+        repeats: int | None = None,
+        brief: str | None = None,
+        reference_run: RunRef | None = None,
+        candidates: int | None = None,
+        screen_cases: int | None = None,
+        finalists: int | None = None,
+        parents: str | None = None,
+        round_budget: int | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -383,7 +418,25 @@ class EvalSession:
         ``concurrency`` defaults to the policy ``evalrun.concurrency``.
         ``value=True`` also gates on the delta weighted by each case's value at
         stake; ``ablate`` overrides the policy ``evalrun.improve.ablate``.
+        ``proposer_pack`` is the policy the proposer runs under (an ``agent``
+        pack, such as one ``evalrun.meta.improve_proposer`` promoted); its
+        skill tree is materialised under ``out``.
+        ``repeats`` runs each policy that many times per case set and gates on
+        a paired interval (default: the policy ``evalrun.improve.repeats``, 1).
+        ``brief="traces"`` shows the proposer the connectors' own error
+        messages, the arguments behind them, the tools' contracts and failing
+        trajectories beside the autopsy (default: the policy
+        ``evalrun.improve.brief``, ``summary``); ``reference_run`` (a run of
+        the reference agent over the training cases: a label, a directory or
+        a report) supplies accepted calls for it and is refused when it
+        touches a held-out case.
+        Wide search: ``candidates`` proposals a round, screened by successive
+        halving from ``screen_cases`` training cases down to ``finalists``;
+        ``parents="archive"`` branches each round from the archive's Pareto
+        frontier; ``round_budget`` caps a round's screening and finalist
+        case-runs. Each defaults to its ``evalrun.improve.*`` policy.
         """
+        from .evidence import brief_mode
         from .runner import default_concurrency
 
         records: tuple[Any, ...] = self._records
@@ -397,12 +450,63 @@ class EvalSession:
         workers = default_concurrency() if concurrency is None else concurrency
         if workers < 1:
             raise ValueError("concurrency must be at least 1")
-        return ImproveLoop(session=self, agent=_agent_factory(agent), exchange=_exchange(proposer), out=Path(out),
+        from ..packkit.authoring import with_proposer
+
+        exchange = with_proposer(_exchange(proposer), None if proposer_pack is None
+                                 else self.agent_pack(proposer_pack, roots=pack_roots),
+                                 skills_cache=Path(out) / "skills-cache")
+        return ImproveLoop(session=self, agent=_agent_factory(agent), exchange=exchange, out=Path(out),
                            holdout=held, holdout_share=holdout_share, rater=rater_for(rater),
                            concurrency=workers, pack_roots=tuple(pack_roots), authoring_rounds=authoring_rounds,
                            min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
                            max_axis_regression=max_axis_regression, value=value, ablate=ablate,
-                           _records=records, _holdout_records=held_records)
+                           repeats=repeats, brief=brief_mode(brief),
+                           reference_run=None if reference_run is None else self.report(reference_run),
+                           candidates=candidates, screen_cases=screen_cases, finalists=finalists,
+                           parents=parents, round_budget=round_budget, _records=records,
+                           _holdout_records=held_records)
+
+    def campaign(
+        self,
+        *,
+        agent: Callable[[ResolvedPack], AgentUnderTest] | str,
+        proposer: Exchange | str,
+        out: str | Path,
+        builder: Any,
+        rater: str | Rater | None = None,
+        concurrency: int | None = None,
+        pack_roots: Sequence[str | Path] = (),
+        seed: int = 0,
+        max_cases: int | None = None,
+        patience: int | None = None,
+        value: bool = False,
+        baseline: bool = True,
+        **improve_options: Any,
+    ) -> CampaignLoop:
+        """The outer loop over stages of fresh cases; ``.run(champion)`` starts it.
+
+        ``builder`` makes each stage's case sets: a ``StageBuilder``, or a
+        base ``DatasetPlan`` (its JSON document, or a path to one), which
+        becomes a ``DatasetStageBuilder``. With ``baseline`` the champion
+        runs this session's cases first and the first stage is decided from
+        its failures. ``agent``, ``proposer``, ``rater`` and ``concurrency``
+        are read as ``improver`` reads them; *improve_options* (``rounds``
+        and the rest) reach every stage's ``improve()`` untouched.
+        """
+        from .campaign import CampaignLoop, DatasetStageBuilder
+        from .runner import default_concurrency
+
+        workers = default_concurrency() if concurrency is None else concurrency
+        if workers < 1:
+            raise ValueError("concurrency must be at least 1")
+        stage_builder = builder if callable(builder) else DatasetStageBuilder(_dataset_plan(builder),
+                                                                             principal=self.principal)
+        return CampaignLoop(builder=stage_builder, agent=_agent_factory(agent), exchange=_exchange(proposer),
+                            out=Path(out), baseline=(self.cases, self._records) if baseline else None,
+                            rater=rater_for(rater), concurrency=workers, principal=self.principal,
+                            definitions=self._definitions or None, pack_roots=tuple(pack_roots), seed=seed,
+                            max_cases=max_cases, patience=patience, value=value,
+                            improve_options=dict(improve_options))
 
     # -- the loop's parts, one call each ------------------------------------------------
 

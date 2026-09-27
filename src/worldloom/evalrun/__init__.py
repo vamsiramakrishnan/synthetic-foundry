@@ -338,6 +338,39 @@ if TYPE_CHECKING:
     from .session import (
         ImproveLoop as ImproveLoop,
     )
+    from .stages import (
+        STAGE_FINDINGS as STAGE_FINDINGS,
+    )
+    from .stages import (
+        FieldCheck as FieldCheck,
+    )
+    from .stages import (
+        OutputGrade as OutputGrade,
+    )
+    from .stages import (
+        PlanNodeGrade as PlanNodeGrade,
+    )
+    from .stages import (
+        QueryCall as QueryCall,
+    )
+    from .stages import (
+        QueryGrade as QueryGrade,
+    )
+    from .stages import (
+        QueryNode as QueryNode,
+    )
+    from .stages import (
+        StageSummary as StageSummary,
+    )
+    from .stages import (
+        grade_output as grade_output,
+    )
+    from .stages import (
+        grade_plan_nodes as grade_plan_nodes,
+    )
+    from .stages import (
+        grade_queries as grade_queries,
+    )
 
 # The whole surface is re-exported lazily (PEP 562), for the same reason the
 # package root is: importing `worldloom.evalrun.cli` runs this file first, and
@@ -449,6 +482,17 @@ _EXPORTS: dict[str, str] = {
     'append_result': '.results',
     'write_run': '.results',
     'write_studio_csv': '.results',
+    'OutputGrade': '.stages',
+    'PlanNodeGrade': '.stages',
+    'QueryGrade': '.stages',
+    'QueryCall': '.stages',
+    'QueryNode': '.stages',
+    'FieldCheck': '.stages',
+    'StageSummary': '.stages',
+    'STAGE_FINDINGS': '.stages',
+    'grade_queries': '.stages',
+    'grade_plan_nodes': '.stages',
+    'grade_output': '.stages',
 }
 
 
@@ -604,6 +648,18 @@ __all__ = [
     "to_studio_rows",
     "write_run",
     "write_studio_csv",
+    # The stages inside the axes: queries, plan nodes, output.
+    "OutputGrade",
+    "PlanNodeGrade",
+    "QueryGrade",
+    "QueryCall",
+    "QueryNode",
+    "FieldCheck",
+    "StageSummary",
+    "STAGE_FINDINGS",
+    "grade_queries",
+    "grade_plan_nodes",
+    "grade_output",
     # The grader, frozen by digest, and its agreement with Eval Studio's.
     "AgreementReport",
     "GraderDrift",

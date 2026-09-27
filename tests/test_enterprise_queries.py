@@ -354,7 +354,8 @@ def test_a_cover_without_the_required_set_does_not_claim_what_it_cannot_prove() 
     assert proven.truncated and proven.exact and not proven.complete
     assert set(proven.holes) == required - _subsets(rows[0], 2)
     with pytest.raises(ValueError, match="outside the derived required set"):
-        constrained_cover(rows, 2, required=set(itertools.islice(required, 3)))
+        # Three interactions spread over rows, never the three of one row, whatever the hash order.
+        constrained_cover(rows, 2, required=set(sorted(required)[:3]))
 
 
 def test_shards_cover_their_own_slices_and_their_union_covers_the_space() -> None:

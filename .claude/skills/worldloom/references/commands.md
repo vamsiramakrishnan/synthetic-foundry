@@ -114,6 +114,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--policies` | Give the company its standing documents: core or full. These are the papers a company *has* rather than produces (a delegation of authority, an expense policy, a leave policy, an information security policy), as opposed to what a close or an incident emits. Without it an assistant asked what the approval threshold is has nothing to find, because the company has no rules. Money provisions scale off the company's own revenue, so two archetypes do not share a limit. Omit it and every existing corpus is byte-identical. |
 | `--priors` | Build under physics calibrated from data by `worldloom calibrate`: a prior snapshot whose spans replace the engine's ranges and whose receipt records how they were made and what privacy budget it cost. Only ranges cross the boundary: no row of the source is in the snapshot, so none can be in the corpus. Applied before --physics, which then overrides it range by range. |
+| `--realism` | How the world materialises into files. `enterprise` (the default for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled reports with cover, document control, contents, numbered sections, schedules from the pack's workbook, appendices, revision files and reviewer comments; decks on real layouts with speaker notes and native charts; intranet pages; wiki exports; pack indexes; and connector file records that carry their text. `legacy` reproduces the compact files every corpus built before this flag has, byte for byte. `ecology` is the artifact-ecology annotation. Recorded on the recipe, so a replay and a later `worldloom render` reproduce it; the world, its facts and its validation are the same under all three. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--reviews` | Review this many people per period. Each is a signed performance review countersigned by the manager's own manager, plus the running one-to-one note that fed it, at a lower authority and saying something slightly different. |
 | `--section-omission` | Per-mille chance that any one *optional* section is left out of any one document, so a type emits a subset of its outline rather than all of it every time. This is swarm testing applied to documents: sections compete for a reader's attention exactly as test features compete for room, and a corpus whose every close pack carries the same five headings teaches a retriever the headings. Sections are required unless a type says otherwise, so no required fact can ever be lost to it; an un-annotated corpus has nothing optional and is unaffected at any value. Pass 0 for the historical all-sections shape. |
@@ -229,7 +230,9 @@ worldloom diversity <CORPUS>
 | `--across` | Additional corpora to compare against; repeatable. Reports shape overlap and cross-corpus prose duplicates over the whole set, the failure no single corpus's report can see: five mosaic companies can each look varied while all five hold the same shapes and say the same sentences. |
 | `--check-quotas` | Exit non-zero if the batch fails a declared Quotas threshold (see compiler/diversity.py). For CI: assert the corpus does not get more monotonous over time. |
 | `--effective` | Also report the Vendi score: the *effective* number of distinct shapes, which is what a count of distinct shapes overstates. Thirty shapes that differ by one section each are closer to four documents than to thirty, and only a metric that reads the similarity matrix rather than counting equality classes can say so. |
+| `--json` | With --sizes, emit the reading as JSON. |
 | `--near-duplicates` | Also group passages whose prose is near-identical, and name which artifacts they belong to. Structural sameness and prose sameness are different failures: a batch can carry twenty distinct shapes and still say the same sentences in all of them. |
+| `--sizes` | Report document size and structure instead, read from the rendered files: words, pages (real for PDF, a layout equivalent for Word), slides and speaker notes, sections, tables and revision files per document type and format. The realism reading beside the variety one: twenty distinct shapes of four-page memos are still four-page memos. The `measure_corpus` MCP tool returns the same reading. |
 | `--verbose`, `-v` | Show the per-artifact-type breakdown and every distinct shape within it. |
 
 ### `worldloom docs`
@@ -423,6 +426,43 @@ worldloom evalrun autopsy <RUN>
 | `--out`, `-o` | Write the autopsy as JSON here. |
 | `--top` | Clusters to report in full; the rest are counted. |
 
+### `worldloom evalrun campaign`
+
+Keep improving an agent across stages of fresh cases, and report how far it moved on cases it never saw.
+
+```
+worldloom evalrun campaign <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--brief` | What every stage's proposer is shown: summary or traces (see `evalrun improve --brief`). Default: policy `evalrun.improve.brief`, summary. |
+| `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
+| `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
+| `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
+| `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
+| `--harness` | An installed coding harness as the agent under test: codex or claude. |
+| `--json` | Emit campaign.json on stdout. |
+| `--max-cases` | Training plus held-out cases the campaign may spend (default: policy `evalrun.campaign.max_cases`). |
+| `--max-turns` |  |
+| `--out`, `-o` | Directory for campaign.json and stages/NNN/. |
+| `--parents` | Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion). |
+| `--plan` | The base DatasetPlan (JSON) every stage's case sets are compiled from, under fresh seeds. |
+| `--principal` |  |
+| `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
+| `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--rater` | grounded or exec:<command>; pinned for the whole campaign. |
+| `--rater-timeout` |  |
+| `--round-budget` | Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit). |
+| `--rounds` | Improve rounds per stage (default: policy `evalrun.improve.rounds`). |
+| `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
+| `--seed` | The campaign seed every stage's seeds derive from. |
+| `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--stages` | Stages to run at most (default: policy `evalrun.campaign.max_stages`). |
+| `--timeout` | Seconds a child (agent turn or proposal) may run. |
+| `--value` | Gate every stage on the value-weighted delta too, and weight targeted stages by value. |
+
 ### `worldloom evalrun cases`
 
 Compile the corpus into three-axis cases and report what the set can grade.
@@ -571,8 +611,11 @@ worldloom evalrun improve <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--brief` | What the proposer is shown: summary (the failure clusters) or traces (also the connectors' own error messages, the arguments behind them, the tools' contracts and failing trajectories). Default: policy `evalrun.improve.brief`, summary. |
+| `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
+| `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
 | `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
@@ -581,15 +624,44 @@ worldloom evalrun improve <CORPUS>
 | `--max-turns` |  |
 | `--no-ablate` | Send the candidate to the holdout whole, without taking out hunks that carry nothing. |
 | `--out`, `-o` | Directory for rounds/, runs/, packs/ and improve.json. |
+| `--parents` | Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion). |
 | `--principal` |  |
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--proposer-pack` | The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest. |
 | `--rater` | grounded or exec:<command>; pinned for the whole loop. |
 | `--rater-timeout` |  |
+| `--reference-run` | A run directory of the reference agent over the training cases only, whose accepted calls a traces brief shows beside the failing ones. Refused when it holds a held-out case. |
+| `--repeats` | Run each policy this many times per case set and gate on a paired bootstrap interval over per-case means (default: policy `evalrun.improve.repeats`, 1). Size it with `evalrun noise`. |
+| `--round-budget` | Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit). |
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
+| `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
+
+### `worldloom evalrun improve-proposer`
+
+Improve the proposer: revise its policy and keep a revision only if the agents it improves gain more.
+
+| Option | Purpose |
+| --- | --- |
+| `--concurrency` | Cases in flight at once in every run. |
+| `--json` | Emit meta.json on stdout. |
+| `--max-turns` |  |
+| `--meta-rounds` | Meta rounds: each proposes one revision of the proposer policy. |
+| `--no-ablate` | Skip ablation in every inner loop. |
+| `--out`, `-o` | Directory for meta/rounds, meta/tasks, meta/packs and meta/meta.json. |
+| `--principal` |  |
+| `--proposer-exec` | The proposing harness, over the `pack author` seam; it also revises its own policy. |
+| `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
+| `--proposer-pack` | The proposer policy to start from: agent:<name>[@<digest>] or a pack file (agent:proposer-baseline ships). |
+| `--rater` | grounded or exec:<command>; pinned for every task. |
+| `--rater-timeout` |  |
+| `--rounds` | Rounds of each inner `improve` loop (default: policy `evalrun.improve.rounds`). |
+| `--shell` | Run the agents' exec commands through the shell. |
+| `--tasks` | TASKS.json: {"tasks": [...], "holdout_tasks": [...]}, each task {name, corpus, holdout_corpus?, agent_pack, exec \| harness, limit?}; paths relative to the file. |
+| `--timeout` | Seconds a child (agent turn or proposal) may run. |
 
 ### `worldloom evalrun merge`
 
@@ -602,6 +674,21 @@ worldloom evalrun merge <OUT> <SHARDS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the summary as JSON. |
+
+### `worldloom evalrun noise`
+
+Measure one policy's run-to-run noise, and the smallest effect a comparison could detect through it.
+
+```
+worldloom evalrun noise <RUNS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--cases` | Size the experiment for this many cases (default: the cases the runs graded). |
+| `--confidence` | Confidence of the interval (default: policy `evalrun.improve.confidence`, 0.95). |
+| `--json` |  |
+| `--repeats` | Size the experiment for this many repeats a side (default: the number of runs given). |
 
 ### `worldloom evalrun plan`
 
@@ -651,7 +738,10 @@ worldloom evalrun run <CORPUS>
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
 | `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
+| `--anvil-cmd` | The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH). |
 | `--concurrency` | Cases in flight at once, each on its own fork (default: policy `evalrun.concurrency`, 1). The ledger is in case order whatever order they finish in. |
+| `--connectors` | What serves the connectors: emulator (in process, the default) or anvil (`anvil simulate serve` over each --contract, the agent calling the vendor API at $ANVIL_BASE_URL). |
+| `--contract` | With --connectors anvil: a contract bundle (or its air.json) to serve, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |
@@ -1011,6 +1101,7 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Consecutive periods per world. |
 | `--probe` | Take the axes from a settled probe instead of this engine's defaults. The probe decides what varies and between which bounds; the algorithm still decides which N. Every parameter the probe bound becomes an axis over the interval it argued for, and axes it said nothing about keep their defaults. |
+| `--realism` | How each world materialises into files: `enterprise` (the default for new builds), `legacy` (byte-identical to earlier mosaics) or `ecology`. See `worldloom build --realism`. |
 | `--resume` | Resume this exact plan from validated worlds and section checkpoints. |
 | `--seed`, `-s` | Base seed. World N uses seed+N-1. |
 | `--shard-count` | Deterministic number of batch shards. |
@@ -1552,6 +1643,7 @@ worldloom render <CORPUS>
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
 | `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
+| `--realism` | Which files the corpus materialises into: `enterprise` (long-form controlled documents, decks, intranet pages, revisions and packs), `legacy` (the compact files, byte-identical to every earlier render) or `ecology`. Omit it to keep what the corpus's recipe records; a corpus that records none is `legacy`. |
 
 ### `worldloom seams`
 

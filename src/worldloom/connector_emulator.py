@@ -147,6 +147,28 @@ def _coerce_predicate(value: Predicate | Mapping[str, Any] | None, *, entity: st
     return Predicate(entity=entity, where=tuple(clauses))
 
 
+#: The two ways a search tool can execute a ``query`` string. ``predicate`` is
+#: the historical conjunctive subset (``connector_query.parse_native``) and the
+#: default, so a default emulator's output stays byte-identical; ``native`` is
+#: the vendor-language evaluator in ``worldloom.connectors.query``.
+QUERY_ENGINES = ("predicate", "native")
+
+
+def _query_engine(stated: str | None) -> str:
+    """The engine a new emulator uses: *stated*, else the policy ``connectors.query.engine``."""
+
+    if stated is None:
+        from . import packkit
+
+        try:
+            stated = str(packkit.policy("connectors.query.engine"))
+        except KeyError:
+            stated = "predicate"
+    if stated not in QUERY_ENGINES:
+        raise ValueError(f"unknown query engine {stated!r}; expected one of {', '.join(QUERY_ENGINES)}")
+    return stated
+
+
 def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8"))
 
@@ -162,6 +184,7 @@ class ConnectorEmulator:
         acl: Mapping[str, Mapping[str, Any]] | None = None,
         faults: Mapping[str, Sequence[str]] | None = None,
         actor: str = "agent",
+        query_engine: str | None = None,
     ) -> None:
         self.definition = definition
         self.server = definition.connector
@@ -180,6 +203,7 @@ class ConnectorEmulator:
         self.acl = {key: dict(value) for key, value in (acl or {}).items()}
         self.faults = {key: tuple(value) for key, value in (faults or {}).items()}
         self.actor = actor
+        self.query_engine = _query_engine(query_engine)
         self.trace: list[ConnectorSpan] = []
         self._call_ordinal = 0
         self._created = 0
@@ -195,6 +219,7 @@ class ConnectorEmulator:
         child.acl = copy.deepcopy(self.acl)
         child.faults = dict(self.faults)
         child.actor = self.actor
+        child.query_engine = self.query_engine
         child.trace = []
         child._call_ordinal = 0
         child._created = 0
@@ -450,7 +475,15 @@ class ConnectorEmulator:
         if start_at < 0:
             raise ConnectorError(400, "start_at must be non-negative", "validation")
         active: Predicate | None = None
-        if query and predicate is None:
+        native = (
+            self._native_search(tool, span.tool.split(".", 1)[1], query, entity)
+            if query and predicate is None and name is None and self.query_engine == "native"
+            else None
+        )
+        if native is not None:
+            hits, projection = native
+            fields = fields or projection or None
+        elif query and predicate is None:
             try:
                 active = parse_native(self.definition, query, entity=entity)
             except ValueError as error:
@@ -463,26 +496,27 @@ class ConnectorEmulator:
             # predicate carrying the alias name would match none of them —
             # every `where` search under an alias returned nothing until this.
             active = active.model_copy(update={"entity": None})
-        pool = self._pool(entity, tool)
-        if name is not None:
-            hits = [
-                record
-                for record in pool
-                if str(record.get("name")) == str(name)
-                or str(record.get("ident")) == str(name)
-            ]
-        elif active is not None:
-            hits = [
-                record
-                for record in pool
-                if evaluate(
-                    active,
-                    self._record_for_predicate(record),
-                    entity=str(record.get("entity")),
-                )
-            ]
-        else:
-            hits = pool
+        if native is None:
+            pool = self._pool(entity, tool)
+            if name is not None:
+                hits = [
+                    record
+                    for record in pool
+                    if str(record.get("name")) == str(name)
+                    or str(record.get("ident")) == str(name)
+                ]
+            elif active is not None:
+                hits = [
+                    record
+                    for record in pool
+                    if evaluate(
+                        active,
+                        self._record_for_predicate(record),
+                        entity=str(record.get("entity")),
+                    )
+                ]
+            else:
+                hits = pool
         requested = max_results or tool.page_size
         limit = min(requested, tool.page_size, tool.max_results)
         page = hits[start_at : start_at + limit]
@@ -499,6 +533,42 @@ class ConnectorEmulator:
             "native_query": query,
             "items": [shape_payload(self.definition, record, fields) for record in page],
         }
+
+    def _native_search(
+        self,
+        tool: ConnectorToolDefinition,
+        tool_name: str,
+        query: str,
+        entity: str | None,
+    ) -> tuple[list[dict[str, Any]], tuple[str, ...]] | None:
+        """Run *query* in the tool's own vendor language, or ``None`` to fall back.
+
+        Only reached under the ``native`` engine. A tool whose language the
+        evaluator does not parse (GraphQL, Rovo search, the system of record's
+        predicate language) keeps the historical path rather than refusing a
+        query it used to answer. A query the vendor would refuse is refused
+        with the vendor's status and message.
+        """
+        from .connectors.query import QueryError, connector_search, tool_language
+
+        if tool_language(self.definition, tool_name) is None:
+            return None
+        by_fid: dict[str, dict[str, Any]] = {}
+
+        def pool(chosen: str | None) -> list[dict[str, Any]]:
+            records = self._pool(chosen, tool)
+            view = []
+            for record in records:
+                by_fid[str(record["fid"])] = record
+                view.append(self._record_for_predicate(record))
+            return view
+
+        try:
+            found = connector_search(self.definition, tool_name, query, pool=pool, entity=entity, user=self.actor)
+        except QueryError as error:
+            raise ConnectorError(error.status, error.message, "validation") from error
+        hits = [by_fid[str(found.records[index]["fid"])] for index in found.result.matches]
+        return hits, found.result.select
 
     def _entity_admits(self, tool: ConnectorToolDefinition, stored: str) -> bool:
         """Whether *tool* handles a record stored under the entity *stored*.
@@ -946,4 +1016,4 @@ class ConnectorEmulator:
         return content_key(self.server, entity, n)[:34]
 
 
-__all__ = ["ConnectorEmulator", "ConnectorError", "ConnectorSpan"]
+__all__ = ["QUERY_ENGINES", "ConnectorEmulator", "ConnectorError", "ConnectorSpan"]

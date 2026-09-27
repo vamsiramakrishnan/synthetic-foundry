@@ -25,7 +25,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_serializer
 
 from .. import packkit
 from ..ids import content_key
@@ -33,6 +33,7 @@ from ..models import Model
 from .contract import EvalCase
 from .grading import CaseScore
 from .runner import RUN_SCHEMA, CaseResult, Latency, RunReport, case_set_digest
+from .stages import StageSummary, _omit_none, stage_scores, summarize_stages
 
 
 def delta_band() -> float:
@@ -112,8 +113,15 @@ class RunSummary(Model):
     by_shape: tuple[RunSlice, ...]
     by_connector: tuple[RunSlice, ...]
     by_failure: tuple[RunSlice, ...]
+    #: The query, plan-node and output stages over the run; absent when no
+    #: graded case carries one, so an older ledger summarises to its old bytes.
+    stages: StageSummary | None = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_stages(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("stages",))
 
 
 def _slice(key: str, rows: Sequence[CaseResult]) -> RunSlice:
@@ -184,6 +192,7 @@ def summarize(report: RunReport) -> RunSummary:
         by_shape=tuple(_slice(key, by_shape[key]) for key in sorted(by_shape)),
         by_connector=tuple(_slice(key, by_connector[key]) for key in sorted(by_connector)),
         by_failure=tuple(_slice(key, by_failure[key]) for key in sorted(by_failure)),
+        stages=summarize_stages(scores),
     )
 
 
@@ -542,6 +551,14 @@ class CaseDelta(Model):
     #: Which axes moved by more than the band, signed.
     axes: dict[str, float]
     verdict: str
+    #: Signed delta per stage (``query``, ``plan_nodes``, ``output``) both
+    #: sides graded under the same stage grader; absent otherwise. Stages
+    #: never decide the verdict: they say which stage moved inside an axis.
+    stages: dict[str, float] | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_stages(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("stages",))
 
 
 class Comparison(Model):
@@ -567,16 +584,32 @@ class Comparison(Model):
     #: ``incomparable``): the two numbers were not measured the same way.
     grader_mismatch: bool = False
     notes: tuple[str, ...] = ()
+    #: Mean stage deltas over the cases both runs graded a stage on, when
+    #: both carry the same stage grader; absent otherwise (an older ledger
+    #: on either side), so a comparison of older runs keeps its bytes.
+    stage_deltas: dict[str, float] | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
+    @model_serializer(mode="wrap")
+    def _omit_absent_stages(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("stage_deltas",))
+
 
 def _grader_digest(report: RunReport) -> str | None:
+    """What graded the three axes: the grader's digest without its stage part.
+
+    Stages never move an axis score, so a run graded with them and one
+    graded before they existed measured the axes the same way and compare.
+    """
+    from .grader import axis_digest
+
+    return axis_digest(report.grader)
+
+
+def _stage_grader(report: RunReport) -> Any:
     grader = report.grader
-    if not isinstance(grader, Mapping):
-        return None
-    value = grader.get("digest")
-    return str(value) if value else None
+    return grader.get("stages") if isinstance(grader, Mapping) else None
 
 
 def compare(baseline: RunReport, recent: RunReport) -> Comparison:
@@ -589,6 +622,10 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
     # exactly as it always did.
     left_grader, right_grader = _grader_digest(baseline), _grader_digest(recent)
     mismatch = left_grader is not None and right_grader is not None and left_grader != right_grader
+    # Stage deltas only between runs whose stage graders are one grader: both
+    # name the same one, or neither names a grader at all.
+    stages_comparable = _stage_grader(baseline) == _stage_grader(recent)
+    stage_totals: dict[str, list[float]] = defaultdict(list)
 
     left = {row.case_id: row for row in baseline.results}
     right = {row.case_id: row for row in recent.results}
@@ -627,6 +664,14 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
             continue
         same_axes = set(a.score.observed) == set(b.score.observed)
         delta = round(b.score.score - a.score.score, 4) if same_axes else _mean(list(axes.values()))
+        stage_delta: dict[str, float] | None = None
+        if stages_comparable:
+            left_stages, right_stages = stage_scores(a.score), stage_scores(b.score)
+            shared_stages = sorted(set(left_stages) & set(right_stages))
+            if shared_stages:
+                stage_delta = {stage: round(right_stages[stage] - left_stages[stage], 4) for stage in shared_stages}
+                for stage, value in stage_delta.items():
+                    stage_totals[stage].append(value)
         if mismatch:
             verdict = "incomparable"
         elif delta > band:
@@ -640,7 +685,7 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
             stable += 1
         deltas.append(CaseDelta(case_id=case_id, baseline=a.score.score, recent=b.score.score, delta=delta,
                                 axes={axis: value for axis, value in axes.items() if abs(value) > band},
-                                verdict=verdict))
+                                verdict=verdict, stages=stage_delta))
     graded_deltas = [item.delta for item in deltas if item.delta is not None]
     return Comparison(
         baseline_agent=baseline.agent, recent_agent=recent.agent,
@@ -657,6 +702,7 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
         grader_mismatch=mismatch,
         notes=(f"the runs were graded differently (grader {left_grader} vs {right_grader}); deltas are"
                " reported but no case is judged an improvement or a regression",) if mismatch else (),
+        stage_deltas={stage: _mean(values) for stage, values in sorted(stage_totals.items())} if stage_totals else None,
     )
 
 

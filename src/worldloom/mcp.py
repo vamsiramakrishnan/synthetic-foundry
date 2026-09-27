@@ -76,7 +76,12 @@ def measure_corpus(corpus: str) -> dict[str, Any]:
     """What this corpus repeats, measured."""
     from . import stats
 
-    return stats.measure(_load(corpus)).as_dict()
+    world = _load(corpus)
+    reading = stats.measure(world).as_dict()
+    # Size and structure beside repetition: a varied corpus of toy-sized
+    # documents is still toy-sized. Read from the files on disk.
+    reading["documents"] = stats.document_shapes(world)
+    return reading
 
 
 def corpus_topology(corpus: str) -> dict[str, Any]:
@@ -324,7 +329,9 @@ TOOLS: tuple[dict[str, Any], ...] = (
         "name": "measure_corpus",
         "description": (
             "Measure what a Worldloom corpus repeats: near-duplicate passage groups "
-            "(exact, not sampled) and how many distinct document shapes it carries."
+            "(exact, not sampled) and how many distinct document shapes it carries; "
+            "and how big its documents are: words, pages, slides and speaker notes, "
+            "sections, tables and revision files per document type and format."
         ),
         "schema": {
             "type": "object",

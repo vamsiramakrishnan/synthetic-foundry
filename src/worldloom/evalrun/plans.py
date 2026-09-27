@@ -62,6 +62,7 @@ from .grading import (
 )
 from .runner import CaseResult, RunReport, case_set_digest, safety_for
 from .safety import OperationSafety
+from .stages import grade_plan_nodes, stages_enabled
 
 if TYPE_CHECKING:
     from ..packkit import ResolvedPack
@@ -363,6 +364,11 @@ def plan_cases(service: ConnectorEvaluationService, cases: Iterable[EvalCase], p
                                       agent=planner.name, status="error", error=f"{type(error).__name__}: {error}"))
             continue
         grade = grade_planned(case, planned, safety=safety)
+        if stages_enabled()["plan_nodes"]:
+            # The same node-level breakdown an executed run gets, from the
+            # stated DAG; the plan score above is untouched by it.
+            grade = grade.model_copy(update={"nodes": grade_plan_nodes(case, declared=planned,
+                                                                       definitions=service.definitions)})
         score = CaseScore(plan=grade, trajectory=unobserved_trajectory(), outcomes=unobserved_outcomes(),
                           assertion_status="unobserved", assertion_fails=(), observed=("plan",),
                           score=grade.score, passed=grade.passed)

@@ -291,6 +291,7 @@ def case_from_row(
     dimensions: Mapping[str, str] | None = None,
     output_format: str | None = None,
     answer: AnswerOutcome | None = None,
+    sections: Iterable[str] = (),
 ) -> EvalCase:
     """Read the three axes out of one compiled row.
 
@@ -373,7 +374,7 @@ def case_from_row(
     )
     unstructured = (
         UnstructuredOutcome(format=output_format, required_records=records, required_fact_ids=facts,
-                            required_evidence_ids=evidence)
+                            required_evidence_ids=evidence, sections=tuple(str(section) for section in sections))
         if carries_evidence and any(outcome.kind == "create" for outcome in structured)
         else None
     )
@@ -445,10 +446,14 @@ def cases_from_corpus(corpus: Any, *, definitions: Mapping[str, Any] | None = No
     for row in report.rows:
         query = by_id[str(row["id"])]
         mutation = query.generation.mutation
+        # The sections the planned artifact must carry: graded by the output
+        # stage when the run produces document text, never by the axes.
+        artifact = query.generation.artifact
         cases.append(case_from_row(
             row, query=query.query, persona=query.dimensions.get("persona", ""),
             principal=principal, dimensions=query.dimensions,
             output_format=mutation.output_format or None,
+            sections=artifact.sections if artifact is not None else (),
         ))
     return tuple(cases)
 

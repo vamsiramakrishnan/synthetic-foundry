@@ -1,0 +1,5 @@
+{
+  "texts": {
+    "evalrun.meta.message": "Revise the policy of the proposer: the harness that revises agent packs in the improvement loop. The draft is the current proposer champion, {champion}, in meta round {round}, handed to you as a tree of files (`draft_tree`). Only its standing instruction (`system`), its planning note, its string skills and its skills under `skills/` reach the proposer; leave the rule overlays, tool advice and turn budget empty. The proposer is scored by the held-out gain of the agents it improves; a revision is kept only if it raises that gain on these improvement tasks and on other tasks you will not see.\n\nHow the champion proposer did on the improvement tasks:\n{brief}"
+  }
+}
