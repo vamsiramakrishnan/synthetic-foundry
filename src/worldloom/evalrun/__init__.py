@@ -230,6 +230,15 @@ if TYPE_CHECKING:
     from .plans import (
         reference_plan as reference_plan,
     )
+    from .proof import (
+        ProofReport as ProofReport,
+    )
+    from .proof import (
+        environment_pins as environment_pins,
+    )
+    from .proof import (
+        prove_cases as prove_cases,
+    )
     from .rater import (
         RATING_SCHEMA as RATING_SCHEMA,
     )
@@ -493,6 +502,9 @@ _EXPORTS: dict[str, str] = {
     'grade_queries': '.stages',
     'grade_plan_nodes': '.stages',
     'grade_output': '.stages',
+    'ProofReport': '.proof',
+    'environment_pins': '.proof',
+    'prove_cases': '.proof',
 }
 
 
@@ -660,6 +672,10 @@ __all__ = [
     "grade_queries",
     "grade_plan_nodes",
     "grade_output",
+    # Solvability: the gold-plan proof and the pins it rests on.
+    "ProofReport",
+    "environment_pins",
+    "prove_cases",
     # The grader, frozen by digest, and its agreement with Eval Studio's.
     "AgreementReport",
     "GraderDrift",

@@ -687,12 +687,29 @@ def prove(cases: Sequence[EvalCase], records: Sequence[Any], *,
     wherever the shape allows it), so a reference answer that misses the
     golden drops the case like any other failed expectation.
     """
-    from .agents import ReferenceAgent
     from .runner import run_cases, service_for
 
     if not cases:
         return (), ()
-    agent = reference if reference is not None else ReferenceAgent(cases)
+    if reference is None:
+        # The gold-plan proof (`proof.prove_cases`): the reference's pass, and
+        # also every gold query in its vendor grammar, every read reaching its
+        # evidence and every stage at 1.0. A case the writer then refuses is
+        # dropped here instead, with the node that made it unsolvable.
+        from .proof import prove_cases
+
+        proved = prove_cases(cases, records, rater=rater if rater is not None else GroundedWhereAllowed())
+        verdicts = {item.case_id: item for item in proved.cases}
+        kept_cases = tuple(case for case in cases if verdicts[case.id].solvable)
+        dropped: list[CornerDrop] = []
+        for case in cases:
+            failure = verdicts[case.id].failure
+            if failure is not None:
+                dropped.append(CornerDrop(case_id=case.id, template=case.dimensions.get("corner", ""),
+                                          event=case.dimensions.get("event", ""),
+                                          reason=f"node {failure.node}, {failure.check}: {failure.reason}"))
+        return kept_cases, tuple(dropped)
+    agent = reference
     report = run_cases(service_for(cases, records), cases, agent,
                        rater=rater if rater is not None else GroundedWhereAllowed())
     kept: list[EvalCase] = []
@@ -744,16 +761,34 @@ def corner_cases(world: World, *, templates: Iterable[str] | None = None, limit:
 
 
 def write_case_set(out: str | Path, cases: Sequence[EvalCase], records: Sequence[ConnectorRecord],
-                   summary: Mapping[str, Any] | None = None, *, summary_file: str = CORNERS_FILE) -> Path:
-    """Write the cases and records as the case set `evalrun run` reads, and the summary beside them."""
-    from ..corpus import write_json, write_jsonl
+                   summary: Mapping[str, Any] | None = None, *, summary_file: str = CORNERS_FILE,
+                   drop_unsolvable: bool = False) -> Path:
+    """Write the cases and records as the case set `evalrun run` reads, the summary and the proof beside them.
 
+    The cases are proved first (``proof.prove_for_writing``) and nothing is
+    written when one is unsolvable: ``proof.Unsolvable`` names it. With
+    ``drop_unsolvable`` those cases are left out and listed in the proof
+    record. An empty set is written without a proof; there is nothing to prove.
+    """
+    from ..corpus import write_json, write_jsonl
+    from .proof import prove_for_writing, write_proof
+
+    proof = None
+    if cases:
+        proof, kept = prove_for_writing(cases, records, drop=drop_unsolvable)
+        cases = [case for case in cases if case.id in kept]
     root = Path(out)
     root.mkdir(parents=True, exist_ok=True)
     write_jsonl(root / CASE_SET_FILE, list(cases))
     write_jsonl(root / RECORDS_FILE, list(records))
     if summary is not None:
         write_json(root / summary_file, dict(summary))
+    if proof is not None:
+        write_proof(root, proof)
+    else:
+        from .proof import PROOF_FILE
+
+        (root / PROOF_FILE).unlink(missing_ok=True)  # a record left by an earlier set would pin the wrong one
     return root
 
 

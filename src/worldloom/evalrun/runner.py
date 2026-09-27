@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_serializer
 
 from .. import packkit
 from ..connectors.serving import ConnectorEvaluationService, ServingError, ServingLimits
@@ -104,8 +104,20 @@ class RunReport(Model):
     #: split on purpose (the improve loop marks its held-out runs ``holdout``),
     #: so export can refuse a sealed run even after its cases lose their split.
     split: str | None = None
+    #: What the case set's validity rested on when this run began
+    #: (``proof.environment_pins`` plus the proof's digest): two runs compare
+    #: only under equal pins. Absent from the wire when unset, so a run made
+    #: without a proof gate keeps its bytes.
+    pins: dict[str, Any] | None = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_pins(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("pins") is None:
+            data.pop("pins", None)
+        return data
 
 
 def case_set_digest(cases: Iterable[EvalCase]) -> str:

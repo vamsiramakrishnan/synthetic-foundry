@@ -8,10 +8,11 @@ over corpus records with deterministic BM25 relevance (``engine``), and answer
 anything outside the supported grammar with the vendor's own error
 (``errors``; the texts live in ``_data/connectors/_query.json``).
 
-The same functions serve the built-in connector emulator (opt-in: the policy
-``connectors.query.engine`` set to ``native``, or
-``ConnectorEmulator(query_engine="native")``) and any out-of-process provider,
-which needs only ``parse``, a ``QueryTarget`` and ``execute``.
+The same functions serve the built-in connector emulator (the default: the
+policy ``connectors.query.engine`` is ``native``; ``predicate`` selects the
+historical conjunctive parser) and any out-of-process provider, which needs
+only ``parse``, a ``QueryTarget`` and ``execute``. What each search tool tells
+the agent about its query language is ``docs.query_help``.
 
 Relative time resolves against the clock the caller passes, the corpus's
 as-of time, never the wall clock. Same text, clock and records: same answer.

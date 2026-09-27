@@ -470,8 +470,10 @@ def test_the_policy_sets_the_cli_concurrency(exported: Path, tmp_path: Path, mon
     monkeypatch.setattr(module, "run_cases", spy)
     assert _run(str(exported), "-o", str(tmp_path / "a"), "--limit", "2").exit_code == 0
     assert _run(str(exported), "-o", str(tmp_path / "b"), "--limit", "2", "--concurrency", "3").exit_code == 0
-    # The empty identity run, then the real one, per invocation.
-    assert used == [1, 1, 1, 3]
+    # Per invocation: the proof gate's reference run (this corpus carries no
+    # proof record, so it is proved at the start), the empty identity run,
+    # then the real one.
+    assert used == [1, 1, 1, 1, 1, 3]
 
 
 def test_a_workers_serving_error_is_not_refused_as_concurrency(exported: Path, tmp_path: Path,

@@ -7,6 +7,6 @@
     "connectors.serving.max_request_bytes": 65536,
     "connectors.serving.max_response_bytes": 1048576,
     "connectors.serving.max_records": 100000,
-    "connectors.query.engine": "predicate"
+    "connectors.query.engine": "native"
   }
 }

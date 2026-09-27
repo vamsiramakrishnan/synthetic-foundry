@@ -394,8 +394,17 @@ def enterprise_evals_build(
     shard_count: int | None = typer.Option(None, "--shard-count"),
     dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground."),
     render_limit: int = typer.Option(0, "--render-limit", min=0),
+    drop_unsolvable: bool = typer.Option(False, "--drop-unsolvable", help="Leave out cases the gold-plan proof finds unsolvable, recording each with its first failing node in proof.json, instead of refusing to write the corpus."),
 ) -> None:
-    """Plan, materialize, validate, export, and optionally render a connector corpus."""
+    """Plan, materialize, validate, prove, export, and optionally render a connector corpus.
+
+    Before anything is written, every case is proved solvable
+    (`worldloom evalrun prove`): its gold DAG replayed through the connector
+    emulator under the vendor query engine. A corpus with an unsolvable case
+    is refused, naming each case's first failing node, unless
+    `--drop-unsolvable` leaves those cases out. The proof and its pins are
+    written to proof.json beside the corpus.
+    """
     from .enterprise_artifacts import render_corpus_artifacts
     from .enterprise_corpus import materialize_corpus, validate_corpus
     from .enterprise_dag import resolve_shapes
@@ -438,7 +447,29 @@ def enterprise_evals_build(
         for finding in findings:
             typer.echo(finding, err=True)
         raise typer.Exit(1)
+    from .evalrun.contract import cases_from_corpus
+    from .evalrun.proof import Unsolvable, prove_for_writing, write_proof
+
+    try:
+        proof, kept = prove_for_writing(cases_from_corpus(corpus), corpus.connector_data.records,
+                                        drop=drop_unsolvable)
+    except Unsolvable as error:
+        _refuse("cases_unsolvable", str(error), fix="fix the planner or the connector data the named node rests on, "
+                "or pass --drop-unsolvable to leave those cases out with the reason recorded",
+                unsolvable=error.report.unsolvable, reasons=error.report.reasons)
+    except ValueError as error:
+        _refuse("cases_uncompilable", str(error))
+    if proof.dropped:
+        corpus = corpus.model_copy(update={
+            "queries": tuple(query for query in corpus.queries if query.id in kept),
+            "fixtures": tuple(fixture for fixture in corpus.fixtures if fixture.query_id in kept),
+        })
+        for item in proof.dropped:
+            assert item.failure is not None
+            typer.echo(f"dropped {item.case_id}: node {item.failure.node}, {item.failure.check}: {item.failure.reason}",
+                       err=True)
     export_corpus(corpus, output)
+    write_proof(output, proof)
     rendered = render_corpus_artifacts(
         corpus, output / "artifacts", limit=render_limit
     ) if render_limit else ()
@@ -453,6 +484,7 @@ def enterprise_evals_build(
                 "queries": len(corpus.queries),
                 "records": len(corpus.connector_data.records),
                 "rendered_artifacts": len(rendered),
+                "proof": {"solvable": proof.solvable, "dropped": len(proof.dropped), "digest": proof.digest},
                 "coverage": _coverage_summary(report) if report else None,
             },
             sort_keys=True,
@@ -774,6 +806,8 @@ _REFUSALS: dict[str, str] = {
     "shards_unmergeable": "the shard directories are not one complete sharded run; the message names what differs or is missing",
     "results_unreadable": "an external harness's results file cannot be read",
     "case_set_unreadable": "the case set directory's cases or records cannot be read",
+    "proof_stale_unsolvable": "the case set's proof no longer matches the live environment and re-proving it found cases no agent can solve; the message names the pins that moved and the first failing node",
+    "cases_unsolvable": "the generated cases include some no agent can solve, so nothing was written; the message names each case's first failing node, and --drop-unsolvable drops them with the reason recorded",
     "unknown_corner_template": "a --templates value names no corner-case template; the message lists the known ones",
     "holdout_overlap": "the frontier search was pointed at seeds or cases held out for judging; nothing was searched",
     "schema_version": "the corpus's schema version cannot be carried to this engine's by the migration chain",

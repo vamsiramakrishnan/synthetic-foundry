@@ -123,7 +123,8 @@ worldloom status ./corpus --json   # names the stage and the exact next command
 Agent evaluation loop (querying, iteration, outcomes; not retrieval):
 
 ```bash
-worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*' --drop-unsolvable
+worldloom evalrun prove ./cases                    # every case solvable? first failing node and why
 worldloom evalrun cases ./cases                    # per-axis coverage; a zero is a named gap
 worldloom evalrun run ./cases -o ./runs/reference  # the reference agent: the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json

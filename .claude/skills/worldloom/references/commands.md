@@ -257,7 +257,7 @@ Plan, generate, and validate multi-connector enterprise agent evaluations.
 
 ### `worldloom enterprise-evals build`
 
-Plan, materialize, validate, export, and optionally render a connector corpus.
+Plan, materialize, validate, prove, export, and optionally render a connector corpus.
 
 ```
 worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
@@ -266,6 +266,7 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 | Option | Purpose |
 | --- | --- |
 | `--dag-shape` | Executable DAG shape; repeat, * for the whole catalogue, none for the single-write DAG. Default: every shape a row can ground. |
+| `--drop-unsolvable` | Leave out cases the gold-plan proof finds unsolvable, recording each with its first failing node in proof.json, instead of refusing to write the corpus. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -710,6 +711,23 @@ worldloom evalrun plan <CORPUS>
 | `--principal` | The principal the tool catalog is advertised to. |
 | `--shell` | Run the --exec command through the shell. |
 | `--timeout` | Seconds the --exec child may run per case. |
+
+### `worldloom evalrun prove`
+
+Prove every case solvable: replay its gold DAG and name the first node that is not.
+
+```
+worldloom evalrun prove <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--anvil-cmd` | The Anvil CLI (default: $WORLDLOOM_ANVIL, else `anvil` on PATH). |
+| `--connectors` | emulator (the default) or anvil: also serve each gold trajectory through `anvil simulate serve` over each --contract. Skipped, with the reason, when no Anvil CLI is found. |
+| `--contract` | With --connectors anvil: a contract bundle, as CONNECTOR=PATH or a bare PATH. Repeat per connector. |
+| `--json` | Emit the proof report as JSON. |
+| `--limit` | Prove only the first N cases. |
+| `--record` | Write the proof record (proof.json, with its pins) into the case set directory, whatever the verdict. |
 
 ### `worldloom evalrun requests`
 

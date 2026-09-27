@@ -224,7 +224,7 @@ def append_result(directory: Path, result: CaseResult) -> None:
 
 #: The identity fields two ledgers must share to be one run: a resume refuses
 #: a ledger that differs in any, and a merge refuses shards that do.
-IDENTITY_FIELDS = ("agent", "principal", "case_set", "agent_pack", "grader", "agent_identity", "split")
+IDENTITY_FIELDS = ("agent", "principal", "case_set", "agent_pack", "grader", "agent_identity", "split", "pins")
 
 
 def _header(report: RunReport, cases: int) -> dict[str, Any]:
@@ -239,6 +239,8 @@ def _header(report: RunReport, cases: int) -> dict[str, Any]:
         header["agent_identity"] = report.agent_identity
     if report.split is not None:
         header["split"] = report.split
+    if report.pins is not None:
+        header["pins"] = report.pins
     return header
 
 
@@ -374,7 +376,8 @@ def read_run(directory: Path, *, allow_partial: bool = False) -> RunReport:
     return RunReport(agent=str(header["agent"]), principal=str(header.get("principal", "agent")),
                      case_set=str(header["case_set"]), results=tuple(results),
                      agent_pack=header.get("agent_pack"), grader=header.get("grader"),
-                     agent_identity=header.get("agent_identity"), split=header.get("split"))
+                     agent_identity=header.get("agent_identity"), split=header.get("split"),
+                     pins=header.get("pins"))
 
 
 def _mismatches(header: Mapping[str, Any], identity: RunReport) -> list[str]:
@@ -501,7 +504,7 @@ def merge_shards(directories: Sequence[Path]) -> RunReport:
         loaded.append((directory, shard, header, read_run(directory)))
     first_dir, first_shard, first_header, first = loaded[0]
     for directory, shard, header, _report in loaded[1:]:
-        differs = [key for key in ("agent", "principal", "agent_pack", "grader", "agent_identity", "split") if header.get(key) != first_header.get(key)]
+        differs = [key for key in ("agent", "principal", "agent_pack", "grader", "agent_identity", "split", "pins") if header.get(key) != first_header.get(key)]
         differs += [key for key in ("count", "case_set", "order") if shard.get(key) != first_shard.get(key)]
         if differs:
             raise ValueError(f"{directory}: not a shard of the same run as {first_dir}: differs in "
@@ -537,7 +540,7 @@ def merge_shards(directories: Sequence[Path]) -> RunReport:
     return RunReport(agent=first.agent, principal=first.principal, case_set=str(first_shard["case_set"]),
                      results=tuple(results[case_id] for case_id in order),
                      agent_pack=first.agent_pack, grader=first.grader, agent_identity=first.agent_identity,
-                     split=first.split)
+                     split=first.split, pins=first.pins)
 
 
 # -- comparison ---------------------------------------------------------------
@@ -588,12 +591,18 @@ class Comparison(Model):
     #: both carry the same stage grader; absent otherwise (an older ledger
     #: on either side), so a comparison of older runs keeps its bytes.
     stage_deltas: dict[str, float] | None = None
+    #: The pins that differ when both runs record pins and they are not
+    #: equal (``proof.pin_changes``): the corpus, a connector definition, the
+    #: query engine, the grader or the serving moved between them, so, as with
+    #: a grader mismatch, no case is judged. Absent when both runs share their
+    #: pins or either predates them, so an older comparison keeps its bytes.
+    pins_mismatch: tuple[str, ...] | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
     @model_serializer(mode="wrap")
     def _omit_absent_stages(self, handler: Any) -> Any:
-        return _omit_none(handler(self), ("stage_deltas",))
+        return _omit_none(handler(self), ("stage_deltas", "pins_mismatch"))
 
 
 def _grader_digest(report: RunReport) -> str | None:
@@ -621,7 +630,16 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
     # names none (every run written before graders were recorded) compares
     # exactly as it always did.
     left_grader, right_grader = _grader_digest(baseline), _grader_digest(recent)
-    mismatch = left_grader is not None and right_grader is not None and left_grader != right_grader
+    grader_mismatch = left_grader is not None and right_grader is not None and left_grader != right_grader
+    # The same rule one level out: two runs whose case sets rested on
+    # different pins (another corpus, connector definition, query engine or
+    # serving) measured different things. Runs without pins compare as before.
+    moved: tuple[str, ...] = ()
+    if baseline.pins is not None and recent.pins is not None and baseline.pins != recent.pins:
+        from .proof import pin_changes
+
+        moved = pin_changes(baseline.pins, recent.pins) or ("pins",)
+    mismatch = grader_mismatch or bool(moved)
     # Stage deltas only between runs whose stage graders are one grader: both
     # name the same one, or neither names a grader at all.
     stages_comparable = _stage_grader(baseline) == _stage_grader(recent)
@@ -699,9 +717,13 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
                               outcomes=_mean(axis_totals["outcomes"]) if axis_totals["outcomes"] else None,
                               overall=_mean(graded_deltas)),
         deltas=tuple(deltas),
-        grader_mismatch=mismatch,
-        notes=(f"the runs were graded differently (grader {left_grader} vs {right_grader}); deltas are"
-               " reported but no case is judged an improvement or a regression",) if mismatch else (),
+        grader_mismatch=grader_mismatch,
+        notes=tuple(note for note, applies in (
+            (f"the runs were graded differently (grader {left_grader} vs {right_grader}); deltas are"
+             " reported but no case is judged an improvement or a regression", grader_mismatch),
+            (f"the runs rest on different pins ({', '.join(moved)}); deltas are reported but no case is judged"
+             " an improvement or a regression", bool(moved))) if applies),
+        pins_mismatch=moved or None,
         stage_deltas={stage: _mean(values) for stage, values in sorted(stage_totals.items())} if stage_totals else None,
     )
 

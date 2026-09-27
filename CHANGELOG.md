@@ -11,6 +11,83 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Solvable case sets
+
+- **Default change: the vendor query engine.** The policy
+  `connectors.query.engine` now defaults to `native`: a search tool's `query`
+  runs as the vendor's own language through the shared evaluator
+  (`worldloom.connectors.query`). A live pilot's call errors were 104 of 122
+  "unsupported query clause" refusals from the old parser, many of them valid
+  vendor queries (`SELECT Id, Name FROM Account ORDER BY LastModifiedDate DESC
+  LIMIT 50`, `priority=1^ORDERBYnumber`, JQL `OR`). `predicate` still selects
+  the historical parser. What moves under the default: an emulator answer to a
+  `query` string (a query the old parser refused now runs; ServiceNow drops a
+  condition it cannot read and SharePoint searches an unknown property as
+  text, as the products do; a malformed OData or JQL query gets the vendor's
+  error text instead of `unsupported ... query clause`), and so any run ledger
+  whose agent searched with query strings. Structured `predicate` searches
+  are unchanged. Tests updated for
+  the correct vendor behaviour: the default-engine test in
+  `test_connector_native_query.py` (now asserts `native`, and `predicate` as
+  the selectable legacy parser), the refused-search probes in `test_evalrun.py`
+  and `test_evalrun_stages.py` (bare words and `state!!new` are not refusals
+  in ServiceNow; the refusal is now a negative offset) and the scripted
+  mistakes in `test_trace_brief.py` (`priority=N^ORDERBYnumber` is valid
+  ServiceNow; the mistake is now a table the instance does not have, and the
+  wrong-dialect email search carries Graph's `Invalid filter clause`).
+- **Every search tool states its query language.** The tool catalog
+  (`tools[*].query` in the turn document, plans and requests documents) and
+  the MCP tool description carry the language a search tool's `query` is read
+  in, a grammar summary, two or three examples in that vendor's syntax, the
+  field names the connector knows, and the free-text form where the product
+  has one (ServiceNow `123TEXTQUERY321=`, Jira and Confluence `text ~`, Drive
+  `fullText contains`, KQL bare terms; SOQL has none and says to use `LIKE`).
+  A tool the evaluator does not read (GraphQL, Rovo, the system of record) says
+  to pass a `predicate`. The words are data
+  (`_data/connectors/_query_docs.json`); every example is executed by the
+  tests. The catalog gains a key, so a turn document's bytes change.
+- **`worldloom evalrun prove <cases>`** (JSON and text; `prove_cases`,
+  `EvalSession.prove()`): replays each case's gold DAG through the emulator
+  under the vendor engine. Every gold query must parse in its vendor grammar
+  (a structured predicate is compiled into the connector's language, an
+  identity lookup restated on the vendor's identity), every gold read must
+  retrieve its evidence, every gold write must leave the expected state, and
+  the reference must score 1.0 on plan, trajectory, outcomes and each stage.
+  Each unsolvable case names its first failing node and why; the command
+  exits 1 when any is unsolvable. `--connectors anvil --contract ...` also
+  serves each gold trajectory through Anvil (each call turned into its
+  contract operation's vendor request), skipped with the reason when no
+  Anvil CLI is found. `--record` writes `proof.json`.
+- **Writers refuse unsolvable sets.** `enterprise-evals build` proves its
+  cases before writing and refuses (`cases_unsolvable`) naming each case's
+  first failing node; `--drop-unsolvable` writes the solvable ones and lists
+  each dropped case with its reason in `proof.json`. `evalrun corners` drops
+  by the same proof (every `restated_figure` case is now dropped: its answer
+  states figures no readable record carries), and `corners.write_case_set`
+  refuses by default. Measured on `--exhaustive --limit 200 --dag-shape '*'`
+  over the `--seed 8128 --incident` and `--seed 4242 --incident` worlds, with
+  no profile and each shipped profile: 116 of 1,000 unsolvable per seed, 65
+  because the gold DAG replies to or sends an email without reading it first
+  (`destructive_without_read`) and 51 because a diamond DAG's write carries an
+  evidence count of 2 for one evidence record (`stage.output`). The documented
+  builds therefore now carry `--drop-unsolvable` until the planner reads a
+  send's target first.
+- **Eval-set pins.** `proof.json` records the pins its proof rests on: the
+  corpus (records and rows), each connector definition, the query engine and
+  its vendor data, the grader, and under Anvil the contracts, any exposure
+  profiles, the provider mappings and the Anvil version. `evalrun run`
+  compares them with the live environment before any agent runs: a moved pin
+  re-proves the set and refuses (`proof_stale_unsolvable`) when it no longer
+  proves, naming what moved; a set with no proof record is proved at the start
+  and runs with a warning. `run.json` records `pins`; `--resume` and `evalrun
+  merge` refuse a ledger under other pins, and `compare` reports two runs
+  under different pins as incomparable (`pins_mismatch`), as it does two
+  graders.
+- **Fixed.** A call whose `entity` names an entity the connector does not
+  declare (`incidents` for `incident`) crashed the agent's turn with a
+  `KeyError` from node attribution; it now gets the emulator's `Unknown
+  entity` validation error, as the vendor would answer.
+
 ### Serving connectors through Anvil
 
 - **An Anvil state provider.** `python -m worldloom.anvil_provider --corpus

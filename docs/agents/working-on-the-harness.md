@@ -57,7 +57,7 @@ query corpus rather than Worldloom's native retrieval benchmark:
 ```bash
 worldloom enterprise-evals space --profile examples/enterprise-evals/omnichannel-retailer.json --max-candidates 100000
 worldloom enterprise-evals plan dist/world queries.jsonl --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 2000
-worldloom enterprise-evals build dist/world dist/enterprise-evals --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 2000 --render-limit 30
+worldloom enterprise-evals build dist/world dist/enterprise-evals --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 2000 --render-limit 30 --drop-unsolvable
 worldloom enterprise-evals validate dist/enterprise-evals
 worldloom enterprise-evals simulate dist/enterprise-evals --limit 500
 worldloom enterprise-evals score query.json trace.json --fixture fixture.json
