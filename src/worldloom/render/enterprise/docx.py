@@ -288,7 +288,25 @@ def _control(document, doc: longform.LongDocument, g: StyleGenome, *, keep: bool
         document.add_page_break()
 
 
-def _contents(document, doc: longform.LongDocument, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+def _body_section(document) -> None:  # type: ignore[no-untyped-def]
+    """Open the body in a section of its own, numbered from one.
+
+    Front matter (cover, document control, contents) and the paper are two
+    sections in a Word document a design team signs off, so the body's first
+    page is page 1 and the running heads carry on unchanged: the new section's
+    header and footer stay linked to the first's, and only the first page of
+    the document is a cover.
+    """
+    from docx.enum.section import WD_SECTION
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
+
+    section = document.add_section(WD_SECTION.NEW_PAGE)
+    section.different_first_page_header_footer = False
+    section._sectPr.append(parse_xml(f'<w:pgNumType {nsdecls("w")} w:start="1"/>'))
+
+
+def _contents(document, doc: longform.LongDocument, g: StyleGenome, *, turn: bool = True) -> None:  # type: ignore[no-untyped-def]
     """A TOC field whose cached result is the numbered outline.
 
     A field, so Word rebuilds it (with page numbers) on open; a cached result,
@@ -315,7 +333,8 @@ def _contents(document, doc: longform.LongDocument, g: StyleGenome) -> None:  # 
         if index:
             paragraphs.append(paragraph)
     paragraphs[-1]._element.append(parse_xml(f'<w:r {nsdecls("w")}><w:fldChar w:fldCharType="end"/></w:r>'))
-    document.add_page_break()
+    if turn:
+        document.add_page_break()
 
 
 def _tracked(paragraph, segments, revision: longform.Revision, g: StyleGenome, ids) -> None:  # type: ignore[no-untyped-def]
@@ -403,7 +422,9 @@ def render_document(doc: longform.LongDocument, ctx: Context, ir: ArtifactIR) ->
         _cover(document, doc, g)
     _control(document, doc, g, keep=designed)
     if doc.long:
-        _contents(document, doc, g)
+        _contents(document, doc, g, turn=not designed)
+    if designed:
+        _body_section(document)
 
     chart_index = count(1)
     ids = count(9001)

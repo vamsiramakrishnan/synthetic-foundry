@@ -3069,7 +3069,8 @@ def build(
         # A reader-grade corpus is written by the composing narrator; every
         # other profile keeps the contract fixture, so its prose and ledger
         # are the ones it always had.
-        provider = ComposedProvider() if realism_profiles.reader_grade(world) else DeterministicProvider()
+        provider = (ComposedProvider.for_world(world) if realism_profiles.reader_grade(world)
+                    else DeterministicProvider())
         if replay is not None:
             source = replay_source if replay_source is not None else _load(str(replay))
             ledger = source._ledger
@@ -4562,7 +4563,8 @@ def mosaic(
                         f"checkpoint {checkpoint.path} already exists; pass --resume"
                     )
                 world = world.narrate(
-                    provider,
+                    # The composing narrator speaks for each world's own engine.
+                    provider.for_world(world) if hasattr(provider, "for_world") else provider,
                     ledger=checkpoint_ledger,
                     concurrency=narration_concurrency,
                     on_accepted=checkpoint.append,

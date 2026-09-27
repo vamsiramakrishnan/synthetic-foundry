@@ -480,15 +480,21 @@ def _prose(text: str, resolve: _Resolver, canonical: Mapping[str, CanonicalFact]
            locale: Locale, presentation: Presentation) -> tuple[str, tuple[tuple[str, str | None], ...]]:
     """*text* with every reference spelled, and the tracked segments if any
     reference resolved to a different fact than the canonical document's."""
+    from .figures import spell_all
+
     segments: list[tuple[str, str | None]] = []
     changed = False
     cursor = 0
-    for match in references.REFERENCE.finditer(text):
+    # Spelled together, so a reader spelling can hold one precision per
+    # sentence; under an exact spelling each is `render_value`, as before.
+    spelled = spell_all(text, resolve, locale=locale, presentation=presentation)
+    for position, match in enumerate(references.REFERENCE.finditer(text)):
         fid = match.group("id")
         segments.append((text[cursor:match.start()], None))
         stated = resolve(fid)
         base = canonical.get(fid)
-        new_text = _spell(stated, locale, presentation) if base is not None or stated is not None else f"[missing {fid}]"
+        new_text = ((spelled[position] or _TBC) if base is not None or stated is not None
+                    else f"[missing {fid}]")
         if base is not None and (stated is None or stated.id != base.id):
             old_text = _spell(base, locale, presentation)
             if resolve.amendment:

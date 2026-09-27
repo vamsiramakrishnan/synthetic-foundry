@@ -91,6 +91,18 @@ The default industry pack holds the words the product used before packs existed.
 A build that puts no industry pack in force is therefore byte-identical to one
 made before this mechanism.
 
+An industry pack is also the offline narrator's phrase bank for its engine.
+The composing narrator that writes a reader-grade (`enterprise/v2`) corpus
+without a model puts the shipped industry pack that rides the world's engine
+in force while it writes, when the world names no industry pack of its own:
+`banking` for a bank, `insurance` for an insurer, `infrastructure_services`
+(which names no aliases, so no company description resolves to it) for the
+group the procurement engine builds. Each carries sentences for its own fact
+kinds (`narrative.prose.fact.<kind>`), what they mean
+(`narrative.prose.implication.kind.<kind>`), the nouns a reader uses for its
+measures and its connectives, so a capital return reads like a bank wrote it
+without a line of code per doctype.
+
 ## Prompts and policy
 
 Every prompt, instruction and templated sentence is a key in `prompts:default`.
@@ -101,7 +113,12 @@ them for that industry only.
 
 Overrides are linted:
 
-- an unknown key is refused, with the nearby keys named;
+- an unknown key is refused, with the nearby keys named, except under
+  `narrative.prose.`: the offline narrator's phrase bank is looked up by fact
+  kind (`narrative.prose.fact.<kind>`, `...implication.kind.<kind>`,
+  `...noun.<measure>`) and does without a key it cannot find, so an industry
+  pack may add sentences for its own fact kinds; a new key there may fill
+  only the placeholders the narrator supplies;
 - a prompt that introduces a `{placeholder}` its caller does not fill is refused;
 - a `{{term:x}}` that names no term is refused;
 - a policy value of the wrong type is refused.

@@ -114,6 +114,13 @@ class DeterministicProvider:
 
     id = "deterministic-fake-1"
 
+    #: The contract fixture proves the contract is satisfiable; it does not
+    #: write for a reader ("For inventory-valuation, the valuation feed
+    #: reported failed."), so the reader-spelling refusals (`number_spelling`,
+    #: `slug_leak`) are not applied to it. Every other provider, the
+    #: composing narrator and a harness included, is held to them.
+    writes_for_reader = False
+
     def __init__(self, *, respect_cutoff: bool = True) -> None:
         self.respect_cutoff = respect_cutoff
         self.calls = 0

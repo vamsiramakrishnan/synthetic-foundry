@@ -275,6 +275,70 @@ first written up, before the waves above it landed.
   production approval stays a human step. Receipts record `lever`, the
   overlay digests and the recompiled contract digests. With `--levers agent`
   (the default) every receipt is byte-identical to before.
+### Reader-grade figures, decks and industries
+
+**Generation.** Changes what an `enterprise/v2` build narrates and renders
+(its requests, its offline prose, its figures, its deck, its Word section
+layout). `legacy` and `enterprise/v1` corpora build, narrate, render and
+replay byte for byte as before (checked on retail and banking builds in every
+format).
+
+- **The profile owns number spelling.** A new presentation knob, `spelling`
+  (`exact`, `reader`; `reader` and `filing` profiles use `reader`), backed by
+  a rulebook in `src/worldloom/_data/presentation/spelling.json` and the new
+  `figures` module. A reader spelling rounds money per magnitude (`bn` two
+  places, `m` one, `k` none, at least two significant figures), spells a
+  sentence's figures together (one precision per unit, and a figure at least
+  a tenth of the sentence's largest magnitude spelled in it: `AUD 1.0m
+  adverse` beside `AUD 617.2m`, not `AUD 958 thousands adverse`), writes `k`
+  never "thousands", `nil` for a zero, `%` for a `pct` unit, ISO dates in
+  words and recorded enum values in words, and drops "adverse" after a phrase
+  that already carries the direction (prompts pack `render.figures.*`). A
+  ledger held in millions is no longer relabelled `m` by `magnitudes:
+  scaled`. `figures.agrees` accepts a correct rounding of a fact at the
+  precision shown and refuses a wrong one; reader checks use it (a reader
+  target carries its accepted spellings, off the wire when empty).
+- **Narration refusals for what a reader sees.** Under a reader spelling the
+  claim validator adds `number_spelling` (the substituted prose read by
+  `figures.defects`) and `slug_leak` (a snake_case token, a recorded enum
+  value or a slug in the writer's own words, with the words to use). The
+  request document states both rules (`narrative.spelling.rule.*`) and shows
+  each fact as it will print. The contract fixture (`DeterministicProvider`,
+  `writes_for_reader = False`) is not held to them; every other provider is.
+  A section's facts that an earlier section of its document carries are
+  marked `restated` on the request (still allowed; the offline narrator
+  leaves them to the section that said them).
+- **Presenter deck.** Content slide titles are built from the lead fact of
+  the slide's lead move (`render.deck.takeaway.fact.*`); lead-ins listed in
+  `render.deck.generic_titles` are never titles and `presenter.lint_titles`
+  refuses a title that carries no fact; one fact titles one slide. The agenda
+  lists the argument's sections by lead move (`render.deck.agenda.move.*`).
+  Notes draw on larger pack text banks with a no-repeat rule per deck, and the
+  line into the next slide comes from the relation between the two slides'
+  lead moves (`render.deck.notes.relation.*`). `prose_quality.
+  notes_repetition` and `NOTES_THRESHOLD` measure it.
+- **Industry prose.** The composing narrator (`composed-prose-2`,
+  `ComposedProvider.for_world`) puts the shipped industry pack for the
+  world's engine in force while it writes: `banking` and `insurance` gained
+  phrase banks for their fact kinds, and a new `infrastructure_services`
+  industry pack (no aliases) speaks for the procurement engine's group.
+  Industry packs may add `narrative.prose.*` keys the default does not list.
+  The rhetoric catalogue moves to `moves@2.json` with move sets for the
+  banking, insurance and procurement doctypes. A thin reader-grade section
+  may draw on up to three context facts (same subject, kind family and
+  period, figures only, current and visible to the author, not carried or
+  given elsewhere in the document); a request's `recurrence`
+  walks a recurring fact kind through its alternatives. Retail, banking,
+  insurance and procurement builds all meet the prose thresholds, enforced
+  in `tests/test_industry_prose.py`; `prose_quality` adds
+  `number_spelling_defects` (ceiling zero) and counts recorded enum values
+  reaching the page as slug leaks.
+- **Word structure.** Under `layout: designed` the body is a Word section of
+  its own after the front matter, numbered from one, with the running heads
+  linked. `tests/test_docx_structure.py` verifies styles, keep-with-next,
+  repeating header rows, custom properties, comments, the section break and
+  the header and footer fields with python-docx.
+
 ### Reader-grade documents (`enterprise/v2`)
 
 **Generation.** New builds default to `artifact_realism: enterprise/v2`. A

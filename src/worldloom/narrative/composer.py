@@ -28,7 +28,15 @@ model and still byte-for-byte reproducible:
   sentence opens with "For <subject>,".
 * **Variation without randomness.** An alternative is chosen by a content key
   over the artifact, section, move and slot, and a section never uses the
-  same alternative of a key twice while another is unused.
+  same alternative of a key twice while another is unused. Where the request
+  states a fact kind's ``recurrence`` (how many earlier sections of the corpus
+  were given one), the walk starts that many alternatives on, so a kind a
+  whole document family cites is said a different way each time.
+* **The engine's own words.** `ComposedProvider.for_world` names the engine
+  the world was built on, and the shipped industry pack that rides it
+  (banking, insurance, the group procurement builds) is put in force while a
+  section is composed: its sentences for its own fact kinds, its nouns, its
+  connectives and what its facts mean.
 
 What it may not do is unchanged: no digit outside a reference, every
 reference cited by a claim, no capitalised run that is not a world entity,
@@ -41,6 +49,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from ..ids import content_key
@@ -49,9 +58,10 @@ from .requests import GeneratedClaim, GeneratedNarrative, NarrativeRequest, Requ
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
+    from ..packkit import ResolvedPack
     from .prompts import Prompt
 
-__all__ = ["ComposedProvider", "compose"]
+__all__ = ["ComposedProvider", "compose", "measure_noun"]
 
 #: Measure facets the last kind segment can name.
 _FACETS = ("actual", "budget", "variance", "forecast", "prior", "target")
@@ -59,6 +69,10 @@ _FACETS = ("actual", "budget", "variance", "forecast", "prior", "target")
 #: Spelled counts: prose may carry no digit outside a reference.
 _COUNTS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
            "eleven", "twelve")
+
+
+#: A paragraph shorter than this many words joins its neighbour.
+_SHORT_PARAGRAPH = 10
 
 
 def _count(n: int) -> str:
@@ -94,6 +108,34 @@ class _Group:
         return [fact.id for fact in self.facets.values()]
 
 
+def _options(key: str) -> list[str]:
+    """The alternatives of prompts pack text ``narrative.prose.<key>``."""
+    from .. import packkit
+
+    try:
+        raw = packkit.template(f"narrative.prose.{key}")
+    except KeyError:
+        return []
+    return [piece.strip() for piece in raw.split(" | ")]
+
+
+def _noun(measure: str) -> str:
+    spoken = _options(f"noun.{measure.replace('.', '_')}")
+    if spoken:
+        return spoken[0]
+    words = measure.replace(".", " ").replace("_", " ").replace(" pct", "").strip()
+    acronyms = {a.lower() for a in _options("noun.acronyms")}
+    return " ".join(w.upper() if w in acronyms else w for w in words.split())
+
+
+def measure_noun(kind: str) -> str:
+    """How prose names what a fact kind measures ("gross margin", "CET1 ratio"):
+    the pack's ``narrative.prose.noun.<measure>`` where it gives one, else the
+    kind's own words. Public so a slide title says a measure the way the
+    prose under it does."""
+    return _noun(_parse(kind)[1])
+
+
 class _Words:
     """Prompts pack text for the narrator, chosen without randomness."""
 
@@ -103,16 +145,30 @@ class _Words:
         """The artifact's own number. Two documents citing the same fact reach
         for the same key; offsetting by the artifact's number walks them
         through the alternatives in turn instead of letting them collide."""
+        self.recurrence: Mapping[str, int] = {}
+        """How many earlier sections of the corpus carry each fact (the
+        request's ``recurrence``). A bank's collateral treatment is cited by
+        half its documents; walking a fact's sentence on by its recurrence
+        states it a different way each time it comes back, which a hash of
+        the section could only do by luck."""
         self.used: dict[str, set[int]] = {}
 
-    def options(self, key: str) -> list[str]:
-        from .. import packkit
+    def start(self, key: str, slot: str) -> int:
+        """Where the walk through *key*'s alternatives starts for *slot*.
 
-        try:
-            raw = packkit.template(f"narrative.prose.{key}")
-        except KeyError:
-            return []
-        return [piece.strip() for piece in raw.split(" | ")]
+        For a slot naming facts whose recurrence the request states, the key's
+        own hash plus the most any of them recurs: every sentence about a kind
+        of fact starts one alternative on from the last section that said one,
+        whichever fact of the kind it is. Otherwise the slot's hash plus the
+        artifact's number, as before recurrence was known.
+        """
+        ids = slot.split(",")
+        if ids and all(fid in self.recurrence for fid in ids):
+            return int(content_key(key), 16) + max(self.recurrence[fid] for fid in ids)
+        return int(content_key(key, slot), 16) + self.ordinal
+
+    def options(self, key: str) -> list[str]:
+        return _options(key)
 
     def has(self, key: str) -> bool:
         return bool(self.options(key))
@@ -123,7 +179,7 @@ class _Words:
         options = self.options(key)
         if not options:
             return fallback
-        start = (int(content_key(key, slot), 16) + self.ordinal) % len(options)
+        start = self.start(key, slot) % len(options)
         used = self.used.setdefault(key, set())
         for step in range(len(options)):
             index = (start + step) % len(options)
@@ -168,6 +224,8 @@ class _Composer:
         leading = re.match(r"\d+", request.section)
         self.words = _Words(f"{request.artifact_id}\x1f{request.section}",
                             int(digits or 0) + (int(leading.group(0)) if leading else 0))
+        self.words.recurrence = dict(request.recurrence)
+        self.restated = set(request.restated)
         self.cutoff = request.temporal_cutoff
         self.priors = {prior: current for current, prior in request.comparators.items()}
         subjects = {request.subjects.get(fid) for fid in request.allowed_fact_ids}
@@ -180,7 +238,7 @@ class _Composer:
 
     def usable(self, fact_id: str) -> CanonicalFact | None:
         fact = self.facts.get(fact_id)
-        if fact is None:
+        if fact is None or fact_id in self.restated:
             return None
         if self.cutoff is not None and fact.valid_from > self.cutoff:
             return None
@@ -198,12 +256,7 @@ class _Composer:
         return self.request.hierarchy.get(subject) == "the group" or not subject
 
     def noun(self, measure: str) -> str:
-        spoken = self.words.options(f"noun.{measure.replace('.', '_')}")
-        if spoken:
-            return spoken[0]
-        words = measure.replace(".", " ").replace("_", " ").replace(" pct", "").strip()
-        acronyms = {a.lower() for a in self.words.options("noun.acronyms")}
-        return " ".join(w.upper() if w in acronyms else w for w in words.split())
+        return _noun(measure)
 
     def fact_key(self, fact: CanonicalFact, move: str = "") -> str:
         """The pack key that speaks this one fact, or ``""``.
@@ -230,6 +283,14 @@ class _Composer:
                 return stem
         return ""
 
+    def zero_key(self, fact: CanonicalFact, key: str) -> str:
+        """*key*'s ``.zero`` variant for a figure of zero, where the pack has one:
+        a close that "landed 0 business days late" is a close that landed on
+        its date, and "the delay is a calendar cost" is not true of no delay."""
+        if fact.value is not None and fact.value.amount == 0 and self.words.has(f"{key}.zero"):
+            return f"{key}.zero"
+        return key
+
     def subject_phrase(self, fact: CanonicalFact, measure: str) -> tuple[str, bool]:
         """The noun phrase for *measure* of *fact*'s subject, and whether it
         opens with a proper name (so it must not be lower-cased)."""
@@ -239,8 +300,10 @@ class _Composer:
         name = self.name(fact)
         if self.is_group(fact):
             if self.contrasting:
+                # "group the CET1 movement" is a noun with its article still on.
+                bare = noun[4:] if noun.startswith("the ") else noun
                 return _fill(self.words.pick("subject.group", subject + measure, fallback="group {noun}"),
-                             {"noun": noun}), False
+                             {"noun": bare}), False
             return noun, False
         if where.startswith("division of") or where.startswith("category in"):
             return f"{name} {noun}", True
@@ -368,6 +431,7 @@ class _Composer:
                                        fallback="At the time it was recorded as {ref}, which was later superseded.")
         else:
             key = self.fact_key(fact, move)
+            key = self.zero_key(fact, key) if key else key
             template = self.words.pick(key, slot) if key else ""
             if not template:
                 long_form = fact.value is None and len((fact.text_value or "").split()) > 3
@@ -495,16 +559,23 @@ class _Composer:
         sentences: list[str] = []
         pool = [fid for fid in move.fact_ids if self.usable(fid) is not None and fid not in self.priors]
         variances = [self.facts[f] for f in pool if _parse(self.facts[f].kind)[2] == "variance"
-                     and self.facts[f].value is not None]
+                     and self.facts[f].value is not None and not self.fact_key(self.facts[f])]
         cautious = "cautious" in self.request.voice or "provisional" in self.request.voice
         if variances:
             sentences.extend(self.verdict(variances, index))
+        # What a fact kind means, once per kind and at most twice a section,
+        # led by the facts the section opened with: an implication for every
+        # fact the section touched is how one sentence came to be said three
+        # times in one bank's quarter.
+        said: set[str] = set()
         for fid in pool:
             fact = self.facts[fid]
-            key = f"implication.kind.{fact.kind.replace('.', '_')}"
-            if self.words.has(key) and len(sentences) < 3:
-                sentences.append(self.claim(_upper_first(_fill(self.words.pick(key, fid),
-                                                               {"subject": self.name(fact)})), [fid]))
+            key = self.zero_key(fact, f"implication.kind.{fact.kind.replace('.', '_')}")
+            if fact.kind in said or not self.words.has(key) or len(said) >= 2 or len(sentences) >= 3:
+                continue
+            said.add(fact.kind)
+            sentences.append(self.claim(_upper_first(_fill(self.words.pick(key, fid),
+                                                           {"subject": self.name(fact)})), [fid]))
         forecasts = [g for g in self.groups(pool) if "forecast" in g.facets and "actual" in g.facets]
         for group in forecasts[:1]:
             a, f = group.facets["actual"], group.facets["forecast"]
@@ -590,7 +661,7 @@ class _Composer:
             template = self.words.pick("background", str(index))
             if not template:
                 return ""
-            lowered = text if text.split(" ", 1)[0] in names or text[:2].isupper() else text[:1].lower() + text[1:]
+            lowered = text if text.split(" ", 1)[0] in names or (text[:2].isupper() and text[1:2].isalpha()) else text[:1].lower() + text[1:]
             return _upper_first(_fill(template, {"context": lowered}))
         return ""
 
@@ -612,12 +683,24 @@ class _Composer:
                 paragraphs.append(" ".join(sentences[middle:]))
             else:
                 paragraphs.append(" ".join(sentences))
+        # A move with one short sentence ("The risk margin policy is 12%.")
+        # is not a paragraph a writer would leave standing alone; it joins the
+        # paragraph before it, or the one after when it opens the section.
+        joined: list[str] = []
+        for paragraph in paragraphs:
+            if joined and len(joined[-1].split()) < _SHORT_PARAGRAPH:
+                joined[-1] = f"{joined[-1]} {paragraph}"
+            elif joined and len(paragraph.split()) < _SHORT_PARAGRAPH:
+                joined[-1] = f"{joined[-1]} {paragraph}"
+            else:
+                joined.append(paragraph)
+        paragraphs = joined
         # A section with a single fact is a sentence, not a section. The
         # standing context the request carries (lore the facts touch) is what
         # a writer who knows the business would add, so one line of it is
         # given, in the pack's words, when it passes the same lexical checks
         # the validator applies: no digit, no capitalised run it cannot name.
-        if sum(len(p.split(". ")) for p in paragraphs) < 3:
+        if sum(len(p.split(". ")) for p in paragraphs) < 4:
             context = self.background()
             if context:
                 paragraphs.append(context)
@@ -638,18 +721,51 @@ def compose(request: NarrativeRequest, facts: Mapping[str, CanonicalFact]) -> Ge
     return _Composer(request, facts).compose()
 
 
+@lru_cache(maxsize=16)
+def _engine_pack(engine: str) -> ResolvedPack | None:
+    """The shipped industry pack that speaks for *engine*: the one named after
+    it, else the only one that rides it, else none.
+
+    Shipped packs only, never a user's: this decides what an offline corpus
+    says, and a corpus has to rebuild the same on any machine.
+    """
+    from ..packkit.resolve import resolve_envelope
+    from ..packkit.sources import discover
+
+    riding = {located.envelope.name: located for located in discover("industry", strict=False)
+              if located.origin == "builtin" and (located.envelope.body or {}).get("engine") == engine}
+    chosen = riding.get(engine) or (next(iter(riding.values())) if len(riding) == 1 else None)
+    return resolve_envelope(chosen.envelope, located=chosen) if chosen is not None else None
+
+
 class ComposedProvider:
     """The offline narrator a reader-grade build writes with.
 
     Deterministic, key-free and network-free like the contract fixture, and
     thread-safe for the same reason: each call reads a request and a fact
     table and holds nothing between calls but a counter.
+
+    *engine* names the engine the world was built on. Its shipped industry
+    pack (banking, insurance, the infrastructure services group procurement
+    builds) carries the phrase bank for its own fact kinds: the sentences,
+    nouns, connectives and implications a writer in that industry uses. It is
+    put in force for the composing only, and only when the world names no
+    industry pack of its own, so a corpus that chose its industry's words
+    keeps them.
     """
 
-    id = "composed-prose-1"
+    id = "composed-prose-2"
 
-    def __init__(self) -> None:
+    def __init__(self, engine: str = "") -> None:
         self.calls = 0
+        self.engine = engine
+
+    @classmethod
+    def for_world(cls, world: object) -> ComposedProvider:
+        """The narrator for *world*, speaking for the engine it was built on."""
+        from ..documents import _vertical_of
+
+        return cls(engine=_vertical_of(world))
 
     def complete(
         self,
@@ -659,8 +775,15 @@ class ComposedProvider:
         *,
         feedback: str = "",
     ) -> GeneratedNarrative:
+        from .. import packkit
+
         self.calls += 1
+        in_force = packkit.active("industry")
+        pack = _engine_pack(self.engine) if self.engine else None
+        if pack is not None and (in_force is None or in_force.is_default):
+            with packkit.use(pack):
+                return compose(request, facts)
         return compose(request, facts)
 
     def __repr__(self) -> str:
-        return f"ComposedProvider(calls={self.calls})"
+        return f"ComposedProvider(engine={self.engine!r}, calls={self.calls})"

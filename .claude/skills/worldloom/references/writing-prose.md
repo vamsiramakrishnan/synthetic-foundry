@@ -139,6 +139,26 @@ supplies the world's entity list, which `narrate accept` always does. Fix: you
 invented a name, or misspelled a real one; check it against `hierarchy` and
 `subjects` in the request, or against `worldloom inspect ./corpus`.
 
+Two more fire only on a corpus spelled for a reader (the presentation
+profile's `spelling: reader`, which every `enterprise/v2` corpus has unless
+it names another profile). The request document's `rules` state both.
+
+**`number_spelling`**: your prose, with its references spelled the way the
+page will print them, carries a figure no memo prints. A reference already
+spells its currency, a rounded magnitude and its direction ("AUD 10.2m
+adverse", "AUD 958k", "nil"), so `{{fact:X}} thousands`, `AUD {{fact:X}}` and
+`a shortfall of {{fact:X}} adverse` are all refused. After a phrase that
+already carries the direction ("a shortfall of", "missed plan by") the
+reference drops its own "adverse"; do not add it back. The `statement` of each
+fact in the request shows the spelling. Fix: write the sentence around the
+reference and add no unit, currency or direction word of your own.
+
+**`slug_leak`**: a recorded identifier in your own words: a snake_case value
+(`control_failure`), a service slug (`inventory-valuation`), a raw enum value
+of a fact you were given. The finding names the words to use ("control
+failure", the `display_names` entry). Fix: reference the fact, whose value
+prints in words, or write the words the finding gives.
+
 ## The two subtle ones
 
 **`knows_as_of` and `not_yet_known` are about permission to refer, not about

@@ -1,0 +1,26 @@
+{
+  "schema": "worldloom.spelling/v1",
+  "about": "How a figure is spelled in a sentence, by the presentation profile's `spelling` knob. `exact` is the ledger's own figure (every corpus before this file, and every audit rendering). A reader spelling rounds money to a magnitude a memo would print, keeps one precision per unit within a sentence, writes unit words a reader uses, and says a zero in words. Rounding here is a spelling, never a value: `figures.agrees` accepts a reader's copy of a rounded figure only when it is a correct rounding of the ledger figure at the precision it shows, and the words a spelling uses (the zero, the direction phrases) are prompts pack text under `render.figures.`.",
+  "spellings": {
+    "exact": {
+      "about": "The figure as the ledger states it (or promoted to the largest exact magnitude under `magnitudes: scaled`)."
+    },
+    "reader": {
+      "about": "Money rounded per magnitude (bn to two places, m to one, k to none), consolidated to the sentence's largest magnitude when a smaller figure is at least a tenth of it, one precision per unit per sentence, `k` never `thousands`, zero as `nil`, percentages as `%`, ISO dates in words, recorded enum values in words.",
+      "money": {
+        "magnitudes": [
+          {"suffix": "bn", "factor": 1000000000, "places": 2},
+          {"suffix": "m", "factor": 1000000, "places": 1},
+          {"suffix": "k", "factor": 1000, "places": 0},
+          {"suffix": "", "factor": 1, "places": 0}
+        ],
+        "scales": {"": 1, "thousands": 1000, "millions": 1000000, "billions": 1000000000},
+        "min_significant": 2,
+        "consolidate_share": 0.1
+      },
+      "percent": {"units": ["percent", "pct"], "places": 2},
+      "dates": true,
+      "enums": true
+    }
+  }
+}
