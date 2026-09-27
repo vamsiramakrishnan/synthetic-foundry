@@ -51,11 +51,13 @@ from ..connectors.anvil import (
     AnvilMapping,
     MappingError,
     ServiceBackend,
-    answer,
     lint_mapping,
     load_mapping,
     operations_from_air,
     read_air,
+    refusal_message,
+    refusal_tool,
+    run_request,
     shipped_mappings,
 )
 from ..connectors.anvil_provider import STATE_SCHEMA
@@ -158,6 +160,9 @@ class AnvilToolSurface(ToolSurface):
                    "with $ANVIL_TOKEN as the bearer token")
         self._service.record_refusal(self._principal, self.run_id, tool, arguments, message)
         raise ServingError(message)
+
+    def call_planned(self, tool: str, /, **arguments: Any) -> Any:
+        return self.call(tool, **arguments)
 
 
 def _record_json(record: Any) -> dict[str, Any]:
@@ -436,20 +441,22 @@ def replay_traces(service: ConnectorEvaluationService, principal: str, run_id: s
                 error = {"code": "upstream_unavailable", "message": str(provider["transportError"])}
             # Named as the connector tool the operation maps to, where it
             # maps to one, so a refused attempt counts against that tool.
-            mapped = mappings[connector].entry(str(entry.get("operationId")))
-            tool = mapped.tool if mapped is not None and mapped.tool else entry.get("tool")
-            service.record_refusal(principal, run_id, f"{connector}.{tool}", _argument_names(entry),
-                                   f"anvil_{error.get('code', 'refused')}: {error.get('message', '')}".rstrip())
+            service.record_refusal(principal, run_id,
+                                   refusal_tool(mappings[connector], entry.get("operationId"), entry.get("tool")),
+                                   _argument_names(entry), refusal_message(error))
             continue
         spans_before = len(service.spans(principal, run_id)) if observations is not None else 0
-        replayed = answer(mappings[connector], ServiceBackend(service, principal, run_id, connector), normalized)
+        names = _argument_names(entry)
+
+        def refuse(tool: str, _: Sequence[str], message: str, names: list[str] = names) -> None:
+            # Named by what the agent sent, not the normalized request.
+            service.record_refusal(principal, run_id, tool, names, message)
+
+        replayed = run_request(mappings[connector], ServiceBackend(service, principal, run_id, connector), normalized,
+                               refuse=refuse)
         if observations is not None:
             for span in service.spans(principal, run_id)[spans_before:]:
                 observations[str(span.id)] = observed_exchange(entry)
-        if not replayed.called:
-            error = replayed.response.get("error") or {}
-            service.record_refusal(principal, run_id, f"{connector}.{replayed.tool or entry.get('tool')}",
-                                   _argument_names(entry), f"anvil_{error.get('code')}: {error.get('message', '')}")
         if provider is not None and _canonical(replayed.response) != _canonical(provider):
             notes.append(f"anvil_divergence: {label} answered differently on replay than it did to the agent")
     return tuple(notes)

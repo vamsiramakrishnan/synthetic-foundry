@@ -107,6 +107,27 @@ class ToolSurface:
         self.attempts += 1
         return self._service.call(self._principal, self.run_id, tool, arguments)
 
+    @property
+    def surface(self) -> str:
+        """``native`` or ``contract``: which tools ``tools()`` lists (``connectors.surface``)."""
+        return str(getattr(self._service, "surface", "native"))
+
+    def call_planned(self, tool: str, /, **arguments: Any) -> Any:
+        """A planned connector call (``connector.tool``), made on this run's surface.
+
+        On the contract surface it is made as the exposed operation that
+        carries it, and a call no operation carries is refused as a
+        ``contract_gap`` (``ConnectorEvaluationService.call_planned``). The
+        connector tool's own result is returned. For a privileged walker of
+        a gold plan, never an agent under test.
+        """
+        self.attempts += 1
+        return self._service.call_planned(self._principal, self.run_id, tool, arguments)
+
+    def native_params(self) -> dict[str, set[str]]:
+        """Every connector tool's parameters: what a planned call may carry."""
+        return self._service.native_params()
+
     def ask(self, question: str, *, about: Sequence[str] = ()) -> str:
         """Ask the user a question and get their reply.
 
@@ -252,6 +273,12 @@ class ReferenceAgent:
         # pruned to what the tool advertises, which is what a real agent
         # reading ``tools/list`` would send.
         self._params = {str(tool["name"]): set(tool["params"]) for tool in tools.tools()}
+        # On the contract surface the catalog lists the contract's operations;
+        # the plan names connector tools, which each operation is checked to
+        # carry exactly, so a call is pruned to what the connector tool takes.
+        self._local.planned = getattr(tools, "surface", "native") == "contract"
+        if self._local.planned:
+            self._params = {**tools.native_params(), **self._params}
         # The questions the row requires, asked before anything runs: the
         # reference knows the plan, so it also knows what is unclear about it.
         # A question carries what the row says it must mention; a
@@ -280,6 +307,8 @@ class ReferenceAgent:
         allowed = self._params.get(tool)
         pruned = {key: value for key, value in arguments.items()
                   if value is not None and (allowed is None or key in allowed)}
+        if getattr(self._local, "planned", False):
+            return tools.call_planned(tool, **pruned)
         return tools.call(tool, **pruned)
 
     # -- legacy rows ---------------------------------------------------------

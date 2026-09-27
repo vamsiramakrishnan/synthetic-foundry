@@ -22,6 +22,52 @@ app = typer.Typer(
 
 AGENTS = ("reference", "lazy", "scripted")
 
+_SURFACE_HELP = ("The tools the agent is shown: native (each connector definition's own tools; the default, policy "
+                 "`connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them "
+                 "for MCP, dispatched in process through the connector's Anvil mapping).")
+
+
+def _with_surface(*, bundles: bool) -> Any:
+    """Run a command with the ``--surface`` it was given in force for every service it builds.
+
+    With *bundles*, ``--surface contract --contract C=BUNDLE`` (and no
+    ``--connectors anvil``) serves those bundles' surfaces in process, and the
+    command body never sees the ``--contract`` it would otherwise refuse.
+    """
+    import functools
+
+    def wrap(command: Any) -> Any:
+        @functools.wraps(command)
+        def run(*args: Any, **kwargs: Any) -> Any:
+            from ..connectors.surface import (
+                SURFACES,
+                SurfaceError,
+                load_surfaces,
+                serving_surface,
+            )
+
+            choice: Any = kwargs.get("surface")
+            if choice is not None and choice not in SURFACES:
+                from ..cli import _refuse
+
+                _refuse("unknown_surface", f"--surface {choice!r}; use {' or '.join(SURFACES)}")
+            if bundles and choice == "contract" and kwargs.get("contract") and kwargs.get("connectors") in (None, "emulator"):
+                from ..cli import _refuse
+                from .anvil import AnvilError, find_anvil, resolve_contracts
+
+                try:
+                    given = resolve_contracts(kwargs["contract"])
+                    choice = load_surfaces(sorted(given), bundles=given, anvil=find_anvil(kwargs.get("anvil_cmd")))
+                except (AnvilError, SurfaceError) as error:
+                    _refuse("surface_unavailable", str(error))
+                kwargs = {**kwargs, "contract": None, "anvil_cmd": None}
+            with serving_surface(choice):
+                return command(*args, **kwargs)
+
+        return run
+
+    return wrap
+
 
 class _CaseSet:
     """A case set read from disk, shaped like the corpus the commands expect: its records under `connector_data.records`."""
@@ -239,6 +285,7 @@ def requests_command(
 
 
 @app.command("run")
+@_with_surface(bundles=True)
 def run_command(
     corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set written by `worldloom industry programme` (evalrun-cases.jsonl beside records.jsonl)."),
     out: Path = typer.Option(..., "--out", "-o", help="Run directory to write (run.json, results.jsonl, summary.json)."),
@@ -272,6 +319,7 @@ def run_command(
     anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
     harness_mode: str = typer.Option("turns", "--harness-mode", help="How the --exec child acts: turns (one call per turn, the default) or sdk-program (it writes one Python program per case against a generated client; Worldloom runs it and grades the calls it made)."),
     program_timeout: float = typer.Option(300.0, "--program-timeout", help="With --harness-mode sdk-program: seconds the program may run per case before it is killed."),
+    surface: str | None = typer.Option(None, "--surface", help=_SURFACE_HELP),
 ) -> None:
     """Run one agent over the case set, one isolated connector state per case, and grade.
 
@@ -1010,6 +1058,7 @@ def _check_parents(parents: str | None) -> None:
 
 
 @app.command("improve")
+@_with_surface(bundles=False)
 def improve_command(
     corpus: Path = typer.Argument(..., help="The corpus or case set the agent is improved on."),
     agent_pack: str = typer.Option(..., "--agent-pack", help="The champion to start from: agent:<name>[@<digest>] or a pack file."),
@@ -1046,6 +1095,7 @@ def improve_command(
     source_root: list[str] | None = typer.Option(None, "--source-root", help="CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it."),
     transfer_agent: str | None = typer.Option(None, "--transfer-agent", help="A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
+    surface: str | None = typer.Option(None, "--surface", help=_SURFACE_HELP),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
 
@@ -1288,6 +1338,7 @@ def corners_command(
 
 
 @app.command("prove")
+@_with_surface(bundles=True)
 def prove_command(
     corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set (evalrun-cases.jsonl beside records.jsonl)."),
     limit: int | None = typer.Option(None, "--limit", min=1, help="Prove only the first N cases."),
@@ -1296,6 +1347,7 @@ def prove_command(
     contract: list[str] | None = typer.Option(None, "--contract", help="With --connectors anvil: a contract bundle, as CONNECTOR=PATH or a bare PATH. Repeat per connector."),
     anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
     json_output: bool = typer.Option(False, "--json", help="Emit the proof report as JSON."),
+    surface: str | None = typer.Option(None, "--surface", help=_SURFACE_HELP),
 ) -> None:
     """Prove every case solvable: replay its gold DAG and name the first node that is not.
 

@@ -55,6 +55,7 @@ from typing import Any
 from .. import packkit
 from ..connector_emulator import ConnectorError
 from ..connectors.serving import ServingError
+from ..connectors.surface import error_document
 from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
 from ..ids import content_key
 from .agents import AgentResponse, AgentTask, ProducedArtifact, ToolSurface
@@ -81,13 +82,32 @@ def _identifier(name: str) -> str:
     return f"_{cleaned}" if not cleaned or cleaned[0].isdigit() else cleaned
 
 
+def _client_connector(tool: Mapping[str, Any]) -> str:
+    """The client object a tool's method hangs on: a contract tool says its connector; a native one is ``connector.tool``."""
+    name = str(tool.get("name", ""))
+    return str(tool.get("connector") or (name.partition(".")[0] if "." in name else ""))
+
+
+def _client_method(tool: Mapping[str, Any]) -> str:
+    """A tool's method name: a contract tool without its service prefix (as Anvil's own SDK names it)."""
+    name = str(tool.get("name", ""))
+    if tool.get("surface") == "contract":
+        return _identifier(name.removeprefix(f"{_client_connector(tool)}_"))
+    return _identifier(name.partition(".")[2])
+
+
+def client_methods(catalog: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    """``client.method`` to tool name for each contract tool, so a program's calls are read as the tools they are."""
+    return {f"{_identifier(_client_connector(tool))}.{_client_method(tool)}": str(tool["name"])
+            for tool in catalog if tool.get("surface") == "contract" and _client_connector(tool)}
+
+
 def client_source(catalog: Sequence[Mapping[str, Any]]) -> str:
     """A client module with one method per tool in *catalog*, calling the endpoint in ``$WORLDLOOM_TOOL_URL``."""
 
     by_connector: dict[str, list[Mapping[str, Any]]] = {}
     for tool in catalog:
-        name = str(tool.get("name", ""))
-        connector, _, _ = name.partition(".")
+        connector = _client_connector(tool)
         if connector:
             by_connector.setdefault(connector, []).append(tool)
     lines = [
@@ -135,10 +155,15 @@ def client_source(catalog: Sequence[Mapping[str, Any]]) -> str:
         for tool in sorted(by_connector[connector], key=lambda item: str(item.get("name"))):
             name = str(tool["name"])
             params = sorted(str(key) for key in (tool.get("params") or {}))
-            entities = ", ".join(str(entity) for entity in tool.get("entities") or ()) or "any"
-            summary = f"{tool.get('op') or 'call'} on {entities}."
+            if tool.get("surface") == "contract":
+                # The contract's operation: its title and its route.
+                summary = f"{tool.get('title') or tool.get('operation')} ({tool.get('method')} {tool.get('path')})."
+                summary = summary.replace('"""', "'''").replace("\\", "/")
+            else:
+                entities = ", ".join(str(entity) for entity in tool.get("entities") or ()) or "any"
+                summary = f"{tool.get('op') or 'call'} on {entities}."
             lines += [
-                f"    def {_identifier(name.partition('.')[2])}(self, **arguments):",
+                f"    def {_client_method(tool)}(self, **arguments):",
                 f'        """{summary} Parameters: {", ".join(params) or "none"}."""',
                 f"        return call({name!r}, **arguments)",
                 "",
@@ -150,7 +175,8 @@ def client_source(catalog: Sequence[Mapping[str, Any]]) -> str:
 # -- the declared DAG, read off the source -------------------------------------------------
 
 
-def declared_from_program(source: str, tools: Sequence[str]) -> dict[str, Any] | None:
+def declared_from_program(source: str, tools: Sequence[str], *, methods: Mapping[str, str] | None = None
+                          ) -> dict[str, Any] | None:
     """The DAG a program's source declares: tool calls in source order, dependencies by variable flow.
 
     A call is ``<connector>.<tool>(...)`` (through any client object) or
@@ -168,6 +194,7 @@ def declared_from_program(source: str, tools: Sequence[str]) -> dict[str, Any] |
     for name in tools:
         connector, _, tool = name.partition(".")
         known[f"{_identifier(connector)}.{_identifier(tool)}"] = name
+    known.update(methods or {})
     taint: dict[str, set[str]] = {}
     nodes: list[dict[str, Any]] = []
 
@@ -370,7 +397,7 @@ class ToolShim:
                         raise ServingError("arguments must be an object")
                     reply = {"result": self.tools.call(tool, **dict(arguments))}
                 except ConnectorError as failure:
-                    reply = {"error": {"code": failure.code, "kind": failure.kind, "message": failure.message}}
+                    reply = {"error": error_document(failure)}
                 except ServingError as failure:
                     reply = {"error": {"code": 400, "kind": "serving", "message": str(failure)}}
                 spans = self.tools.spans
@@ -462,7 +489,7 @@ class ProgramAgent:
         if not isinstance(source, str) or not source.strip():
             raise RuntimeError("exec_unparseable: the reply must be {\"program\": \"<python source>\"}")
         stated = document.get("planned_dag")
-        declared = dict(stated) if isinstance(stated, Mapping) else declared_from_program(source, names)
+        declared = dict(stated) if isinstance(stated, Mapping) else declared_from_program(source, names, methods=client_methods(catalog))
         record: dict[str, Any] = {
             "language": "python", "source": source, "digest": content_key("evalrun-program", source),
             "declared_from": "reply" if isinstance(stated, Mapping) else ("source" if declared else None),

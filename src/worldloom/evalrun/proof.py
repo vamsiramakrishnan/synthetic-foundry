@@ -171,7 +171,7 @@ def _data_digest(*parts: str) -> str:
 
 def environment_pins(cases: Sequence[EvalCase], records: Iterable[Any], *,
                      definitions: Mapping[str, Any], query_engine: str = PROOF_ENGINE,
-                     anvil: AnvilServing | None = None) -> dict[str, Any]:
+                     anvil: AnvilServing | None = None, surface: Any = None) -> dict[str, Any]:
     """Everything a proof's validity depends on, as digests. Pure: no clock, no host.
 
     ``corpus`` is the records and the case rows; ``connectors`` each
@@ -194,6 +194,15 @@ def environment_pins(cases: Sequence[EvalCase], records: Iterable[Any], *,
         "grader": grader_identity(None)["digest"],
         "serving": "emulator" if anvil is None else anvil_pins(anvil),
     }
+    # The contract surface is part of what a proof rests on: the tools the
+    # gold plan was carried through and the mapping that carried them. The
+    # native surface adds nothing, so a proof recorded before surfaces
+    # existed keeps its pins.
+    from ..connectors.surface import resolve_surfaces
+
+    surfaces = resolve_surfaces(surface, sorted(definitions))
+    if surfaces is not None:
+        pins["surface"] = surfaces.identity()
     return pins
 
 
@@ -605,7 +614,8 @@ def prove_cases(cases: Sequence[EvalCase], records: Sequence[Any], *,
         proofs.append(CaseProof(case_id=case.id, solvable=not ordered, failure=ordered[0] if ordered else None,
                                 failures=ordered, scores=_scores(result)))
     reasons = Counter(item.failure.check for item in proofs if item.failure is not None)
-    pins = environment_pins(listed, records, definitions=service.definitions, anvil=anvil, query_engine=query_engine)
+    pins = environment_pins(listed, records, definitions=service.definitions, anvil=anvil, query_engine=query_engine,
+                            surface=service.surfaces if service.surfaces is not None else "native")
     return ProofReport(case_set=case_set_digest(listed), serving="anvil" if anvil is not None else "emulator",
                        query_engine=query_engine,
                        cases=tuple(proofs), solvable=sum(item.solvable for item in proofs),
@@ -712,89 +722,41 @@ def anvil_request(mapping: Any, tool: str, args: Mapping[str, Any], definitions:
                   connector: str) -> dict[str, Any]:
     """The vendor request a mapped contract operation takes for one connector tool call.
 
-    The inverse of ``connectors.anvil.plan_call``: the first operation whose
-    tool is *tool* and whose required arguments the call carries, each
-    argument placed where the operation reads it. A structured predicate is
-    compiled into the connector's vendor query first, because a vendor API
-    takes no predicate. Raises ``ValueError`` when no modelled operation fits.
+    The inverse of ``connectors.anvil.plan_call``, shared with the in-process
+    contract surface (``connectors.anvil.placements``): the first routed
+    operation that carries the call, each argument placed where the
+    operation reads it and the whole request checked by running the same
+    mapping forward over it. A structured predicate is compiled into the
+    connector's vendor query first, because a vendor API takes no predicate.
+    Raises ``ValueError`` when no modelled operation fits.
     """
     from ..connector_definition import load_connector_definition
-    from ..connector_emulator import _coerce_predicate
-    from ..connector_query import compile_native
+    from ..connectors.anvil import expressible, placements, plan_call
 
     definition = (definitions or {}).get(connector) or load_connector_definition(connector)
-    arguments = {key: value for key, value in args.items() if value is not None}
-    if "predicate" in arguments and "query" not in arguments:
-        predicate = _coerce_predicate(arguments.pop("predicate"), entity=arguments.get("entity"))
-        arguments["query"] = compile_native(definition, predicate, entity=arguments.get("entity"))
-    arguments.pop("entity", None) if tool.startswith(("search", "query")) else None
-    start_at = int(arguments.pop("start_at", 0) or 0)
-    reasons: list[str] = []
-    for entry in mapping.operations.values():
-        if entry.tool != tool or entry.route is None:
-            if entry.tool == tool and entry.unmodelled:
-                reasons.append(f"{entry.operation_id} unmodelled: {entry.unmodelled}")
+    arguments = expressible(definition, tool, args)
+    found, reasons = placements(mapping, tool, arguments, definition=definition)
+    wanted = {key: value for key, value in arguments.items() if key != "start_at" or value}
+    for placed in found:
+        if placed.entry.route is None:
             continue
-        missing = [name for name, spec in entry.args.items() if spec.required and name not in arguments]
-        extra = [name for name in arguments if name not in entry.args]
-        if missing or extra:
-            reasons.append(f"{entry.operation_id} needs {missing or 'nothing more'}, cannot carry {extra or 'nothing'}")
+        request = placed.request()
+        try:
+            planned = plan_call(mapping, placed.entry, request, definition)
+        except Exception as error:  # an OperationRefused or a transform's refusal: this one does not carry it
+            reasons.append(f"{placed.entry.operation_id}: {error}")
             continue
-        method, _, path = entry.route.partition(" ")
-        request: dict[str, Any] = {"method": method, "path": path, "query": {}, "body": None}
-        for name, spec in entry.args.items():
-            if name not in arguments:
-                continue
-            _place(request, spec.source, _invert(spec.transform, arguments[name], mapping))
-        if start_at and entry.cursor:
-            _place(request, entry.cursor, str(start_at))
-        return request
+        if planned.tool != tool or any(json.dumps(planned.args.get(key), sort_keys=True, default=str)
+                                       != json.dumps(value, sort_keys=True, default=str)
+                                       for key, value in wanted.items() if key in planned.args):
+            reasons.append(f"{placed.entry.operation_id} carries another call")
+            continue
+        method, _, path = placed.entry.route.partition(" ")
+        for name, value in (placed.params.get("path") or {}).items():
+            path = path.replace("{" + name + "}", str(value))
+        return {"method": method, "path": path, "query": dict(placed.params.get("query") or {}), "body": placed.body}
     raise ValueError("no modelled contract operation takes this call"
                      + (f" ({'; '.join(reasons[:2])})" if reasons else ""))
-
-
-def _invert(transform: str | None, value: Any, mapping: Any) -> Any:
-    """The request value a mapping transform turns into *value*."""
-    if transform in (None, "text", "jira_fields"):
-        return value
-    if transform == "int":
-        return int(value)
-    if transform == "csv":
-        return ",".join(str(item) for item in value) if isinstance(value, list | tuple) else value
-    if transform == "entity":
-        return {"name": value}
-    if transform == "assignee":
-        return {"accountId": (value or {}).get("assignee") if isinstance(value, Mapping) else value}
-    if transform == "transition":
-        for item in mapping.transitions:
-            if str(item.get("to")) == str(value):
-                return {"id": str(item.get("id"))}
-        raise ValueError(f"no transition leads to {value!r}")
-    raise ValueError(f"cannot invert the {transform!r} transform")
-
-
-def _place(request: dict[str, Any], source: str, value: Any) -> None:
-    where, _, rest = source.partition(".")
-    if where == "path":
-        request["path"] = request["path"].replace("{" + rest + "}", str(value))
-    elif where == "query":
-        request["query"][rest] = value
-    elif where == "body":
-        if not rest:
-            request["body"] = value
-            return
-        body = request["body"] if isinstance(request["body"], dict) else {}
-        cursor = body
-        keys = rest.split(".")
-        for key in keys[:-1]:
-            cursor = cursor.setdefault(key, {})
-        if isinstance(value, Mapping) and isinstance(cursor.get(keys[-1]), Mapping):
-            cursor[keys[-1]] = {**cursor[keys[-1]], **value}
-        else:
-            cursor[keys[-1]] = value
-        request["body"] = body
-    else:
-        raise ValueError(f"cannot place an argument at {source!r}")
 
 
 def _send(base_url: str, token: str, request: Mapping[str, Any]) -> None:

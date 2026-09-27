@@ -97,6 +97,54 @@ class _Run:
     ended: bool = False
 
 
+def _resolve_surfaces(choice: Any, connectors: Sequence[str]) -> Any:
+    """The service's contract surfaces, or ``None`` for the connector definitions' own tools."""
+    from .surface import SurfaceError, resolve_surfaces
+
+    try:
+        return resolve_surfaces(choice, connectors)
+    except SurfaceError as error:
+        raise ServingError(str(error)) from error
+
+
+class _RunBackend:
+    """A run's connector state as a mapping backend, remembering the connector call the mapping made.
+
+    The contract surface dispatches through it: the tool the mapping chooses
+    runs as that connector tool in the run (a span, graded), and a caller
+    that asked for the connector call (the reference carrying a gold node)
+    gets its result or its error back as the tool gave it.
+    """
+
+    def __init__(self, service: ConnectorEvaluationService, principal: str, run_id: str, connector: str) -> None:
+        self.service = service
+        self.principal = principal
+        self.run_id = run_id
+        self.connector = connector
+        self.result: Any = None
+        self.error: ConnectorError | None = None
+        self.called = False
+
+    @property
+    def definition(self) -> ConnectorDefinition:
+        return self.service.definitions[self.connector]
+
+    def call(self, tool: str, args: Mapping[str, Any]) -> Any:
+        self.called = True
+        try:
+            self.result = self.service.call_connector(self.principal, self.run_id, f"{self.connector}.{tool}", args)
+        except ConnectorError as error:
+            self.error = error
+            raise
+        return self.result
+
+    def record(self, reference: Any) -> Mapping[str, Any] | None:
+        return self.service.lookup(self.principal, self.run_id, self.connector, reference)
+
+    def snapshot(self) -> dict[str, dict[str, Any]]:
+        return self.service.snapshot(self.principal, self.run_id)
+
+
 def _entities_meet(definition: ConnectorDefinition, node_entity: str, asked: str) -> bool:
     """Whether a call's ``entity`` names the node's entity, either way round an alias.
 
@@ -144,6 +192,7 @@ class ConnectorEvaluationService:
         limits: ServingLimits | None = None,
         run_prefix: str = "",
         query_engine: str | None = None,
+        surface: Any = None,
     ) -> None:
         if query_engine is not None and query_engine not in QUERY_ENGINES:
             raise ServingError(f"query_engine: one of {', '.join(QUERY_ENGINES)}")
@@ -186,7 +235,26 @@ class ConnectorEvaluationService:
         selected = set(allowed_tools) if allowed_tools is not None else set(catalog)
         if selected - set(catalog):
             raise ServingError(f"unknown tools: {sorted(selected - set(catalog))}")
-        if len(selected) + _MANAGEMENT_TOOLS > limits.max_tools:
+        self.surfaces = _resolve_surfaces(surface, sorted(self.definitions))
+        #: ``native`` (the connector definitions' tools) or ``contract`` (Anvil's projection of each contract).
+        self.surface = "contract" if self.surfaces is not None else "native"
+        #: Contract tool name to its connector and tool, for connectors served on their contract.
+        self.contract_tools: dict[str, tuple[str, Any]] = {}
+        if self.surfaces is not None:
+            for connector in self.surfaces.connectors:
+                for item in self.surfaces.surfaces[connector].tools:
+                    self.contract_tools[item.name] = (connector, item)
+            # One MCP process lists every connector's tools; a contract lists
+            # more than a hand-written definition, so the limit is held per
+            # query, against the tools one run is actually shown.
+            for row in materialized_rows:
+                servers = {str(node["server"]) for node in row["expected_dag"]["nodes"] if node.get("node_kind") != "transform"}
+                shown = sum(len(self.surfaces.surfaces[name].tools) if name in self.surfaces.surfaces
+                            else sum(1 for tool in selected if catalog[tool][0] == name) for name in servers)
+                if shown + _MANAGEMENT_TOOLS > limits.max_tools:
+                    raise ServingError(f"tool_limit: query {row['id']} is shown {shown} contract and connector tools "
+                                       "plus six evaluation tools; raise connectors.serving.max_tools")
+        elif len(selected) + _MANAGEMENT_TOOLS > limits.max_tools:
             raise ServingError(f"tool_limit: {len(selected)} connector tools plus six evaluation tools; use --tool")
         self.tools = {name: catalog[name] for name in sorted(selected)}
         for row in self.rows.values():
@@ -386,13 +454,26 @@ class ConnectorEvaluationService:
                 wanted = bound_arguments(node, outputs, items[index])
             except ValueError:
                 continue
-            if node.operation in {"search", "create", "send", "post", "upload"} and "entity" in declared.params:
+            actual = dict(arguments)
+            if node.operation == "search" and actual.get("predicate") is None and actual.get("query") is not None \
+                    and wanted.get("predicate") is not None:
+                # A vendor API takes no predicate: a search through a contract
+                # carries a vendor query instead, which no text comparison with
+                # the plan's predicate can judge. It is attributed by shape, and
+                # kept only if it read the node's evidence.
+                continue
+            # A vendor search names its type in the query (JQL `issuetype`, a
+            # CQL `type`, SOQL `FROM`) and takes no separate entity, so a call
+            # carrying exactly the plan's query without one is the plan's call.
+            implied = (node.operation == "search" and "entity" not in actual and actual.get("query") is not None
+                       and actual.get("query") == wanted.get("query"))
+            if node.operation in {"search", "create", "send", "post", "upload"} and "entity" in declared.params \
+                    and not implied:
                 # Only when the tool declares it. `call` refuses an undeclared
                 # argument before reaching here, so demanding `entity` of a
                 # tool without one (email's `search_threads`) made every such
                 # node unattributable through the very surface it is served on.
                 wanted["entity"] = node.entity
-            actual = dict(arguments)
             if node.operation == "search" and prior:
                 next_offset = int(prior[-1].args.get("start_at", 0)) + prior[-1].items
                 if int(actual.get("start_at", 0)) != next_offset or not prior[-1].items:
@@ -525,6 +606,190 @@ class ConnectorEvaluationService:
         return tuple(reversed(consumed))
 
     def call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        """One call on the surface this run presents.
+
+        On the native surface *name* is ``connector.tool``. On the contract
+        surface it is a contract tool (``jira_get_issue``), dispatched through
+        the connector's mapping to the connector tool it becomes; a connector
+        tool of a contracted connector is not on that surface and is refused.
+        """
+        if self.surfaces is not None:
+            held = self.contract_tools.get(name)
+            if held is not None:
+                return self._contract_call(principal, run_id, held[0], held[1], arguments)
+            if name in self.tools and self.surfaces.get(self.tools[name][0]) is not None:
+                with self._held(principal, run_id) as run:
+                    message = (f"tool_not_served: {name} is not on this run's contract surface; call the "
+                               f"{self.tools[name][0]} contract's operations (tools/list)")
+                    self._refusal(run, name, arguments, message)
+                raise ServingError(message)
+        return self.call_connector(principal, run_id, name, arguments)
+
+    def _refusal(self, run: _Run, name: str, arguments: Iterable[str], message: str) -> None:
+        run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message,
+                             # Where it happened: the span count at the refusal, so an
+                             # exported trace can place it among the spans.
+                             "index": len(run.spans)})
+
+    def _contract_call(self, principal: str, run_id: str, connector: str, tool: Any, arguments: Mapping[str, Any],
+                       backend: _RunBackend | None = None) -> Any:
+        from .anvil import refusal_message
+        from .surface import ContractCallError
+
+        surface = self.surfaces.surfaces[connector]
+        with self._held(principal, run_id) as run:
+            if connector not in run.emulators:
+                self._refusal(run, tool.name, arguments, f"connector_not_in_query: {connector}")
+                raise ServingError(f"connector_not_in_query: {connector}")
+            if run.attempts >= self.limits.max_calls_per_run:
+                self._refusal(run, tool.name, arguments, "call_limit: retrieve the trace and end this run")
+                raise ServingError("call_limit: retrieve the trace and end this run")
+            if len(json.dumps(dict(arguments), sort_keys=True, allow_nan=False, default=str).encode()) > \
+                    self.limits.max_request_bytes:
+                run.attempts += 1
+                self._refusal(run, tool.name, arguments, "request_limit: reduce the tool arguments")
+                raise ServingError("request_limit: reduce the tool arguments")
+            backend = backend or _RunBackend(self, principal, run_id, connector)
+            before = (len(run.spans), len(run.refusals))
+
+            def refuse(label: str, names: Sequence[str], message: str) -> None:
+                run.attempts += 1
+                self._refusal(run, label, names, message)
+
+            try:
+                return surface.invoke(tool.name, arguments, backend,
+                                      request_id=f"r{len(run.spans) + len(run.refusals) + 1}", refuse=refuse)
+            except ContractCallError as error:
+                if (len(run.spans), len(run.refusals)) == before:
+                    # Refused on Anvil's surface (a missing input, an
+                    # unconfirmed write): no connector saw it, and it is an
+                    # attempt all the same, counted against the tool it maps to.
+                    run.attempts += 1
+                    self._refusal(run, surface.maps_to(tool) or f"{connector}.{tool.name}", arguments,
+                                  refusal_message(error.envelope.get("error") or {}))
+                raise
+
+    def call_planned(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        """A planned connector call (``connector.tool``), made on the surface this run presents.
+
+        On the native surface it is ``call``. On the contract surface the call
+        is carried by the exposed operation whose mapping gives it back
+        exactly (``ContractSurface.carry``) and made as that operation, so
+        the span it leaves is the one an agent calling the operation would
+        leave; the connector tool's own result (or error) is returned, which
+        is what a plan's next node reads. A call no exposed operation carries
+        is refused as a ``contract_gap``. The reference agent walks gold
+        plans through this.
+        """
+        from .surface import ContractCallError, SurfaceError
+
+        if self.surfaces is None or name not in self.tools:
+            return self.call(principal, run_id, name, arguments)
+        connector, tool = self.tools[name]
+        surface = self.surfaces.get(connector)
+        if surface is None:
+            return self.call(principal, run_id, name, arguments)
+        record = self.lookup(principal, run_id, connector, arguments["id"]) if arguments.get("id") is not None else None
+        arguments = self._vendor_handles(principal, run_id, connector, tool, arguments)
+        try:
+            carried = surface.carry(tool, arguments, self.definitions[connector], record=record)
+        except SurfaceError as gap:
+            with self._held(principal, run_id) as run:
+                run.attempts += 1
+                self._refusal(run, name, arguments, f"contract_gap: {gap}")
+            raise ServingError(f"contract_gap: {gap}") from gap
+        backend = _RunBackend(self, principal, run_id, connector)
+        try:
+            self._contract_call(principal, run_id, connector, surface.tool(carried.tool), carried.arguments,
+                                backend=backend)
+        except ContractCallError:
+            if backend.error is not None:
+                raise backend.error from None
+            raise
+        if backend.error is not None:
+            raise backend.error
+        return backend.result
+
+    def _vendor_handles(self, principal: str, run_id: str, connector: str, tool: str,
+                        arguments: Mapping[str, Any]) -> dict[str, Any]:
+        """A planned search's predicate on Worldloom record ids, restated on the vendor's handles where it must be.
+
+        A plan may pick records by the corpus's own ids (``id in
+        ('CONN-JIRA-...')``). Some vendor languages resolve those (the
+        emulator's ServiceNow encoded query does); others see only the
+        vendor's own handle, the connector catalog's ``stable_id`` (a Jira
+        key, a Salesforce ``Id``). The predicate is restated on the handles
+        only when the vendor query compiled from it finds nothing and the
+        restated one finds records, each probed on a throwaway copy of the
+        run's state (never a span). The records are the same ones; only
+        their names change.
+        """
+        from ..connector_emulator import _coerce_predicate
+        from ..connector_payload import shape_payload
+        from .anvil import expressible
+
+        out = dict(arguments)
+        raw = out.get("predicate")
+        definition = self.definitions[connector]
+        if raw is None or definition.catalog is None or not tool.startswith(("search", "query")):
+            return out
+        try:
+            predicate = _coerce_predicate(raw, entity=out.get("entity"))
+        except (TypeError, ValueError):
+            return out
+        entity = str(out.get("entity") or predicate.entity or "")
+        catalog = definition.catalog.entities or {}
+        stable = (catalog[entity].stable_id if entity in catalog else None) \
+            or next((item.stable_id for item in catalog.values() if item.stable_id), None)
+        if not stable or not any(item.field == "id" for item in predicate.where):
+            return out
+        with self._held(principal, run_id) as run:
+            emulator = run.emulators.get(connector)
+            if emulator is None:
+                return out
+
+            def found(candidate: Mapping[str, Any]) -> bool:
+                try:
+                    trial = emulator.transaction()
+                    trial.call(tool, **expressible(definition, tool, candidate))
+                    return bool(trial.trace[-1].reads)
+                except (ConnectorError, TypeError, ValueError, KeyError):
+                    return False
+
+            if found(out):
+                return out
+            where = []
+            for item in predicate.where:
+                if item.field != "id":
+                    where.append(item)
+                    continue
+                listed = isinstance(item.value, list | tuple)
+                handles = []
+                for value in (item.value if listed else [item.value]):  # type: ignore[union-attr]
+                    try:
+                        record = emulator.records[emulator.resolve(value)]
+                    except ConnectorError:
+                        return out
+                    payload = shape_payload(definition, record)
+                    handle = next((payload[key] for key in payload if str(key).casefold() == stable.casefold()), None)
+                    if handle is None:
+                        return out
+                    handles.append(handle)
+                where.append(item.model_copy(update={"field": stable,
+                                                     "value": tuple(handles) if listed else handles[0]}))
+            restated = {**out, "predicate": predicate.model_copy(update={"where": tuple(where)})}
+            return restated if found(restated) else out
+
+    def native_params(self) -> dict[str, set[str]]:
+        """Every connector tool's parameters, ``connector.tool`` to names: what a planned call may carry."""
+        return {name: set(self.definitions[connector].tool(tool).params) for name, (connector, tool) in self.tools.items()}
+
+    def call_connector(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        """The connector tool ``connector.tool`` itself, whatever surface the run presents: the call graded.
+
+        What the contract surface's mapping, the Anvil provider and the
+        replay of an Anvil trace run each operation as.
+        """
         with self._held(principal, run_id) as run:
 
             def refuse(message: str) -> ServingError:
@@ -741,15 +1006,26 @@ class ConnectorEvaluationService:
         The `tools/list` an MCP client would see, minus the five evaluation
         tools: only connectors the query names, each with the read-only,
         destructive and idempotent hints the same classification derives.
+        On the contract surface a contracted connector's entries are its
+        contract's tools as Anvil projects them (``ContractSurface.catalog``).
         """
         from ..evalrun.safety import classify_tool, tool_annotations
         from .query.docs import query_help
 
         with self._held(principal, run_id) as run:
             out = []
+            contracted: set[str] = set()
+            if self.surfaces is not None:
+                # A connector on its contract shows Anvil's tools for it, as
+                # Anvil's MCP server lists them, in place of its own.
+                for connector in sorted(run.emulators):
+                    surface = self.surfaces.get(connector)
+                    if surface is not None:
+                        contracted.add(connector)
+                        out.extend(surface.catalog(self.definitions[connector]))
             for name in sorted(self.tools):
                 connector, tool = self.tools[name]
-                if connector not in run.emulators:
+                if connector not in run.emulators or connector in contracted:
                     continue
                 definition = self.definitions[connector]
                 declared = definition.tool(tool)
@@ -984,7 +1260,53 @@ def create_connector_app(
     param_types: dict[str, Any] = {"string": str, "int": int, "integer": int,
                                  "number": float, "bool": bool, "boolean": bool,
                                  "object": dict[str, Any], "array": list[Any]}
+    contracted = set(service.surfaces.connectors) if service.surfaces is not None else set()
+    if contracted:
+        from .surface import ContractCallError
+
+        class _Passthrough(FuncMetadata):
+            """A contract tool's arguments are Anvil's schema's, handed to the surface as sent (zod strips, not refuses)."""
+
+            def validate_arguments(self, arguments_to_validate: dict[str, Any]) -> dict[str, Any]:
+                raw = dict(self.pre_parse_json(arguments_to_validate))
+                run_id = raw.pop("run_id", None)
+                if not isinstance(run_id, str):
+                    raise ToolError("run_id: a string is required")
+                return {"run_id": run_id, "arguments": raw}
+
+        class _ContractArgs(ArgModelBase):
+            model_config = ConfigDict(extra="allow")
+            run_id: str
+
+        def contract_tool(connector: str, item: Any) -> Any:
+            def invoke(ctx: Any, run_id: str, arguments: dict[str, Any], name: str = item.name) -> Any:
+                principal = ctx.request_context.request.scope["worldloom.principal"]
+                try:
+                    return service.call(principal, run_id, name, arguments)
+                except ContractCallError as error:
+                    raise ToolError(json.dumps(error.envelope, sort_keys=True)) from error
+                except (ServingError, ConnectorError) as error:
+                    raise ToolError(str(error)) from error
+
+            schema = json.loads(json.dumps(item.input_schema))
+            schema.setdefault("properties", {})["run_id"] = {"type": "string",
+                                                             "description": "The evaluation run this call acts in."}
+            schema["required"] = ["run_id", *schema.get("required", [])]
+            hints = dict(item.definition.get("annotations") or {})
+            return Tool(name=item.name, title=item.definition.get("title"), description=str(item.definition.get("description") or ""),
+                        fn=invoke, is_async=False, context_kwarg="ctx", parameters=schema,
+                        fn_metadata=_Passthrough(arg_model=_ContractArgs),
+                        annotations=ToolAnnotations(read_only_hint=hints.get("readOnlyHint"),
+                                                    destructive_hint=hints.get("destructiveHint"),
+                                                    idempotent_hint=hints.get("idempotentHint"),
+                                                    open_world_hint=hints.get("openWorldHint")))
+
+        for connector in sorted(contracted):
+            if connector in service.definitions:
+                tools.extend(contract_tool(connector, item) for item in service.surfaces.surfaces[connector].tools)
     for name, (connector, tool_name) in service.tools.items():
+        if connector in contracted:
+            continue
         definition = service.definitions[connector]
         tool = definition.tool(tool_name)
         params: dict[str, tuple[Any, Any]] = {"run_id": (str, ...)}

@@ -106,8 +106,14 @@ def grade_execution_contract(
                 fails.append(f"invalid_binding:{node.id}:{error}")
                 continue
             actual = span.get("args", {})
+            # A search made through a vendor contract carries a vendor query,
+            # never the plan's structured predicate (no vendor API takes one):
+            # what it found is graded by the reads, not by the predicate's text.
+            vendor_search = search and actual.get("query") is not None and actual.get("predicate") is None
             for key, value in args.items():
                 if key in {"id", "start_at", "max_results"}:
+                    continue
+                if vendor_search and key in {"predicate", "entity"}:
                     continue
                 if actual.get(key) != value:
                     fails.append(f"argument_mismatch:{node.id}:{key}")
