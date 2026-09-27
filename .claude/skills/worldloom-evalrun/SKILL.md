@@ -64,6 +64,12 @@ worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300
      `ANVIL_BASE_URL` and `ANVIL_TOKEN` in its environment and calls the
      vendor's paths; the calls Anvil traced are replayed into the case and
      graded by the same code. Contract in `references/protocol.md`.
+   - A program instead of turns: add `--harness-mode sdk-program` to
+     `--exec`, and the child is asked once per case for a Python program
+     against a generated client (`worldloom_client`); Worldloom runs it with
+     `--program-timeout` against the in-process shim or Anvil, grades the
+     calls it made, and keeps the program on the ledger. Contract in
+     `references/protocol.md`.
 4. **Compare by case id, never by eye.** `compare` reports improvements and
    regressions under ±0.10 bands, which axis moved, and cases graded on one
    side and errored on the other as reliability changes, not score changes.
@@ -132,6 +138,17 @@ improve`, `EvalSession.improver`), use the `worldloom-improve` skill.
   evidence. Their keys (`query.*`, `plan.node_*`, `output.*`) show in the
   autopsy; `summarize` reports `stages`, `compare` reports `stage_deltas`.
   Policies `evalrun.grade.queries|plan_nodes|output` switch them.
+- **Plans are graded as data flow.** `plan.nodes.dag` is the DAG the calls
+  formed: B depends on A when a distinctive value A returned reappears in
+  B's arguments (never because A ran first), and each span's
+  `consumed_from` says which. It is graded edge by edge against the gold
+  DAG: `plan.edge_missing` (a call guessed or hardcoded what it should have
+  read), `plan.edge_spurious`, `plan.wrong_source`, `plan.wrong_branch`
+  (the untaken branch of a conditional), and `plan.serialised`
+  (independent reads run one after the other: efficiency, not an error).
+  When the agent declared a plan, `dag.declared` reports what it declared
+  and never did, did and never declared, and `agreement`. Rules and fields:
+  `docs/eval-execution.md` ("Plans as data flow").
 
 ## From Python
 

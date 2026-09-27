@@ -1,0 +1,3428 @@
+{
+ "schema": "worldloom.world-interview-script/v1",
+ "name": "kestrel-vale",
+ "about": "A scripted interviewee for an omnichannel outdoor retailer: three lines of business, twelve roles over four levels, three processes over seven systems, nine document types with review chains, four months with an incident, a departure and a mid-history policy change, and twelve eval intents, three per level. Every question's first answer is refused on purpose, so the refusal loop runs on every layer.",
+ "answers": {
+  "company": [
+   {
+    "spec": {
+     "about": "A listed mid-size omnichannel outdoor retailer whose commercial desk, replatform programme and service desk all leave paper across several systems.",
+     "industry": "Outdoor and leisure retail",
+     "engine": "retail",
+     "geo": "australia",
+     "facets": {
+      "listing": "listed",
+      "scale": "midmarket"
+     }
+    }
+   },
+   {
+    "spec": {
+     "about": "A listed mid-size omnichannel outdoor retailer whose commercial desk, replatform programme and service desk all leave paper across several systems.",
+     "industry": "Outdoor and leisure retail",
+     "engine": "retail",
+     "geo": "australia",
+     "facets": {
+      "listing": "listed",
+      "scale": "midmarket"
+     },
+     "identity": {
+      "company_name": "Kestrel and Vale Outfitters",
+      "headquarters": "Hobart, Tasmania"
+     }
+    }
+   }
+  ],
+  "lobs": [
+   {
+    "lobs": [
+     {
+      "name": "commercial",
+      "title": "Commercial Trading",
+      "purpose": "Negotiate supplier trade agreements, hold them to legal review, and answer for the funding recognised against them.",
+      "roles": [
+       {
+        "key": "ceo",
+        "title": "Group Chief Executive Officer",
+        "function": "Executive",
+        "reports_to": null
+       },
+       {
+        "key": "cfo",
+        "title": "Group Chief Financial Officer",
+        "function": "Finance",
+        "reports_to": "ceo"
+       },
+       {
+        "key": "merch_lead",
+        "title": "Head of Commercial Trading",
+        "function": "Merchandising",
+        "reports_to": "cfo"
+       },
+       {
+        "key": "merch_analyst",
+        "title": "Commercial Analyst",
+        "function": "Merchandising",
+        "reports_to": "merch_lead"
+       },
+       {
+        "key": "audit",
+        "title": "Legal and Controls Reviewer",
+        "function": "Audit",
+        "reports_to": "cfo"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "lobs": [
+     {
+      "name": "commercial",
+      "title": "Commercial Trading",
+      "purpose": "Negotiate supplier trade agreements, hold them to legal review, and answer for the funding recognised against them.",
+      "roles": [
+       {
+        "key": "ceo",
+        "title": "Group Chief Executive Officer",
+        "function": "Executive",
+        "reports_to": null
+       },
+       {
+        "key": "cfo",
+        "title": "Group Chief Financial Officer",
+        "function": "Finance",
+        "reports_to": "ceo"
+       },
+       {
+        "key": "merch_lead",
+        "title": "Head of Commercial Trading",
+        "function": "Merchandising",
+        "reports_to": "cfo"
+       },
+       {
+        "key": "merch_analyst",
+        "title": "Commercial Analyst",
+        "function": "Merchandising",
+        "reports_to": "merch_lead"
+       },
+       {
+        "key": "audit",
+        "title": "Legal and Controls Reviewer",
+        "function": "Audit",
+        "reports_to": "cfo"
+       }
+      ]
+     },
+     {
+      "name": "delivery",
+      "title": "Programme Delivery",
+      "purpose": "Run the funded replatform programme, report its spend against a fixed envelope, and carry its risks on the record.",
+      "roles": [
+       {
+        "key": "ceo",
+        "title": "Group Chief Executive Officer",
+        "function": "Executive",
+        "reports_to": null
+       },
+       {
+        "key": "cio",
+        "title": "Chief Information Officer",
+        "function": "Technology",
+        "reports_to": "ceo"
+       },
+       {
+        "key": "platform_lead",
+        "title": "Programme Lead, Replatform",
+        "function": "Technology",
+        "reports_to": "cio"
+       },
+       {
+        "key": "platform_senior",
+        "title": "Delivery Manager",
+        "function": "Technology",
+        "reports_to": "platform_lead"
+       },
+       {
+        "key": "platform_engineer",
+        "title": "Platform Engineer",
+        "function": "Technology",
+        "reports_to": "platform_lead"
+       }
+      ]
+     },
+     {
+      "name": "service",
+      "title": "Service Operations",
+      "purpose": "Keep stores and the online channel running: triage incidents, review them, and report service health.",
+      "roles": [
+       {
+        "key": "ceo",
+        "title": "Group Chief Executive Officer",
+        "function": "Executive",
+        "reports_to": null
+       },
+       {
+        "key": "cio",
+        "title": "Chief Information Officer",
+        "function": "Technology",
+        "reports_to": "ceo"
+       },
+       {
+        "key": "svc_lead",
+        "title": "Head of Service Operations",
+        "function": "ServiceOperations",
+        "reports_to": "cio"
+       },
+       {
+        "key": "svc_incident",
+        "title": "Major Incident Manager",
+        "function": "ServiceOperations",
+        "reports_to": "svc_lead"
+       },
+       {
+        "key": "svc_desk",
+        "title": "Service Desk Analyst",
+        "function": "ServiceOperations",
+        "reports_to": "svc_lead"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "employees": [
+   {
+    "levels": {
+     "ceo": "executive",
+     "cfo": "executive",
+     "cio": "executive",
+     "merch_lead": "director",
+     "platform_lead": "director",
+     "svc_lead": "director",
+     "audit": "manager",
+     "platform_senior": "manager",
+     "svc_incident": "manager",
+     "merch_analyst": "executive",
+     "platform_engineer": "ic"
+    }
+   },
+   {
+    "levels": {
+     "ceo": "executive",
+     "cfo": "executive",
+     "cio": "executive",
+     "merch_lead": "director",
+     "platform_lead": "director",
+     "svc_lead": "director",
+     "audit": "manager",
+     "platform_senior": "manager",
+     "svc_incident": "manager",
+     "merch_analyst": "ic",
+     "platform_engineer": "ic",
+     "svc_desk": "ic"
+    }
+   }
+  ],
+  "processes:commercial": [
+   {
+    "episodes": [
+     {
+      "name": "TradeAgreementCycle",
+      "domain": "retail",
+      "period": "month",
+      "detail": "One month of the commercial desk: the pipeline reviewed, one agreement legally reviewed and signed, funding recognised against signed plans. The legal gate is the episode's spine; signature is caused by clearance, never beside it.",
+      "fact_kinds": [
+       {
+        "kind": "trade.pipeline_value",
+        "value_type": "money",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "amount": 46800,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "trade.agreements_in_negotiation",
+        "value_type": "measure",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "amount": 7,
+        "unit": "agreements",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "trade.counterparty",
+        "value_type": "text",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "text": "Meridian Foods Group, under the FY26 joint business plan",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The annual plan's counterparty belongs to no month; the monthly cycle recognises against it."
+         }
+        ]
+       },
+       {
+        "kind": "trade.agreement_value",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "amount": 5400,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The committed annual value is agreed at signature and holds for the term."
+         }
+        ]
+       },
+       {
+        "kind": "trade.rebate_rate",
+        "value_type": "percent",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "amount": 4.25,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The rate is a term of the agreement, not a monthly negotiation."
+         }
+        ]
+       },
+       {
+        "kind": "trade.funding_recognised",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "derive": "percent_of(trade.agreement_value, trade.rebate_rate)",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "legal.review_status",
+        "value_type": "text",
+        "authority": "approved_report",
+        "period_scope": "period-keyed",
+        "text": "Cleared for signature; indemnity clause amended at review",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "legal.risk_note",
+        "value_type": "text",
+        "authority": "approved_report",
+        "period_scope": "period-keyed",
+        "text": "Volume-commitment exposure if category resets mid-term; mitigated by the quarterly true-up clause",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       }
+      ],
+      "events": [
+       {
+        "kind": "pipeline_reviewed",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 4,
+        "hour": 10,
+        "minute": 0,
+        "summary": "The commercial desk reviewed the trade pipeline: value under negotiation and the agreements carrying it, ahead of this month's signature.",
+        "actors": [
+         "merch_lead"
+        ],
+        "fact_keys": [
+         "trade.pipeline_value",
+         "trade.agreements_in_negotiation"
+        ]
+       },
+       {
+        "kind": "legal_review_completed",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 7,
+        "hour": 15,
+        "minute": 30,
+        "summary": "Legal and controls review of the lead agreement closed: cleared for signature with the indemnity clause amended.",
+        "actors": [
+         "audit"
+        ],
+        "fact_keys": [
+         "legal.review_status",
+         "legal.risk_note"
+        ]
+       },
+       {
+        "kind": "agreement_signed",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 9,
+        "hour": 11,
+        "minute": 0,
+        "caused_by": "legal_review_completed",
+        "summary": "The joint business plan was signed following clearance: committed annual value and rebate rate now on the record.",
+        "actors": [
+         "merch_lead"
+        ],
+        "fact_keys": [
+         "trade.counterparty",
+         "trade.agreement_value",
+         "trade.rebate_rate"
+        ]
+       },
+       {
+        "kind": "funding_recognised",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 12,
+        "hour": 9,
+        "minute": 30,
+        "caused_by": "agreement_signed",
+        "summary": "Monthly trade funding was recognised against signed agreements, at the contracted rebate rate.",
+        "actors": [
+         "cfo"
+        ],
+        "fact_keys": [
+         "trade.funding_recognised"
+        ]
+       }
+      ],
+      "artifacts": [
+       {
+        "artifact_type": "trade_pipeline_review",
+        "author_role": "merch_lead",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.pipeline_value",
+         "trade.agreements_in_negotiation",
+         "trade.agreement_value",
+         "trade.counterparty",
+         "trade.rebate_rate",
+         "trade.funding_recognised"
+        ],
+        "size": "medium",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "pipeline_reviewed"
+        ],
+        "rationale": "The desk's monthly account of what is in negotiation and what signed; the document a 'what deals are in flight' question retrieves.",
+        "domain": "strategy"
+       },
+       {
+        "artifact_type": "trade_agreement",
+        "author_role": "merch_lead",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.counterparty",
+         "trade.agreement_value",
+         "trade.rebate_rate",
+         "legal.review_status"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "agreement_signed"
+        ],
+        "rationale": "The contract of record: parties, term, committed value, rate; and the clearance it relied on, by reference.",
+        "domain": "strategy"
+       },
+       {
+        "artifact_type": "legal_review_note",
+        "author_role": "audit",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.counterparty",
+         "trade.agreement_value",
+         "legal.review_status",
+         "legal.risk_note"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "legal_review_completed"
+        ],
+        "rationale": "The review the signature cites: scope, findings, and the one risk worth carrying forward on the record.",
+        "domain": "risk"
+       },
+       {
+        "artifact_type": "board_trading_paper",
+        "author_role": "cfo",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.agreement_value",
+         "trade.rebate_rate",
+         "trade.funding_recognised",
+         "legal.review_status"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "funding_recognised"
+        ],
+        "rationale": "The paper the board reads on trading terms: what signed, at what rate, and what it earned this month.",
+        "domain": "finance"
+       }
+      ],
+      "carry_forward": [
+       {
+        "from_kind": "trade.counterparty",
+        "to_kind": "trade.counterparty",
+        "rule": "reuse",
+        "detail": "The annual plan's counterparty does not change monthly; month N recognises against month 1's signature."
+       },
+       {
+        "from_kind": "trade.agreement_value",
+        "to_kind": "trade.agreement_value",
+        "rule": "reuse",
+        "detail": "The committed annual value is a term of the signed plan."
+       },
+       {
+        "from_kind": "trade.rebate_rate",
+        "to_kind": "trade.rebate_rate",
+        "rule": "reuse",
+        "detail": "So is the rate; a rate that renegotiated itself monthly would contradict LORE-TRADE-FUNDING."
+       }
+      ],
+      "role_slots": [
+       {
+        "slot": "negotiator",
+        "required": true,
+        "purpose": "review the pipeline and sign the agreement once cleared"
+       },
+       {
+        "slot": "reviewer",
+        "required": true,
+        "purpose": "run the legal and controls review; may hold the agreement"
+       },
+       {
+        "slot": "recogniser",
+        "required": true,
+        "purpose": "book the monthly funding against signed plans; never the negotiator"
+       }
+      ],
+      "evaluation": {
+       "detail": "The gate is the story: signature follows clearance. The questions worth authoring are the ones whose confident wrong answer is the bigger, better-known number one document over.",
+       "emphasis": {
+        "authority_resolution": 2
+       },
+       "families": [
+        {
+         "family": "authority_resolution",
+         "about": [
+          "trade.rebate_rate"
+         ],
+         "question": "What rebate rate is the group contractually entitled to under the signed joint business plan, as at {period}?",
+         "answer": "{value}; the rate the trade agreement states. The pipeline review quotes it secondhand; the agreement is the record.",
+         "reasoning": "Two documents carry the rate and only one is the contract."
+        }
+       ],
+       "abstentions": [
+        {
+         "question": "What hourly rate does the group pay its external counsel for trade agreement reviews?",
+         "reasoning": "Reviews are performed in-house by the legal and controls function; no external counsel, and no rate, exists anywhere in the corpus."
+        }
+       ]
+      }
+     }
+    ],
+    "systems": {
+     "TradeAgreementCycle.pipeline_reviewed": [
+      "salesforce",
+      "fax"
+     ],
+     "TradeAgreementCycle.legal_review_completed": [
+      "jira",
+      "outlook"
+     ],
+     "TradeAgreementCycle.agreement_signed": [
+      "salesforce",
+      "sharepoint"
+     ]
+    },
+    "responsibilities": [
+     {
+      "role_key": "merch_lead",
+      "fact_kinds": [
+       "trade.pipeline_value",
+       "trade.agreement_value",
+       "trade.rebate_rate"
+      ],
+      "artifact_types": [
+       "trade_pipeline_review",
+       "trade_agreement"
+      ]
+     },
+     {
+      "role_key": "audit",
+      "fact_kinds": [
+       "legal.review_status",
+       "legal.risk_note"
+      ],
+      "artifact_types": [
+       "legal_review_note"
+      ]
+     },
+     {
+      "role_key": "cfo",
+      "fact_kinds": [
+       "trade.funding_recognised"
+      ],
+      "artifact_types": [
+       "board_trading_paper"
+      ]
+     }
+    ],
+    "slot_bindings": [
+     {
+      "process": "TradeAgreementCycle",
+      "slot": "negotiator",
+      "role_key": "merch_lead"
+     },
+     {
+      "process": "TradeAgreementCycle",
+      "slot": "reviewer",
+      "role_key": "audit"
+     },
+     {
+      "process": "TradeAgreementCycle",
+      "slot": "recogniser",
+      "role_key": "cfo"
+     }
+    ]
+   },
+   {
+    "episodes": [
+     {
+      "name": "TradeAgreementCycle",
+      "domain": "retail",
+      "period": "month",
+      "detail": "One month of the commercial desk: the pipeline reviewed, one agreement legally reviewed and signed, funding recognised against signed plans. The legal gate is the episode's spine; signature is caused by clearance, never beside it.",
+      "fact_kinds": [
+       {
+        "kind": "trade.pipeline_value",
+        "value_type": "money",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "amount": 46800,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "trade.agreements_in_negotiation",
+        "value_type": "measure",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "amount": 7,
+        "unit": "agreements",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "trade.counterparty",
+        "value_type": "text",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "text": "Meridian Foods Group, under the FY26 joint business plan",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The annual plan's counterparty belongs to no month; the monthly cycle recognises against it."
+         }
+        ]
+       },
+       {
+        "kind": "trade.agreement_value",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "amount": 5400,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The committed annual value is agreed at signature and holds for the term."
+         }
+        ]
+       },
+       {
+        "kind": "trade.rebate_rate",
+        "value_type": "percent",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "amount": 4.25,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The rate is a term of the agreement, not a monthly negotiation."
+         }
+        ]
+       },
+       {
+        "kind": "trade.funding_recognised",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "derive": "percent_of(trade.agreement_value, trade.rebate_rate)",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "legal.review_status",
+        "value_type": "text",
+        "authority": "approved_report",
+        "period_scope": "period-keyed",
+        "text": "Cleared for signature; indemnity clause amended at review",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "legal.risk_note",
+        "value_type": "text",
+        "authority": "approved_report",
+        "period_scope": "period-keyed",
+        "text": "Volume-commitment exposure if category resets mid-term; mitigated by the quarterly true-up clause",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       }
+      ],
+      "events": [
+       {
+        "kind": "pipeline_reviewed",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 4,
+        "hour": 10,
+        "minute": 0,
+        "summary": "The commercial desk reviewed the trade pipeline: value under negotiation and the agreements carrying it, ahead of this month's signature.",
+        "actors": [
+         "merch_lead"
+        ],
+        "fact_keys": [
+         "trade.pipeline_value",
+         "trade.agreements_in_negotiation"
+        ]
+       },
+       {
+        "kind": "legal_review_completed",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 7,
+        "hour": 15,
+        "minute": 30,
+        "summary": "Legal and controls review of the lead agreement closed: cleared for signature with the indemnity clause amended.",
+        "actors": [
+         "audit"
+        ],
+        "fact_keys": [
+         "legal.review_status",
+         "legal.risk_note"
+        ]
+       },
+       {
+        "kind": "agreement_signed",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 9,
+        "hour": 11,
+        "minute": 0,
+        "caused_by": "legal_review_completed",
+        "summary": "The joint business plan was signed following clearance: committed annual value and rebate rate now on the record.",
+        "actors": [
+         "merch_lead"
+        ],
+        "fact_keys": [
+         "trade.counterparty",
+         "trade.agreement_value",
+         "trade.rebate_rate"
+        ]
+       },
+       {
+        "kind": "funding_recognised",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 12,
+        "hour": 9,
+        "minute": 30,
+        "caused_by": "agreement_signed",
+        "summary": "Monthly trade funding was recognised against signed agreements, at the contracted rebate rate.",
+        "actors": [
+         "cfo"
+        ],
+        "fact_keys": [
+         "trade.funding_recognised"
+        ]
+       }
+      ],
+      "artifacts": [
+       {
+        "artifact_type": "trade_pipeline_review",
+        "author_role": "merch_lead",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.pipeline_value",
+         "trade.agreements_in_negotiation",
+         "trade.agreement_value",
+         "trade.counterparty",
+         "trade.rebate_rate",
+         "trade.funding_recognised"
+        ],
+        "size": "medium",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "pipeline_reviewed"
+        ],
+        "rationale": "The desk's monthly account of what is in negotiation and what signed; the document a 'what deals are in flight' question retrieves.",
+        "domain": "strategy"
+       },
+       {
+        "artifact_type": "trade_agreement",
+        "author_role": "merch_lead",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.counterparty",
+         "trade.agreement_value",
+         "trade.rebate_rate",
+         "legal.review_status"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "agreement_signed"
+        ],
+        "rationale": "The contract of record: parties, term, committed value, rate; and the clearance it relied on, by reference.",
+        "domain": "strategy"
+       },
+       {
+        "artifact_type": "legal_review_note",
+        "author_role": "audit",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.counterparty",
+         "trade.agreement_value",
+         "legal.review_status",
+         "legal.risk_note"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "legal_review_completed"
+        ],
+        "rationale": "The review the signature cites: scope, findings, and the one risk worth carrying forward on the record.",
+        "domain": "risk"
+       },
+       {
+        "artifact_type": "board_trading_paper",
+        "author_role": "cfo",
+        "audience": "commercial_and_finance",
+        "required_facts": [
+         "trade.agreement_value",
+         "trade.rebate_rate",
+         "trade.funding_recognised",
+         "legal.review_status"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "funding_recognised"
+        ],
+        "rationale": "The paper the board reads on trading terms: what signed, at what rate, and what it earned this month.",
+        "domain": "finance"
+       }
+      ],
+      "carry_forward": [
+       {
+        "from_kind": "trade.counterparty",
+        "to_kind": "trade.counterparty",
+        "rule": "reuse",
+        "detail": "The annual plan's counterparty does not change monthly; month N recognises against month 1's signature."
+       },
+       {
+        "from_kind": "trade.agreement_value",
+        "to_kind": "trade.agreement_value",
+        "rule": "reuse",
+        "detail": "The committed annual value is a term of the signed plan."
+       },
+       {
+        "from_kind": "trade.rebate_rate",
+        "to_kind": "trade.rebate_rate",
+        "rule": "reuse",
+        "detail": "So is the rate; a rate that renegotiated itself monthly would contradict LORE-TRADE-FUNDING."
+       }
+      ],
+      "role_slots": [
+       {
+        "slot": "negotiator",
+        "required": true,
+        "purpose": "review the pipeline and sign the agreement once cleared"
+       },
+       {
+        "slot": "reviewer",
+        "required": true,
+        "purpose": "run the legal and controls review; may hold the agreement"
+       },
+       {
+        "slot": "recogniser",
+        "required": true,
+        "purpose": "book the monthly funding against signed plans; never the negotiator"
+       }
+      ],
+      "evaluation": {
+       "detail": "The gate is the story: signature follows clearance. The questions worth authoring are the ones whose confident wrong answer is the bigger, better-known number one document over.",
+       "emphasis": {
+        "authority_resolution": 2
+       },
+       "families": [
+        {
+         "family": "authority_resolution",
+         "about": [
+          "trade.rebate_rate"
+         ],
+         "question": "What rebate rate is the group contractually entitled to under the signed joint business plan, as at {period}?",
+         "answer": "{value}; the rate the trade agreement states. The pipeline review quotes it secondhand; the agreement is the record.",
+         "reasoning": "Two documents carry the rate and only one is the contract."
+        }
+       ],
+       "abstentions": [
+        {
+         "question": "What hourly rate does the group pay its external counsel for trade agreement reviews?",
+         "reasoning": "Reviews are performed in-house by the legal and controls function; no external counsel, and no rate, exists anywhere in the corpus."
+        }
+       ]
+      }
+     }
+    ],
+    "systems": {
+     "TradeAgreementCycle.pipeline_reviewed": [
+      "salesforce",
+      "slack"
+     ],
+     "TradeAgreementCycle.legal_review_completed": [
+      "jira",
+      "outlook"
+     ],
+     "TradeAgreementCycle.agreement_signed": [
+      "salesforce",
+      "sharepoint"
+     ],
+     "TradeAgreementCycle.funding_recognised": [
+      "jira",
+      "slack"
+     ]
+    },
+    "responsibilities": [
+     {
+      "role_key": "merch_lead",
+      "fact_kinds": [
+       "trade.pipeline_value",
+       "trade.agreement_value",
+       "trade.rebate_rate"
+      ],
+      "artifact_types": [
+       "trade_pipeline_review",
+       "trade_agreement"
+      ]
+     },
+     {
+      "role_key": "audit",
+      "fact_kinds": [
+       "legal.review_status",
+       "legal.risk_note"
+      ],
+      "artifact_types": [
+       "legal_review_note"
+      ]
+     },
+     {
+      "role_key": "cfo",
+      "fact_kinds": [
+       "trade.funding_recognised"
+      ],
+      "artifact_types": [
+       "board_trading_paper"
+      ]
+     }
+    ],
+    "slot_bindings": [
+     {
+      "process": "TradeAgreementCycle",
+      "slot": "negotiator",
+      "role_key": "merch_lead"
+     },
+     {
+      "process": "TradeAgreementCycle",
+      "slot": "reviewer",
+      "role_key": "audit"
+     },
+     {
+      "process": "TradeAgreementCycle",
+      "slot": "recogniser",
+      "role_key": "cfo"
+     }
+    ]
+   }
+  ],
+  "processes:delivery": [
+   {
+    "episodes": [
+     {
+      "name": "ProjectSteering",
+      "domain": "retail",
+      "period": "month",
+      "detail": "Monthly steering of the checkout and loyalty replatform: status reported, spend booked cumulatively against a fixed envelope, risks counted and carried. The programme LORE-REPLATFORM promises is the one this episode papers.",
+      "fact_kinds": [
+       {
+        "kind": "project.status",
+        "value_type": "text",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "text": "Amber; conversion volatility holding the cutover gate",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.budget_total",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "amount": 18000,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The envelope is fixed by the funding decision; a programme that rebases its own budget is the defect LORE-REPLATFORM names."
+         }
+        ]
+       },
+       {
+        "kind": "project.spend_this_period",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "amount": 1450,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.spend_prior",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "derive": "prior(project.spend_to_date)",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.spend_to_date",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "derive": "plus(project.spend_prior, project.spend_this_period)",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.milestone_due",
+        "value_type": "date",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "text": "{bd:15}",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.risk_count",
+        "value_type": "measure",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "amount": 4,
+        "unit": "open risks",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       }
+      ],
+      "events": [
+       {
+        "kind": "status_reported",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 6,
+        "hour": 9,
+        "minute": 0,
+        "summary": "The programme reported its monthly status: state, spend against the envelope, and the next milestone.",
+        "actors": [
+         "platform_lead"
+        ],
+        "fact_keys": [
+         "project.status",
+         "project.budget_total",
+         "project.spend_this_period",
+         "project.spend_prior",
+         "project.spend_to_date",
+         "project.milestone_due",
+         "project.risk_count"
+        ]
+       },
+       {
+        "kind": "steering_held",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 8,
+        "hour": 14,
+        "minute": 0,
+        "caused_by": "status_reported",
+        "summary": "The steering committee met on the reported position and recorded its decisions and the risks it chose to carry.",
+        "actors": [
+         "cio"
+        ],
+        "fact_keys": []
+       }
+      ],
+      "artifacts": [
+       {
+        "artifact_type": "project_status_report",
+        "author_role": "platform_lead",
+        "audience": "all_staff",
+        "required_facts": [
+         "project.status",
+         "project.milestone_due",
+         "project.spend_to_date",
+         "project.budget_total",
+         "project.spend_this_period"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "status_reported"
+        ],
+        "rationale": "The monthly report the funded programme owes its governance; status, burn, and what is left of a fixed envelope.",
+        "domain": "engineering"
+       },
+       {
+        "artifact_type": "steering_minutes",
+        "author_role": "cio",
+        "audience": "all_staff",
+        "required_facts": [
+         "project.status",
+         "project.spend_to_date",
+         "project.risk_count"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "steering_held"
+        ],
+        "rationale": "Decisions with the figures they were taken on, and the risks the committee accepted; the record a 'who decided' question retrieves.",
+        "domain": "engineering"
+       },
+       {
+        "artifact_type": "delivery_status_note",
+        "author_role": "platform_senior",
+        "audience": "all_staff",
+        "required_facts": [
+         "project.status",
+         "project.spend_this_period",
+         "project.milestone_due"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "status_reported"
+        ],
+        "rationale": "The delivery manager's weekly status: where the build stands, what it cost this period, what is due next.",
+        "domain": "engineering"
+       }
+      ],
+      "carry_forward": [
+       {
+        "from_kind": "project.spend_to_date",
+        "to_kind": "project.spend_prior",
+        "rule": "derive",
+        "detail": "This month opens where last month closed; cumulative spend is the one figure here whose whole meaning is its history, and the first month opens at zero because nothing had been spent, not because nothing was recorded."
+       },
+       {
+        "from_kind": "project.budget_total",
+        "to_kind": "project.budget_total",
+        "rule": "reuse",
+        "detail": "The envelope does not move."
+       }
+      ],
+      "role_slots": [
+       {
+        "slot": "programme_lead",
+        "required": true,
+        "purpose": "report status and spend; owns the plan"
+       },
+       {
+        "slot": "sponsor",
+        "required": true,
+        "purpose": "chair steering and own the decisions"
+       }
+      ],
+      "evaluation": {
+       "detail": "Cumulative spend against a fixed envelope is the question shape here; the confident wrong answer is always this month's burn.",
+       "emphasis": {},
+       "families": [
+        {
+         "family": "numerical_comparison",
+         "about": [
+          "project.spend_to_date",
+          "project.budget_total"
+         ],
+         "question": "How much of the replatform programme's fixed envelope had been spent by the end of {period}?",
+         "answer": "{value} of the envelope; cumulative to date, not the month's burn.",
+         "reasoning": "The status report states both figures; the trap is answering with the period spend."
+        }
+       ],
+       "abstentions": [
+        {
+         "question": "Which external systems integrator is delivering the checkout replatform?",
+         "reasoning": "The programme is delivered by the platform engineering team; no integrator is engaged or named anywhere in the corpus."
+        }
+       ]
+      }
+     }
+    ],
+    "systems": {
+     "ProjectSteering.status_reported": [
+      "jira",
+      "confluence"
+     ],
+     "ProjectSteering.steering_held": [
+      "outlook",
+      "sharepoint"
+     ]
+    },
+    "responsibilities": [
+     {
+      "role_key": "platform_lead",
+      "fact_kinds": [
+       "project.status",
+       "project.spend_to_date"
+      ],
+      "artifact_types": [
+       "project_status_report"
+      ]
+     },
+     {
+      "role_key": "cio",
+      "fact_kinds": [
+       "project.risk_count"
+      ],
+      "artifact_types": [
+       "steering_minutes"
+      ]
+     },
+     {
+      "role_key": "platform_senior",
+      "fact_kinds": [
+       "project.spend_this_period"
+      ],
+      "artifact_types": [
+       "delivery_status_note"
+      ]
+     }
+    ],
+    "slot_bindings": [
+     {
+      "process": "ProjectSteering",
+      "slot": "programme_lead",
+      "role_key": "platform_lead"
+     }
+    ]
+   },
+   {
+    "episodes": [
+     {
+      "name": "ProjectSteering",
+      "domain": "retail",
+      "period": "month",
+      "detail": "Monthly steering of the checkout and loyalty replatform: status reported, spend booked cumulatively against a fixed envelope, risks counted and carried. The programme LORE-REPLATFORM promises is the one this episode papers.",
+      "fact_kinds": [
+       {
+        "kind": "project.status",
+        "value_type": "text",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "text": "Amber; conversion volatility holding the cutover gate",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.budget_total",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "standing",
+        "amount": 18000,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         },
+         {
+          "kind": "standing",
+          "detail": "The envelope is fixed by the funding decision; a programme that rebases its own budget is the defect LORE-REPLATFORM names."
+         }
+        ]
+       },
+       {
+        "kind": "project.spend_this_period",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "amount": 1450,
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.spend_prior",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "derive": "prior(project.spend_to_date)",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.spend_to_date",
+        "value_type": "money",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "derive": "plus(project.spend_prior, project.spend_this_period)",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.milestone_due",
+        "value_type": "date",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "text": "{bd:15}",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       },
+       {
+        "kind": "project.risk_count",
+        "value_type": "measure",
+        "authority": "working_document",
+        "period_scope": "period-keyed",
+        "amount": 4,
+        "unit": "open risks",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ]
+       }
+      ],
+      "events": [
+       {
+        "kind": "status_reported",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 6,
+        "hour": 9,
+        "minute": 0,
+        "summary": "The programme reported its monthly status: state, spend against the envelope, and the next milestone.",
+        "actors": [
+         "platform_lead"
+        ],
+        "fact_keys": [
+         "project.status",
+         "project.budget_total",
+         "project.spend_this_period",
+         "project.spend_prior",
+         "project.spend_to_date",
+         "project.milestone_due",
+         "project.risk_count"
+        ]
+       },
+       {
+        "kind": "steering_held",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 8,
+        "hour": 14,
+        "minute": 0,
+        "caused_by": "status_reported",
+        "summary": "The steering committee met on the reported position and recorded its decisions and the risks it chose to carry.",
+        "actors": [
+         "cio"
+        ],
+        "fact_keys": []
+       }
+      ],
+      "artifacts": [
+       {
+        "artifact_type": "project_status_report",
+        "author_role": "platform_lead",
+        "audience": "all_staff",
+        "required_facts": [
+         "project.status",
+         "project.milestone_due",
+         "project.spend_to_date",
+         "project.budget_total",
+         "project.spend_this_period"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "status_reported"
+        ],
+        "rationale": "The monthly report the funded programme owes its governance; status, burn, and what is left of a fixed envelope.",
+        "domain": "engineering"
+       },
+       {
+        "artifact_type": "steering_minutes",
+        "author_role": "cio",
+        "audience": "all_staff",
+        "required_facts": [
+         "project.status",
+         "project.spend_to_date",
+         "project.risk_count"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "steering_held"
+        ],
+        "rationale": "Decisions with the figures they were taken on, and the risks the committee accepted; the record a 'who decided' question retrieves.",
+        "domain": "engineering"
+       },
+       {
+        "artifact_type": "delivery_status_note",
+        "author_role": "platform_senior",
+        "audience": "all_staff",
+        "required_facts": [
+         "project.status",
+         "project.spend_this_period",
+         "project.milestone_due"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "status_reported"
+        ],
+        "rationale": "The delivery manager's weekly status: where the build stands, what it cost this period, what is due next.",
+        "domain": "engineering"
+       }
+      ],
+      "carry_forward": [
+       {
+        "from_kind": "project.spend_to_date",
+        "to_kind": "project.spend_prior",
+        "rule": "derive",
+        "detail": "This month opens where last month closed; cumulative spend is the one figure here whose whole meaning is its history, and the first month opens at zero because nothing had been spent, not because nothing was recorded."
+       },
+       {
+        "from_kind": "project.budget_total",
+        "to_kind": "project.budget_total",
+        "rule": "reuse",
+        "detail": "The envelope does not move."
+       }
+      ],
+      "role_slots": [
+       {
+        "slot": "programme_lead",
+        "required": true,
+        "purpose": "report status and spend; owns the plan"
+       },
+       {
+        "slot": "sponsor",
+        "required": true,
+        "purpose": "chair steering and own the decisions"
+       }
+      ],
+      "evaluation": {
+       "detail": "Cumulative spend against a fixed envelope is the question shape here; the confident wrong answer is always this month's burn.",
+       "emphasis": {},
+       "families": [
+        {
+         "family": "numerical_comparison",
+         "about": [
+          "project.spend_to_date",
+          "project.budget_total"
+         ],
+         "question": "How much of the replatform programme's fixed envelope had been spent by the end of {period}?",
+         "answer": "{value} of the envelope; cumulative to date, not the month's burn.",
+         "reasoning": "The status report states both figures; the trap is answering with the period spend."
+        }
+       ],
+       "abstentions": [
+        {
+         "question": "Which external systems integrator is delivering the checkout replatform?",
+         "reasoning": "The programme is delivered by the platform engineering team; no integrator is engaged or named anywhere in the corpus."
+        }
+       ]
+      }
+     }
+    ],
+    "systems": {
+     "ProjectSteering.status_reported": [
+      "jira",
+      "confluence"
+     ],
+     "ProjectSteering.steering_held": [
+      "outlook",
+      "sharepoint"
+     ]
+    },
+    "responsibilities": [
+     {
+      "role_key": "platform_lead",
+      "fact_kinds": [
+       "project.status",
+       "project.spend_to_date"
+      ],
+      "artifact_types": [
+       "project_status_report"
+      ]
+     },
+     {
+      "role_key": "cio",
+      "fact_kinds": [
+       "project.risk_count"
+      ],
+      "artifact_types": [
+       "steering_minutes"
+      ]
+     },
+     {
+      "role_key": "platform_senior",
+      "fact_kinds": [
+       "project.spend_this_period"
+      ],
+      "artifact_types": [
+       "delivery_status_note"
+      ]
+     }
+    ],
+    "slot_bindings": [
+     {
+      "process": "ProjectSteering",
+      "slot": "programme_lead",
+      "role_key": "platform_lead"
+     },
+     {
+      "process": "ProjectSteering",
+      "slot": "sponsor",
+      "role_key": "cio"
+     }
+    ]
+   }
+  ],
+  "processes:service": [
+   {
+    "episodes": [
+     {
+      "name": "IncidentReview",
+      "domain": "retail",
+      "period": "month",
+      "detail": "One month of service operations: incidents triaged as they land, then reviewed, with the month's service health on the record. Review follows triage, never beside it.",
+      "fact_kinds": [
+       {
+        "kind": "service.incidents_open",
+        "value_type": "measure",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ],
+        "amount": 6,
+        "unit": "incidents"
+       },
+       {
+        "kind": "service.mttr_hours",
+        "value_type": "measure",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ],
+        "amount": 5.5,
+        "unit": "hours"
+       },
+       {
+        "kind": "service.review_status",
+        "value_type": "text",
+        "authority": "approved_report",
+        "period_scope": "period-keyed",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ],
+        "text": "Reviewed: the checkout timeout traced to a certificate rotation, with the runbook amended"
+       }
+      ],
+      "events": [
+       {
+        "kind": "incident_triaged",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 3,
+        "hour": 8,
+        "minute": 30,
+        "summary": "Service operations triaged the month's incidents: how many stayed open and how long restoration took.",
+        "actors": [
+         "svc_incident"
+        ],
+        "fact_keys": [
+         "service.incidents_open",
+         "service.mttr_hours"
+        ]
+       },
+       {
+        "kind": "review_published",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 10,
+        "hour": 16,
+        "minute": 0,
+        "caused_by": "incident_triaged",
+        "summary": "The post-incident review was published: what caused the month's worst incident and what changed.",
+        "actors": [
+         "svc_lead"
+        ],
+        "fact_keys": [
+         "service.review_status"
+        ]
+       }
+      ],
+      "artifacts": [
+       {
+        "artifact_type": "service_weekly_status",
+        "author_role": "cfo",
+        "audience": "all_staff",
+        "required_facts": [
+         "service.incidents_open",
+         "service.mttr_hours"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "incident_triaged"
+        ],
+        "rationale": "The incident manager's status: what is open and how quickly service came back.",
+        "domain": "operations"
+       },
+       {
+        "artifact_type": "service_quarterly_review",
+        "author_role": "svc_lead",
+        "audience": "all_staff",
+        "required_facts": [
+         "service.incidents_open",
+         "service.mttr_hours",
+         "service.review_status"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "review_published"
+        ],
+        "rationale": "The director's review of service health and the lesson the month's review recorded.",
+        "domain": "operations"
+       }
+      ],
+      "role_slots": [
+       {
+        "slot": "triager",
+        "required": true,
+        "purpose": "triage incidents and report what stays open"
+       },
+       {
+        "slot": "reviewer",
+        "required": true,
+        "purpose": "run the post-incident review and publish it"
+       }
+      ]
+     }
+    ],
+    "systems": {
+     "IncidentReview.incident_triaged": [
+      "servicenow",
+      "slack"
+     ],
+     "IncidentReview.review_published": [
+      "confluence",
+      "jira"
+     ]
+    },
+    "responsibilities": [
+     {
+      "role_key": "svc_incident",
+      "fact_kinds": [
+       "service.incidents_open",
+       "service.mttr_hours"
+      ],
+      "artifact_types": [
+       "service_weekly_status"
+      ]
+     },
+     {
+      "role_key": "svc_lead",
+      "fact_kinds": [
+       "service.review_status"
+      ],
+      "artifact_types": [
+       "service_quarterly_review"
+      ]
+     }
+    ],
+    "slot_bindings": [
+     {
+      "process": "IncidentReview",
+      "slot": "triager",
+      "role_key": "svc_incident"
+     },
+     {
+      "process": "IncidentReview",
+      "slot": "reviewer",
+      "role_key": "svc_lead"
+     }
+    ]
+   },
+   {
+    "episodes": [
+     {
+      "name": "IncidentReview",
+      "domain": "retail",
+      "period": "month",
+      "detail": "One month of service operations: incidents triaged as they land, then reviewed, with the month's service health on the record. Review follows triage, never beside it.",
+      "fact_kinds": [
+       {
+        "kind": "service.incidents_open",
+        "value_type": "measure",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ],
+        "amount": 6,
+        "unit": "incidents"
+       },
+       {
+        "kind": "service.mttr_hours",
+        "value_type": "measure",
+        "authority": "system_of_record",
+        "period_scope": "period-keyed",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ],
+        "amount": 5.5,
+        "unit": "hours"
+       },
+       {
+        "kind": "service.review_status",
+        "value_type": "text",
+        "authority": "approved_report",
+        "period_scope": "period-keyed",
+        "invariants": [
+         {
+          "kind": "holds-at"
+         }
+        ],
+        "text": "Reviewed: the checkout timeout traced to a certificate rotation, with the runbook amended"
+       }
+      ],
+      "events": [
+       {
+        "kind": "incident_triaged",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 3,
+        "hour": 8,
+        "minute": 30,
+        "summary": "Service operations triaged the month's incidents: how many stayed open and how long restoration took.",
+        "actors": [
+         "svc_incident"
+        ],
+        "fact_keys": [
+         "service.incidents_open",
+         "service.mttr_hours"
+        ]
+       },
+       {
+        "kind": "review_published",
+        "when": "start",
+        "anchor": "prior_period_end",
+        "business_day": 10,
+        "hour": 16,
+        "minute": 0,
+        "caused_by": "incident_triaged",
+        "summary": "The post-incident review was published: what caused the month's worst incident and what changed.",
+        "actors": [
+         "svc_lead"
+        ],
+        "fact_keys": [
+         "service.review_status"
+        ]
+       }
+      ],
+      "artifacts": [
+       {
+        "artifact_type": "service_weekly_status",
+        "author_role": "svc_incident",
+        "audience": "all_staff",
+        "required_facts": [
+         "service.incidents_open",
+         "service.mttr_hours"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "incident_triaged"
+        ],
+        "rationale": "The incident manager's status: what is open and how quickly service came back.",
+        "domain": "operations"
+       },
+       {
+        "artifact_type": "service_quarterly_review",
+        "author_role": "svc_lead",
+        "audience": "all_staff",
+        "required_facts": [
+         "service.incidents_open",
+         "service.mttr_hours",
+         "service.review_status"
+        ],
+        "size": "small",
+        "structured": false,
+        "unstructured": true,
+        "triggered_by_events": [
+         "review_published"
+        ],
+        "rationale": "The director's review of service health and the lesson the month's review recorded.",
+        "domain": "operations"
+       }
+      ],
+      "role_slots": [
+       {
+        "slot": "triager",
+        "required": true,
+        "purpose": "triage incidents and report what stays open"
+       },
+       {
+        "slot": "reviewer",
+        "required": true,
+        "purpose": "run the post-incident review and publish it"
+       }
+      ]
+     }
+    ],
+    "systems": {
+     "IncidentReview.incident_triaged": [
+      "servicenow",
+      "slack"
+     ],
+     "IncidentReview.review_published": [
+      "confluence",
+      "jira"
+     ]
+    },
+    "responsibilities": [
+     {
+      "role_key": "svc_incident",
+      "fact_kinds": [
+       "service.incidents_open",
+       "service.mttr_hours"
+      ],
+      "artifact_types": [
+       "service_weekly_status"
+      ]
+     },
+     {
+      "role_key": "svc_lead",
+      "fact_kinds": [
+       "service.review_status"
+      ],
+      "artifact_types": [
+       "service_quarterly_review"
+      ]
+     }
+    ],
+    "slot_bindings": [
+     {
+      "process": "IncidentReview",
+      "slot": "triager",
+      "role_key": "svc_incident"
+     },
+     {
+      "process": "IncidentReview",
+      "slot": "reviewer",
+      "role_key": "svc_lead"
+     }
+    ]
+   }
+  ],
+  "documents": [
+   {
+    "doctypes": [
+     {
+      "key": "trade_pipeline_review",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 6,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Pipeline position",
+        "kinds": [
+         "trade.pipeline_value",
+         "trade.agreements_in_negotiation"
+        ],
+        "scope": "any",
+        "purpose": "The value under negotiation and how many agreements carry it. State the number that moved since last month first; a pipeline review that opens with the total is a review of nothing."
+       },
+       {
+        "heading": "This month's signature",
+        "kinds": [
+         "trade.agreement_value",
+         "trade.counterparty",
+         "trade.rebate_rate"
+        ],
+        "scope": "any",
+        "purpose": "The agreement that signed: who with, its annual value, and the rebate rate agreed. One deal argued properly, not a list."
+       },
+       {
+        "heading": "Funding recognised",
+        "kinds": [
+         "trade.funding_recognised"
+        ],
+        "scope": "any",
+        "purpose": "What this month's ledger books against signed agreements. Recognition follows the signed plan, and this figure is the month's answer to 'did it'."
+       }
+      ]
+     },
+     {
+      "key": "trade_agreement",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 2,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Parties and term",
+        "kinds": [
+         "trade.counterparty"
+        ],
+        "scope": "any",
+        "purpose": "Who the agreement binds, stated as the contract states it. Formal register; this is the document the others quote."
+       },
+       {
+        "heading": "Commercial terms",
+        "kinds": [
+         "trade.agreement_value",
+         "trade.rebate_rate"
+        ],
+        "scope": "any",
+        "purpose": "The annual committed value and the rebate rate. Numbers with their basis, no commentary; a contract that argues is a memo."
+       },
+       {
+        "heading": "Review and clearance",
+        "kinds": [
+         "legal.review_status"
+        ],
+        "scope": "any",
+        "purpose": "The legal review outcome this signature relied on, by reference. A signed agreement citing no clearance is the defect the review gate exists to prevent."
+       }
+      ]
+     },
+     {
+      "key": "legal_review_note",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+       "days": 0,
+       "hours": 4,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Scope of review",
+        "kinds": [
+         "trade.counterparty",
+         "trade.agreement_value"
+        ],
+        "scope": "any",
+        "purpose": "What was reviewed: the agreement, its counterparty, the value at stake. Written so a later reader can tell whether this note covers the document in their other hand."
+       },
+       {
+        "heading": "Findings and clearance",
+        "kinds": [
+         "legal.review_status",
+         "legal.risk_note"
+        ],
+        "scope": "any",
+        "purpose": "The outcome and the one risk worth recording. 'Cleared' and 'held' are the vocabulary; if held, say what unheld it or would."
+       }
+      ]
+     },
+     {
+      "key": "project_status_report",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 5,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Status",
+        "kinds": [
+         "project.status",
+         "project.milestone_due"
+        ],
+        "scope": "any",
+        "purpose": "The programme's state in one word its own governance defines, and the next milestone with its date. The reader is deciding whether to escalate, not learning the project exists."
+       },
+       {
+        "heading": "Spend against envelope",
+        "kinds": [
+         "project.spend_to_date",
+         "project.budget_total",
+         "project.spend_this_period"
+        ],
+        "scope": "any",
+        "purpose": "Cumulative spend against the fixed envelope, and this month's burn. The envelope does not move; say plainly how much of it is left."
+       }
+      ]
+     },
+     {
+      "key": "steering_minutes",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 20,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Decisions",
+        "kinds": [
+         "project.status",
+         "project.spend_to_date"
+        ],
+        "scope": "any",
+        "purpose": "What the steering committee decided, with the figures it decided on. Minutes record decisions and who owns them; discussion belongs in the memory of the people who had it."
+       },
+       {
+        "heading": "Risks accepted",
+        "kinds": [
+         "project.risk_count"
+        ],
+        "scope": "any",
+        "purpose": "The open risks the committee saw and chose to carry. A count with the top one named, not a register."
+       }
+      ]
+     },
+     {
+      "key": "board_trading_paper",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+       "days": 1,
+       "hours": 0,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Terms signed",
+        "kinds": [
+         "trade.agreement_value",
+         "trade.rebate_rate"
+        ],
+        "scope": "any",
+        "purpose": "What the group committed to and at what rate; one agreement, argued properly."
+       },
+       {
+        "heading": "Funding earned",
+        "kinds": [
+         "trade.funding_recognised"
+        ],
+        "scope": "any",
+        "purpose": "What the month's ledger recognised against signed terms, and whether it tracks the plan."
+       },
+       {
+        "heading": "Assurance",
+        "kinds": [
+         "legal.review_status"
+        ],
+        "scope": "any",
+        "purpose": "The review the signature relied on, by outcome."
+       }
+      ]
+     },
+     {
+      "key": "delivery_status_note",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 3,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Where the build stands",
+        "kinds": [
+         "project.status",
+         "project.milestone_due"
+        ],
+        "scope": "any",
+        "purpose": "State and the next milestone, first."
+       },
+       {
+        "heading": "This period's cost",
+        "kinds": [
+         "project.spend_this_period"
+        ],
+        "scope": "any",
+        "purpose": "The period's burn, never the cumulative figure."
+       }
+      ]
+     },
+     {
+      "key": "service_weekly_status",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 2,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Open incidents",
+        "kinds": [
+         "service.incidents_open"
+        ],
+        "scope": "any",
+        "purpose": "How many incidents are still open and which matter."
+       },
+       {
+        "heading": "Restoration",
+        "kinds": [
+         "service.mttr_hours"
+        ],
+        "scope": "any",
+        "purpose": "How long restoration took on average, and the outlier."
+       }
+      ]
+     }
+    ],
+    "chains": [
+     {
+      "artifact_type": "trade_pipeline_review",
+      "reviewer": "cfo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint",
+       "confluence"
+      ]
+     },
+     {
+      "artifact_type": "trade_agreement",
+      "reviewer": "cfo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint"
+      ]
+     },
+     {
+      "artifact_type": "legal_review_note",
+      "reviewer": "merch_lead",
+      "approver": "merch_analyst",
+      "published_on": [
+       "sharepoint"
+      ]
+     },
+     {
+      "artifact_type": "board_trading_paper",
+      "reviewer": "ceo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint",
+       "drive"
+      ]
+     },
+     {
+      "artifact_type": "project_status_report",
+      "reviewer": "cio",
+      "approver": "cio",
+      "published_on": [
+       "sharepoint",
+       "confluence"
+      ]
+     },
+     {
+      "artifact_type": "steering_minutes",
+      "reviewer": "ceo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint"
+      ]
+     },
+     {
+      "artifact_type": "delivery_status_note",
+      "reviewer": "platform_lead",
+      "approver": "cio",
+      "published_on": [
+       "confluence"
+      ]
+     },
+     {
+      "artifact_type": "service_weekly_status",
+      "reviewer": "svc_lead",
+      "approver": "cio",
+      "published_on": [
+       "confluence",
+       "sharepoint"
+      ]
+     }
+    ]
+   },
+   {
+    "doctypes": [
+     {
+      "key": "trade_pipeline_review",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 6,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Pipeline position",
+        "kinds": [
+         "trade.pipeline_value",
+         "trade.agreements_in_negotiation"
+        ],
+        "scope": "any",
+        "purpose": "The value under negotiation and how many agreements carry it. State the number that moved since last month first; a pipeline review that opens with the total is a review of nothing."
+       },
+       {
+        "heading": "This month's signature",
+        "kinds": [
+         "trade.agreement_value",
+         "trade.counterparty",
+         "trade.rebate_rate"
+        ],
+        "scope": "any",
+        "purpose": "The agreement that signed: who with, its annual value, and the rebate rate agreed. One deal argued properly, not a list."
+       },
+       {
+        "heading": "Funding recognised",
+        "kinds": [
+         "trade.funding_recognised"
+        ],
+        "scope": "any",
+        "purpose": "What this month's ledger books against signed agreements. Recognition follows the signed plan, and this figure is the month's answer to 'did it'."
+       }
+      ]
+     },
+     {
+      "key": "trade_agreement",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 2,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Parties and term",
+        "kinds": [
+         "trade.counterparty"
+        ],
+        "scope": "any",
+        "purpose": "Who the agreement binds, stated as the contract states it. Formal register; this is the document the others quote."
+       },
+       {
+        "heading": "Commercial terms",
+        "kinds": [
+         "trade.agreement_value",
+         "trade.rebate_rate"
+        ],
+        "scope": "any",
+        "purpose": "The annual committed value and the rebate rate. Numbers with their basis, no commentary; a contract that argues is a memo."
+       },
+       {
+        "heading": "Review and clearance",
+        "kinds": [
+         "legal.review_status"
+        ],
+        "scope": "any",
+        "purpose": "The legal review outcome this signature relied on, by reference. A signed agreement citing no clearance is the defect the review gate exists to prevent."
+       }
+      ]
+     },
+     {
+      "key": "legal_review_note",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+       "days": 0,
+       "hours": 4,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Scope of review",
+        "kinds": [
+         "trade.counterparty",
+         "trade.agreement_value"
+        ],
+        "scope": "any",
+        "purpose": "What was reviewed: the agreement, its counterparty, the value at stake. Written so a later reader can tell whether this note covers the document in their other hand."
+       },
+       {
+        "heading": "Findings and clearance",
+        "kinds": [
+         "legal.review_status",
+         "legal.risk_note"
+        ],
+        "scope": "any",
+        "purpose": "The outcome and the one risk worth recording. 'Cleared' and 'held' are the vocabulary; if held, say what unheld it or would."
+       }
+      ]
+     },
+     {
+      "key": "project_status_report",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 5,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Status",
+        "kinds": [
+         "project.status",
+         "project.milestone_due"
+        ],
+        "scope": "any",
+        "purpose": "The programme's state in one word its own governance defines, and the next milestone with its date. The reader is deciding whether to escalate, not learning the project exists."
+       },
+       {
+        "heading": "Spend against envelope",
+        "kinds": [
+         "project.spend_to_date",
+         "project.budget_total",
+         "project.spend_this_period"
+        ],
+        "scope": "any",
+        "purpose": "Cumulative spend against the fixed envelope, and this month's burn. The envelope does not move; say plainly how much of it is left."
+       }
+      ]
+     },
+     {
+      "key": "steering_minutes",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 20,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Decisions",
+        "kinds": [
+         "project.status",
+         "project.spend_to_date"
+        ],
+        "scope": "any",
+        "purpose": "What the steering committee decided, with the figures it decided on. Minutes record decisions and who owns them; discussion belongs in the memory of the people who had it."
+       },
+       {
+        "heading": "Risks accepted",
+        "kinds": [
+         "project.risk_count"
+        ],
+        "scope": "any",
+        "purpose": "The open risks the committee saw and chose to carry. A count with the top one named, not a register."
+       }
+      ]
+     },
+     {
+      "key": "board_trading_paper",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+       "days": 1,
+       "hours": 0,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Terms signed",
+        "kinds": [
+         "trade.agreement_value",
+         "trade.rebate_rate"
+        ],
+        "scope": "any",
+        "purpose": "What the group committed to and at what rate; one agreement, argued properly."
+       },
+       {
+        "heading": "Funding earned",
+        "kinds": [
+         "trade.funding_recognised"
+        ],
+        "scope": "any",
+        "purpose": "What the month's ledger recognised against signed terms, and whether it tracks the plan."
+       },
+       {
+        "heading": "Assurance",
+        "kinds": [
+         "legal.review_status"
+        ],
+        "scope": "any",
+        "purpose": "The review the signature relied on, by outcome."
+       }
+      ]
+     },
+     {
+      "key": "delivery_status_note",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 3,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Where the build stands",
+        "kinds": [
+         "project.status",
+         "project.milestone_due"
+        ],
+        "scope": "any",
+        "purpose": "State and the next milestone, first."
+       },
+       {
+        "heading": "This period's cost",
+        "kinds": [
+         "project.spend_this_period"
+        ],
+        "scope": "any",
+        "purpose": "The period's burn, never the cumulative figure."
+       }
+      ]
+     },
+     {
+      "key": "service_weekly_status",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+       "days": 0,
+       "hours": 2,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Open incidents",
+        "kinds": [
+         "service.incidents_open"
+        ],
+        "scope": "any",
+        "purpose": "How many incidents are still open and which matter."
+       },
+       {
+        "heading": "Restoration",
+        "kinds": [
+         "service.mttr_hours"
+        ],
+        "scope": "any",
+        "purpose": "How long restoration took on average, and the outlier."
+       }
+      ]
+     },
+     {
+      "key": "service_quarterly_review",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+       "days": 2,
+       "hours": 0,
+       "minutes": 0
+      },
+      "word": true,
+      "sections": [
+       {
+        "heading": "Service health",
+        "kinds": [
+         "service.incidents_open",
+         "service.mttr_hours"
+        ],
+        "scope": "any",
+        "purpose": "The trend in open incidents and restoration time."
+       },
+       {
+        "heading": "What the review changed",
+        "kinds": [
+         "service.review_status"
+        ],
+        "scope": "any",
+        "purpose": "The cause the review found and what changed because of it."
+       }
+      ]
+     }
+    ],
+    "chains": [
+     {
+      "artifact_type": "trade_pipeline_review",
+      "reviewer": "cfo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint",
+       "confluence"
+      ]
+     },
+     {
+      "artifact_type": "trade_agreement",
+      "reviewer": "cfo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint"
+      ]
+     },
+     {
+      "artifact_type": "legal_review_note",
+      "reviewer": "merch_lead",
+      "approver": "cfo",
+      "published_on": [
+       "sharepoint"
+      ]
+     },
+     {
+      "artifact_type": "board_trading_paper",
+      "reviewer": "ceo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint",
+       "drive"
+      ]
+     },
+     {
+      "artifact_type": "project_status_report",
+      "reviewer": "cio",
+      "approver": "cio",
+      "published_on": [
+       "sharepoint",
+       "confluence"
+      ]
+     },
+     {
+      "artifact_type": "steering_minutes",
+      "reviewer": "ceo",
+      "approver": "ceo",
+      "published_on": [
+       "sharepoint"
+      ]
+     },
+     {
+      "artifact_type": "delivery_status_note",
+      "reviewer": "platform_lead",
+      "approver": "cio",
+      "published_on": [
+       "confluence"
+      ]
+     },
+     {
+      "artifact_type": "service_weekly_status",
+      "reviewer": "svc_lead",
+      "approver": "cio",
+      "published_on": [
+       "confluence",
+       "sharepoint"
+      ]
+     },
+     {
+      "artifact_type": "service_quarterly_review",
+      "reviewer": "cio",
+      "approver": "ceo",
+      "published_on": [
+       "confluence",
+       "sharepoint"
+      ]
+     }
+    ]
+   }
+  ],
+  "timeline": [
+   {
+    "start": "2026-01",
+    "periods": 4,
+    "incidents": [
+     "2027-02"
+    ],
+    "changes": [
+     {
+      "period": "2026-02",
+      "kind": "departure",
+      "role_key": "merch_analyst"
+     }
+    ],
+    "policies": [
+     {
+      "kind": "norm",
+      "assertion": "Trade funding is agreed in annual joint business plans and recognised monthly against the signed agreement, never on handshakes.",
+      "effective_from": "2026-01",
+      "constrains": [
+       {
+        "kind": "terminology",
+        "target": "trade_funding",
+        "effect": "'Trade funding' covers rebates and promotional contributions together."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "start": "2026-01",
+    "periods": 4,
+    "incidents": [
+     "2026-02"
+    ],
+    "changes": [
+     {
+      "period": "2026-02",
+      "kind": "departure",
+      "role_key": "merch_analyst"
+     }
+    ],
+    "policies": [
+     {
+      "kind": "norm",
+      "assertion": "Trade funding is agreed in annual joint business plans and recognised monthly against the signed agreement, never on handshakes.",
+      "effective_from": "2026-01",
+      "constrains": [
+       {
+        "kind": "terminology",
+        "target": "trade_funding",
+        "effect": "'Trade funding' covers rebates and promotional contributions together."
+       }
+      ]
+     },
+     {
+      "kind": "decision",
+      "assertion": "From March 2026 every trade agreement above the delegated limit needs the CFO's co-signature, and the legal review note records which route an agreement took.",
+      "effective_from": "2026-03",
+      "constrains": [
+       {
+        "kind": "terminology",
+        "target": "co_signature",
+        "effect": "'Co-signed' means the CFO signed beside the commercial lead; it is not an approval of the review."
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "evals": [
+   {
+    "intents": [
+     {
+      "id": "ic-analyst-pipeline",
+      "level": "ic",
+      "asker": "merch_analyst",
+      "ask": "Find this month's pipeline review in Salesforce and log it as a Jira task for the commercial desk.",
+      "reads": [
+       {
+        "system": "salesforce",
+        "process": "TradeAgreementCycle",
+        "step": "pipeline_reviewed",
+        "period": "latest"
+       },
+       {
+        "system": "jira",
+        "process": "TradeAgreementCycle",
+        "step": "funding_recognised",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "jira",
+       "entity": "issue",
+       "operation": "create",
+       "format": "task"
+      }
+     },
+     {
+      "id": "ic-desk-triage",
+      "level": "ic",
+      "asker": "svc_desk",
+      "ask": "Look up this month's incident triage in ServiceNow and post it to the service channel.",
+      "reads": [
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "slack",
+       "entity": "message",
+       "operation": "create"
+      }
+     },
+     {
+      "id": "ic-engineer-status",
+      "level": "ic",
+      "asker": "platform_engineer",
+      "ask": "Pull the replatform status from Jira and write it up on a Confluence page.",
+      "reads": [
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "confluence",
+       "entity": "page",
+       "operation": "create",
+       "format": "markdown"
+      }
+     },
+     {
+      "id": "mgr-legal-fanin",
+      "level": "manager",
+      "asker": "audit",
+      "ask": "Pull this month's legal review from Outlook and the funding recognition from Jira into one controls note on SharePoint.",
+      "reads": [
+       {
+        "system": "servicenow",
+        "process": "TradeAgreementCycle",
+        "step": "legal_review_completed",
+        "period": "latest"
+       },
+       {
+        "system": "jira",
+        "process": "TradeAgreementCycle",
+        "step": "funding_recognised",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "docx"
+      }
+     },
+     {
+      "id": "mgr-incident-fanin",
+      "level": "manager",
+      "asker": "svc_incident",
+      "ask": "Combine this month's triage from ServiceNow and Slack with the published review from Confluence and draft the stakeholder email.",
+      "reads": [
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "latest"
+       },
+       {
+        "system": "slack",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "latest"
+       },
+       {
+        "system": "confluence",
+        "process": "IncidentReview",
+        "step": "review_published",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "email",
+       "entity": "message",
+       "operation": "draft",
+       "format": "html"
+      }
+     },
+     {
+      "id": "mgr-delivery-fanin",
+      "level": "manager",
+      "asker": "platform_senior",
+      "ask": "Bring the status from Jira and the steering record from SharePoint together on the programme's Confluence page.",
+      "reads": [
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "latest"
+       },
+       {
+        "system": "sharepoint",
+        "process": "ProjectSteering",
+        "step": "steering_held",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "confluence",
+       "entity": "page",
+       "operation": "create",
+       "format": "markdown"
+      }
+     },
+     {
+      "id": "dir-commercial-review",
+      "level": "director",
+      "asker": "merch_lead",
+      "ask": "Take last month's pipeline review and every signed agreement on record, and prepare the commercial review.",
+      "reads": [
+       {
+        "document": "trade_pipeline_review",
+        "period": "previous",
+        "system": "sharepoint",
+        "revised": true
+       },
+       {
+        "system": "salesforce",
+        "process": "TradeAgreementCycle",
+        "step": "agreement_signed",
+        "period": "all"
+       }
+      ],
+      "branch": {
+       "read": 1,
+       "at_least": 3
+      },
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "docx"
+      }
+     },
+     {
+      "id": "dir-service-review",
+      "level": "director",
+      "asker": "svc_lead",
+      "ask": "Read the latest incident manager's status and every triage record, and write the service review.",
+      "reads": [
+       {
+        "document": "service_weekly_status",
+        "period": "latest",
+        "system": "confluence"
+       },
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "all"
+       }
+      ],
+      "branch": {
+       "read": 1,
+       "at_least": 5
+      },
+      "deliver": {
+       "system": "confluence",
+       "entity": "page",
+       "operation": "create",
+       "format": "markdown"
+      }
+     },
+     {
+      "id": "dir-programme-baseline",
+      "level": "director",
+      "asker": "platform_lead",
+      "ask": "Compare the programme's first status report with everything reported since, and prepare the steering deck.",
+      "reads": [
+       {
+        "document": "project_status_report",
+        "period": "first",
+        "system": "sharepoint",
+        "revised": true
+       },
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "all"
+       }
+      ],
+      "branch": {
+       "read": 1,
+       "at_least": 4
+      },
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "pptx"
+      }
+     },
+     {
+      "id": "exec-board-synthesis",
+      "level": "executive",
+      "asker": "ceo",
+      "ask": "Across trading, the replatform and service operations, pull every board paper, every steering record and every triage, entity by entity, into the board deck.",
+      "reads": [
+       {
+        "document": "board_trading_paper",
+        "period": "all",
+        "system": "drive"
+       },
+       {
+        "document": "steering_minutes",
+        "period": "all",
+        "system": "sharepoint"
+       },
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "all"
+       }
+      ],
+      "per_entity": true,
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "pptx"
+      }
+     },
+     {
+      "id": "exec-cio-portfolio",
+      "level": "executive",
+      "asker": "cio",
+      "ask": "Go through every replatform status and every published incident review, one by one, with the service reviews, and build my portfolio deck in Drive.",
+      "reads": [
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "all"
+       },
+       {
+        "system": "confluence",
+        "process": "IncidentReview",
+        "step": "review_published",
+        "period": "all"
+       },
+       {
+        "document": "service_quarterly_review",
+        "period": "all",
+        "system": "sharepoint"
+       }
+      ],
+      "per_entity": true,
+      "deliver": {
+       "system": "drive",
+       "entity": "file",
+       "operation": "create",
+       "format": "pptx"
+      }
+     },
+     {
+      "id": "exec-cfo-commitments",
+      "level": "executive",
+      "asker": "cfo",
+      "ask": "Take every signed agreement and every funding recognition, record by record, with the latest programme status, and draft my note to the board.",
+      "reads": [
+       {
+        "system": "salesforce",
+        "process": "TradeAgreementCycle",
+        "step": "agreement_signed",
+        "period": "all"
+       },
+       {
+        "system": "jira",
+        "process": "TradeAgreementCycle",
+        "step": "funding_recognised",
+        "period": "all"
+       },
+       {
+        "document": "project_status_report",
+        "period": "latest",
+        "system": "sharepoint"
+       }
+      ],
+      "per_entity": true,
+      "deliver": {
+       "system": "email",
+       "entity": "message",
+       "operation": "draft",
+       "format": "html"
+      }
+     }
+    ]
+   },
+   {
+    "intents": [
+     {
+      "id": "ic-analyst-pipeline",
+      "level": "ic",
+      "asker": "merch_analyst",
+      "ask": "Find this month's pipeline review in Salesforce and log it as a Jira task for the commercial desk.",
+      "reads": [
+       {
+        "system": "salesforce",
+        "process": "TradeAgreementCycle",
+        "step": "pipeline_reviewed",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "jira",
+       "entity": "issue",
+       "operation": "create",
+       "format": "task"
+      }
+     },
+     {
+      "id": "ic-desk-triage",
+      "level": "ic",
+      "asker": "svc_desk",
+      "ask": "Look up this month's incident triage in ServiceNow and post it to the service channel.",
+      "reads": [
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "slack",
+       "entity": "message",
+       "operation": "create"
+      }
+     },
+     {
+      "id": "ic-engineer-status",
+      "level": "ic",
+      "asker": "platform_engineer",
+      "ask": "Pull the replatform status from Jira and write it up on a Confluence page.",
+      "reads": [
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "confluence",
+       "entity": "page",
+       "operation": "create",
+       "format": "markdown"
+      }
+     },
+     {
+      "id": "mgr-legal-fanin",
+      "level": "manager",
+      "asker": "audit",
+      "ask": "Pull this month's legal review from Outlook and the funding recognition from Jira into one controls note on SharePoint.",
+      "reads": [
+       {
+        "system": "outlook",
+        "process": "TradeAgreementCycle",
+        "step": "legal_review_completed",
+        "period": "latest"
+       },
+       {
+        "system": "jira",
+        "process": "TradeAgreementCycle",
+        "step": "funding_recognised",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "docx"
+      }
+     },
+     {
+      "id": "mgr-incident-fanin",
+      "level": "manager",
+      "asker": "svc_incident",
+      "ask": "Combine this month's triage from ServiceNow and Slack with the published review from Confluence and draft the stakeholder email.",
+      "reads": [
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "latest"
+       },
+       {
+        "system": "slack",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "latest"
+       },
+       {
+        "system": "confluence",
+        "process": "IncidentReview",
+        "step": "review_published",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "email",
+       "entity": "message",
+       "operation": "draft",
+       "format": "html"
+      }
+     },
+     {
+      "id": "mgr-delivery-fanin",
+      "level": "manager",
+      "asker": "platform_senior",
+      "ask": "Bring the status from Jira and the steering record from SharePoint together on the programme's Confluence page.",
+      "reads": [
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "latest"
+       },
+       {
+        "system": "sharepoint",
+        "process": "ProjectSteering",
+        "step": "steering_held",
+        "period": "latest"
+       }
+      ],
+      "deliver": {
+       "system": "confluence",
+       "entity": "page",
+       "operation": "create",
+       "format": "markdown"
+      }
+     },
+     {
+      "id": "dir-commercial-review",
+      "level": "director",
+      "asker": "merch_lead",
+      "ask": "Take last month's pipeline review and every signed agreement on record, and prepare the commercial review.",
+      "reads": [
+       {
+        "document": "trade_pipeline_review",
+        "period": "previous",
+        "system": "sharepoint",
+        "revised": true
+       },
+       {
+        "system": "salesforce",
+        "process": "TradeAgreementCycle",
+        "step": "agreement_signed",
+        "period": "all"
+       }
+      ],
+      "branch": {
+       "read": 1,
+       "at_least": 3
+      },
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "docx"
+      }
+     },
+     {
+      "id": "dir-service-review",
+      "level": "director",
+      "asker": "svc_lead",
+      "ask": "Read the latest incident manager's status and every triage record, and write the service review.",
+      "reads": [
+       {
+        "document": "service_weekly_status",
+        "period": "latest",
+        "system": "confluence"
+       },
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "all"
+       }
+      ],
+      "branch": {
+       "read": 1,
+       "at_least": 5
+      },
+      "deliver": {
+       "system": "confluence",
+       "entity": "page",
+       "operation": "create",
+       "format": "markdown"
+      }
+     },
+     {
+      "id": "dir-programme-baseline",
+      "level": "director",
+      "asker": "platform_lead",
+      "ask": "Compare the programme's first status report with everything reported since, and prepare the steering deck.",
+      "reads": [
+       {
+        "document": "project_status_report",
+        "period": "first",
+        "system": "sharepoint",
+        "revised": true
+       },
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "all"
+       }
+      ],
+      "branch": {
+       "read": 1,
+       "at_least": 4
+      },
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "pptx"
+      }
+     },
+     {
+      "id": "exec-board-synthesis",
+      "level": "executive",
+      "asker": "ceo",
+      "ask": "Across trading, the replatform and service operations, pull every board paper, every steering record and every triage, entity by entity, into the board deck.",
+      "reads": [
+       {
+        "document": "board_trading_paper",
+        "period": "all",
+        "system": "drive"
+       },
+       {
+        "document": "steering_minutes",
+        "period": "all",
+        "system": "sharepoint"
+       },
+       {
+        "system": "servicenow",
+        "process": "IncidentReview",
+        "step": "incident_triaged",
+        "period": "all"
+       }
+      ],
+      "per_entity": true,
+      "deliver": {
+       "system": "sharepoint",
+       "entity": "file",
+       "operation": "create",
+       "format": "pptx"
+      }
+     },
+     {
+      "id": "exec-cio-portfolio",
+      "level": "executive",
+      "asker": "cio",
+      "ask": "Go through every replatform status and every published incident review, one by one, with the service reviews, and build my portfolio deck in Drive.",
+      "reads": [
+       {
+        "system": "jira",
+        "process": "ProjectSteering",
+        "step": "status_reported",
+        "period": "all"
+       },
+       {
+        "system": "confluence",
+        "process": "IncidentReview",
+        "step": "review_published",
+        "period": "all"
+       },
+       {
+        "document": "service_quarterly_review",
+        "period": "all",
+        "system": "sharepoint"
+       }
+      ],
+      "per_entity": true,
+      "deliver": {
+       "system": "drive",
+       "entity": "file",
+       "operation": "create",
+       "format": "pptx"
+      }
+     },
+     {
+      "id": "exec-cfo-commitments",
+      "level": "executive",
+      "asker": "cfo",
+      "ask": "Take every signed agreement and every funding recognition, record by record, with the latest programme status, and draft my note to the board.",
+      "reads": [
+       {
+        "system": "salesforce",
+        "process": "TradeAgreementCycle",
+        "step": "agreement_signed",
+        "period": "all"
+       },
+       {
+        "system": "jira",
+        "process": "TradeAgreementCycle",
+        "step": "funding_recognised",
+        "period": "all"
+       },
+       {
+        "document": "project_status_report",
+        "period": "latest",
+        "system": "sharepoint"
+       }
+      ],
+      "per_entity": true,
+      "deliver": {
+       "system": "email",
+       "entity": "message",
+       "operation": "draft",
+       "format": "html"
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -131,6 +131,35 @@ CLI is `--anvil-cmd`, else `$WORLDLOOM_ANVIL`, else `anvil` on `PATH`.
 `docs/connector-serving.md` ("Serving through Anvil") has the mapping and the
 provider.
 
+## The program document (`worldloom.evalrun-program/v1`)
+
+`worldloom evalrun run ./cases --exec "<command>" --harness-mode sdk-program`
+runs the child **once per case** and asks it for a Python program instead of
+one call per turn. On stdin:
+
+| Field | Meaning |
+|---|---|
+| `schema` | `worldloom.evalrun-program/v1` |
+| `case_id`, `query`, `persona`, `principal` | The request, as in a turn document |
+| `tools` | The case's tool catalog, as in a turn document |
+| `client` | `{module: "worldloom_client", source, endpoint_env: "WORLDLOOM_TOOL_URL"}`: a generated module with one method per tool (`worldloom_client.<connector>.<tool>(**arguments)`, or `worldloom_client.call("<connector.tool>", **arguments)`; a tool error raises `worldloom_client.ToolError`) |
+| `anvil` | Under `--connectors anvil`: the base URLs, as in a turn document; the program calls the vendor API instead |
+| `instructions` | The `evalrun.program.rule.*` texts |
+| `program_timeout` | Seconds the program may run (`--program-timeout`, 300) |
+
+The child prints `{"program": "<python source>"}`, optionally with
+`"planned_dag": {"nodes": [...]}` (the plan-document shape). Worldloom writes
+the program beside `worldloom_client.py`, runs it with `WORLDLOOM_TOOL_URL` (a
+local HTTP shim over the run's own tool surface) and any Anvil variables in
+its environment, and grades the calls it made. The program prints its answer
+last: a JSON line `{"answer": ..., "artifacts": [...]}`, else its stdout is
+the answer. A program that exits non-zero or times out is an error row. The
+ledger line carries `program` (source, digest, exit code, output tails, the
+declared DAG and whether it came from the reply or was read off the source).
+Calls the program issues concurrently (threads) are recorded as one step.
+Grading, including data-flow lineage and the declared-against-executed
+divergence, is in `docs/eval-execution.md` ("Plans as data flow").
+
 ## The requests document (`worldloom.evalrun-requests/v1`)
 
 `worldloom evalrun requests ./cases -o requests.json`. In a responses
@@ -248,6 +277,7 @@ set, and reports a missing case as `not_attempted`.
 
 `run.json` (schema `worldloom.eval-run/v1`, agent, principal, `case_set`
 digest), `results.jsonl` (one `CaseResult` per line: status, error, the
-three grades, assertion status, answer, spans, latency when timed), and
+three grades, assertion status, answer, spans with their data-flow
+`consumed_from`, latency when timed, the program of an `sdk-program` run), and
 `summary.json` (`worldloom.eval-run-summary/v1`). `compare` reads two of
 them and refuses nothing, but says when the `case_set` digests differ.

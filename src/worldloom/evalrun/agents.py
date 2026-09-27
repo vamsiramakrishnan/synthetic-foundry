@@ -64,6 +64,10 @@ class AgentResponse(Model):
     ttft: float | None = None
     ttfa: float | None = None
     notes: tuple[str, ...] = Field(default=())
+    #: The program an ``sdk-program`` harness wrote and Worldloom ran
+    #: (``evalrun.program``), kept on the run as an artifact of it. ``None``
+    #: for every agent that acts call by call.
+    program: dict[str, Any] | None = None
 
 
 #: The pseudo-tool a scripted trajectory uses to ask the user a question:

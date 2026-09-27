@@ -1,0 +1,6 @@
+{
+  "values": {
+    "world.interview.max_rounds": 4,
+    "world.interview.max_reads": 8
+  }
+}

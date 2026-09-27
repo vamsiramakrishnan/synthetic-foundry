@@ -261,6 +261,112 @@ the evaluator does not read (GraphQL, Rovo, the system of record) says to pass
 a structured `predicate`. The words are data (`_data/connectors/_query_docs.json`)
 and every example is executed by the tests.
 
+## Plans as data flow
+
+A plan is a DAG of calls, and a DAG's edges are dependencies. Matching nodes
+and then reading edges off "ran first" grades a trace as a sequence: two
+reads that happened to run one after the other look like a chain, and a write
+that names an id it never saw looks downstream of the search that would have
+found it, as long as the search ran earlier. The plan stage therefore also
+derives the **executed DAG from data flow** (`evalrun.lineage`) and grades it
+edge by edge against the gold DAG. It is attached as `PlanGrade.nodes.dag`,
+with its own score and findings; the plan axis, the node breakdown beside it
+and every other number are unchanged, byte for byte.
+
+**Lineage.** Call B depends on call A when a value A returned reappears in
+B's arguments. The rules, in order:
+
+- *Produced values* come only from a call that succeeded, and only from what
+  the agent saw: the response the surface returned, or for a run served by
+  Anvil the vendor response Anvil answered with (the replay's own result is
+  not what the agent read). Every scalar that passes the distinctiveness rule
+  counts, and so does every identifier-shaped token inside a longer string. A
+  record the call returned or wrote is also produced under its fid, ident and
+  external id, the handles the in-process surface resolves.
+- *Consumed values* are every scalar in the request (for Anvil, the path,
+  query string and body the agent sent), identifier tokens inside strings,
+  the literal values of a native query (JQL, SOQL, an encoded query, OData,
+  CQL, KQL, Drive and Slack search) read by the shared evaluator in
+  `worldloom.connectors.query`, and the records a get, update or delete
+  resolved.
+- *Distinctiveness*: booleans and nulls never link; a number links when its
+  integer part has five or more digits; a string links when it is an email
+  address, or has a digit and three or more characters (an all-digit string
+  needs five), or has no digit and sixteen or more characters. ISO dates and
+  timestamps never link. A value carried by more than half the items of a
+  list of three or more (a status, an assignee, a project key) is a shared
+  attribute and does not link.
+- *Stated values*: a value the case's request states is the user's, not a
+  call's, and links nothing.
+- *Several producers*: the link goes to the most recent earlier producer; the
+  others are kept as alternatives. An ambiguous link honours a gold edge when
+  the gold producer is the chosen call or an alternative.
+- *Pagination*: a call that repeats the last call to the same tool with the
+  same non-paging arguments and asks for a later page depends on it.
+- *Unsourced*: a record handle the agent used that no earlier call produced
+  and the request did not state is counted as unsourced (guessed or
+  hardcoded), never linked.
+
+The run's ledger carries the result in each span's `consumed_from` when the
+plan stage is on; with it off, the spans keep what the service recorded.
+
+**The executed DAG against the gold DAG.** Executed nodes are the implied
+nodes (one per attributed plan node, one per unattributed tool and entity),
+matched to gold as the node breakdown matches them. Gold edges come from the
+case's generation: a consumer that binds a producer's output
+(`bindings` such as `fields.evidence`, `id` from `$.steps.<node>`, a
+`for_each`), transforms compressed out, is a **data** edge; one whose
+condition reads it is a **control** edge; the rest (a `read_chain`'s listed
+order) are **order** edges. A row without bindings still has a data edge
+where the consumer acts on the producer's record (the same fixture, or the
+readback of a write). `PlanGrade.nodes.dag` reports:
+
+| Field | Meaning | Finding |
+| --- | --- | --- |
+| `edge_recall` | gold data edges the run carried | |
+| `edge_precision` | lineage edges between matched nodes that a gold edge or gold ancestry accounts for | |
+| `missing` | a consumer ran without the producer's output: it guessed or hardcoded the value | `plan.edge_missing` |
+| `spurious` | a consumer used the output of a node the gold DAG says it does not depend on | `plan.edge_spurious` |
+| `wrong_source` | `(consumer, gold producer, actual producer)`: consumed, but from another node | `plan.wrong_source` |
+| `wrong_branch` | a conditional branch the data the run read did not select was executed anyway | `plan.wrong_branch` |
+| `parallelisable`, `serialised` | independent reads (no path either way in gold or in the run), and those run one after the other | `plan.serialised` (efficiency, not an error) |
+| `executed` | the DAG itself: nodes, edges (how each was carried, a few of the values, alternatives), depth, steps | |
+
+Which branch the data selected is decided from the results the reads
+returned; a write carrying the untaken branch's literal arguments is on the
+wrong branch whatever node attribution by shape gave it. Calls an agent
+issued together (an `sdk-program`'s threads, which the shim records as
+overlapping) are one step and never `serialised`.
+
+**Declared against executed.** When the agent declares a plan (`planned_dag`
+in its answer, or the plan read off an `sdk-program`'s source), the node
+breakdown grades the declared DAG as before and `dag.declared` reports the
+divergence: `declared_not_executed`, `executed_not_declared`,
+`edges_dropped` (declared dependencies the calls did not carry),
+`edges_added` (data flow the plan did not declare), the declared DAG's own
+edge precision and recall against gold, and `agreement` (mean of node and
+edge agreement; 1.0 means the agent did what it said). `summarize` reports
+`stages.plan_dag`, `edge_precision`, `edge_recall`, `declared_cases` and
+`declared_agreement`.
+
+**The `sdk-program` harness mode.** A coding harness plans by writing a
+program. `evalrun run --exec "<cmd>" --harness-mode sdk-program` asks the
+child once per case for one: a `worldloom.evalrun-program/v1` document on
+stdin carries the request, the tool catalog, a generated client module
+(`worldloom_client`, one method per tool) and the endpoint variable
+(`WORLDLOOM_TOOL_URL`, or the `anvil` block under `--connectors anvil`), and
+the child replies `{"program": "<python source>"}`, optionally with a
+`planned_dag`. Worldloom runs the program in a subprocess under
+`--program-timeout` against the run's serving path (a local HTTP shim over
+the run's own tool surface, or Anvil), grades the calls it made with every
+axis, stage and lineage, and keeps the program on the ledger line
+(`program`: source, digest, exit status, output tails, the declared DAG and
+where it came from). Without a stated plan, the declared DAG is read off the
+source with Python's `ast`: tool calls in source order, each depending on the
+calls whose results reach its arguments through variables. A program that
+exits non-zero or times out is an error row that still carries its program.
+The default harness mode stays the turn protocol.
+
 ## The agent seam
 
 An agent under test receives an `AgentTask` (the request, the persona, the

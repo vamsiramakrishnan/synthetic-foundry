@@ -46,7 +46,9 @@ the existing campaign and pipeline APIs own orchestration and acceptance.
 
 Before any of this: an industry the engines do not model at all (a hospital, an
 airline) is `/worldloom-vertical`, and a loose ask (no seed, no shape chosen)
-is `/worldloom-design`.
+is `/worldloom-design`. To drive every stage above as one interview (one
+question at a time, resumable, with evals generated from the interviewed
+processes and levels), use `/worldloom-interview`.
 
 Order matters the way it does inside one cascade: a later stage's brief carries
 what earlier stages accepted. Author the LOB before its process.

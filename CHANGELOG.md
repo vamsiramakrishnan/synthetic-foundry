@@ -88,6 +88,89 @@ first written up, before the waves above it landed.
   `KeyError` from node attribution; it now gets the emulator's `Unknown
   entity` validation error, as the vendor would answer.
 
+### Plans as data flow
+
+- **Lineage from the call trace.** `evalrun.lineage.derive_lineage` reads,
+  for every call, which earlier calls it consumed: a distinctive value one
+  call returned (a record id, key, sys_id, email, cursor, a copied title)
+  that reappears in a later call's path, query, body or native query (read
+  through the shared evaluator) makes the later call depend on it. Values
+  the request states, constants, dates and attributes most items of a
+  listing share never link; the most recent producer wins and the others are
+  kept as alternatives; a later page depends on the page before it. An
+  Anvil-served run links by what the agent actually sent and saw over HTTP.
+  With the plan stage on, each ledger span's `consumed_from` is this
+  lineage (it was the service's attribution); with it off the spans are
+  unchanged.
+- **The executed DAG graded edge by edge.** `PlanGrade.nodes.dag` (additive,
+  absent on a run with no calls) carries the executed DAG and its grade
+  against the gold DAG's data edges (bindings, `for_each`, the same record):
+  edge precision and recall, and the findings `plan.edge_missing`,
+  `plan.edge_spurious`, `plan.wrong_source`, `plan.wrong_branch` and
+  `plan.serialised` (independent reads run serially; efficiency, not an
+  error), glossed in the autopsy and the brief. When the agent declares a
+  plan, `dag.declared` reports what it declared and never ran, ran and never
+  declared, the edges that changed, and an `agreement`; `summarize` reports
+  `stages.plan_dag`, `edge_precision`, `edge_recall`, `declared_cases` and
+  `declared_agreement`. Every existing score, pass and finding is unchanged.
+- **`evalrun run --exec <cmd> --harness-mode sdk-program`.** The agent under
+  test writes one Python program per case (`worldloom.evalrun-program/v1`,
+  with a generated `worldloom_client` module and the tool endpoint in
+  `WORLDLOOM_TOOL_URL`, or the Anvil base URLs under `--connectors anvil`);
+  Worldloom runs it under `--program-timeout` against a local HTTP shim over
+  the run's own tool surface, or against Anvil, and grades the calls it made
+  like any run's. The program, its digest, exit status and the plan read off
+  its source (Python `ast`, calls in source order with variable flow) ride
+  on the ledger line as `program`. The default harness mode is unchanged.
+### A whole world from an interview
+
+- **`worldloom interview`** (and `worldloom.interview`, its SDK) interviews a
+  harness or a script one question at a time through seven layers: `company`,
+  `lobs`, `employees`, `processes:<lob>`, `documents`, `timeline`, `evals`.
+  Each answer is refused with every finding until it lints clean against the
+  seam it feeds (`company.resolve`, the LOB cascade's roles stage,
+  `episodes.lint`, `lob.lint_lob`, `doctypes.lint` and `packs.lint` on the
+  assembled pack, `timeline.review` against the built roster) plus the rules
+  only the interview can state: seniority levels on the reporting ladder
+  (`ic`, `manager`, `director`, `executive`), the systems every process step
+  touches, review chains that go up, and eval intents whose reads name steps
+  and systems the processes declared. `run` (with `--script`, `--harness` or
+  `--exec`), `next` / `answer` for the file round trip, `status`, `build`,
+  `measure`. Requests are `worldloom.world-interview/v1`; prompt keys
+  `world.interview.*`, policy `world.interview.max_rounds` and
+  `world.interview.max_reads`; the bundled harness adapters recognise the
+  schema.
+- **Resumable and deterministic.** Every round lands in `transcript.jsonl` as
+  it happens; reopening replays the accepted answers through the lints again
+  and restores the question in progress, so an interrupted interview finishes
+  byte-identical to one never interrupted. Builds inside the interview run
+  under `registries.scoped()`.
+- **One pack, no parallel format.** The accepted answers assemble into one
+  `packs.Pack` (lobs, episodes, artifact types, lore, and a role table when a
+  LOB adds a post) plus a resolution for what a pack has no field for.
+  `interview build` builds it under the enterprise realism profile, runs the
+  reviewed history with every process once per period, narrates under fact
+  constraints (the deterministic writer, or `--narrate-exec` /
+  `--narrate-harness`), renders, validates, and writes the corpus.
+- **Evals from the interviewed world.** Each intent becomes an
+  `enterprise-dag@1` query shaped by its asker's level (IC lookup, manager
+  fan-in, director conditional with period- and revision-aware document reads,
+  executive per-entity maps across LOBs) through the existing materialise,
+  validate and compile path, with `interview_provenance` naming the question
+  behind every node. One case set per level (`evals/<level>/`) with
+  `provenance.jsonl`; the build refuses unless the reference agent passes
+  every case. The interview projection adds `interview_*`, `period`,
+  `revisions` and review-chain fields to the records it touches and mints a
+  record per step on systems the engine projects nothing for; it is opt-in,
+  so every other corpus projects as before.
+- **`examples/interviews/kestrel-vale.json`**: a scripted interviewee whose
+  first answer to every question is refused on purpose. Measured at seed
+  8128: 3 LOBs, 12 levelled roles (3 per level), 3 processes over 8 systems,
+  75 documents (284 files, 132 revision files), 4 periods with an incident, a
+  departure and a mid-history policy, 12 cases (3 per level), reference 12 of
+  12. `docs/interview-to-world.md` carries the gap analysis;
+  `/worldloom-interview` drives it.
+
 ### Serving connectors through Anvil
 
 - **An Anvil state provider.** `python -m worldloom.anvil_provider --corpus

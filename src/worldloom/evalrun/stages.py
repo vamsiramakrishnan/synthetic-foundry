@@ -52,6 +52,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal
 
+from pydantic import model_serializer
+
 from .. import packkit
 from ..models import Model
 from ..predicates import (
@@ -64,6 +66,7 @@ from ..predicates import (
 )
 from .agents import AgentResponse
 from .contract import EvalCase, NodeContract
+from .lineage import DagGrade, Lineage
 
 #: Bumped by hand whenever this module changes what number a given trace
 #: earns on a stage. It is part of the grader's identity whenever a stage is
@@ -93,6 +96,11 @@ STAGE_FINDINGS: dict[str, str] = {
     "plan.node_missing": "a gold DAG node has no counterpart in the agent's plan",
     "plan.node_extra": "the agent's plan has a node the gold DAG does not",
     "plan.node_misordered": "a node ran or was planned before a node whose output it consumes",
+    "plan.edge_missing": "a call ran without consuming the output of the node the gold DAG says it depends on: it guessed or hardcoded the value",
+    "plan.edge_spurious": "a call consumed the output of a node the gold DAG says it does not depend on",
+    "plan.wrong_source": "a call consumed its input from a different node than the gold DAG names",
+    "plan.wrong_branch": "the run executed a conditional branch the data it read did not select",
+    "plan.serialised": "independent reads ran one after the other; they could have been issued together (efficiency, not an error)",
     "output.field_mismatch": "a written record does not carry the field value the case expects",
     "output.wrong_format": "the produced document is not in the requested format",
     "output.missing_section": "the produced document lacks a section the case requires",
@@ -812,6 +820,15 @@ class PlanNodeGrade(Model):
     dependency_accuracy: float
     score: float
     findings: tuple[str, ...] = ()
+    #: The executed DAG read off data flow (``lineage``) and graded edge by
+    #: edge against the gold DAG, with the declared plan's divergence from it.
+    #: Its own score and findings; never moves ``score`` or ``findings`` above.
+    #: Absent when the run made no call (a plan-only run), so those keep their bytes.
+    dag: DagGrade | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_dag(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("dag",))
 
 
 def _gold_kind(node: NodeContract) -> str:
@@ -878,8 +895,43 @@ def _implied_nodes(spans: Sequence[Mapping[str, Any]], definitions: Mapping[str,
     return list(order.values())
 
 
+def _match_nodes(expected: Sequence[NodeContract], agent: Sequence[_AgentNode], known: Mapping[str, Any], *,
+                 implied: bool) -> tuple[dict[str, _AgentNode], list[_AgentNode]]:
+    """Gold node id to the agent node it matched, and the agent nodes left over.
+
+    On an implied plan the service's attribution is a match already made on
+    the record's identity, and is honoured before falling back to shape:
+    ``(connector, operation kind, target entity)``, greedily in gold order.
+    """
+
+    matched: dict[str, _AgentNode] = {}
+    free = list(agent)
+    if implied:
+        for node in expected:
+            for candidate in free:
+                if candidate.id == f"node:{node.id}":
+                    matched[node.id] = candidate
+                    free.remove(candidate)
+                    break
+    for node in expected:
+        if node.id in matched:
+            continue
+        kind = _gold_kind(node)
+        for candidate in free:
+            if candidate.connector == node.connector and candidate.kind == kind \
+                    and _entity_ok(known, node.connector, node.entity, candidate.entity or None):
+                matched[node.id] = candidate
+                free.remove(candidate)
+                break
+    return matched, free
+
+
 def grade_plan_nodes(case: EvalCase, spans: Sequence[Any] = (), response: AgentResponse | None = None, *,
-                     declared: Any = None, definitions: Mapping[str, Any] | None = None) -> PlanNodeGrade:
+                     declared: Any = None, definitions: Mapping[str, Any] | None = None,
+                     lineage: Lineage | None = None, before: Mapping[str, Mapping[str, Any]] | None = None,
+                     after: Mapping[str, Mapping[str, Any]] | None = None,
+                     observations: Mapping[str, Mapping[str, Any]] | None = None,
+                     concurrent: Sequence[Sequence[str]] = ()) -> PlanNodeGrade:
     """Match the agent's plan (declared, else implied by its calls) to the gold DAG node by node.
 
     A gold node and an agent node match on ``(connector, operation kind,
@@ -916,27 +968,7 @@ def grade_plan_nodes(case: EvalCase, spans: Sequence[Any] = (), response: AgentR
         reachable = set(_reachable(case, skipped_nodes(case, materialized)))
         expected = [node for node in case.plan.tool_nodes if node.id in reachable]
 
-    matched: dict[str, _AgentNode] = {}
-    free = list(agent)
-    if source == "implied":
-        # The service's attribution is a match already made on the record's
-        # identity; honour it before falling back to shape.
-        for node in expected:
-            for candidate in free:
-                if candidate.id == f"node:{node.id}":
-                    matched[node.id] = candidate
-                    free.remove(candidate)
-                    break
-    for node in expected:
-        if node.id in matched:
-            continue
-        kind = _gold_kind(node)
-        for candidate in free:
-            if candidate.connector == node.connector and candidate.kind == kind \
-                    and _entity_ok(known, node.connector, node.entity, candidate.entity or None):
-                matched[node.id] = candidate
-                free.remove(candidate)
-                break
+    matched, free = _match_nodes(expected, agent, known, implied=source == "implied")
 
     def label(node: NodeContract) -> str:
         return f"{node.id}={node.connector}:{_gold_kind(node)}:{node.entity or '*'}"
@@ -959,11 +991,22 @@ def grade_plan_nodes(case: EvalCase, spans: Sequence[Any] = (), response: AgentR
     findings.update(f"plan.node_extra:{item.kind}" for item in free)
     if misordered:
         findings.add("plan.node_misordered")
+    dag = None
+    if materialized:
+        # The executed DAG, from what the calls consumed, whatever the agent declared.
+        from .lineage import derive_lineage, grade_dag
+
+        if lineage is None:
+            lineage = derive_lineage(materialized, query=case.query, definitions=known, before=before, after=after,
+                                     observations=observations)
+        dag = grade_dag(case, materialized, lineage, definitions=known,
+                        planned=planned if source == "declared" else None, concurrent=concurrent)
     return PlanNodeGrade(
         source=source, expected=len(expected), stated=len(agent), matched=count,
         node_precision=precision, node_recall=recall, missing=missing, extra=extra,
         dependencies=len(edges), dependencies_honoured=len(edges) - len(misordered), misordered=tuple(misordered),
         dependency_accuracy=accuracy, score=_mean([precision, recall, accuracy]), findings=tuple(sorted(findings)),
+        dag=dag,
     )
 
 
@@ -1261,7 +1304,9 @@ def grade_output(case: EvalCase, outcomes: Any, before: Mapping[str, Mapping[str
 def attach_stages(case: EvalCase, spans: Sequence[Any], before: Mapping[str, Mapping[str, Any]],
                   after: Mapping[str, Mapping[str, Any]], response: AgentResponse | None,
                   plan: Any, trajectory: Any, outcomes: Any, *, definitions: Mapping[str, Any] | None = None,
-                  refusals: Sequence[Mapping[str, Any]] = ()) -> tuple[Any, Any, Any]:
+                  refusals: Sequence[Mapping[str, Any]] = (), lineage: Lineage | None = None,
+                  observations: Mapping[str, Mapping[str, Any]] | None = None,
+                  concurrent: Sequence[Sequence[str]] = ()) -> tuple[Any, Any, Any]:
     """The three axis grades with the stages the policy turns on attached; unchanged when none is on.
 
     Only fields the axis grades declare as optional breakdowns are set, so
@@ -1270,7 +1315,9 @@ def attach_stages(case: EvalCase, spans: Sequence[Any], before: Mapping[str, Map
 
     enabled = stages_enabled()
     if enabled["plan_nodes"]:
-        plan = plan.model_copy(update={"nodes": grade_plan_nodes(case, spans, response, definitions=definitions)})
+        plan = plan.model_copy(update={"nodes": grade_plan_nodes(
+            case, spans, response, definitions=definitions, lineage=lineage, before=before, after=after,
+            observations=observations, concurrent=concurrent)})
     if enabled["queries"]:
         trajectory = trajectory.model_copy(update={"queries": grade_queries(
             case, spans, before, definitions=definitions, refusals=refusals)})
@@ -1287,6 +1334,8 @@ def stage_keys(score: Any) -> tuple[str, ...]:
     nodes = getattr(score.plan, "nodes", None) if "plan" in observed else None
     if nodes is not None:
         keys.update(nodes.findings)
+        if nodes.dag is not None:
+            keys.update(nodes.dag.findings)
     queries = getattr(score.trajectory, "queries", None) if "trajectory" in observed else None
     if queries is not None:
         keys.update(queries.findings)
@@ -1304,6 +1353,8 @@ def stage_scores(score: Any) -> dict[str, float]:
     nodes = getattr(score.plan, "nodes", None) if "plan" in observed else None
     if nodes is not None:
         out["plan_nodes"] = nodes.score
+        if nodes.dag is not None and nodes.dag.score is not None:
+            out["plan_dag"] = nodes.dag.score
     queries = getattr(score.trajectory, "queries", None) if "trajectory" in observed else None
     if queries is not None and queries.score is not None:
         out["query"] = queries.score
@@ -1335,6 +1386,20 @@ class StageSummary(Model):
     #: Stage finding key to the number of graded cases carrying it, passing
     #: cases included: a query can over-fetch on a case that still passes.
     findings: dict[str, int]
+    #: The executed DAG against the gold DAG (``PlanNodeGrade.dag``): means
+    #: over the cases that carry one; absent from the wire on older ledgers.
+    plan_dag: float | None = None
+    edge_precision: float | None = None
+    edge_recall: float | None = None
+    #: Cases whose agent declared a plan, and the mean agreement between what
+    #: it declared and what its calls did (1.0: it did what it said).
+    declared_cases: int | None = None
+    declared_agreement: float | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_dag(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("plan_dag", "edge_precision", "edge_recall", "declared_cases",
+                                          "declared_agreement"))
 
 
 def summarize_stages(scores: Sequence[Any]) -> StageSummary | None:
@@ -1353,6 +1418,8 @@ def summarize_stages(scores: Sequence[Any]) -> StageSummary | None:
     findings: Counter[str] = Counter()
     for score in carrying:
         findings.update(stage_keys(score))
+    dags = [grade for grade in nodes if grade.dag is not None]
+    declared = [grade.dag.declared for grade in dags if grade.dag.declared is not None]
 
     def mean_of(values: Iterable[float | None]) -> float | None:
         listed = [value for value in values if value is not None]
@@ -1376,6 +1443,11 @@ def summarize_stages(scores: Sequence[Any]) -> StageSummary | None:
         fields_expected=sum(grade.fields_expected for grade in outputs),
         output_grounding=mean_of(grade.grounding for grade in outputs),
         findings=dict(sorted(findings.items())),
+        plan_dag=mean_of(grade.dag.score for grade in dags) if dags else None,
+        edge_precision=mean_of(grade.dag.edge_precision for grade in dags) if dags else None,
+        edge_recall=mean_of(grade.dag.edge_recall for grade in dags) if dags else None,
+        declared_cases=len(declared) if dags else None,
+        declared_agreement=mean_of(item.agreement for item in declared) if declared else None,
     )
 
 
