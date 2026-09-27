@@ -11,6 +11,48 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Two levers: the agent and the interface
+
+- **Failure ownership.** `evalrun.ownership` gives every failing finding one
+  owner, `agent`, `interface`, `world` or `grader`, by deterministic rules
+  applied in order (a solvability proof record or a reference agent failing
+  the same way makes it the world's; an identical trajectory scored
+  differently, a replay divergence or an unexplained failure the grader's;
+  validation, schema and unsupported-operation errors, refused calls,
+  malformed queries on a tool with no documented grammar, undeclared
+  pagination, unexposed tools and serving errors the interface's, with the
+  findings that follow from never getting evidence charged to the interface
+  as consequences). Each attribution names its rule and evidence.
+  `autopsy(attribute=True)` adds owner counts per cluster and owner shares;
+  `evalrun autopsy` prints them (`--no-owners`, `--reference-run`, `--proofs`,
+  `--peer`), `evalrun summarize` prints an owner line and `evalrun compare`
+  the change per owner. The pilot's six training runs reclassify as 54%
+  interface, 46% agent.
+- **The interface lever.** `evalrun improve --levers interface` (or
+  `agent,interface`) with `--contract CONNECTOR=<bundle>` lets a round
+  reshape the interface the agent is served: an Anvil manifest overlay per
+  connector (`evalrun.interface`), proposed from the interface-owned findings,
+  the failing arguments and vendor errors and the served tools, through an
+  interview (kind `anvil-overlay` on the pack interview's wire format)
+  refused with findings until the diff touches only agent-facing keys,
+  compiles with `anvil compile`, keeps every approval (re-granted for
+  simulation with `anvil approve` when needed) and leaves every operation's
+  behaviour in the compiled AIR unchanged. Runs are served through Anvil
+  under the champion interface, the agent is handed the served tool catalog
+  (`$ANVIL_<CONNECTOR>_SURFACE`), recompiled bundles are cached by digest,
+  and candidates face the unchanged training gate, ablation and holdout.
+  `--candidates` mixes agent and interface candidates.
+- **Transfer gate.** An interface candidate must also not regress a second
+  agent (`--transfer-agent`) on the held-out cases; without one the gate is
+  skipped and the receipt says why.
+- **Promotion output.** A promoted overlay is written under
+  `<out>/interface/promoted/NNN/` as a reviewable manifest diff and an
+  approvals record in Anvil's `approvals.jsonl` format marked
+  simulation-only; nothing outside the loop's directory is touched, and
+  production approval stays a human step. Receipts record `lever`, the
+  overlay digests and the recompiled contract digests. With `--levers agent`
+  (the default) every receipt is byte-identical to before.
+
 ### Serving connectors through Anvil
 
 - **An Anvil state provider.** `python -m worldloom.anvil_provider --corpus

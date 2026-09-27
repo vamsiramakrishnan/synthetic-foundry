@@ -22,6 +22,13 @@ Three steps, each deterministic:
 3. ``render_brief`` writes the autopsy as plain text short enough to hand an
    improving harness as its instructions.
 
+With ``attribute=True`` (or a served surface, proofs, peers or a reference
+run to attribute with) every failing finding is also given an owner by
+``evalrun.ownership``: ``agent``, ``interface``, ``world`` or ``grader``.
+Each cluster then counts its findings per owner, the autopsy carries the
+owner shares, and the brief prints both. Without it nothing here changes, to
+the byte.
+
 Why lift and not raw counts: a cluster whose cases are 60% ``partial_write``
 says nothing if the run was 60% ``partial_write``. Lift is the cluster's
 share of a value divided by the run's share of it, so a lift of 2.0 means
@@ -38,6 +45,7 @@ from pydantic import ConfigDict, Field, model_serializer
 
 from ..models import Model
 from .contract import EvalCase
+from .ownership import OWNERS, Ownership, SurfaceFacts, owner_line, ownership
 from .runner import CaseResult, RunReport
 from .stages import STAGE_FINDINGS, stage_keys
 
@@ -286,12 +294,18 @@ class Cluster(Model):
     #: dump otherwise, so an autopsy without values is byte-identical to one
     #: written before values existed.
     value: ClusterValue | None = None
+    #: Owner to count of this cluster's findings (``evalrun.ownership``), and
+    #: the owner of most of them; present only when the autopsy attributed.
+    owners: dict[str, int] | None = None
+    owner: str | None = None
 
     @model_serializer(mode="wrap")
     def _omit_absent_value(self, handler: Any) -> Any:
         data = handler(self)
-        if isinstance(data, dict) and data.get("value", False) is None:
-            data.pop("value")
+        if isinstance(data, dict):
+            for name in ("value", "owners", "owner"):
+                if data.get(name, False) is None:
+                    data.pop(name)
         return data
 
 
@@ -309,8 +323,18 @@ class Autopsy(Model):
     clusters: tuple[Cluster, ...]
     #: Clusters beyond ``top``, by key and count, so nothing is dropped unseen.
     omitted: dict[str, int] = Field(default_factory=dict)
+    #: Every failing finding's owner and each owner's share, when the autopsy
+    #: attributed (``evalrun.ownership``); absent otherwise.
+    ownership: Ownership | None = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_ownership(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("ownership", False) is None:
+            data.pop("ownership")
+        return data
 
 
 def _cases_by_id(cases: Mapping[str, EvalCase] | Iterable[EvalCase] | None) -> dict[str, EvalCase]:
@@ -439,6 +463,11 @@ def autopsy(
     concentrations: int = 3,
     values: Mapping[str, Any] | None = None,
     order: str = "count",
+    attribute: bool = False,
+    surface: Mapping[str, SurfaceFacts] | None = None,
+    proofs: Mapping[str, Any] | None = None,
+    peers: Sequence[RunReport] = (),
+    reference: RunReport | None = None,
 ) -> Autopsy:
     """Cluster a run's failing cases by finding key.
 
@@ -456,6 +485,12 @@ def autopsy(
     clusters by weight (then count, then key) instead of by count; the
     default ordering, and every byte of an autopsy without ``values``, is
     unchanged.
+
+    ``attribute`` gives every failing finding an owner (``evalrun.ownership``);
+    ``surface`` (the served tools' ``SurfaceFacts``), ``proofs`` (solvability
+    proof records by case id), ``peers`` (other runs over the same cases) and
+    ``reference`` (the reference agent's run) are what the rules read, and
+    any of them implies ``attribute``.
     """
 
     if top < 1 or exemplars < 1 or concentrations < 0:
@@ -479,6 +514,11 @@ def autopsy(
             failing += 1
         for key in keys:
             members[key].append(row)
+    owned: Ownership | None = None
+    if attribute or surface is not None or proofs or peers or reference is not None:
+        owned = ownership(report, cases=by_id, surface=surface, proofs=proofs, peers=peers, reference=reference)
+    owner_of: dict[tuple[str, str], str] = ({(item.case_id, item.key): item.owner for item in owned.attributions}
+                                            if owned is not None else {})
     weigh = _cluster_weigher(values, members) if values is not None else None
     if weigh is not None and order == "value":
         ordered = sorted(members, key=lambda key: (-weigh(key).weight, -len(members[key]), key))
@@ -512,6 +552,7 @@ def autopsy(
                                      evidence=_evidence(key, row, by_id.get(row.case_id)))
                             for row in group[:exemplars]),
             value=weigh(key) if weigh is not None else None,
+            **(_cluster_owners(key, group, owner_of) if owned is not None else {}),
         ))
     graded = [row for row in rows if row.graded]
     return Autopsy(
@@ -522,7 +563,15 @@ def autopsy(
         base={name: dict(sorted(base[name].items())) for name in sorted(base)},
         clusters=tuple(clusters),
         omitted={key: len(members[key]) for key in ordered[top:]},
+        ownership=owned,
     )
+
+
+def _cluster_owners(key: str, group: Sequence[CaseResult], owner_of: Mapping[tuple[str, str], str]) -> dict[str, Any]:
+    """A cluster's ``owners`` counts and its majority ``owner`` (ties in ``OWNERS`` order)."""
+    counts = Counter(owner_of.get((row.case_id, key), "agent") for row in group)
+    ranked = sorted(counts, key=lambda owner: (-counts[owner], OWNERS.index(owner)))
+    return {"owners": dict(sorted(counts.items())), "owner": ranked[0] if ranked else None}
 
 
 def _cluster_weigher(values: Mapping[str, Any], members: Mapping[str, list[CaseResult]]) -> Callable[[str], ClusterValue]:
@@ -572,6 +621,8 @@ def render_brief(report: Autopsy, *, clusters: int | None = None) -> str:
         f"Autopsy of agent {report.agent!r} over case set {report.case_set[:16]}:",
         f"{report.failing} of {report.cases} case(s) failed ({report.errors} errored, {report.passed} passed).",
     ]
+    if report.ownership is not None and report.failing:
+        lines.append(owner_line(report.ownership))
     if not shown:
         lines.append("No failing case: nothing to improve on this case set; consider escalating its difficulty.")
         return "\n".join(lines) + "\n"
@@ -581,6 +632,9 @@ def render_brief(report: Autopsy, *, clusters: int | None = None) -> str:
         lines.append(f"{number}. {cluster.key}: {cluster.cases} case(s), {round(cluster.share_of_failures * 100)}% of failures")
         if cluster.gloss:
             lines.append(f"   meaning: {cluster.gloss}")
+        if cluster.owners:
+            lines.append("   owner: " + ", ".join(f"{owner} ({count})" for owner, count in
+                                                  sorted(cluster.owners.items(), key=lambda item: (-item[1], item[0]))))
         if cluster.value is not None:
             money = (f", {cluster.value.at_stake:g}{' ' + cluster.value.currency if cluster.value.currency else ''} at stake"
                      if cluster.value.at_stake is not None else "")
