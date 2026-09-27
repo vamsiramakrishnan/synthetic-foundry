@@ -221,7 +221,7 @@ def test_the_assembled_pack_is_the_existing_company_pack(completed: interview.In
     pack = interview.pack_of(completed.opened.state)
     assert packs.lint(pack) == []
     assert [lob.name for lob in pack.lobs] == ["commercial", "delivery", "service"]
-    assert {spec.name for spec in pack.episodes} == {"TradeAgreementCycle", "ProjectSteering", "IncidentReview"}
+    assert {spec.name for spec in pack.episodes} == {"SupplierTermsCycle", "ProgrammeSteering", "IncidentReview"}
     assert any(policy.effective_from == "2026-03" for policy in pack.lore)
 
 

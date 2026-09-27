@@ -228,7 +228,7 @@
    {
     "episodes": [
      {
-      "name": "TradeAgreementCycle",
+      "name": "SupplierTermsCycle",
       "domain": "retail",
       "period": "month",
       "detail": "One month of the commercial desk: the pipeline reviewed, one agreement legally reviewed and signed, funding recognised against signed plans. The legal gate is the episode's spine; signature is caused by clearance, never beside it.",
@@ -434,7 +434,7 @@
         "domain": "strategy"
        },
        {
-        "artifact_type": "trade_agreement",
+        "artifact_type": "supplier_trade_agreement",
         "author_role": "merch_lead",
         "audience": "commercial_and_finance",
         "required_facts": [
@@ -554,15 +554,15 @@
      }
     ],
     "systems": {
-     "TradeAgreementCycle.pipeline_reviewed": [
+     "SupplierTermsCycle.pipeline_reviewed": [
       "salesforce",
       "fax"
      ],
-     "TradeAgreementCycle.legal_review_completed": [
+     "SupplierTermsCycle.legal_review_completed": [
       "jira",
       "outlook"
      ],
-     "TradeAgreementCycle.agreement_signed": [
+     "SupplierTermsCycle.agreement_signed": [
       "salesforce",
       "sharepoint"
      ]
@@ -577,7 +577,7 @@
       ],
       "artifact_types": [
        "trade_pipeline_review",
-       "trade_agreement"
+       "supplier_trade_agreement"
       ]
      },
      {
@@ -602,17 +602,17 @@
     ],
     "slot_bindings": [
      {
-      "process": "TradeAgreementCycle",
+      "process": "SupplierTermsCycle",
       "slot": "negotiator",
       "role_key": "merch_lead"
      },
      {
-      "process": "TradeAgreementCycle",
+      "process": "SupplierTermsCycle",
       "slot": "reviewer",
       "role_key": "audit"
      },
      {
-      "process": "TradeAgreementCycle",
+      "process": "SupplierTermsCycle",
       "slot": "recogniser",
       "role_key": "cfo"
      }
@@ -621,7 +621,7 @@
    {
     "episodes": [
      {
-      "name": "TradeAgreementCycle",
+      "name": "SupplierTermsCycle",
       "domain": "retail",
       "period": "month",
       "detail": "One month of the commercial desk: the pipeline reviewed, one agreement legally reviewed and signed, funding recognised against signed plans. The legal gate is the episode's spine; signature is caused by clearance, never beside it.",
@@ -827,7 +827,7 @@
         "domain": "strategy"
        },
        {
-        "artifact_type": "trade_agreement",
+        "artifact_type": "supplier_trade_agreement",
         "author_role": "merch_lead",
         "audience": "commercial_and_finance",
         "required_facts": [
@@ -947,19 +947,19 @@
      }
     ],
     "systems": {
-     "TradeAgreementCycle.pipeline_reviewed": [
+     "SupplierTermsCycle.pipeline_reviewed": [
       "salesforce",
       "slack"
      ],
-     "TradeAgreementCycle.legal_review_completed": [
+     "SupplierTermsCycle.legal_review_completed": [
       "jira",
       "outlook"
      ],
-     "TradeAgreementCycle.agreement_signed": [
+     "SupplierTermsCycle.agreement_signed": [
       "salesforce",
       "sharepoint"
      ],
-     "TradeAgreementCycle.funding_recognised": [
+     "SupplierTermsCycle.funding_recognised": [
       "jira",
       "slack"
      ]
@@ -974,7 +974,7 @@
       ],
       "artifact_types": [
        "trade_pipeline_review",
-       "trade_agreement"
+       "supplier_trade_agreement"
       ]
      },
      {
@@ -999,17 +999,17 @@
     ],
     "slot_bindings": [
      {
-      "process": "TradeAgreementCycle",
+      "process": "SupplierTermsCycle",
       "slot": "negotiator",
       "role_key": "merch_lead"
      },
      {
-      "process": "TradeAgreementCycle",
+      "process": "SupplierTermsCycle",
       "slot": "reviewer",
       "role_key": "audit"
      },
      {
-      "process": "TradeAgreementCycle",
+      "process": "SupplierTermsCycle",
       "slot": "recogniser",
       "role_key": "cfo"
      }
@@ -1020,7 +1020,7 @@
    {
     "episodes": [
      {
-      "name": "ProjectSteering",
+      "name": "ProgrammeSteering",
       "domain": "retail",
       "period": "month",
       "detail": "Monthly steering of the checkout and loyalty replatform: status reported, spend booked cumulatively against a fixed envelope, risks counted and carried. The programme LORE-REPLATFORM promises is the one this episode papers.",
@@ -1174,7 +1174,7 @@
         "domain": "engineering"
        },
        {
-        "artifact_type": "steering_minutes",
+        "artifact_type": "programme_steering_minutes",
         "author_role": "cio",
         "audience": "all_staff",
         "required_facts": [
@@ -1261,11 +1261,11 @@
      }
     ],
     "systems": {
-     "ProjectSteering.status_reported": [
+     "ProgrammeSteering.status_reported": [
       "jira",
       "confluence"
      ],
-     "ProjectSteering.steering_held": [
+     "ProgrammeSteering.steering_held": [
       "outlook",
       "sharepoint"
      ]
@@ -1287,7 +1287,7 @@
        "project.risk_count"
       ],
       "artifact_types": [
-       "steering_minutes"
+       "programme_steering_minutes"
       ]
      },
      {
@@ -1302,7 +1302,7 @@
     ],
     "slot_bindings": [
      {
-      "process": "ProjectSteering",
+      "process": "ProgrammeSteering",
       "slot": "programme_lead",
       "role_key": "platform_lead"
      }
@@ -1311,7 +1311,7 @@
    {
     "episodes": [
      {
-      "name": "ProjectSteering",
+      "name": "ProgrammeSteering",
       "domain": "retail",
       "period": "month",
       "detail": "Monthly steering of the checkout and loyalty replatform: status reported, spend booked cumulatively against a fixed envelope, risks counted and carried. The programme LORE-REPLATFORM promises is the one this episode papers.",
@@ -1465,7 +1465,7 @@
         "domain": "engineering"
        },
        {
-        "artifact_type": "steering_minutes",
+        "artifact_type": "programme_steering_minutes",
         "author_role": "cio",
         "audience": "all_staff",
         "required_facts": [
@@ -1552,11 +1552,11 @@
      }
     ],
     "systems": {
-     "ProjectSteering.status_reported": [
+     "ProgrammeSteering.status_reported": [
       "jira",
       "confluence"
      ],
-     "ProjectSteering.steering_held": [
+     "ProgrammeSteering.steering_held": [
       "outlook",
       "sharepoint"
      ]
@@ -1578,7 +1578,7 @@
        "project.risk_count"
       ],
       "artifact_types": [
-       "steering_minutes"
+       "programme_steering_minutes"
       ]
      },
      {
@@ -1593,12 +1593,12 @@
     ],
     "slot_bindings": [
      {
-      "process": "ProjectSteering",
+      "process": "ProgrammeSteering",
       "slot": "programme_lead",
       "role_key": "platform_lead"
      },
      {
-      "process": "ProjectSteering",
+      "process": "ProgrammeSteering",
       "slot": "sponsor",
       "role_key": "cio"
      }
@@ -2003,7 +2003,7 @@
       ]
      },
      {
-      "key": "trade_agreement",
+      "key": "supplier_trade_agreement",
       "authority": "system_of_record",
       "lifecycle": "published",
       "lag": {
@@ -2104,7 +2104,7 @@
       ]
      },
      {
-      "key": "steering_minutes",
+      "key": "programme_steering_minutes",
       "authority": "approved_report",
       "lifecycle": "published",
       "lag": {
@@ -2242,7 +2242,7 @@
       ]
      },
      {
-      "artifact_type": "trade_agreement",
+      "artifact_type": "supplier_trade_agreement",
       "reviewer": "cfo",
       "approver": "ceo",
       "published_on": [
@@ -2276,7 +2276,7 @@
       ]
      },
      {
-      "artifact_type": "steering_minutes",
+      "artifact_type": "programme_steering_minutes",
       "reviewer": "ceo",
       "approver": "ceo",
       "published_on": [
@@ -2345,7 +2345,7 @@
       ]
      },
      {
-      "key": "trade_agreement",
+      "key": "supplier_trade_agreement",
       "authority": "system_of_record",
       "lifecycle": "published",
       "lag": {
@@ -2446,7 +2446,7 @@
       ]
      },
      {
-      "key": "steering_minutes",
+      "key": "programme_steering_minutes",
       "authority": "approved_report",
       "lifecycle": "published",
       "lag": {
@@ -2614,7 +2614,7 @@
       ]
      },
      {
-      "artifact_type": "trade_agreement",
+      "artifact_type": "supplier_trade_agreement",
       "reviewer": "cfo",
       "approver": "ceo",
       "published_on": [
@@ -2648,7 +2648,7 @@
       ]
      },
      {
-      "artifact_type": "steering_minutes",
+      "artifact_type": "programme_steering_minutes",
       "reviewer": "ceo",
       "approver": "ceo",
       "published_on": [
@@ -2765,13 +2765,13 @@
       "reads": [
        {
         "system": "salesforce",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "pipeline_reviewed",
         "period": "latest"
        },
        {
         "system": "jira",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "funding_recognised",
         "period": "latest"
        }
@@ -2810,7 +2810,7 @@
       "reads": [
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "latest"
        }
@@ -2830,13 +2830,13 @@
       "reads": [
        {
         "system": "servicenow",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "legal_review_completed",
         "period": "latest"
        },
        {
         "system": "jira",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "funding_recognised",
         "period": "latest"
        }
@@ -2888,13 +2888,13 @@
       "reads": [
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "latest"
        },
        {
         "system": "sharepoint",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "steering_held",
         "period": "latest"
        }
@@ -2920,7 +2920,7 @@
        },
        {
         "system": "salesforce",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "agreement_signed",
         "period": "all"
        }
@@ -2979,7 +2979,7 @@
        },
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "all"
        }
@@ -3007,7 +3007,7 @@
         "system": "drive"
        },
        {
-        "document": "steering_minutes",
+        "document": "programme_steering_minutes",
         "period": "all",
         "system": "sharepoint"
        },
@@ -3034,7 +3034,7 @@
       "reads": [
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "all"
        },
@@ -3066,13 +3066,13 @@
       "reads": [
        {
         "system": "salesforce",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "agreement_signed",
         "period": "all"
        },
        {
         "system": "jira",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "funding_recognised",
         "period": "all"
        },
@@ -3102,7 +3102,7 @@
       "reads": [
        {
         "system": "salesforce",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "pipeline_reviewed",
         "period": "latest"
        }
@@ -3141,7 +3141,7 @@
       "reads": [
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "latest"
        }
@@ -3161,13 +3161,13 @@
       "reads": [
        {
         "system": "outlook",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "legal_review_completed",
         "period": "latest"
        },
        {
         "system": "jira",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "funding_recognised",
         "period": "latest"
        }
@@ -3219,13 +3219,13 @@
       "reads": [
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "latest"
        },
        {
         "system": "sharepoint",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "steering_held",
         "period": "latest"
        }
@@ -3251,7 +3251,7 @@
        },
        {
         "system": "salesforce",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "agreement_signed",
         "period": "all"
        }
@@ -3310,7 +3310,7 @@
        },
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "all"
        }
@@ -3338,7 +3338,7 @@
         "system": "drive"
        },
        {
-        "document": "steering_minutes",
+        "document": "programme_steering_minutes",
         "period": "all",
         "system": "sharepoint"
        },
@@ -3365,7 +3365,7 @@
       "reads": [
        {
         "system": "jira",
-        "process": "ProjectSteering",
+        "process": "ProgrammeSteering",
         "step": "status_reported",
         "period": "all"
        },
@@ -3397,13 +3397,13 @@
       "reads": [
        {
         "system": "salesforce",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "agreement_signed",
         "period": "all"
        },
        {
         "system": "jira",
-        "process": "TradeAgreementCycle",
+        "process": "SupplierTermsCycle",
         "step": "funding_recognised",
         "period": "all"
        },
