@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_serializer
 
 from .. import packkit
 from ..connectors.serving import ConnectorEvaluationService, ServingError, ServingLimits
@@ -32,7 +32,7 @@ from .contract import EvalCase
 from .grader import grader_identity
 from .grading import CaseScore, grade_outcomes, grade_plan, grade_trajectory, score_case
 from .safety import OperationSafety, classify_definition
-from .stages import attach_stages
+from .stages import _omit_none, attach_stages, stages_enabled
 
 if TYPE_CHECKING:
     from .anvil import AnvilServing
@@ -74,6 +74,14 @@ class CaseResult(Model):
     #: spans and the refusals: a question is a turn.
     questions: tuple[dict[str, Any], ...] = ()
     latency: Latency | None = None
+    #: The program an ``sdk-program`` harness wrote for this case (``evalrun.program``):
+    #: its source, digest, how it exited and the plan read off its source.
+    #: Absent for every other agent, so their ledger lines keep their bytes.
+    program: dict[str, Any] | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_program(self, handler: Any) -> Any:
+        return _omit_none(handler(self), ("program",))
 
     @property
     def graded(self) -> bool:
@@ -165,11 +173,17 @@ def grade_run(
     safety: Mapping[str, OperationSafety] | None = None,
     refusals: Sequence[Mapping[str, Any]] = (),
     questions: Sequence[Mapping[str, Any]] = (),
+    lineage: Any = None,
+    observations: Mapping[str, Mapping[str, Any]] | None = None,
+    concurrent: Sequence[Sequence[str]] = (),
 ) -> CaseScore:
     """The three grades plus the assertion verdict, from what a run recorded.
 
     Shared by the in-process runner and the served `eval_score`, so an agent
     reached over MCP is graded by exactly the code that grades a local one.
+    *lineage* (``lineage.derive_lineage``) is derived from the spans when not
+    given; *observations* name what an Anvil-served agent actually sent and
+    saw, and *concurrent* the spans an agent issued together.
     """
 
     plan = grade_plan(case, spans, response)
@@ -178,7 +192,8 @@ def grade_run(
     # The stages (queries, plan nodes, output) refine the axes without
     # moving them: attached as breakdowns, off the score and the pass.
     plan, trajectory, outcomes = attach_stages(case, spans, before, after, response, plan, trajectory, outcomes,
-                                               definitions=definitions, refusals=refusals)
+                                               definitions=definitions, refusals=refusals, lineage=lineage,
+                                               observations=observations, concurrent=concurrent)
     return score_case(plan, trajectory, outcomes, assertions)
 
 
@@ -228,9 +243,11 @@ def run_case(
     except Exception as error:  # the agent is untrusted; its crash is a result, not ours
         failure = f"{type(error).__name__}: {error}"
     latency = None
+    program = response.program if response is not None else getattr(agent, "last_program", {}).get(case.id)
     if clock is not None and started is not None:
         elapsed = round(clock() - started, 4)
         latency = Latency(ttft=response.ttft if response else None, ttfa=response.ttfa if response else None, ttlt=elapsed)
+    observations: Mapping[str, Mapping[str, Any]] | None = None
     if served is not None:
         # The calls graded are the ones Anvil served: replayed into this run
         # before its spans and post-state are read.
@@ -241,11 +258,25 @@ def run_case(
             failure = failure or f"anvil: {type(error).__name__}: {error}"
         if response is not None and divergences:
             response = response.model_copy(update={"notes": (*response.notes, *divergences)})
+        # What the agent sent and saw over HTTP, per replayed span: lineage
+        # reads these, not the replay's connector arguments.
+        observations = getattr(served, "observations", None) or None
     spans = service.spans(who, run_id)
     refusals = service.refusals(who, run_id)
     questions = tuple(dict(item) for item in service.questions(who, run_id))
     after = service.snapshot(who, run_id)
     materialized = tuple(_span_dict(span) for span in spans)
+    concurrent = tuple(tuple(group) for group in (program or {}).get("concurrent", ()))
+    lineage = None
+    if stages_enabled()["plan_nodes"] and materialized:
+        # The ledger's `consumed_from` is the data-flow lineage: which earlier
+        # call each call used a returned value of. With the plan stage off the
+        # spans keep what the service recorded, byte for byte.
+        from .lineage import derive_lineage, with_lineage
+
+        lineage = derive_lineage(materialized, query=case.query, definitions=service.definitions, before=before,
+                                 after=after, observations=observations)
+        materialized = with_lineage(materialized, lineage)
     try:
         assertions = service.end(who, run_id)["grade"]
     except ServingError as error:
@@ -254,16 +285,16 @@ def run_case(
         return CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
                           agent=agent.name, status="error", error=failure, calls=len(materialized),
                           spans=materialized, refused=len(refusals), refusals=refusals, questions=questions,
-                          latency=latency)
+                          latency=latency, program=program)
     assert response is not None
     score = grade_run(case, spans, before, after, assertions, response, definitions=service.definitions,
                       rater=rater, safety=safety if safety is not None else _safety(service), refusals=refusals,
-                      questions=questions)
+                      questions=questions, lineage=lineage, observations=observations, concurrent=concurrent)
     return CaseResult(
         case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
         agent=agent.name, status="graded", score=score, answer=response.answer, notes=response.notes,
         calls=len(materialized), spans=materialized, refused=len(refusals), refusals=refusals,
-        questions=questions, latency=latency,
+        questions=questions, latency=latency, program=program,
     )
 
 

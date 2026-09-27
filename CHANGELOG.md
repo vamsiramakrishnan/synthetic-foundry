@@ -11,6 +11,41 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Plans as data flow
+
+- **Lineage from the call trace.** `evalrun.lineage.derive_lineage` reads,
+  for every call, which earlier calls it consumed: a distinctive value one
+  call returned (a record id, key, sys_id, email, cursor, a copied title)
+  that reappears in a later call's path, query, body or native query (read
+  through the shared evaluator) makes the later call depend on it. Values
+  the request states, constants, dates and attributes most items of a
+  listing share never link; the most recent producer wins and the others are
+  kept as alternatives; a later page depends on the page before it. An
+  Anvil-served run links by what the agent actually sent and saw over HTTP.
+  With the plan stage on, each ledger span's `consumed_from` is this
+  lineage (it was the service's attribution); with it off the spans are
+  unchanged.
+- **The executed DAG graded edge by edge.** `PlanGrade.nodes.dag` (additive,
+  absent on a run with no calls) carries the executed DAG and its grade
+  against the gold DAG's data edges (bindings, `for_each`, the same record):
+  edge precision and recall, and the findings `plan.edge_missing`,
+  `plan.edge_spurious`, `plan.wrong_source`, `plan.wrong_branch` and
+  `plan.serialised` (independent reads run serially; efficiency, not an
+  error), glossed in the autopsy and the brief. When the agent declares a
+  plan, `dag.declared` reports what it declared and never ran, ran and never
+  declared, the edges that changed, and an `agreement`; `summarize` reports
+  `stages.plan_dag`, `edge_precision`, `edge_recall`, `declared_cases` and
+  `declared_agreement`. Every existing score, pass and finding is unchanged.
+- **`evalrun run --exec <cmd> --harness-mode sdk-program`.** The agent under
+  test writes one Python program per case (`worldloom.evalrun-program/v1`,
+  with a generated `worldloom_client` module and the tool endpoint in
+  `WORLDLOOM_TOOL_URL`, or the Anvil base URLs under `--connectors anvil`);
+  Worldloom runs it under `--program-timeout` against a local HTTP shim over
+  the run's own tool surface, or against Anvil, and grades the calls it made
+  like any run's. The program, its digest, exit status and the plan read off
+  its source (Python `ast`, calls in source order with variable flow) ride
+  on the ledger line as `program`. The default harness mode is unchanged.
+
 ### Serving connectors through Anvil
 
 - **An Anvil state provider.** `python -m worldloom.anvil_provider --corpus
