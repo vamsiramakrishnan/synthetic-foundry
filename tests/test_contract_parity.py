@@ -580,6 +580,8 @@ def test_drive_parity_through_the_vendor_discovery_contract(cache: Path, tmp_pat
 
 #: Anvil pages Graph lists by $skiptoken and writes `value`; the `@odata.nextLink` continuation is the part pending.
 GRAPH_NEXT = "Anvil OData paging: the page envelope does not carry Graph's @odata.nextLink yet"
+#: GET .../content reads one item's bytes; Anvil classifies it as a list and serves a page.
+GRAPH_CONTENT = "Anvil paging classification: a driveItem's GET .../content is served as a page"
 
 
 def _outlook_records() -> list[ConnectorRecord]:
@@ -645,4 +647,62 @@ def _outlook(s: Session) -> None:
 @needs_anvil
 def test_outlook_parity_through_the_vendor_graph_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("outlook", _outlook_records(), cache, tmp_path, _outlook)
+    session.landing.settle()
+
+
+# -- Microsoft Graph: OneDrive ---------------------------------------------------------------
+
+
+def _drive_items(connector: str, prefix: str) -> list[ConnectorRecord]:
+    folders = [ConnectorRecord(id=f"{prefix}-f{n}", connector=connector, entity="folder", external_id=f"01FOLDER{n}",
+                               title=name, fields={"name": name, "parent": "root"})
+               for n, name in enumerate(("Finance", "Archive"), start=1)]
+    files = [ConnectorRecord(id=f"{prefix}-{n}", connector=connector, entity=entity, external_id=f"01ITEM{n}", title=name,
+                             fields={"name": name, "parent": "01FOLDER1", "body": text,
+                                     "modified_at": f"2026-09-0{n}T09:00:00Z"})
+             for n, (entity, name, text) in enumerate((("docx", "Budget memo.docx", "Budget for the quarter"),
+                                                        ("xlsx", "Budget model.xlsx", "Budget model"),
+                                                        ("pdf", "Audit letter.pdf", "Letter from the auditor")), start=1)]
+    return [*folders, *files]
+
+
+def _onedrive(s: Session) -> None:
+    drive = "/drives/b!drive1"
+    status, body = s.http("GET", f"{drive}/search(q='budget')")
+    mine = s.local("search_items", query="budget", drive_id="b!drive1")[1]  # search(q=) is KQL, as Microsoft Search reads it
+    assert status == 200 and body["value"] == mine["items"] and len(mine["items"]) == 2
+    status, body = s.http("GET", f"{drive}/items/01FOLDER1/children")
+    assert status == 200 and body["value"] == s.local("list_children", id="01FOLDER1")[1]["items"]
+    assert s.http("GET", f"{drive}/items/01ITEM1") == s.local("get_item", id="01ITEM1")
+    assert s.http("GET", f"{drive}/items/01ITEM1", query={"$select": "name,size"}) == s.local(
+        "get_item", id="01ITEM1", fields=["name", "size"])
+    status, body = s.http("GET", f"{drive}/items/01ITEM3/content")
+    record = s.local("download_content", id="01ITEM3")[1]
+    assert status == 200 and record in (body, *(body.get("items") or ()))
+    s.landing.expect(body == record, GRAPH_CONTENT)
+    # A folder facet creates a folder; a file name creates a file of its type.
+    status, folder = s.http("POST", f"{drive}/items/01FOLDER1/children", {"name": "Q3", "folder": {}})
+    mine = s.local("create_folder", entity="folder", name="Q3", parent="01FOLDER1", fields={"name": "Q3"})[1]
+    assert (status, folder) == (201, mine)
+    status, upload = s.http("POST", f"{drive}/items/01FOLDER1/children", {"name": "Plan.docx", "file": {}})
+    mine = s.local("upload_file", entity="docx", name="Plan.docx", parent="01FOLDER1", fields={"name": "Plan.docx"})[1]
+    assert (status, upload) == (201, mine)
+    # A rename is an update; a new parentReference is a move.
+    assert s.http("PATCH", f"{drive}/items/01ITEM2", {"name": "Budget model v2.xlsx"}) == s.local(
+        "update_item", id="01ITEM2", fields={"name": "Budget model v2.xlsx"})
+    assert s.http("PATCH", f"{drive}/items/01ITEM3", {"parentReference": {"id": "01FOLDER2"}}) == s.local(
+        "move_item", id="01ITEM3", parent="01FOLDER2")
+    assert s.http("DELETE", f"{drive}/items/01ITEM1")[0] in (200, 204)
+    s.local("delete_item", id="01ITEM1")
+    # Errors: an item that does not exist, a move into a file.
+    assert s.http("GET", f"{drive}/items/01NOPE") == s.local("get_item", id="01NOPE")
+    assert s.http("PATCH", f"{drive}/items/01ITEM2", {"parentReference": {"id": "01ITEM3"}}) == s.local(
+        "move_item", id="01ITEM2", parent="01ITEM3")
+    status, _ = s.http("POST", f"{drive}/items/01ITEM2/checkout")
+    assert status >= 400
+
+
+@needs_anvil
+def test_onedrive_parity_through_the_vendor_graph_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("onedrive", _drive_items("onedrive", "od"), cache, tmp_path, _onedrive)
     session.landing.settle()

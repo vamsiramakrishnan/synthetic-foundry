@@ -403,15 +403,20 @@ def lint_mapping(mapping: AnvilMapping, operations: Sequence[ContractOperation],
             advisories.append(f"not_served: {entry.operation_id} is mapped but the contract does not expose it")
         if entry.unmodelled is not None or definition is None or entry.tool is None:
             continue
+        # With several tools, an argument is sent to the one chosen when it
+        # takes it; one that no tool takes is an error.
+        taken: set[str] = set()
         for name in entry.tools:
             try:
                 tool = definition.tool(definition.canonical_tool(name))
             except KeyError:
                 errors.append(f"unknown_tool: {entry.operation_id} maps to {mapping.connector}.{name}, which the definition does not declare")
                 continue
-            unknown = sorted(set(entry.args) - set(tool.params))
-            if unknown:
-                errors.append(f"unknown_arguments: {entry.operation_id} passes {unknown} to {mapping.connector}.{name}")
+            taken |= set(tool.params)
+        unknown = sorted(set(entry.args) - taken) if taken else []
+        if unknown:
+            errors.append(f"unknown_arguments: {entry.operation_id} passes {unknown} to {mapping.connector}."
+                          f"{'/'.join(entry.tools)}")
     return tuple(errors), tuple(sorted(advisories))
 
 
@@ -639,6 +644,24 @@ def _slack_in(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping
     return f"in:{value}"
 
 
+_EXTENSION_ENTITIES = {"docx": "docx", "xlsx": "xlsx", "pptx": "pptx", "pdf": "pdf", "csv": "csv", "html": "html",
+                       "md": "markdown"}
+
+
+def _drive_item_entity(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
+    """A Graph driveItem body as the entity it creates: a folder facet is a folder, else the name's extension."""
+
+    if not isinstance(value, Mapping):
+        return _MISSING
+    if value.get("folder") is not None:
+        return "folder"
+    extension = str(value.get("name") or "").rsplit(".", 1)[-1].casefold()
+    entity = _EXTENSION_ENTITIES.get(extension)
+    if entity is not None and entity in definition.entities:
+        return entity
+    return "file" if "file" in definition.entities else (entity or extension)
+
+
 def _slack_ts(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
     """A Slack message timestamp as its string, six decimals.
 
@@ -674,6 +697,7 @@ TRANSFORMS: Mapping[str, Callable[[Any, Any, AnvilMapping], Any]] = {
     "assignee": _assignee,
     "cql": _cql,
     "csv": _csv,
+    "drive_item_entity": _drive_item_entity,
     "entity": _entity,
     "fields": _fields,
     "flatten": _flatten,
@@ -739,9 +763,28 @@ def plan_call(mapping: AnvilMapping, entry: OperationMap, request: Mapping[str, 
             args["start_at"] = start_at
     tool = entry.tool
     if entry.tool_by is not None and not entry.tool_by[0].startswith("record."):
-        chosen = read_location(request, entry.tool_by[0])
-        tool = entry.tool_by[1].get(str(chosen), tool) if chosen is not _MISSING else tool
-    return PlannedCall(tool=tool, args=args, start_at=start_at)
+        tool = _choose(entry, read_location(request, entry.tool_by[0]))
+    return PlannedCall(tool=tool, args=_taken(definition, tool, args), start_at=start_at)
+
+
+def _choose(entry: OperationMap, value: Any) -> str:
+    """The tool ``tool_by`` names for *value*: its own key, else ``*`` for any value present, else the entry's tool."""
+
+    assert entry.tool is not None and entry.tool_by is not None
+    if value is _MISSING or value is None:
+        return entry.tool
+    choices = entry.tool_by[1]
+    return choices.get(str(value), choices.get("*", entry.tool))
+
+
+def _taken(definition: ConnectorDefinition, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """*args* the chosen *tool* takes; an entry with several tools reads arguments only some of them take."""
+
+    try:
+        params = definition.tool(definition.canonical_tool(tool)).params
+    except KeyError:
+        return args
+    return {name: value for name, value in args.items() if name in params}
 
 
 def _offset(cursor: Any) -> int:
@@ -848,8 +891,9 @@ def answer(mapping: AnvilMapping, backend: Backend, request: Mapping[str, Any]) 
         # route updates a Google Doc with one tool and an upload with another).
         stored = backend.record(planned.args["id"])
         value = stored.get(entry.tool_by[0].split(".", 1)[1]) if stored is not None else None
-        if value is not None and str(value) in entry.tool_by[1]:
-            planned = PlannedCall(tool=entry.tool_by[1][str(value)], args=planned.args, start_at=planned.start_at)
+        chosen = _choose(entry, value)
+        if chosen != planned.tool:
+            planned = PlannedCall(tool=chosen, args=_taken(backend.definition, chosen, planned.args), start_at=planned.start_at)
     try:
         result = backend.call(planned.tool, planned.args)
         response = _shape(mapping, entry, backend, request, planned, result)
