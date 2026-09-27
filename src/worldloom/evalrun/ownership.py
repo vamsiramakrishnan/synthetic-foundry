@@ -30,10 +30,12 @@ that fired and the evidence it read. The first rule that applies wins.
 
 Case-level rules, before any key is read:
 
-1. ``world.proof``: the case carries a solvability proof record (the
-   ``proofs`` mapping, or ``case.row["proof"]``) that says the case cannot
-   be solved: every finding of the case is the world's. A proof that names
-   unreachable plan nodes makes only the missing-node findings on those
+1. ``world.proof``: the case's solvability proof (``proofs``, by case id: the
+   ``CaseProof`` entries of the ``proof.json`` that ``evalrun prove --record``
+   and the case writers put beside a case set, read by ``read_proofs``) says
+   the case cannot be solved: every finding of the case is the world's, and
+   the evidence names the proof's first failing node and why. A proof that
+   names unreachable plan nodes makes only the missing-node findings on those
    nodes the world's.
 2. ``grader.disagreement``: a peer run (another repeat, another agent) left
    the same case with the identical trajectory (the same calls, arguments,
@@ -168,10 +170,8 @@ def _clip(text: str) -> str:
 
 
 def _proof_of(case_id: str, case: EvalCase | None, proofs: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
-    """The solvability proof record of a case, from *proofs* or the case row; ``None`` without one."""
+    """The solvability proof of a case from *proofs* (``read_proofs``, or a ``ProofReport``'s cases); ``None`` without one."""
     found = (proofs or {}).get(case_id)
-    if found is None and case is not None and isinstance(case.row, Mapping):
-        found = case.row.get("proof") or case.row.get("solvability")
     if found is not None and hasattr(found, "model_dump"):
         found = found.model_dump(mode="json")
     return found if isinstance(found, Mapping) else None
@@ -185,6 +185,10 @@ def _unsolvable(proof: Mapping[str, Any]) -> bool:
 
 
 def _proof_reason(proof: Mapping[str, Any]) -> str:
+    # `evalrun prove` names the first failing node, the check and why.
+    failure = proof.get("failure")
+    if isinstance(failure, Mapping) and failure.get("reason"):
+        return f"node {failure.get('node')}, {failure.get('check')}: {failure.get('reason')}"
     for name in ("reason", "reasons", "detail", "findings"):
         value = proof.get(name)
         if isinstance(value, str) and value:
@@ -472,29 +476,26 @@ def compare_ownership(baseline: Ownership, recent: Ownership) -> dict[str, dict[
 
 
 def read_proofs(directory: Any) -> dict[str, Any]:
-    """Solvability proof records a case set carries beside its cases, by case id; empty when there are none.
+    """The solvability proofs a case set carries, by case id; empty when it carries none.
 
-    Read from ``proofs.jsonl`` or ``solvability.jsonl`` (one record per line
-    with a ``case_id``) in the case set's directory.
+    The record is the one ``evalrun prove --record`` and the case writers
+    (``enterprise-evals build``, ``corners.write_case_set``) write:
+    ``proof.json`` beside the cases (``evalrun.proof``). *directory* is the
+    case set, or the ``proof.json`` itself. Each case's entry is its
+    ``CaseProof`` (``solvable``, the first ``failure`` with its node, check
+    and reason, every failure, the reference's scores); a case the writer
+    dropped as unsolvable is included too, so a run over an older copy of the
+    set still finds its proof.
     """
     from pathlib import Path
 
-    out: dict[str, Any] = {}
-    base = Path(directory)
-    for name in ("proofs.jsonl", "solvability.jsonl"):
-        path = base / name
-        if not path.is_file():
-            continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                record = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(record, dict) and isinstance(record.get("case_id"), str):
-                out.setdefault(record["case_id"], record)
-    return out
+    from .proof import PROOF_FILE, read_proof
+
+    path = Path(directory)
+    report = read_proof(path.parent if path.name == PROOF_FILE else path)
+    if report is None:
+        return {}
+    return {item.case_id: item.model_dump(mode="json") for item in (*report.cases, *report.dropped)}
 
 
 __all__ = [

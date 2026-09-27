@@ -427,7 +427,7 @@ worldloom evalrun autopsy <RUN>
 | `--out`, `-o` | Write the autopsy as JSON here. |
 | `--owners` | Attribute every failing finding to an owner (agent, interface, world or grader) and print the shares. |
 | `--peer` | Another run over the same cases (a repeat): the identical trajectory scored differently is the grader's. Repeat per run. |
-| `--proofs` | A directory holding solvability proof records (proofs.jsonl or solvability.jsonl): a case they prove unsolvable is the world's. |
+| `--proofs` | The case set whose proof.json (written by `evalrun prove --record` or the case writer) says which cases are unsolvable: their findings are the world's. |
 | `--reference-run` | A reference-agent run over the same cases: a finding it shares is the world's. |
 | `--top` | Clusters to report in full; the rest are counted. |
 

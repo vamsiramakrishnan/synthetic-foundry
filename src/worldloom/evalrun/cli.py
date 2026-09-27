@@ -813,7 +813,7 @@ def autopsy_command(
     json_output: bool = typer.Option(False, "--json", help="Print the autopsy as JSON instead of the brief."),
     owners: bool = typer.Option(True, "--owners/--no-owners", help="Attribute every failing finding to an owner (agent, interface, world or grader) and print the shares."),
     reference_run: Path | None = typer.Option(None, "--reference-run", help="A reference-agent run over the same cases: a finding it shares is the world's."),
-    proofs: Path | None = typer.Option(None, "--proofs", help="A directory holding solvability proof records (proofs.jsonl or solvability.jsonl): a case they prove unsolvable is the world's."),
+    proofs: Path | None = typer.Option(None, "--proofs", help="The case set whose proof.json (written by `evalrun prove --record` or the case writer) says which cases are unsolvable: their findings are the world's."),
     peer: list[Path] | None = typer.Option(None, "--peer", help="Another run over the same cases (a repeat): the identical trajectory scored differently is the grader's. Repeat per run."),
 ) -> None:
     """Cluster a run's failing cases by finding and print a brief an improver can act on.

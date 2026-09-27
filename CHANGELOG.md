@@ -87,6 +87,11 @@ first written up, before the waves above it landed.
   declare (`incidents` for `incident`) crashed the agent's turn with a
   `KeyError` from node attribution; it now gets the emulator's `Unknown
   entity` validation error, as the vendor would answer.
+- **Failure ownership reads the proof.** `evalrun.ownership.read_proofs`
+  (and `evalrun autopsy --proofs <case set>`) reads the `proof.json` the proof
+  writes, dropped cases included, in place of the `proofs.jsonl`,
+  `solvability.jsonl` and row fields it guessed at; a `world.proof`
+  attribution names the proof's first failing node, check and reason.
 - **Fixed: one name for a rendered file.** The served emulator named a
   `ConnectorRecord` by its title while a compiled row's snapshot named it by
   `fields.name`; on a rendered SharePoint or Drive file (whose `name` is its

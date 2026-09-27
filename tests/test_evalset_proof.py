@@ -433,3 +433,25 @@ def test_cases_over_a_rendered_world_prove_without_a_result_mismatch() -> None:
     mismatched = [(item.case_id, failure.reason) for item in report.cases for failure in item.failures
                   if "result_mismatch" in failure.reason]
     assert mismatched == []
+
+
+
+# -- failure ownership reads the proof ----------------------------------------------------
+
+
+def test_an_unsolvable_cases_findings_are_the_worlds_by_the_recorded_proof(tmp_path: Path) -> None:
+    from worldloom.evalrun.ownership import read_proofs
+
+    cases = _case_set(tmp_path / "cases", [_row(), _row(move={"fixture": "rec-404"}, case_id="broken")])
+    assert runner.invoke(app, ["evalrun", "prove", str(cases), "--record"]).exit_code == 1
+    proofs = read_proofs(cases)
+    assert proofs["broken"]["solvable"] is False and proofs["triage"]["solvable"] is True
+    assert read_proofs(cases / PROOF_FILE) == proofs and read_proofs(tmp_path) == {}
+
+    run = runner.invoke(app, ["evalrun", "run", str(cases), "-o", str(tmp_path / "run")])
+    assert run.exit_code == 0, run.output
+    result = runner.invoke(app, ["evalrun", "autopsy", str(tmp_path / "run"), "--proofs", str(cases), "--json"])
+    assert result.exit_code == 0, result.output
+    owned = [item for item in json.loads(result.stdout)["ownership"]["attributions"] if item["case_id"] == "broken"]
+    assert owned and {(item["owner"], item["rule"]) for item in owned} == {("world", "world.proof")}
+    assert all("node move, write.error" in item["evidence"][0] for item in owned)

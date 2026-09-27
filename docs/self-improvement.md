@@ -962,7 +962,7 @@ the evidence it read:
 
 | Owner | What it means | Rules |
 |---|---|---|
-| `world` | the case or corpus: evidence unreachable, request ambiguous, data contradictory | a solvability proof record (`proofs.jsonl`, `solvability.jsonl`, or `row.proof`) says the case cannot be solved, or names the missing node unreachable; the reference agent fails the case with the same key |
+| `world` | the case or corpus: evidence unreachable, request ambiguous, data contradictory | the case set's solvability proof (`proof.json`, written by `evalrun prove --record` and the case writers; `--proofs <case set>`) says the case cannot be solved, naming its first failing node, or names the missing node unreachable; the reference agent fails the case with the same key |
 | `grader` | the measurement | a peer run left the identical trajectory (calls, arguments, errors, answer) with a different verdict; the Anvil replay diverged from what was served; `unclassified`, `assertion.fail`, `outcomes.answer_unrated` |
 | `interface` | the surface misled the agent or could not express the need | `error:validation_error`, `schema_mismatch`, `unsupported_operation`; a refused call; a malformed query on a tool whose served surface shows no grammar; a validation `query.error`; a short-paged search on a tool that declares no pagination; a missing node whose tool the surface does not expose; a serving error; and, in a case where no read node was served successfully because of one of those, the findings that follow from never getting evidence (named as consequences of the root finding) |
 | `agent` | planning and behaviour | everything else |
