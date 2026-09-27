@@ -537,3 +537,20 @@ def test_the_corner_builder_draws_fresh_worlds_and_escalates_to_the_frontier(tmp
     assert len(train_records.groups) + len(held_records.groups) >= 3
     frontier_train, _, _, _, how = builder(replace(request, mode="escalate"))
     assert how.startswith("escalate:") and frontier_train, "an idle champion fails every corner the reference solves"
+
+
+def test_a_baseline_case_can_never_enter_a_sealed_held_out_set(corpus: Any, seed_case: Any, tmp_path: Path) -> None:
+    # The baseline's autopsy shapes stage 1, so its cases count as trained on.
+    registry: dict[str, Any] = {seed_case.id: seed_case}
+
+    class HoldsTheBaseline(ScriptedBuilder):
+        def __call__(self, request: StageRequest) -> Any:
+            train, held, records, held_records, note = super().__call__(request)
+            return train, [*held, seed_case], records, held_records, note
+
+    builder = HoldsTheBaseline(seed_case, corpus.connector_data.records, registry)
+    report = _campaign(corpus, seed_case, tmp_path / "c", builder=builder, registry=registry, stages=1,
+                       baseline=((seed_case,), tuple(corpus.connector_data.records)))
+    assert report.stopped == "held_out_overlap" and not report.stages
+    assert "trained on" in report.reasons[0]
+    assert not (tmp_path / "c" / "stages" / "001" / "improve").exists(), "nothing ran on the leaked set"

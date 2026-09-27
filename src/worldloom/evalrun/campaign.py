@@ -680,6 +680,9 @@ def campaign(
         baseline_summary = {"case_set": case_set_digest(cases), "cases": len(cases), "passed": summary.passed,
                             "pass_rate": summary.pass_rate, "mean": summary.means.overall}
         previous = state.outcome(0, "baseline", original, cases, groups, run_report, None)
+        # The baseline's failures shape the first stage's curriculum, so its
+        # cases count as trained on: none may enter a sealed held-out set.
+        trained.update(map(case_key, cases))
     stopped: str = "max_stages"
     reasons: tuple[str, ...] = (f"ran {limit} stage(s), the stage budget",)
     for number in range(1, limit + 1):

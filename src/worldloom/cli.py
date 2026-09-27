@@ -1492,11 +1492,11 @@ def build(
             "would write the least plausible sentence in the corpus."
         ),
     ),
-    realism: str = typer.Option(
-        "enterprise", "--realism",
+    realism: str | None = typer.Option(
+        None, "--realism",
         help=(
             "How the world materialises into files. `enterprise` (the default"
-            " for new builds) writes the documents a company keeps: controlled"
+            " for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled"
             " reports with cover, document control, contents, numbered sections,"
             " schedules from the pack's workbook, appendices, revision files and"
             " reviewer comments; decks on real layouts with speaker notes and"
@@ -1603,10 +1603,11 @@ def build(
             _refuse("unknown_locale", f"[red]error:[/red] {escape(str(exc))}")
     from . import realism_profiles
 
-    try:
-        realism = realism_profiles.named(realism)
-    except ValueError as exc:
-        _refuse("unknown_realism", f"[red]error:[/red] {escape(str(exc))}")
+    if realism is not None:
+        try:
+            realism = realism_profiles.named(realism)
+        except ValueError as exc:
+            _refuse("unknown_realism", f"[red]error:[/red] {escape(str(exc))}")
     if timeline is not None and timeline not in _TIMELINE_DENSITIES:
         _refuse(
             "unknown_timeline",
@@ -3099,6 +3100,13 @@ def build(
     # recorded before rendering so the files and the record of how they were
     # made cannot disagree, and absent under `legacy` so a legacy build's
     # world.json is the one every earlier build wrote.
+    # A replay keeps the profile its source recorded unless one is asked
+    # for; the replay comparison ignores the key, so defaulting to enterprise
+    # here would silently re-materialise a legacy corpus. New builds default
+    # to enterprise.
+    if realism is None:
+        realism = (realism_profiles.of(replay_source if replay_source is not None else _load(str(replay)))
+                   if replay is not None else realism_profiles.ENTERPRISE)
     world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
     if formats:
         from .render import RenderError

@@ -308,3 +308,25 @@ def test_cli_evals_export_emits_jsonl(tmp_path) -> None:
     lines = out.read_text().strip().splitlines()
     assert len(lines) == 28
     assert all(line.startswith("{") for line in lines)
+
+
+def test_cli_replay_keeps_the_realism_profile_its_source_recorded(tmp_path) -> None:
+    first, second, third = tmp_path / "first", tmp_path / "second", tmp_path / "third"
+    built = runner.invoke(app, ["build", "--seed", "8128", "--incident", "--narrate", "--realism", "legacy",
+                                "-f", "markdown", "--out", str(first)])
+    assert built.exit_code == 0, built.output
+
+    # No --realism on the replay: the source's legacy profile, file for file.
+    replayed = runner.invoke(app, ["build", "--seed", "8128", "--incident", "--replay", str(first),
+                                   "-f", "markdown", "--out", str(second)])
+    assert replayed.exit_code == 0, replayed.output
+    for path in first.rglob("*"):
+        if path.is_file():
+            relative = path.relative_to(first)
+            assert path.read_bytes() == (second / relative).read_bytes(), relative
+
+    # Asked for explicitly, a replay may re-materialise under another profile.
+    enterprise = runner.invoke(app, ["build", "--seed", "8128", "--incident", "--replay", str(first),
+                                     "--realism", "enterprise", "-f", "markdown", "--out", str(third)])
+    assert enterprise.exit_code == 0, enterprise.output
+    assert (third / "world.json").read_bytes() != (first / "world.json").read_bytes()
