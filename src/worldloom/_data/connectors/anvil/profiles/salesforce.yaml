@@ -1,0 +1,11 @@
+# Worldloom exposure profile for the authored Salesforce contract
+# (contracts/salesforce.openapi.json).
+#
+# SOQL query and its continuation and sObject rows, which the salesforce
+# connector's tools model; and the neighbours an agent might reach for
+# instead: queryAll, SOSL search, the describes and the org's limits. The
+# contract was authored to this scope, so the profile selects all of it.
+profile: worldloom-salesforce
+description: Salesforce records as the Worldloom salesforce connector models them, with the neighbours an agent might misuse.
+select: all
+unexposed: skip

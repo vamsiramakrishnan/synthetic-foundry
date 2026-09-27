@@ -1,0 +1,27 @@
+# Worldloom exposure profile for Outlook mail in Microsoft Graph v1.0.
+#
+# The signed-in user's messages, mail folders and message attachments, which
+# the outlook connector's tools model, and the neighbours an agent might reach
+# for instead: reply-all, copy, create-reply drafts, sending a draft by id,
+# child folders, folder copy and move, and folder-scoped message listing.
+profile: worldloom-outlook
+description: Outlook mail as the Worldloom outlook connector models it, with the neighbours an agent might misuse.
+select:
+  - path:
+      - "/me/messages"
+      - "/me/messages/{message-id}"
+      - "/me/messages/{message-id}/attachments"
+      - "/me/messages/{message-id}/attachments/{attachment-id}"
+      - "/me/messages/{message-id}/reply"
+      - "/me/messages/{message-id}/replyAll"
+      - "/me/messages/{message-id}/forward"
+      - "/me/messages/{message-id}/move"
+      - "/me/messages/{message-id}/copy"
+      - "/me/messages/{message-id}/send"
+      - "/me/messages/{message-id}/createReply"
+      - "/me/sendMail"
+      - "/me/mailFolders"
+      - "/me/mailFolders/{mailFolder-id}"
+      - "/me/mailFolders/{mailFolder-id}/messages"
+      - "/me/mailFolders/{mailFolder-id}/childFolders"
+unexposed: skip

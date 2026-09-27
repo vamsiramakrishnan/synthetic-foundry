@@ -1,0 +1,57 @@
+# Anvil manifest for the Confluence Cloud REST API v2, compiled under
+# profiles/confluence.yaml.
+#
+# Confluence declares basic auth and OAuth as alternatives, which leaves every
+# operation blocked until the service chooses one; `basic` is the one an API
+# token uses. Creates append a new page, post or comment on every call and
+# carry no dedupe key, so a retry after a failure could duplicate them.
+service:
+  name: confluence
+  display_name: Confluence Cloud REST API v2
+  owner: worldloom
+  environment: prod
+
+auth:
+  type: basic
+  scopes:
+    - read:page:confluence
+    - write:page:confluence
+    - read:comment:confluence
+    - write:comment:confluence
+
+operations:
+  createPage:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Creates a new page; retrying after a failure may create a duplicate.
+    retries:
+      enabled: false
+
+  createBlogPost:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Creates a new blog post; retrying after a failure may create a duplicate.
+    retries:
+      enabled: false
+
+  createFooterComment:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Adds a comment; retrying after a failure may post it twice.
+    retries:
+      enabled: false

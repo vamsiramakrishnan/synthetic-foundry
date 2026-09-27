@@ -1,0 +1,85 @@
+# Anvil manifest for the Jira Cloud platform REST API v3, compiled under
+# profiles/jira.yaml.
+#
+# The operation policies follow Anvil's own Jira backtest manifest
+# (docs/backtesting/reproduce/manifests/jira.anvil.yaml in the Anvil
+# repository). The service auth is `basic`, one of the two alternatives the
+# Jira spec declares: with both left open every operation compiles `blocked`.
+# Approval is not granted here; `worldloom contracts build` approves the
+# profile's operations with `anvil approve --profile`.
+service:
+  name: jira
+  display_name: Jira Cloud platform REST API
+  owner: worldloom
+  environment: prod
+
+auth:
+  type: basic
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - manage:jira-project
+
+operations:
+  # Jira assigns a new key on every create and has no dedupe key.
+  createIssue:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Creates a new Jira issue; retrying after a failure may create a duplicate.
+    retries:
+      enabled: false
+
+  # Each call appends a new comment.
+  addComment:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Adds a comment; retrying after a failure may post it twice.
+    retries:
+      enabled: false
+
+  # Re-issuing a transition to the state an issue is already in is a no-op.
+  doTransition:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: natural
+
+  addWatcher:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: natural
+
+  addWorklog:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Logs work time on the issue; retrying after a failure may double it.
+    retries:
+      enabled: false
+
+  linkIssues:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Links two issues; retrying after a failure may create a duplicate link.
+    retries:
+      enabled: false

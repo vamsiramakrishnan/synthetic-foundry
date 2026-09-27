@@ -1,0 +1,25 @@
+# Worldloom exposure profile for OneDrive files in Microsoft Graph v1.0.
+#
+# Drive items by id (get, list children, create, update, delete, content,
+# copy), the drive search function, and the neighbours an agent might reach
+# for instead: checkin and checkout, sharing links and invitations,
+# permissions, restore, recent and shared-with-me listings.
+profile: worldloom-onedrive
+description: OneDrive items as the Worldloom onedrive connector models them, with the neighbours an agent might misuse.
+select:
+  - path:
+      - "/drives/{drive-id}/items/{driveItem-id}"
+      - "/drives/{drive-id}/items/{driveItem-id}/children"
+      - "/drives/{drive-id}/items/{driveItem-id}/content"
+      - "/drives/{drive-id}/items/{driveItem-id}/copy"
+      - "/drives/{drive-id}/items/{driveItem-id}/checkin"
+      - "/drives/{drive-id}/items/{driveItem-id}/checkout"
+      - "/drives/{drive-id}/items/{driveItem-id}/createLink"
+      - "/drives/{drive-id}/items/{driveItem-id}/invite"
+      - "/drives/{drive-id}/items/{driveItem-id}/restore"
+      - "/drives/{drive-id}/items/{driveItem-id}/permissions"
+      - "/drives/{drive-id}/search(q='{q}')"
+      - "/drives/{drive-id}/recent()"
+      - "/drives/{drive-id}/sharedWithMe()"
+      - "/drives/{drive-id}/root"
+unexposed: skip

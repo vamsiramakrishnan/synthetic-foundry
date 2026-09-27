@@ -112,6 +112,7 @@ evals_app.add_typer(calibration_app, name="calibration")
 evals_app.add_typer(dataset_app, name="dataset")
 
 # Keep operational generation in its own command module, not this monolith.
+from .contracts_cli import app as contracts_app
 from .evalrun.cli import app as evalrun_app
 from .gemini_enterprise.cli import app as gemini_enterprise_app
 from .interview_cli import app as interview_app
@@ -126,6 +127,7 @@ app.add_typer(studio_app, name="studio")
 _install_pack_commands(pack_app)
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 app.add_typer(evalrun_app, name="evalrun")
+app.add_typer(contracts_app, name="contracts")
 app.add_typer(interview_app, name="interview")
 
 
@@ -800,6 +802,8 @@ _REFUSALS: dict[str, str] = {
     "unknown_harness_mode": "the --harness-mode value is not turns or sdk-program",
     "unknown_lever": "the --levers value names something other than agent and interface",
     "anvil_unavailable": "Anvil cannot serve the run: no Anvil CLI, an unreadable contract, or a contract its connector's mapping does not cover",
+    # `worldloom contracts`.
+    "contract_refused": "the contract lock does not read, a source's sha256 is not the locked one, Anvil refused the compile, or the mapping does not cover the bundle",
     "no_writer": "the command needs a writer and none was named",
     "script_unreadable": "the scripted agent's JSON file cannot be read",
     "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",

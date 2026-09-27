@@ -1,0 +1,73 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "servicenow",
+  "service": "servicenow",
+  "contract": "ServiceNow Table, Aggregate and Attachment APIs as Worldloom authored them from the REST API reference (contracts/servicenow.openapi.json), compiled under profiles/servicenow.yaml with --service servicenow",
+  "error_body": {"error": {"message": "{message}", "detail": ""}, "status": "failure"},
+  "operations": {
+    "servicenow.table.get.by_table_name": {
+      "route": "GET /api/now/table/{tableName}",
+      "vendor": "getTableRecords",
+      "tool": "search_records",
+      "tool_by": {"from": "path.tableName", "map": {"kb_knowledge": "search_kb", "cmdb_ci": "query_cmdb"}},
+      "args": {
+        "entity": {"from": "path.tableName", "map": {"kb_knowledge": "kb_article", "sc_request": "catalog_request"}},
+        "query": "query.sysparm_query",
+        "max_results": {"from": "query.sysparm_limit", "transform": "int"},
+        "fields": {"from": "query.sysparm_fields", "transform": "csv"}
+      },
+      "cursor": "query.sysparm_offset",
+      "result": {"shape": "list", "envelope": {"result": "$items"}}
+    },
+    "servicenow.table.get.by_sys_id": {
+      "route": "GET /api/now/table/{tableName}/{sys_id}",
+      "vendor": "getTableRecord",
+      "tool": "get_record",
+      "tool_by": {"from": "path.tableName", "map": {"kb_knowledge": "get_kb_article"}},
+      "args": {
+        "id": {"from": "path.sys_id", "required": true},
+        "fields": {"from": "query.sysparm_fields", "transform": "csv"}
+      },
+      "result": {"shape": "record", "envelope": {"result": "$record"}}
+    },
+    "servicenow.table.create": {
+      "route": "POST /api/now/table/{tableName}",
+      "vendor": "createTableRecord",
+      "tool": "create_record",
+      "tool_by": {"from": "path.tableName", "map": {"kb_knowledge": "create_kb_article", "sc_request": "create_catalog_request"}},
+      "args": {
+        "entity": {"from": "path.tableName", "map": {"kb_knowledge": "kb_article", "sc_request": "catalog_request"}, "required": true},
+        "name": {"from": "body.short_description"},
+        "fields": {"from": "body", "transform": "fields", "required": true}
+      },
+      "result": {"shape": "record", "envelope": {"result": "$record"}}
+    },
+    "servicenow.table.update": {
+      "route": "PATCH /api/now/table/{tableName}/{sys_id}",
+      "vendor": "updateTableRecord",
+      "tool": "update_record",
+      "tool_by": {"from": "path.tableName", "map": {"kb_knowledge": "update_kb_article", "cmdb_ci": "update_cmdb_ci"}},
+      "args": {
+        "id": {"from": "path.sys_id", "required": true},
+        "fields": {"from": "body", "transform": "fields", "required": true}
+      },
+      "result": {"shape": "record", "envelope": {"result": "$record"}}
+    },
+    "servicenow.table.replace": {
+      "route": "PUT /api/now/table/{tableName}/{sys_id}",
+      "vendor": "replaceTableRecord",
+      "tool": "update_record",
+      "tool_by": {"from": "path.tableName", "map": {"kb_knowledge": "update_kb_article", "cmdb_ci": "update_cmdb_ci"}},
+      "args": {
+        "id": {"from": "path.sys_id", "required": true},
+        "fields": {"from": "body", "transform": "fields", "required": true}
+      },
+      "result": {"shape": "record", "envelope": {"result": "$record"}}
+    },
+    "servicenow.table.delete": {"route": "DELETE /api/now/table/{tableName}/{sys_id}", "vendor": "deleteTableRecord", "unmodelled": "the servicenow definition declares no delete tool; records are resolved and closed, never removed"},
+    "servicenow.stats.get": {"route": "GET /api/now/stats/{tableName}", "vendor": "getTableStats", "unmodelled": "aggregates are computed over records, not records; the definition declares no aggregate tool"},
+    "servicenow.attachment.list": {"route": "GET /api/now/attachment", "vendor": "getAttachments", "unmodelled": "attachments are not a servicenow entity the definition declares"},
+    "servicenow.attachment.get": {"route": "GET /api/now/attachment/{sys_id}", "vendor": "getAttachment", "unmodelled": "attachments are not a servicenow entity the definition declares"},
+    "servicenow.attachment.delete": {"route": "DELETE /api/now/attachment/{sys_id}", "vendor": "deleteAttachment", "unmodelled": "attachments are not a servicenow entity the definition declares"}
+  }
+}

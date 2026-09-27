@@ -1,0 +1,38 @@
+# Worldloom exposure profile for the Jira Cloud platform REST API v3.
+#
+# The operations the jira connector's tools model (search, get, create, edit,
+# assign, transition, comment) and the neighbours an agent is likely to reach
+# for by mistake: delete instead of a transition, a comment edit, watchers,
+# worklogs, links, project and field lookups. These are the 26 operations of
+# Anvil's own Jira backtest, so a result here reads against that one.
+profile: worldloom-jira
+description: Issue tracking as the Worldloom jira connector models it, with the neighbours an agent might misuse.
+select:
+  - operation_id:
+      - searchAndReconsileIssuesUsingJqlPost
+      - getIssue
+      - createIssue
+      - editIssue
+      - deleteIssue
+      - assignIssue
+      - getTransitions
+      - doTransition
+      - getComments
+      - addComment
+      - updateComment
+      - deleteComment
+      - getIssueWatchers
+      - addWatcher
+      - removeWatcher
+      - getIssueWorklog
+      - addWorklog
+      - linkIssues
+      - deleteIssueLink
+      - getIssueLinkTypes
+      - getIssueTypesForProject
+      - searchProjects
+      - getProject
+      - getProjectComponents
+      - getProjectVersions
+      - getFieldsPaginated
+unexposed: skip

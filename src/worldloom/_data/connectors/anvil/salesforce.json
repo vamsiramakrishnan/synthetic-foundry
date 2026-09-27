@@ -1,0 +1,70 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "salesforce",
+  "service": "salesforce",
+  "contract": "Salesforce Platform REST API v61.0 (query, search, describe, sObject rows, limits) as Worldloom authored it from the REST API Developer Guide (contracts/salesforce.openapi.json), compiled under profiles/salesforce.yaml with --service salesforce",
+  "error_body": [{"message": "{text}", "errorCode": "{errorCode}"}],
+  "operations": {
+    "salesforce.query.list": {
+      "route": "GET /services/data/v61.0/query",
+      "vendor": "query",
+      "tool": "query",
+      "args": {"query": {"from": "query.q", "required": true}},
+      "result": {
+        "shape": "list", "cursor": "locator", "next_link": "/services/data/v61.0/query/{cursor}",
+        "envelope": {"totalSize": "$total", "done": "$is_last", "nextRecordsUrl": "$next_link", "records": "$items"}
+      }
+    },
+    "salesforce.query.get": {
+      "route": "GET /services/data/v61.0/query/{queryLocator}",
+      "vendor": "queryMore",
+      "tool": "query",
+      "args": {"query": {"from": "path.queryLocator", "transform": "locator_query", "required": true}},
+      "cursor": "path.queryLocator",
+      "result": {
+        "shape": "list", "cursor": "locator", "next_link": "/services/data/v61.0/query/{cursor}",
+        "envelope": {"totalSize": "$total", "done": "$is_last", "nextRecordsUrl": "$next_link", "records": "$items"}
+      }
+    },
+    "salesforce.sobjects.get": {
+      "route": "GET /services/data/v61.0/sobjects/{sObject}/{id}",
+      "vendor": "getSObject",
+      "tool": "get_record",
+      "args": {
+        "id": {"from": "path.id", "required": true},
+        "fields": {"from": "query.fields", "transform": "csv"}
+      },
+      "result": "record"
+    },
+    "salesforce.sobjects.create": {
+      "route": "POST /services/data/v61.0/sobjects/{sObject}",
+      "vendor": "createSObject",
+      "tool": "create_record",
+      "tool_by": {"from": "path.sObject", "map": {"Task": "create_task"}},
+      "args": {
+        "entity": {"from": "path.sObject", "required": true,
+                   "map": {"Account": "account", "Contact": "contact", "Opportunity": "opportunity", "Lead": "lead",
+                           "Case": "case", "Task": "task"}},
+        "name": {"from": "body.Name"},
+        "fields": {"from": "body", "transform": "fields", "required": true}
+      },
+      "result": {"shape": "record", "envelope": {"id": "$record.Id", "success": true, "errors": []}}
+    },
+    "salesforce.sobjects.update": {
+      "route": "PATCH /services/data/v61.0/sobjects/{sObject}/{id}",
+      "vendor": "updateSObject",
+      "tool": "update_record",
+      "args": {
+        "id": {"from": "path.id", "required": true},
+        "fields": {"from": "body", "transform": "fields", "required": true}
+      },
+      "result": "empty"
+    },
+    "salesforce.sobjects.delete": {"route": "DELETE /services/data/v61.0/sobjects/{sObject}/{id}", "vendor": "deleteSObject", "unmodelled": "the salesforce definition declares no delete tool; records are closed or reassigned, never removed"},
+    "salesforce.data.list": {"route": "GET /services/data/v61.0/queryAll", "vendor": "queryAll", "unmodelled": "queryAll adds deleted and archived records, which the emulator does not keep"},
+    "salesforce.search.list": {"route": "GET /services/data/v61.0/search", "vendor": "search", "unmodelled": "SOSL is not a language the shared query evaluator parses; the connector searches with SOQL"},
+    "salesforce.sobjects.list": {"route": "GET /services/data/v61.0/sobjects", "vendor": "describeGlobal", "unmodelled": "the object catalogue is the definition's schema, not records"},
+    "salesforce.describe.list": {"route": "GET /services/data/v61.0/sobjects/{sObject}/describe", "vendor": "describeSObject", "unmodelled": "an object's describe is the definition's schema, not records"},
+    "salesforce.limits.list": {"route": "GET /services/data/v61.0/limits", "vendor": "limits", "unmodelled": "org limits are not records the connector holds"}
+  }
+}
