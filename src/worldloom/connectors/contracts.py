@@ -81,6 +81,12 @@ class ContractSource:
     locked: str
     url: str | None = None
     path: str | None = None
+    #: ``"json"`` when the digest is of the canonical JSON (keys sorted, no
+    #: whitespace) rather than of the bytes served: Google's Discovery service
+    #: serves the same document with its keys in a different order on every
+    #: request, so its served bytes cannot be pinned, and the cache keeps the
+    #: canonical form so Anvil's snapshot of it is stable too.
+    canonical: str | None = None
 
 
 @dataclass(frozen=True)
@@ -150,6 +156,8 @@ def parse_lock(document: Mapping[str, Any], *, origin: str = "_contracts.json") 
         if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
             raise ContractError(f"{where}: sha256 is 64 lowercase hex digits")
         url, path = source.get("url"), source.get("path")
+        if source.get("canonical") not in (None, "json"):
+            raise ContractError(f"{where}: canonical is \"json\" or absent")
         if provenance == "vendor" and not url:
             raise ContractError(f"{where}: a vendor contract names the `url` it is fetched from")
         if provenance == "authored":
@@ -164,7 +172,8 @@ def parse_lock(document: Mapping[str, Any], *, origin: str = "_contracts.json") 
             source=ContractSource(format=fmt, sha256=digest, bytes=int(_require(source, "bytes", where)),
                                   filename=str(_require(source, "filename", where)),
                                   version=str(_require(source, "version", where)),
-                                  locked=str(_require(source, "locked", where)), url=url, path=path),
+                                  locked=str(_require(source, "locked", where)), url=url, path=path,
+                                  canonical=source.get("canonical")),
             profile=str(_require(raw, "profile", where)),
             manifest=raw.get("manifest"),
             vendor_operations=int(_require(raw, "vendor_operations", where)),
@@ -223,6 +232,16 @@ def _download(url: str) -> bytes:
     return data
 
 
+def canonical_json(data: bytes) -> bytes:
+    """A JSON document with its keys sorted and no whitespace: the form a ``canonical: json`` digest is of."""
+
+    try:
+        document = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ContractError(f"a canonical-JSON source did not parse as JSON: {error}") from error
+    return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
 def source_path(contract: LockedContract, cache: Path) -> Path:
     """Where *contract*'s verified bytes live in *cache*."""
 
@@ -245,6 +264,8 @@ def fetch_contract(contract: LockedContract, cache: Path, *, opener: Opener | No
         except OSError as error:
             raise ContractError(f"{contract.connector}: could not fetch {contract.source.url}: {error}") from error
         status = "fetched"
+    if contract.source.canonical == "json":
+        data = canonical_json(data)
     got = sha256_bytes(data)
     if got != contract.source.sha256:
         where = contract.source.url or contract.source.path
@@ -729,6 +750,7 @@ __all__ = [
     "anvil_version",
     "build",
     "build_key",
+    "canonical_json",
     "count_operations",
     "coverage",
     "data_file",

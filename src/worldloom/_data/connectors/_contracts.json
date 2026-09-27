@@ -27,13 +27,14 @@
    "source": {
     "url": "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
     "format": "discovery",
-    "sha256": "953aedec3e742606cce48e400434431989b34e521648619685f217404fd6873f",
-    "bytes": 269730,
+    "sha256": "9d03ef1af8a16ddfae290b465876a5f74936c76bf33c4cb0b0925ceffb6a5505",
+    "bytes": 195535,
     "filename": "drive-v3.discovery.json",
     "version": "v3 (revision 20260923)",
-    "locked": "2026-09-27"
+    "locked": "2026-09-27",
+    "canonical": "json"
    },
-   "anvil_source_hash": "sha256:fe4bb0f302e82334dee6c68d1a6c3e7b05a068a4fe97c52a28ed8f289a3d42da",
+   "anvil_source_hash": "sha256:2b611b79f1e1c1c2eaccc4d110f6796e91da7eeca1452e48c7062d9b99cc2d26",
    "vendor_operations": 64,
    "profiled_operations": 18,
    "profile": "anvil/profiles/drive.yaml"
@@ -69,7 +70,7 @@
     "version": "v1.0",
     "locked": "2026-09-27"
    },
-   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "anvil_source_hash": "sha256:269dd1d56399833f7dc19ff0a4fc4a1366d194d1b453407ae668255f6ae63422",
    "vendor_operations": 17870,
    "profiled_operations": 20,
    "profile": "anvil/profiles/onedrive.yaml",
@@ -87,7 +88,7 @@
     "version": "v1.0",
     "locked": "2026-09-27"
    },
-   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "anvil_source_hash": "sha256:269dd1d56399833f7dc19ff0a4fc4a1366d194d1b453407ae668255f6ae63422",
    "vendor_operations": 17870,
    "profiled_operations": 26,
    "profile": "anvil/profiles/outlook.yaml",
@@ -156,7 +157,7 @@
     "version": "v1.0",
     "locked": "2026-09-27"
    },
-   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "anvil_source_hash": "sha256:269dd1d56399833f7dc19ff0a4fc4a1366d194d1b453407ae668255f6ae63422",
    "vendor_operations": 17870,
    "profiled_operations": 36,
    "profile": "anvil/profiles/sharepoint.yaml",
@@ -174,7 +175,7 @@
     "version": "1.7.0",
     "locked": "2026-09-27"
    },
-   "anvil_source_hash": "sha256:f21636c8815f877626f7f2a4ab6c996e4cc9222b8c4328240c83e6b71305b5e1",
+   "anvil_source_hash": "sha256:020232ace971d2e74205a8b6979f0cda47a88763d10fbcc67e67bbece878a207",
    "vendor_operations": 174,
    "profiled_operations": 30,
    "profile": "anvil/profiles/slack.yaml"
@@ -191,7 +192,7 @@
     "version": "v1.0",
     "locked": "2026-09-27"
    },
-   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "anvil_source_hash": "sha256:269dd1d56399833f7dc19ff0a4fc4a1366d194d1b453407ae668255f6ae63422",
    "vendor_operations": 17870,
    "profiled_operations": 41,
    "profile": "anvil/profiles/teams.yaml",

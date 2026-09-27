@@ -155,6 +155,24 @@ def test_a_fetch_writes_verified_bytes_once_and_then_reads_the_cache(tmp_path: P
     assert authored.status == "copied" and authored.path.name == "servicenow.openapi.json"
 
 
+def test_a_canonical_json_lock_accepts_the_same_document_in_any_key_order(tmp_path: Path) -> None:
+    # Google's Discovery service serves the Drive document with its keys in a
+    # different order on every request; its lock pins the canonical JSON.
+    from worldloom.connectors.contracts import canonical_json
+
+    contract = load_lock().contract("drive")
+    assert contract.source.canonical == "json"
+    document = {"b": [1, {"y": 2, "x": 1}], "a": "one"}
+    canonical = canonical_json(json.dumps(document).encode())
+    pinned = type(contract)(**{**contract.__dict__, "source": type(contract.source)(
+        **{**contract.source.__dict__, "sha256": hashlib.sha256(canonical).hexdigest(), "bytes": len(canonical)})})
+    served = json.dumps({"a": "one", "b": [1, {"x": 1, "y": 2}]}, indent=2).encode()
+    fetched = fetch_contract(pinned, tmp_path, opener=lambda url: served)
+    assert fetched.status == "fetched" and fetched.path.read_bytes() == canonical
+    with pytest.raises(ContractError, match="not the locked"):
+        fetch_contract(pinned, tmp_path / "other", opener=lambda url: json.dumps({"a": "two"}).encode())
+
+
 def test_the_cli_fetches_an_authored_contract_and_reports_coverage(tmp_path: Path) -> None:
     result = runner.invoke(app, ["contracts", "fetch", "servicenow", "salesforce", "--cache", str(tmp_path), "--json"])
     assert result.exit_code == 0, result.output

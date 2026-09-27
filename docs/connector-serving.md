@@ -395,7 +395,10 @@ worldloom contracts coverage              # what each connector exposes and mode
 `fetch` writes into a cache (`--cache`, else `$WORLDLOOM_CONTRACTS_CACHE`,
 else `~/.cache/worldloom/contracts`) and refuses bytes that hash to anything
 but the lock, naming both digests: a vendor that republished its spec is a
-review, never a silent upgrade. `build` compiles with `anvil compile
+review, never a silent upgrade. Google's Discovery service serves the Drive
+document with its keys in a different order on every request, so the Drive
+lock says `"canonical": "json"`: its digest is of the key-sorted, compact
+JSON, and the cache keeps that form, so Anvil's snapshot of it is stable too. `build` compiles with `anvil compile
 --profile --manifest --service`, approves with `anvil approve --profile
 --reviewer worldloom-contracts`, checks Anvil read the locked bytes as the
 locked snapshot, lints the connector's mapping against what the bundle
