@@ -54,7 +54,7 @@ import urllib.parse
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
@@ -194,7 +194,9 @@ class ContractSurface:
     def digest(self) -> str:
         return content_key("contract-surface", json.dumps(
             {"connector": self.connector, "tools": [dict(tool.definition) for tool in self.tools],
-             "bindings": {tool.name: dict(tool.binding) for tool in self.tools}, "page_size": self.page_size},
+             "bindings": {tool.name: dict(tool.binding) for tool in self.tools}, "page_size": self.page_size,
+             # Calls dispatch through the mapping, so a changed mapping is a changed surface.
+             "mapping": asdict(self.mapping)},
             sort_keys=True, default=str))
 
     def entry(self, tool: ContractTool) -> OperationMap | None:

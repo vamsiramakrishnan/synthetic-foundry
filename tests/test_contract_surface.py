@@ -642,3 +642,15 @@ def test_the_sequences_cover_every_locked_connector() -> None:
 def test_operations_listed_by_the_air_match_the_surface() -> None:
     # Guards the helper the lint test uses, so it cannot pass vacuously.
     assert operations_from_air({"operations": []}) == ()
+
+
+def test_a_changed_mapping_changes_the_surface_pin() -> None:
+    """Calls dispatch through the mapping, so the pin a proof records must move with it."""
+    import dataclasses
+
+    surface = shipped_surface("jira")
+    operation, entry = next((key, value) for key, value in surface.mapping.operations.items() if value.tool)
+    moved = dataclasses.replace(surface.mapping, operations={
+        **surface.mapping.operations, operation: dataclasses.replace(entry, tool=f"{entry.tool}_elsewhere")})
+    assert dataclasses.replace(surface, mapping=moved).digest != surface.digest
+    assert dataclasses.replace(surface, mapping=surface.mapping).digest == surface.digest
