@@ -794,7 +794,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_messiness": "no messiness level is registered under that name",
     "unknown_parameter": "no physics parameter starts with that prefix",
     "unknown_profile": "no presentation profile is registered under that name",
-    "unknown_realism": "no realism profile has that name: legacy, ecology or enterprise",
+    "unknown_realism": "no realism profile has that name: legacy, ecology, enterprise (enterprise/v2) or enterprise/v1",
     "unknown_timeline": "--timeline names no known density",
     "unknown_value": "the facet exists but has no such value",
     "unknown_world": "the mosaic has no world with that index",
@@ -1495,17 +1495,21 @@ def build(
     realism: str | None = typer.Option(
         None, "--realism",
         help=(
-            "How the world materialises into files. `enterprise` (the default"
-            " for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled"
+            "How the world materialises into files. `enterprise` (`enterprise/v2`,"
+            " the default for new builds; a `--replay` keeps the profile its source recorded) writes the documents a company keeps: controlled"
             " reports with cover, document control, contents, numbered sections,"
             " schedules from the pack's workbook, appendices, revision files and"
             " reviewer comments; decks on real layouts with speaker notes and"
             " native charts; intranet pages; wiki exports; pack indexes; and"
-            " connector file records that carry their text. `legacy` reproduces"
+            " connector file records that carry their text. It is written for a"
+            " reader: sections are asked for move by move, `--narrate` writes"
+            " with the composing narrator, and the reader presentation profile"
+            " applies unless another is named. `enterprise/v1` is the same"
+            " files audit-presented and narrated by the contract fixture. `legacy` reproduces"
             " the compact files every corpus built before this flag has, byte for"
             " byte. `ecology` is the artifact-ecology annotation. Recorded on the"
             " recipe, so a replay and a later `worldloom render` reproduce it;"
-            " the world, its facts and its validation are the same under all three."
+            " the world, its facts and its validation are the same under all of them."
         ),
     ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
@@ -2997,9 +3001,24 @@ def build(
 
         world = world.run(ConversationRefresh())
 
+    # The realism profile is decided before narration, because a reader-grade
+    # corpus (`enterprise/v2`) is *asked* for its prose differently: its
+    # requests carry the moves each section makes. A replay keeps the profile
+    # its source recorded unless one is asked for.
+    recorded_realism = (realism_profiles.of(replay_source if replay_source is not None else _load(str(replay)))
+                        if replay is not None else None)
+    if realism is None:
+        realism = recorded_realism if recorded_realism is not None else realism_profiles.DEFAULT_FOR_NEW_BUILDS
+    # A replay narrates under the profile its ledger was recorded under, so
+    # every request asks what it asked then and every key hits; a different
+    # profile asked for on the command line re-materialises the files after.
+    world = world.extend(recipe=realism_profiles.with_realism(
+        world.recipe, recorded_realism if recorded_realism is not None else realism))
+
     if narrate or replay is not None:
         from . import recipe as recipe_module
         from .narrative import (
+            ComposedProvider,
             DeterministicProvider,
             NarrationError,
             ProviderError,
@@ -3007,7 +3026,10 @@ def build(
         )
 
         ledger = ()
-        provider = DeterministicProvider()
+        # A reader-grade corpus is written by the composing narrator; every
+        # other profile keeps the contract fixture, so its prose and ledger
+        # are the ones it always had.
+        provider = ComposedProvider() if realism_profiles.reader_grade(world) else DeterministicProvider()
         if replay is not None:
             source = replay_source if replay_source is not None else _load(str(replay))
             ledger = source._ledger
@@ -3096,18 +3118,14 @@ def build(
             f", {rejected} rejected\n"
         )
 
-    # The realism profile rides the recipe, like the presentation profile:
-    # recorded before rendering so the files and the record of how they were
-    # made cannot disagree, and absent under `legacy` so a legacy build's
-    # world.json is the one every earlier build wrote.
-    # A replay keeps the profile its source recorded unless one is asked
-    # for; the replay comparison ignores the key, so defaulting to enterprise
-    # here would silently re-materialise a legacy corpus. New builds default
-    # to enterprise.
-    if realism is None:
-        realism = (realism_profiles.of(replay_source if replay_source is not None else _load(str(replay)))
-                   if replay is not None else realism_profiles.ENTERPRISE)
     world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
+    # The realism profile rides the recipe, like the presentation profile:
+    # recorded (above, before narration) so the files and the record of how
+    # they were made cannot disagree, and absent under `legacy` so a legacy
+    # build's world.json is the one every earlier build wrote. A replay keeps
+    # the profile its source recorded unless one is asked for; the replay
+    # comparison ignores the key, so defaulting here would silently
+    # re-materialise a legacy corpus.
     if formats:
         from .render import RenderError
 
@@ -4064,8 +4082,9 @@ def render(
         None, "--realism",
         help=(
             "Which files the corpus materialises into: `enterprise` (long-form"
-            " controlled documents, decks, intranet pages, revisions and packs),"
-            " `legacy` (the compact files, byte-identical to every earlier"
+            " controlled documents, decks, intranet pages, revisions and packs,"
+            " presented for a reader; `enterprise/v1` for the audit-presented"
+            " first version), `legacy` (the compact files, byte-identical to every earlier"
             " render) or `ecology`. Omit it to keep what the corpus's recipe"
             " records; a corpus that records none is `legacy`."
         ),
@@ -4242,7 +4261,8 @@ def mosaic(
     realism: str = typer.Option(
         "enterprise", "--realism",
         help=("How each world materialises into files: `enterprise` (the default"
-              " for new builds), `legacy` (byte-identical to earlier mosaics) or"
+              " for new builds, reader-grade and written by the composing"
+              " narrator), `enterprise/v1`, `legacy` (byte-identical to earlier mosaics) or"
               " `ecology`. See `worldloom build --realism`."),
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit the plan as data."),
@@ -4413,6 +4433,10 @@ def mosaic(
             timeout=narrate_timeout,
             shell=narrate_shell,
         )
+    elif realism == realism_profiles.ENTERPRISE_V2:
+        from .narrative import ComposedProvider
+
+        provider = ComposedProvider()
     else:
         provider = DeterministicProvider()
 
@@ -4485,6 +4509,10 @@ def mosaic(
         # evidence lives in unwritten prose as a failure, and five worlds of
         # them read as a hard benchmark.
         sections = 0
+        # Recorded before narration: a reader-grade world's requests carry the
+        # moves its sections make, so the profile has to be on the recipe the
+        # requests are built from.
+        world = world.extend(recipe=realism_profiles.with_realism(world.recipe, realism))
         if narrate or narrate_exec:
             checkpoint = batch_module.Checkpoint(out, variant.index)
             try:
@@ -5840,6 +5868,14 @@ def diversity(
                           str(row["slides_max"]), str(row["notes_max"]), str(row["sections_max"]),
                           str(row["tables_max"]), str(row["revisions"]))
         console.print(table)
+        prose = reading["prose"]
+        console.print(
+            f"Prose: {prose['sections']} narrated section(s), template openers"
+            f" {prose['template_opener_rate']:.2f}, repeated sentences {prose['repeated_sentence_rate']:.2f},"
+            f" slug leaks {prose['slug_leaks']}, {prose['mean_sentences_per_section']} sentence(s) and"
+            f" {prose['mean_paragraphs_per_section']} paragraph(s) per section,"
+            f" {prose['mean_paragraph_words']} words per paragraph"
+            + (f"; below the reader-grade floor: {'; '.join(prose['failures'])}" if prose["failures"] else ""))
         return
     if not world.artifact_irs:
         try:

@@ -20,9 +20,21 @@ Three profiles, one closed vocabulary:
     The opt-in artifact-ecology annotation (`artifact_ecology.enrich_world`),
     unchanged.
 ``enterprise/v1``
-    The long-form corpus (`longform`, `render.enterprise`). **The default for
-    new builds**: `worldloom build` and `sdk.Blueprint.build` write it onto the
-    recipe unless told `legacy`.
+    The long-form corpus (`longform`, `render.enterprise`), audit-presented
+    and narrated offline by the contract fixture. Every corpus that recorded
+    it rebuilds, re-renders and replays exactly as it did.
+``enterprise/v2``
+    The same long-form corpus written and laid out for a reader. **The
+    default for new builds**: `worldloom build` and `sdk.Blueprint.build`
+    write it onto the recipe unless told otherwise. Three things differ from
+    ``enterprise/v1``, and each is decided by data rather than by this
+    module: narration requests carry the rhetorical moves the doctype's
+    sections declare (`rhetoric`), so a writer is asked for an argument
+    rather than a list; `build --narrate` writes with the composing offline
+    narrator (`narrative.composer`) instead of the contract fixture; and a
+    corpus that names no presentation profile is presented under ``reader``
+    (`recipe.presentation_of`), so provenance sits in appendices and file
+    properties rather than beside every paragraph.
 
 **Why the recipe and not the presentation profile.** Both ride the recipe and
 both decide nothing about the world, so the choice between them is about what
@@ -52,12 +64,16 @@ __all__ = [
     "DEFAULT_FOR_NEW_BUILDS",
     "ECOLOGY",
     "ENTERPRISE",
+    "ENTERPRISE_V1",
+    "ENTERPRISE_V2",
     "LEGACY",
     "PROFILES",
     "REALISM_KEY",
     "describe",
+    "is_enterprise",
     "named",
     "of",
+    "reader_grade",
     "with_realism",
 ]
 
@@ -66,10 +82,19 @@ REALISM_KEY = "artifact_realism"
 
 LEGACY = "legacy"
 ECOLOGY = "ecology/v1"
-ENTERPRISE = "enterprise/v1"
+ENTERPRISE_V1 = "enterprise/v1"
+ENTERPRISE_V2 = "enterprise/v2"
+#: The current enterprise profile: what ``--realism enterprise`` spells. A
+#: corpus that recorded ``enterprise/v1`` keeps it, because the recipe stores
+#: the canonical name and never the alias.
+ENTERPRISE = ENTERPRISE_V2
+
+#: Both enterprise profiles render through `render.enterprise`; they differ in
+#: how the documents are narrated and presented, never in which files exist.
+ENTERPRISE_FAMILY = frozenset({ENTERPRISE_V1, ENTERPRISE_V2})
 
 #: What a new build gets when nobody names a profile.
-DEFAULT_FOR_NEW_BUILDS = ENTERPRISE
+DEFAULT_FOR_NEW_BUILDS = ENTERPRISE_V2
 
 #: Canonical name to a one-line account of what it produces.
 PROFILES: dict[str, str] = {
@@ -82,13 +107,21 @@ PROFILES: dict[str, str] = {
         "The artifact-ecology annotation: organisation style and lifecycle"
         " metadata on each IR, genre furniture in Word and PDF."
     ),
-    ENTERPRISE: (
+    ENTERPRISE_V1: (
         "Long-form enterprise documents: controlled reports with cover,"
         " document control, contents, numbered sections, schedules,"
         " appendices, revision files and reviewer comments; decks on real"
         " layouts with speaker notes and native charts; intranet pages; wiki"
         " exports with front matter; document families; connector file"
         " records that carry their text."
+    ),
+    ENTERPRISE_V2: (
+        "The enterprise/v1 documents written and laid out for a reader:"
+        " narration asked for per rhetorical move (headline, attribution,"
+        " comparison, implication, actions, risks), the composing offline"
+        " narrator for --narrate, the reader presentation profile by default"
+        " (provenance in appendices and file properties, designed covers,"
+        " presenter decks with talk-track notes)."
     ),
 }
 
@@ -124,6 +157,21 @@ def of(subject: Any) -> str:
     if not value:
         return LEGACY
     return named(str(value))
+
+
+def is_enterprise(subject: Any) -> bool:
+    """Whether *subject* renders through the long-form enterprise renderers."""
+    return of(subject) in ENTERPRISE_FAMILY
+
+
+def reader_grade(subject: Any) -> bool:
+    """Whether *subject* is narrated and presented for a reader (``enterprise/v2``).
+
+    The one question every layer that changed for ``enterprise/v2`` asks, so
+    the answer cannot drift between the request builder, the narrator choice
+    and the default presentation.
+    """
+    return of(subject) == ENTERPRISE_V2
 
 
 def with_realism(recipe: Mapping[str, Any], name: str) -> dict[str, Any]:

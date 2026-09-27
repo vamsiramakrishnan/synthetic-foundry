@@ -153,6 +153,14 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
         "target_words": request.target_words,
         "knows_as_of": request.temporal_cutoff.isoformat() if request.temporal_cutoff else None,
         "must_not_claim": list(request.forbidden_claims),
+        # Present only on a reader-grade request, so every other request
+        # document is byte-identical to the one this contract always wrote.
+        **({"moves": [
+            {"move": move.name, "instruction": move.instruction, "facts": list(move.fact_ids),
+             **({"derived": True} if move.derived else {})}
+            for move in request.moves
+        ]} if request.moves else {}),
+        **({"display_names": dict(request.display)} if request.display else {}),
         "facts": [
             _fact_payload(
                 facts[f],
@@ -200,12 +208,19 @@ def requests_document(world: World) -> dict[str, Any]:
 
     facts = {fact.id: fact for fact in world.facts}
     items = pending(world)
+    rules = list(RULES)
+    if any(request.moves for request in items):
+        # The writing rules for moves are prompts pack text, so a pack can say
+        # how an argument is built in its own industry's terms.
+        from .. import packkit
+
+        rules.extend(packkit.texts("narrative.moves.rule."))
     return {
         "worldloom_seed": world.seed,
-        "prompt_version": prompts.SECTION_PROSE.key,
+        "prompt_version": prompts.for_world(world).key,
         "company": world.company.name,
         "period": world.period,
-        "rules": list(RULES),
+        "rules": rules,
         "reference_syntax": "{{fact:FACT-0001}}",
         "response_shape": {
             "responses": [

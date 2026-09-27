@@ -76,7 +76,7 @@ def test_agent_prose_is_not_the_deterministic_prose(tmp_path: Path) -> None:
         }
 
     agent, stock_writer = narrator(out, "world-01"), narrator(stock, "world-01")
-    assert agent == {"agent"} and stock_writer == {"deterministic-fake-1"}
+    assert agent == {"agent"} and stock_writer == {"composed-prose-1"}
 
 
 def test_the_checkpoint_wiring_carries_agent_prose(tmp_path: Path) -> None:

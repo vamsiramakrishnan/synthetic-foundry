@@ -20,6 +20,27 @@ A knowledge article wants no citations on the page and the RCA sitting beside
 it in the same corpus is read by an engineer who needs them. Without overrides
 the only way to say that is two corpora.
 
+## Provenance placement for a new doctype
+
+A doctype you add (an authored type in a pack, or a vertical's) needs nothing
+to be presented well: under `citations: appendix` its per-section figure
+tables become one "Sources of figures" appendix and its fact ids go into the
+file's custom properties, under `layout: designed` it gets the designed cover,
+and under `deck: presenter` a `deck: true` type becomes a presenter's deck.
+What a doctype *can* want is to be the exception:
+
+```json
+"overrides": {
+  "regulatory_return": { "citations": "inline", "appendix": "append" },
+  "board_briefing": { "slide_budget": "briefing", "notes": "talk" }
+}
+```
+
+A return a regulator reads keeps every citation beside its claim; a briefing
+deck stays at fourteen slides. The ids are never lost either way:
+`artifact-ir.jsonl` keeps every section's `fact_ids`, and under `appendix` the
+file's own properties carry them (`WorldloomFacts`, `WorldloomProvenance`).
+
 ## What the lint refuses
 
 Every finding at once, as sentences to act on:

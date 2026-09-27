@@ -1559,6 +1559,14 @@ class SectionPlan:
     heading, never on the displayed one.
     """
 
+    moves: tuple[Any, ...] = ()
+    """The rhetorical moves this section makes, in order (`rhetoric.MoveSpec`
+    or a bare move name). Empty, the default, takes the moves the rhetoric
+    catalogue declares for this type and heading, or for the section's
+    semantic role. Read only when a narration request is built for a
+    reader-grade corpus, so it changes no outline, no IR and no legacy
+    request."""
+
     @property
     def structural_key(self) -> str:
         """The structural key: ``key`` when stated, else derived from ``heading``."""

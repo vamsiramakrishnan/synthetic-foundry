@@ -31,11 +31,15 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from worldloom import World, recipe
+from worldloom import World, realism_profiles, recipe
 from worldloom.cli import app
 from worldloom.evaluate.across import load, survey
 from worldloom.evaluate.index import passages
-from worldloom.narrative import DeterministicProvider, UnreachableProvider
+from worldloom.narrative import (
+    ComposedProvider,
+    DeterministicProvider,
+    UnreachableProvider,
+)
 
 runner = CliRunner()
 
@@ -214,7 +218,12 @@ def test_one_provider_across_the_mosaic_writes_what_fresh_ones_would(
     fresh provider and diff the bytes.
     """
     for index, entry in enumerate(load(finished), start=1):
-        alone = recipe.rebuild(entry.world.recipe).narrate(DeterministicProvider(), ledger=())
+        # The writer a mosaic uses is the one its realism profile names: the
+        # composing narrator for a reader-grade (default) world, the contract
+        # fixture otherwise. Both hold nothing between calls but a counter.
+        fresh = (ComposedProvider() if realism_profiles.reader_grade(entry.world.recipe)
+                 else DeterministicProvider())
+        alone = recipe.rebuild(entry.world.recipe).narrate(fresh, ledger=())
         target = tmp_path / f"alone-{index:02d}"
         alone.export(target, overwrite=True)
         _same(Path(finished / f"world-{index:02d}"), target)

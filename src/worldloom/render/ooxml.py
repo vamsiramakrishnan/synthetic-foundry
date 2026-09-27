@@ -56,6 +56,79 @@ _TIMESTAMPS = (
 )
 
 
+_CUSTOM_PART = "docProps/custom.xml"
+_CUSTOM_TYPE = "application/vnd.openxmlformats-officedocument.custom-properties+xml"
+_CUSTOM_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties"
+#: The format id every custom property carries (``{D5CDD505-...}`` is the one
+#: Word and PowerPoint write for user-defined properties).
+_CUSTOM_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"
+
+
+def with_custom_properties(payload: bytes, properties: dict[str, str]) -> bytes:
+    """*payload* with *properties* written as the package's custom properties.
+
+    Where a reader profile puts provenance: Word's File > Info > Properties >
+    Custom and PowerPoint's the same, readable by any tool that opens the
+    package (`artifact_text` reports them) and never printed on a page. Written
+    at the zip level, the way `normalise` fixes timestamps, so it holds for
+    whatever python-docx or python-pptx is installed; neither has an API for
+    the part. Properties are written in sorted order so the bytes are a
+    function of the mapping alone.
+    """
+    from xml.sax.saxutils import escape
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    if not properties:
+        return payload
+    entries = "".join(
+        f'<property fmtid="{_CUSTOM_FMTID}" pid="{pid}" name="{escape(name, {chr(34): "&quot;"})}">'
+        f"<vt:lpwstr>{escape(value)}</vt:lpwstr></property>"
+        for pid, (name, value) in enumerate(sorted(properties.items()), start=2)
+    )
+    custom = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" '
+        'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
+        f"{entries}</Properties>"
+    ).encode()
+    source = BytesIO(payload)
+    target = BytesIO()
+    with ZipFile(source) as original, ZipFile(target, "w", ZIP_DEFLATED) as rebuilt:
+        for info in original.infolist():
+            if info.filename == _CUSTOM_PART:
+                continue
+            content = original.read(info.filename)
+            if info.filename == "[Content_Types].xml" and b"/docProps/custom.xml" not in content:
+                content = content.replace(
+                    b"</Types>",
+                    f'<Override PartName="/{_CUSTOM_PART}" ContentType="{_CUSTOM_TYPE}"/></Types>'.encode())
+            elif info.filename == "_rels/.rels" and _CUSTOM_REL.encode() not in content:
+                content = content.replace(
+                    b"</Relationships>",
+                    f'<Relationship Id="rIdWorldloomCustom" Type="{_CUSTOM_REL}" Target="{_CUSTOM_PART}"/>'
+                    "</Relationships>".encode())
+            rebuilt.writestr(info, content)
+        rebuilt.writestr(_CUSTOM_PART, custom)
+    return target.getvalue()
+
+
+def custom_properties(archive_bytes: bytes) -> dict[str, str]:
+    """The custom properties of an Office package, or ``{}``."""
+    from xml.etree import ElementTree
+    from zipfile import ZipFile
+
+    with ZipFile(BytesIO(archive_bytes)) as archive:
+        if _CUSTOM_PART not in archive.namelist():
+            return {}
+        root = ElementTree.fromstring(archive.read(_CUSTOM_PART))
+    out: dict[str, str] = {}
+    for prop in root:
+        name = prop.get("name")
+        if name:
+            out[name] = "".join(prop.itertext())
+    return out
+
+
 def normalise(payload: bytes, *, created: str | None = None) -> bytes:
     """Strip the wall clock out of a finished Office package.
 

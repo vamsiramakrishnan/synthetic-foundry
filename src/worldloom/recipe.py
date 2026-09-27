@@ -460,11 +460,16 @@ def presentation_of(recipe: dict[str, Any]) -> Any:
     built before the profile existed carries no key and *was* the audit
     rendering, so that is a fact about those corpora rather than a gap in them.
     """
-    from .presentation import AUDIT, Presentation
+    from .presentation import AUDIT, READER, Presentation
 
     payload = recipe.get(PRESENTATION_KEY)
     if payload is None:
-        return AUDIT
+        # A corpus materialised for a reader (``enterprise/v2``) that names no
+        # profile is presented for one; every other absent key is the audit
+        # rendering it always was.
+        from .realism_profiles import reader_grade
+
+        return READER if reader_grade(recipe) else AUDIT
     if isinstance(payload, str):
         # A bare name is accepted on the way *in* only — `with_presentation`
         # writes the expanded form — because a hand-edited recipe is a thing
@@ -475,9 +480,9 @@ def presentation_of(recipe: dict[str, Any]) -> Any:
 
         return named(payload)
     try:
-        knobs = {knob: str(payload[knob]) for knob in ("appendix", "provenance",
-                                                       "magnitudes", "table_fit")
-                 if knob in payload}
+        from .presentation import KNOBS
+
+        knobs = {knob: str(payload[knob]) for knob in KNOBS if knob in payload}
         return Presentation(name=str(payload.get("name", "recorded")),
                             overrides=payload.get("overrides") or {}, **knobs)
     except (KeyError, TypeError, ValueError) as exc:
@@ -497,17 +502,17 @@ def with_presentation(recipe: dict[str, Any], profile: Any) -> dict[str, Any]:
     existing corpus under a second profile is the intended use, which is why
     ``worldloom render --profile`` exists and does not require a rebuild.
     """
-    from .presentation import Presentation, named
+    from .presentation import AUDIT, KNOBS, ORIGINAL_KNOBS, Presentation, named
 
     resolved = named(profile) if isinstance(profile, str) else profile
     assert isinstance(resolved, Presentation)
-    document: dict[str, Any] = {
-        "name": resolved.name,
-        "appendix": resolved.appendix,
-        "provenance": resolved.provenance,
-        "magnitudes": resolved.magnitudes,
-        "table_fit": resolved.table_fit,
-    }
+    document: dict[str, Any] = {"name": resolved.name}
+    for knob in KNOBS:
+        # The four original knobs are always written; a later one only when it
+        # differs from its default, so a recipe that named a profile before
+        # the knob existed keeps its bytes and still reads back identically.
+        if knob in ORIGINAL_KNOBS or getattr(resolved, knob) != getattr(AUDIT, knob):
+            document[knob] = getattr(resolved, knob)
     if resolved.overrides:
         document["overrides"] = {k: dict(v) for k, v in resolved.overrides.items()}
     return {**recipe, PRESENTATION_KEY: document}

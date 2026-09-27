@@ -32,7 +32,8 @@ from .compiler import (
     narrate,
     preflight,
 )
-from .prompts import SECTION_PROSE, Prompt, get, register, versions
+from .composer import ComposedProvider
+from .prompts import SECTION_PROSE, Prompt, for_world, get, register, versions
 from .providers import (
     DeterministicProvider,
     ExecProvider,
@@ -48,6 +49,7 @@ from .requests import (
     GeneratedClaim,
     GeneratedNarrative,
     NarrativeRequest,
+    RequestMove,
     Verdict,
     Violation,
 )
@@ -62,6 +64,7 @@ __all__ = [
     "Preflight",
     # contract
     "NarrativeRequest",
+    "RequestMove",
     "GeneratedNarrative",
     "GeneratedClaim",
     "Verdict",
@@ -70,6 +73,7 @@ __all__ = [
     # providers
     "Provider",
     "ProviderError",
+    "ComposedProvider",
     "DeterministicProvider",
     "ExecProvider",
     "ResponseProvider",
@@ -80,6 +84,7 @@ __all__ = [
     # prompts
     "Prompt",
     "SECTION_PROSE",
+    "for_world",
     "get",
     "register",
     "versions",
