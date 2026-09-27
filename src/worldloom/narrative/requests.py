@@ -59,6 +59,26 @@ def superseded_for(fact: CanonicalFact, cutoff: datetime | None) -> bool:
     return cutoff is None or fact.valid_to <= cutoff
 
 
+class RequestMove(Model):
+    """One rhetorical move a section makes: a paragraph, and what it may cite.
+
+    From `rhetoric.plan`. ``fact_ids`` is a subset of the request's allowed
+    facts; a ``derived`` move introduces none of its own and reasons from the
+    ones earlier moves cited.
+    """
+
+    name: str
+    instruction: str
+    fact_ids: list[str] = Field(default_factory=list)
+    derived: bool = False
+
+
+#: Fields added after the request digest was fixed, and left out of it while
+#: empty, so a request that carries none digests exactly as it always did and
+#: every earlier ledger replays.
+ADDITIVE_FIELDS = ("moves", "display")
+
+
 class NarrativeRequest(Model):
     """A request for prose over a bounded set of facts."""
 
@@ -116,6 +136,13 @@ class NarrativeRequest(Model):
     register question and the validators police facts, not style."""
     target_words: int = 190
     """Matches the compiler's "medium" brief — see `narrative.compiler._request`."""
+    moves: list[RequestMove] = Field(default_factory=list)
+    """The section's rhetorical moves, in order (`rhetoric.plan`). Empty for
+    every corpus that is not reader-grade, and then left out of the digest."""
+    display: dict[str, str] = Field(default_factory=dict)
+    """Subject name to how a reader would name it in a sentence, where the two
+    differ: a service recorded as ``inventory-valuation`` is "the inventory
+    valuation service" in prose. Advisory, like terminology."""
     fact_digest: str = ""
     """Content address of the complete request and supplied fact records.
 
@@ -130,7 +157,20 @@ class NarrativeRequest(Model):
             raise ValueError(
                 f"{self.artifact_id}/{self.section}: required facts not in the allowed set: {sorted(stray)}"
             )
+        allowed = set(self.allowed_fact_ids)
+        for move in self.moves:
+            outside = set(move.fact_ids) - allowed
+            if outside:
+                raise ValueError(
+                    f"{self.artifact_id}/{self.section}: move {move.name!r} draws on facts outside the"
+                    f" allowed set: {sorted(outside)}"
+                )
         return self
+
+    def digest_fields(self) -> set[str]:
+        """Fields excluded from the request digest: the digest itself, and every
+        additive field still at its empty default."""
+        return {"fact_digest"} | {name for name in ADDITIVE_FIELDS if not getattr(self, name)}
 
 
 class GeneratedClaim(Model):

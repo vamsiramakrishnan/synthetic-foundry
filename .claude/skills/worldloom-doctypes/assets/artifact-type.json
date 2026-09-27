@@ -9,6 +9,7 @@
       "heading": "Network position",
       "kinds": ["financial.revenue.", "financial.gross_profit."],
       "scope": "group",
+      "moves": ["headline", "comparison", "implication"],
       "purpose": "State the network's month against plan, for a reader who is a small-business owner rather than a manager. They are not staff and they are not investors: they run one store, they pay a fee computed off these figures, and they are entitled to see the arithmetic behind it. Plain register, no growth story, and no framing that would read as a sales pitch to somebody whose lease depends on it."
     }
   ],

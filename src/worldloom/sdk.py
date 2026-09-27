@@ -135,7 +135,7 @@ class Blueprint:
     realism_name: str | None = None
     """Which files the world materialises into: ``"enterprise"``, ``"legacy"``
     or ``"ecology"`` (``worldloom.realism_profiles``). ``None`` is the default
-    for new builds, ``enterprise/v1``; ``"legacy"`` reproduces the compact
+    for new builds, ``enterprise/v2``; ``"legacy"`` reproduces the compact
     files every earlier build wrote, byte for byte. Recorded on the recipe."""
 
     locale_name: str | None = None

@@ -134,6 +134,59 @@ first written up, before the waves above it landed.
   production approval stays a human step. Receipts record `lever`, the
   overlay digests and the recompiled contract digests. With `--levers agent`
   (the default) every receipt is byte-identical to before.
+### Reader-grade documents (`enterprise/v2`)
+
+**Generation.** New builds default to `artifact_realism: enterprise/v2`. A
+corpus that recorded `enterprise/v1` or no profile (`legacy`) rebuilds,
+re-renders and replays exactly as before; `--realism enterprise/v1` still
+names the first version, and `--realism enterprise` now means `v2`.
+
+- **Section rhetoric as data.** `src/worldloom/_data/rhetoric/moves@1.json`
+  declares the moves each section of the shipped doctypes makes (a variance
+  memo's Position is headline, comparison, implication; its Recommendation
+  decision, action, owner, risk), with a default per semantic role, and the
+  fact kinds each move draws on. An authored doctype declares its own with
+  `sections[].moves`, linted for unknown moves and out-of-section kinds.
+  Under `enterprise/v2` a narration request carries `moves` (and
+  `display_names` for subjects recorded as slugs); the brief is the prompts
+  pack text `narrative.section_moves.template`, keyed in the ledger as
+  `section_moves@1+<template digest>`, and the per-move instructions are
+  `narrative.move.<name>`. Requests without moves digest exactly as before.
+- **A composing offline narrator.** `narrative.ComposedProvider`
+  (`composed-prose-1`) writes a paragraph per move from sentence plans (one
+  sentence per measure of a subject, actual against budget with its
+  variance), connectives, lead-ins and implications that are prompts pack
+  text under `narrative.prose.*`, so an industry pack changes the words
+  without code. `build --narrate` and `mosaic` use it under `enterprise/v2`;
+  the contract fixture stays the writer for every other profile.
+- **Prose quality is measured.** `worldloom.prose_quality` reads
+  template-opener rate, repeated-sentence rate, slug leakage, sentences and
+  paragraphs per section and paragraph length, with thresholds the tests
+  enforce. `diversity --sizes` and `measure_corpus` report it. On seed 8128
+  the fixture scores an opener rate of 0.39, a repeated rate of 0.82, eleven
+  slug leaks and one paragraph per section; the composing narrator scores
+  0, under 0.2, none, and more than two.
+- **Provenance placement is profile-driven.** New presentation knobs:
+  `citations` (`inline` or `appendix`), `layout` (`plain` or `designed`),
+  `deck` (`ledger` or `presenter`), `notes` (`provenance` or `talk`) and
+  `slide_budget` (`unbounded`, `board`, `briefing`). `reader` and `filing`
+  set the second of each; `audit` keeps the first and its bytes. Under
+  `appendix` the "Key figures" and "Figures cited" tables become one
+  "Sources of figures" appendix, the workbook schedules move behind the
+  paper, and the cited fact ids go into Word and PowerPoint custom properties
+  and the PDF information dictionary, which `artifact_text` reports as
+  `extra["properties"]`. An `enterprise/v2` corpus that names no profile is
+  presented under `reader`.
+- **Presenter decks.** Takeaway titles written from the facts on the slide,
+  bullets that are the section's argument, a Two Content slide pairing the
+  argument with its chart, charts under takeaway titles, tables in the
+  appendix, talk-track notes (point, evidence, transition) from the prompts
+  pack's `render.deck.notes.*` texts, and a slide budget. Seed 8128's
+  executive deck goes from 52 slides (30 Title Only tables) to 21.
+- **Designed layout.** A cover with a classification band, title block,
+  summary box, contents and distribution; a two-column control grid;
+  keep-with-next, whole short tables, unbroken rows and widow and orphan
+  control, in Word and PDF.
 
 ### Serving connectors through Anvil
 

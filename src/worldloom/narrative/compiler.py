@@ -44,7 +44,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .. import packkit, sizing
+from .. import packkit, realism_profiles, rhetoric, sizing
 from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
@@ -336,10 +336,42 @@ def _request_for(
         # reaches the writer with it.
         target_words=sizing.budget_of(intent).words,
     )
+    if realism_profiles.reader_grade(world):
+        # A reader-grade corpus asks for an argument: the section's moves, each
+        # with the facts it may draw on, and the names a reader would use for
+        # subjects recorded as slugs. Every other corpus asks what it always
+        # asked, and `digest_fields` keeps its digest byte-identical.
+        request = request.model_copy(update={
+            "moves": rhetoric.plan(intent.artifact_type, section, [facts[f] for f in allowed], comparators),
+            "display": _display_names(world, [facts[f] for f in allowed], names),
+        })
     return request.model_copy(update={"fact_digest": content_key(
-        "narration-request/v2", request.model_dump(mode="json", exclude={"fact_digest"}),
+        "narration-request/v2", request.model_dump(mode="json", exclude=request.digest_fields()),
         providers.digest([facts[f] for f in allowed]),
     )})
+
+
+def _display_names(world: World, cited: list[CanonicalFact], names: dict[str, str]) -> dict[str, str]:
+    """How a reader names each subject whose recorded name is a slug.
+
+    A service is recorded by its deployable name (``inventory-valuation``),
+    which is what an engineer types and what no finance paper prints; the
+    offline narrator wrote "For inventory-valuation, the valuation feed
+    reported failed." A reader's name is the words of the slug plus what the
+    thing is, lower case so the claim validator never mistakes it for a
+    capitalised entity it does not know. Only slugs are renamed: a person, a
+    unit or a system already has the name a reader uses.
+    """
+    services = {service.id for service in world.services}
+    out: dict[str, str] = {}
+    for fact in cited:
+        name = names.get(fact.subject)
+        if not name or name in out:
+            continue
+        if fact.subject in services or (name == name.lower() and "-" in name and " " not in name):
+            words = name.replace("-", " ").replace("_", " ").strip()
+            out[name] = f"the {words}" if words.endswith("service") else f"the {words} service"
+    return out
 
 
 @dataclass
@@ -486,7 +518,7 @@ def preflight(
     provider: providers.Provider,
     *,
     ledger: tuple[GenerationLedgerEntry, ...] = (),
-    prompt_name: str = prompts.SECTION_PROSE.name,
+    prompt_name: str | None = None,
 ) -> Preflight:
     """Count what ``narrate`` would do, without spending a single call.
 
@@ -499,7 +531,7 @@ def preflight(
     if not world._artifact_irs:
         raise NarrationError("nothing to narrate — compile artifacts first")
 
-    prompt = prompts.get(prompt_name)
+    prompt = prompts.get(prompt_name) if prompt_name else prompts.for_world(world)
     facts = {fact.id: fact for fact in world.facts}
     ir_slots, live_jobs = _plan(world, facts, ledger, provider, prompt)
 
@@ -527,7 +559,7 @@ def narrate(
     *,
     ledger: tuple[GenerationLedgerEntry, ...] = (),
     retries: int = DEFAULT_RETRIES,
-    prompt_name: str = prompts.SECTION_PROSE.name,
+    prompt_name: str | None = None,
     concurrency: int = 1,
     on_accepted: Callable[[GenerationLedgerEntry], None] | None = None,
 ) -> Narration:
@@ -563,7 +595,10 @@ def narrate(
     if concurrency < 1:
         raise ValueError(f"concurrency must be at least 1, got {concurrency}")
 
-    prompt = prompts.get(prompt_name)
+    # The world decides the prompt unless a caller names one: a reader-grade
+    # corpus is asked move by move, every other corpus under the key its
+    # ledger already records.
+    prompt = prompts.get(prompt_name) if prompt_name else prompts.for_world(world)
     facts = {fact.id: fact for fact in world.facts}
     entity_names = claim_checks.known_entity_names(world)
 

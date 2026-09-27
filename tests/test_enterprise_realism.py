@@ -23,7 +23,7 @@ from worldloom.connector_data import generate_artifact_projection
 from worldloom.connector_definition import load_connector_definition
 from worldloom.connector_emulator import ConnectorEmulator
 from worldloom.narrative import DeterministicProvider, references
-from worldloom.presentation import AUDIT
+from worldloom.presentation import of as presentation_of
 from worldloom.render import enterprise
 from worldloom.render.values import corpus_locale
 from worldloom.retail import RetailWorld
@@ -39,9 +39,11 @@ def narrated():  # type: ignore[no-untyped-def]
     ).narrate(DeterministicProvider())
 
 
-@pytest.fixture(scope="module")
-def rendered(narrated):  # type: ignore[no-untyped-def]
-    world = narrated.extend(recipe=realism_profiles.with_realism(narrated.recipe, "enterprise"))
+@pytest.fixture(scope="module", params=["enterprise/v1", "enterprise/v2"])
+def rendered(narrated, request):  # type: ignore[no-untyped-def]
+    # Both enterprise profiles meet the real-document minimums: v1 as the
+    # audit-presented ledger rendering, v2 (the default) as the reader one.
+    world = narrated.extend(recipe=realism_profiles.with_realism(narrated.recipe, request.param))
     return world.render(*FORMATS)
 
 
@@ -66,7 +68,8 @@ def test_absent_key_is_legacy_and_legacy_writes_nothing() -> None:
     assert realism_profiles.of({}) == realism_profiles.LEGACY
     recipe = {"seed": 1, "artifact_realism": "enterprise/v1"}
     assert realism_profiles.with_realism(recipe, "legacy") == {"seed": 1}
-    assert realism_profiles.with_realism({"seed": 1}, "enterprise")["artifact_realism"] == "enterprise/v1"
+    assert realism_profiles.with_realism({"seed": 1}, "enterprise")["artifact_realism"] == "enterprise/v2"
+    assert realism_profiles.with_realism({"seed": 1}, "enterprise/v1")["artifact_realism"] == "enterprise/v1"
     with pytest.raises(ValueError):
         realism_profiles.named("glossy")
 
@@ -172,6 +175,7 @@ def test_every_figure_in_the_long_form_is_a_fact_or_an_ir_cell(rendered) -> None
     cells = {(cell.fact_id, cell.value) for ir in rendered.artifact_irs for table in ir.tables()
              for row in table.rows for cell in row.cells.values()}
     ctx = enterprise.context(rendered, FORMATS)
+    profile = presentation_of(rendered)
     for ir in rendered.artifact_irs:
         for revision in ctx.history(ir):
             doc = ctx.doc(ir, revision)
@@ -183,7 +187,7 @@ def test_every_figure_in_the_long_form_is_a_fact_or_an_ir_cell(rendered) -> None
                             assert (cell.fact_id, cell.value) in cells, (ir.id, revision.version, row.key)
                         elif cell.fact_id:
                             fact = facts[cell.fact_id]
-                            spelled = references.render_value(fact, locale=locale, presentation=AUDIT)
+                            spelled = references.render_value(fact, locale=locale, presentation=profile)
                             assert cell.value in {spelled, references.describe(fact)} or (
                                 cell.fact_id, cell.value) in cells, (ir.id, cell.value)
             for part in doc.all_parts():
@@ -221,7 +225,8 @@ def test_history_is_chronological_and_signed_by_people_of_the_world(rendered) ->
 
 
 def test_enterprise_rendering_is_byte_deterministic(narrated, rendered) -> None:  # type: ignore[no-untyped-def]
-    again = narrated.extend(recipe=realism_profiles.with_realism(narrated.recipe, "enterprise")).render(*FORMATS)
+    again = narrated.extend(recipe=realism_profiles.with_realism(
+        narrated.recipe, realism_profiles.of(rendered))).render(*FORMATS)
     first, second = _files(rendered), _files(again)
     assert first.keys() == second.keys()
     differing = [p for p in first if hashlib.sha256(first[p]).digest() != hashlib.sha256(second[p]).digest()]

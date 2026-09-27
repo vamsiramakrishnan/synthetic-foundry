@@ -52,7 +52,12 @@ class Prompt:
 
         traits = ", ".join(f"{name} {value:+.1f}" for name, value in sorted(request.author_traits.items()))
 
-        return self.template.format(
+        return self.fill(self.template, request, lines, traits, feedback)
+
+    def fill(self, template: str, request: NarrativeRequest, lines: list[str], traits: str, feedback: str) -> str:
+        """*template* with the request's fields in it. ``str.format`` for a
+        template written in code, whose literal braces are doubled."""
+        return template.format(
             section=request.section,
             purpose=request.purpose or "  (not stated)",
             persona=f" ({request.persona_label})" if request.persona_label else "",
@@ -70,6 +75,86 @@ class Prompt:
             forbidden="\n".join(f"  - {c}" for c in request.forbidden_claims) or "  (none)",
             feedback=f"\nThe previous attempt was rejected:\n{feedback}\n" if feedback else "",
         )
+
+
+def _moves_text(request: NarrativeRequest) -> str:
+    """The section's moves as the brief lists them: one numbered paragraph each."""
+    words = ("First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth")
+    out = []
+    for index, move in enumerate(request.moves):
+        ordinal = words[index] if index < len(words) else "Next"
+        cites = (", reasoning from facts already cited: " if move.derived else ", drawing on: ") + (
+            ", ".join(move.fact_ids) or "nothing new")
+        out.append(f"  {ordinal} paragraph ({move.name}){cites}.\n    {move.instruction}")
+    return "\n".join(out) or "  (none declared; write to the purpose)"
+
+
+@dataclass(frozen=True)
+class PackPrompt(Prompt):
+    """A prompt whose template is prompts pack text rather than a literal here.
+
+    The template is read from the pack in force at construction, and its
+    digest is part of the version, so a pack that rewrites how a section is
+    asked for changes the ledger key exactly as bumping a code prompt's
+    version does: explicitly, never silently. Filled with the pack's own
+    placeholder rule (``{name}`` only; ``{{fact:ID}}`` is literal), so the
+    template never needs doubled braces.
+    """
+
+    def fill(self, template: str, request: NarrativeRequest, lines: list[str], traits: str, feedback: str) -> str:
+        from ..packkit.models import PLACEHOLDER
+
+        values = {
+            "section": request.section,
+            "purpose": request.purpose or "  (not stated)",
+            "persona": f" ({request.persona_label})" if request.persona_label else "",
+            "traits": f"\nWriting tendencies: {traits}" if traits else "",
+            "hierarchy": "\n".join(f"  {k} — {v}" for k, v in sorted(request.hierarchy.items())) or "  (none)",
+            "background": "\n".join(f"  - {b}" for b in request.background) or "  (none)",
+            "terminology": "\n".join(f"  {t} — {n}" for t, n in sorted(request.terminology.items())) or "  (none)",
+            "display": "\n".join(f"  {k} — write it as \"{v}\"" for k, v in sorted(request.display.items())) or "  (none)",
+            "artifact_type": request.artifact_type.replace("_", " "),
+            "audience": request.audience.replace("_", " "),
+            "author_title": request.author_title,
+            "voice": request.voice,
+            "target_words": request.target_words,
+            "cutoff": request.temporal_cutoff.isoformat() if request.temporal_cutoff else "not constrained",
+            "facts": "\n".join(lines) or "  (none)",
+            "forbidden": "\n".join(f"  - {c}" for c in request.forbidden_claims) or "  (none)",
+            "moves": _moves_text(request),
+            "feedback": f"\nThe previous attempt was rejected:\n{feedback}\n" if feedback else "",
+        }
+        return PLACEHOLDER.sub(lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0), template)
+
+
+#: The prompts pack key a reader-grade section brief is read from.
+SECTION_MOVES_KEY = "narrative.section_moves.template"
+
+
+def section_moves() -> PackPrompt:
+    """The move-by-move section brief, from the prompts pack in force."""
+    from .. import packkit
+    from ..ids import content_key
+
+    template = packkit.template(SECTION_MOVES_KEY)
+    return PackPrompt(name="section_moves", version=f"1+{content_key('section-moves', template)[:12]}",
+                      template=template)
+
+
+def for_world(world: object) -> Prompt:
+    """The prompt a world's sections are asked for under.
+
+    A reader-grade corpus is asked for its sections move by move; every other
+    corpus is asked what it always was, under the prompt key its ledger
+    already records.
+    """
+    from .. import realism_profiles
+    from ..recipe import packs_in_force
+
+    if realism_profiles.reader_grade(world):
+        with packs_in_force(getattr(world, "recipe", {}) or {}):
+            return section_moves()
+    return SECTION_PROSE
 
 
 SECTION_PROSE = Prompt(
@@ -150,6 +235,8 @@ _REGISTRY: dict[str, Prompt] = {
 
 def get(name: str = SECTION_PROSE.name) -> Prompt:
     """Look up a prompt by name."""
+    if name == "section_moves":
+        return section_moves()
     try:
         return _REGISTRY[name]
     except KeyError:

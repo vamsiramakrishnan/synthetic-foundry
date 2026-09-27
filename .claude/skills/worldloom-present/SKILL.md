@@ -32,11 +32,23 @@ worldloom present describe                  # every profile and knob, rendering 
 worldloom render ./corpus -f docx -f pdf --profile reader
 ```
 
-Three profiles ship: `audit` (everything on the page; the default, and the
-right profile when the reader is a validator), `reader` (appendix and voice
-off the page), `filing` (citations in a sidecar file). Re-rendering an
-existing corpus under a second profile needs **no rebuild**: unlike `locale`,
-a profile decides nothing about the world.
+Three profiles ship: `audit` (everything on the page, the right profile when
+the reader is a validator, and the default for `legacy` and `enterprise/v1`
+corpora), `reader` (provenance in an appendix and the file's properties, a
+designed layout, a presenter's deck; the default for a new `enterprise/v2`
+build), `filing` (citations in a sidecar file). Re-rendering an existing
+corpus under a second profile needs **no rebuild**: unlike `locale`, a
+profile decides nothing about the world.
+
+Five knobs decide how a document reads rather than what it says:
+`citations` (per-section "Figures cited" tables inline, or one "Sources of
+figures" appendix plus the ids in the file's custom properties), `layout`
+(`plain`, or `designed`: a real cover, keep-with-next, whole short tables,
+widow and orphan control), `deck` (`ledger` tables, or a `presenter` deck of
+takeaway titles and argument bullets), `notes` (talk track or provenance)
+and `slide_budget`. A new doctype gets all of them by being rendered, with
+nothing to declare; a doctype that must keep its citations on the page is an
+`overrides` entry, not a new profile.
 
 ## Authoring your own
 

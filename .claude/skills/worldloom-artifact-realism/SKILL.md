@@ -36,8 +36,8 @@ The deterministic host decides whether a proposal is accepted. Rejection is a no
 - Lifecycle time comes from simulated world time. Never call `now()` for artifact history.
 - Keep organisation style correlated across surfaces, but derive artifact-local variation from named deterministic streams so a company does not collapse to one template.
 - Do not copy identical prose across surfaces. The same episode should produce different views of the same facts.
-- A recipe with no `artifact_realism` key is `legacy` and stays byte-stable. New builds default to `artifact_realism=enterprise/v1` (long-form reports, pack decks, intranet pages, revision and pack files, connector files with text); `--realism legacy` or `Blueprint.realism("legacy")` reproduces the old bytes, and `ecology/v1` remains an explicit opt-in. See `worldloom/references/rendering.md`.
-- Under `enterprise/v1`, length comes from structure the world supplies (document control, numbered sections, schedules incorporated from the pack workbook, lineage appendices, revisions dated in world time), never from inflated prose. Measure it with `worldloom diversity ./corpus --sizes` or the `measure_corpus` MCP tool.
+- A recipe with no `artifact_realism` key is `legacy` and stays byte-stable. New builds default to `artifact_realism=enterprise/v2` (long-form reports, pack decks, intranet pages, revision and pack files, connector files with text, narrated move by move and presented for a reader); `enterprise/v1` is the audit-presented first version; `--realism legacy` or `Blueprint.realism("legacy")` reproduces the old bytes, and `ecology/v1` remains an explicit opt-in. See `worldloom/references/rendering.md`.
+- Under the enterprise profiles, length comes from structure and from argued prose (one paragraph per rhetorical move), the world supplies (document control, numbered sections, schedules incorporated from the pack workbook, lineage appendices, revisions dated in world time), never from inflated prose. Measure it, and the prose-quality reading beside it, with `worldloom diversity ./corpus --sizes` or the `measure_corpus` MCP tool.
 
 ## Review questions
 

@@ -27,7 +27,7 @@ types ported to the schema (`core.json`), a pack that authors one and builds
 `artifact_types` list) and `assets/filing-lore.json` (the lore entry that
 files it).
 
-Five fields decide whether the document is any good:
+Six fields decide whether the document is any good:
 
 - `sections[].kinds`: fact-kind *prefixes*; a prefix nothing produces drops
   the section silently rather than failing.
@@ -35,6 +35,10 @@ Five fields decide whether the document is any good:
   *subject*; only financial generators state per-unit figures.
 - `sections[].purpose`: say what the section must *establish*, and for whom,
   or the prose lists instead of argues.
+- `sections[].moves`: how the argument is built, one paragraph per move
+  (`headline`, `comparison`, `implication`, ...), each drawing on part of the
+  section's facts. Omit it and the section takes the rhetoric catalogue's
+  moves for its role.
 - `filing.audience`: who may **open** the document, not who receives it.
 - `lag`: how long after its newest cited fact it is written; keep it at or
   under a day and fifteen hours.

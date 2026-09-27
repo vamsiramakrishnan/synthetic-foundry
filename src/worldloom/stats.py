@@ -759,11 +759,16 @@ def document_shapes(world: World) -> dict[str, Any]:
         row["words_mean"] = round(row.pop("words") / max(1, row["documents"]), 1)
         row["revisions"] = revisions.get(key, 0)
         out.append(row)
+    from . import prose_quality
+
     return {
         "realism": realism_profiles.of(world),
         "files": files,
         "revision_files": sum(revisions.values()),
         "by_type": out,
+        # How the narrated prose reads, beside how big the documents are: a
+        # thirty-page paper of one-line sections is still one-line sections.
+        "prose": prose_quality.measure(world).as_dict(),
     }
 
 

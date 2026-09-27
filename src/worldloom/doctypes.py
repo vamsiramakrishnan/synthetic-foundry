@@ -204,6 +204,19 @@ class Lag(DocModel):
         return cls(days=total // 1440, hours=(total % 1440) // 60, minutes=total % 60)
 
 
+class MoveSpecModel(DocModel):
+    """One rhetorical move a section makes, when a bare name is not enough.
+
+    ``kinds`` narrows the fact-kind prefixes the move may draw on (each must
+    sit inside the section's own ``kinds``); ``say`` replaces the prompts
+    pack's instruction for this move in this section only.
+    """
+
+    move: str = Field(min_length=1)
+    kinds: list[str] = Field(default_factory=list)
+    say: str = ""
+
+
 class SectionSpec(DocModel):
     """One section of an authored type's outline — a ``SectionPlan`` as JSON."""
 
@@ -244,6 +257,15 @@ class SectionSpec(DocModel):
     default, derives it from ``heading``; state one to keep what the section
     *is* fixed while its heading is reworded. Left off the wire when empty."""
 
+    moves: list[MoveSpecModel | str] = Field(default_factory=list)
+    """The rhetorical moves this section makes, in order: a move name from
+    the rhetoric catalogue (``"headline"``) or ``{"move": ..., "kinds": [...],
+    "say": ...}`` to narrow the facts the move may draw on or to say how it is
+    asked for. Empty, the default, takes the catalogue's moves for this
+    section's semantic role. A writer is asked for one paragraph per move and
+    the offline narrator realises each move from its sentence plans; see
+    `worldloom.rhetoric`. Left off the wire when empty."""
+
     def as_plan(self) -> SectionPlan:
         return SectionPlan(
             heading=self.heading,
@@ -253,14 +275,19 @@ class SectionSpec(DocModel):
             required=self.required,
             repeat=self.repeat,
             key=self.key,
+            moves=tuple(
+                move if isinstance(move, str) else move.model_dump(exclude_defaults=True)
+                for move in self.moves
+            ),
         )
 
     @model_serializer(mode="wrap")
     def _repeat_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         # A section is embedded in every pack-built corpus's recipe; an unset
-        # repeat, note or key stays off it so those recipes keep their exact bytes.
+        # repeat, note, key or move list stays off it so those recipes keep
+        # their exact bytes.
         data: dict[str, Any] = handler(self)
-        for key in ("repeat", "note", "key"):
+        for key in ("repeat", "note", "key", "moves"):
             if not getattr(self, key):
                 data.pop(key, None)
         return data
@@ -529,6 +556,8 @@ def describe(artifact_type: str) -> DocumentType:
                 required=plan.required,
                 repeat=plan.repeat,  # type: ignore[arg-type]
                 key=plan.key,
+                moves=[move if isinstance(move, str) else MoveSpecModel.model_validate(move)
+                       for move in plan.moves],
             )
             for plan in documents._OUTLINES.get(artifact_type, ())
         ],
@@ -964,6 +993,15 @@ def lint(
         reserved_words = {documents.spoken_heading(h) for h in RESERVED_HEADINGS}
         for position, section in enumerate(spec.sections):
             at = f"{where}.sections[{position}] ({section.heading!r})"
+
+            # -- rhetoric ----------------------------------------------------
+            # A move nobody defined would be asked for with no instruction and
+            # realised by no sentence plan; a move narrowed to kinds outside the
+            # section's own could never be handed a fact. Both compile and both
+            # quietly lose a paragraph, so they are named here.
+            from . import rhetoric
+
+            findings.extend(f"{at}: {finding}" for finding in rhetoric.lint_moves(section.moves, section.kinds))
 
             # -- repetition ------------------------------------------------
             unit_variable = documents.UNIT_NAME_VARIABLE[len("{{var:"):-2]

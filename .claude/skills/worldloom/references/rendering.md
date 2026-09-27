@@ -107,7 +107,7 @@ worldloom render ./corpus -f docx --realism legacy
 worldloom diversity ./corpus --sizes
 ```
 
-| | `enterprise/v1` (default for new builds) | `legacy` |
+| | `enterprise/v1` (and `enterprise/v2`, the default for new builds) | `legacy` |
 |---|---|---|
 | Word, PDF | controlled report: cover, document control, revision history, approvals, review record, contents, numbered sections with a "figures cited" table each, the pack workbook's schedules, appendices (supporting facts, lineage, measures, chronology, related documents), running heads with classification and `Page X of Y`; PDF adds bookmarks and a sign-off form | the compact memo |
 | PowerPoint | a pack deck on the template's layouts (title, agenda, section headers, content, two content, comparison, title only for native charts and tables), speaker notes on every slide, footer, date and slide number | seven slides on the blank layout |
@@ -115,6 +115,16 @@ worldloom diversity ./corpus --sizes
 | HTML | intranet page: site navigation, breadcrumbs, page metadata and labels, attachments, related pages, history, comments; plus `artifacts/index.html` | standalone page |
 | extra files | `artifacts/revisions/` (v0.1 draft, v0.2 reviewed, amendments) and `artifacts/families/<pack>/` (pack index, agenda) | none |
 | connector files | `content` (the file's text) and `structure` (pages, slides, sections), revision history | path, size and hash only |
+
+New builds record `enterprise/v2`: the same files as `enterprise/v1`
+(the table's first column), written and laid out for a reader. Sections are
+asked for move by move (`rhetoric`), `--narrate` writes with the composing
+offline narrator, and the `reader` presentation profile applies unless the
+corpus names another: provenance in a "Sources of figures" appendix and the
+files' custom properties instead of a "figures cited" table under every
+section, a designed cover and pagination, and a presenter's deck of takeaway
+titles, argument bullets and talk-track notes within a slide budget.
+`--realism enterprise/v1` keeps the audit-presented first version.
 
 Absent means `legacy`, so every corpus built before the profile existed
 re-renders and replays byte for byte; `--realism legacy` on a new build writes
