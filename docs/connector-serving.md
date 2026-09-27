@@ -441,6 +441,17 @@ provider-neutral mailbox, no published Rovo REST contract, an early-access
 GraphQL API, the generic system of record); the lock says so and coverage
 reports them as `none`.
 
+Anvil ships its own reviewed profiles for Jira, Confluence v2, Slack, Drive
+and Graph (`examples/profiles/<vendor>/` in the Anvil repository), pinned to
+the same bytes; each lock entry names its counterpart (`anvil_profile`) and
+`tests/test_contracts.py` holds the two pins equal. Anvil's profiles are the
+wider surface an agent needs around those APIs; Worldloom's are what its
+connectors model plus the neighbours worth refusing, so every exposed
+operation has a mapping entry. Confluence v2 has no CQL search (that is the
+v1 `/wiki/rest/api/search`), so a v2 listing's filters are answered as the
+CQL they mean; a create whose contract declares 200 (Confluence, Drive, some
+Graph actions) answers 200.
+
 Unmodelled operations are exposed on purpose: an agent that deletes a Jira
 issue instead of transitioning it, or soft-deletes a Teams message, meets the
 vendor's route and a refusal (`unsupported_operation`) rather than a 404 for
