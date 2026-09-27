@@ -333,3 +333,64 @@ def test_with_every_stage_off_the_run_is_what_it_was_before_stages(tmp_path: Pat
     comparison = compare(off, on)
     assert not comparison.grader_mismatch and comparison.stage_deltas is None
     assert "stage_deltas" not in comparison.model_dump(mode="json", by_alias=True)
+
+
+# -- native queries: the stage reads what the evaluator executed ----------------
+
+
+def _native_query_grade(connector: str, tool: str, entity: str, records: list[dict[str, Any]], gold: list[str],
+                        predicate: dict[str, Any], query: str) -> Any:
+    row = {"id": f"native-{connector}", "query": "Find the records the request names.",
+           "expected_dag": {"nodes": [{"id": "search", "server": connector, "tool": tool, "entity": entity,
+                                       "node_kind": "search", "op": "search", "payload": {"predicate": predicate},
+                                       "expected_reads": gold}], "edges": []},
+           "assertions": [{"type": "tool_called", "node": "search"}]}
+    case = case_from_row(row)
+    service = service_for((case,), records, query_engine="native")
+    result = run_case(service, case, ScriptedAgent([(f"{connector}.{tool}", {"query": query})]))
+    assert result.graded and result.score is not None, result.error
+    assert not result.spans[0]["error"], result.spans[0]
+    grade = result.score.trajectory.queries
+    assert grade is not None
+    return grade
+
+
+def test_a_native_jql_disjunction_with_a_relative_window_is_read_as_the_evaluator_ran_it() -> None:
+    records = [{"fid": f"j{n}", "server": "jira", "entity": "task", "ident": f"OPS-{n}", "project": "OPS",
+                "status": status, "severity": severity, "summary": f"Issue {n}",
+                "created_at": f"2026-09-0{n}T10:00:00+08:00"}
+               for n, (status, severity) in enumerate(
+                   [("open", "Sev-1"), ("todo", "Sev-2"), ("review", "Sev-1"), ("done", "Sev-3"), ("open", "Sev-1")],
+                   start=1)]
+    grade = _native_query_grade(
+        "jira", "search_issues", "task", records, ["j1", "j3", "j5"], {"severity": "Sev-1"},
+        '(status = open OR status = review) AND created >= -2d AND cf[10231] = "Sev-1"')
+    call = grade.calls[0]
+    # The historical conjunctive parser could not read this query at all.
+    assert call.constrained == ("created_at", "severity", "status")
+    assert call.missing_filters == ()
+    # `-2d` from the clock (2026-09-05 09:00) cuts j1, created on the 1st.
+    assert call.wrong_window == ("created_at",)
+    assert {"query.wrong_window", "query.missed_evidence"} <= set(grade.findings)
+    assert grade.nodes[0].found == 2
+
+
+def test_a_native_odata_filter_is_read_as_the_evaluator_ran_it() -> None:
+    records = [{"fid": f"m{n}", "server": "outlook", "entity": "message", "ident": f"msg-{n}",
+                "subject": f"Invoice {n}", "sender": "ap@vendor.example" if n < 4 else "someone@else.example",
+                "received_at": f"2026-09-0{n}T08:00:00+08:00", "is_read": n % 2 == 0}
+               for n in range(1, 7)]
+    grade = _native_query_grade(
+        "outlook", "list_messages", "message", records, ["m1", "m2", "m3"], {"sender": "ap@vendor.example"},
+        "from/emailAddress/address eq 'ap@vendor.example' and (isRead eq true or contains(subject,'Invoice')) "
+        "and receivedDateTime ge 2026-09-02T00:00:00+08:00")
+    call = grade.calls[0]
+    assert call.constrained == ("is_read", "received_at", "sender", "subject")
+    assert call.missing_filters == ()
+    assert call.wrong_window == ("received_at",)
+    assert grade.nodes[0].found == 2
+    # Without the sender clause, the gold node's filter is named as missing.
+    loose = _native_query_grade(
+        "outlook", "list_messages", "message", records, ["m1", "m2", "m3"], {"sender": "ap@vendor.example"},
+        "receivedDateTime ge 2026-08-01T00:00:00+08:00")
+    assert loose.calls[0].missing_filters == ("sender",) and loose.calls[0].wrong_window == ()

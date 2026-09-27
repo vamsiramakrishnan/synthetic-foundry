@@ -40,10 +40,14 @@ first written up, before the waves above it landed.
   contracts. The default stays the in-process emulator, byte-identical.
 - **Stages read queries through the shared evaluator.** The query stage's
   filter fields, entity and window clauses now come from the vendor
-  evaluator's parse when it reads the query, and from the historical
-  conjunctive parser otherwise. A relative bound such as `created >= -7d` is
-  now a time relative to the connector clock, so its window is checked; a
-  disjunction still names the fields it constrains.
+  evaluator's parse, bound to the record keys the search compared (JQL
+  `created` is the record's `created_at`, OData `receivedDateTime` its
+  `received_at`), and from the historical conjunctive parser only for a query
+  the evaluator does not read. A relative bound such as `created >= -7d` is
+  now a time relative to the connector clock, so its window is checked; JQL
+  `OR`, native date functions and OData expressions are read rather than
+  dropped as unknown, so `query.missing_filter` and `query.wrong_window` fire
+  on them; a disjunction still names the fields it constrains.
 - **Parity.** `tests/test_anvil_provider.py` replays one Jira call sequence
   (JQL search over two pages, get, create, edit, transition, comment, three
   domain errors) through the emulator and through Anvil and the provider, and

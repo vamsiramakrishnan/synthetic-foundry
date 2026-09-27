@@ -342,7 +342,8 @@ def _where(value: Any) -> list[tuple[str, str, Any]]:
 
 
 def _call_clauses(definitions: Mapping[str, Any], connector: str, args: Mapping[str, Any], *,
-                  tool: str | None = None) -> tuple[list[tuple[str, str, Any]] | None, str | None]:
+                  tool: str | None = None,
+                  keys: frozenset[str] = frozenset()) -> tuple[list[tuple[str, str, Any]] | None, str | None]:
     """What the call filtered on, and the entity it named, as the connector reads them.
 
     A native query is read back through the shared vendor query evaluator
@@ -350,7 +351,12 @@ def _call_clauses(definitions: Mapping[str, Any], connector: str, args: Mapping[
     engine and the Anvil provider execute with, and only when that parser
     refuses it through the emulator's historical conjunctive parser. This
     module never parses a query language itself. A query neither parser can
-    read gives ``None`` (unknown), which is not the same as no filter.
+    read gives ``None`` (unknown), which is not the same as no filter. The
+    historical parser is reached only for a query the evaluator does not
+    read: a language it has no parser for, or text the vendor would refuse,
+    which a ``native`` engine refused at the call, so its clauses grade a
+    ``predicate`` engine's call. *keys* are the record keys the connector's
+    records carry: a bound field is named by the key the evaluator read.
     """
 
     entity = str(args["entity"]) if args.get("entity") else None
@@ -364,7 +370,7 @@ def _call_clauses(definitions: Mapping[str, Any], connector: str, args: Mapping[
             definition = definitions.get(connector)
             if definition is None:
                 return None, entity
-            evaluated = _evaluator_clauses(definition, str(args["query"]), entity=entity, tool=tool)
+            evaluated = _evaluator_clauses(definition, str(args["query"]), entity=entity, tool=tool, keys=keys)
             if evaluated is not None:
                 return evaluated
             from ..connector_query import parse_native
@@ -383,18 +389,20 @@ _TYPE_FIELDS = {"jql": "issuetype", "cql": "type"}
 _AST_OPS = {"eq": "eq", "ne": "ne", "gt": "gt", "ge": "gte", "lt": "lt", "le": "lte"}
 
 
-def _evaluator_clauses(definition: Any, text: str, *, entity: str | None,
-                       tool: str | None) -> tuple[list[tuple[str, str, Any]], str | None] | None:
+def _evaluator_clauses(definition: Any, text: str, *, entity: str | None, tool: str | None,
+                       keys: frozenset[str] = frozenset()) -> tuple[list[tuple[str, str, Any]], str | None] | None:
     """*text* read by the shared evaluator as ``(field, op, value)`` clauses, or ``None`` to fall back.
 
-    Fields come back under their semantic names (``cf[10231]`` is
-    ``severity``), as the historical parser named them, so a gold node's
-    fields compare the same way. A time bound is a ``RelativeTime`` from the
-    connector's clock, which is what the historical parser produced for
-    ``-7d`` and resolves to the instant the evaluator computed. A conjunct
-    that is not a plain field condition (a disjunction, a negation, a
-    collection test) still names the fields it constrains, under the
-    operator ``any``, which no window check reads.
+    Each field is bound as the evaluator binds it when it executes the
+    query (``QueryTarget.resolve``): named by the first of its record keys
+    the connector's records carry (*keys*), else by its first key, which is
+    the semantic name the historical parser gave it (``cf[10231]`` is
+    ``severity``, ``created`` is ``age_days``). So a window clause is checked
+    against the value the search actually compared. A time bound is a
+    ``RelativeTime`` from the connector's clock, the instant the evaluator
+    computed. A conjunct that is not a plain field condition (a disjunction,
+    a negation, a collection test) still names the fields it constrains,
+    under the operator ``any``, which no window check reads.
     """
 
     from ..connector_query import _infer_entity, _semantic_field
@@ -408,8 +416,10 @@ def _evaluator_clauses(definition: Any, text: str, *, entity: str | None,
         QueryError,
         TextMatch,
         TimeWindow,
+        bind,
         canonical_language,
         parse,
+        target_for,
         tool_language,
     )
     from ..connectors.query.ast import And, fields_of
@@ -420,8 +430,21 @@ def _evaluator_clauses(definition: Any, text: str, *, entity: str | None,
     try:
         clock = datetime.fromisoformat(str(definition.clock))
         parsed = parse(language, text, clock=clock)
+        target = target_for(definition, language=language,
+                            entity=entity if entity in definition.entities else None,
+                            records=[dict.fromkeys(sorted(keys))] if keys else ())
+        parsed = bind(parsed, target, text=text)
     except (QueryError, ValueError, TypeError):
         return None
+
+    def named(field: str) -> str:
+        resolved = target.resolve(field)
+        if not resolved:
+            return str(_semantic_field(definition, field))
+        for key in resolved:
+            if key in keys or key.split(".", 1)[0] in keys:
+                return key
+        return resolved[0]
 
     def relative(value: Any) -> Any:
         if isinstance(value, datetime):
@@ -446,25 +469,25 @@ def _evaluator_clauses(definition: Any, text: str, *, entity: str | None,
             chosen = chosen or (node.value if language == "jql" else _infer_entity(definition, node.value))
             continue
         if isinstance(node, Compare):
-            clauses.append((_semantic_field(definition, node.field), _AST_OPS[node.op.value], relative(node.value)))
+            clauses.append((named(node.field), _AST_OPS[node.op.value], relative(node.value)))
         elif isinstance(node, In):
-            clauses.append((_semantic_field(definition, node.field), "in",
+            clauses.append((named(node.field), "in",
                             tuple(relative(value) for value in node.values)))
         elif isinstance(node, IsEmpty):
-            clauses.append((_semantic_field(definition, node.field), "eq", None))
+            clauses.append((named(node.field), "eq", None))
         elif isinstance(node, TimeWindow):
-            field = _semantic_field(definition, node.field)
+            field = named(node.field)
             if node.start is not None:
                 clauses.append((field, "gte", relative(node.start)))
             if node.end is not None:
                 clauses.append((field, "lt", relative(node.end)))
         elif isinstance(node, TextMatch):
             if node.field is not None:
-                clauses.append((_semantic_field(definition, node.field), "contains", node.text))
+                clauses.append((named(node.field), "contains", node.text))
         elif isinstance(node, AnyOf):
-            clauses.append((_semantic_field(definition, node.field), "any", None))
+            clauses.append((named(node.field), "any", None))
         else:
-            clauses.extend((_semantic_field(definition, field), "any", None)
+            clauses.extend((named(field), "any", None)
                            for field in dict.fromkeys(fields_of(node)))
     return clauses, chosen
 
@@ -483,7 +506,39 @@ def _same_field(definitions: Mapping[str, Any], connector: str, left: str, right
         return True
     definition = definitions.get(connector)
     mapping = dict(getattr(definition, "query_fields", {}) or {})
-    return mapping.get(left, left).casefold() == mapping.get(right, right).casefold()
+    if mapping.get(left, left).casefold() == mapping.get(right, right).casefold():
+        return True
+    # The evaluator's binding: `age_days`, `created` and `created_at` are one
+    # Jira field, and a call the grader names by the key it read must still
+    # meet the gold node that names it semantically.
+    target = _target(definition)
+    if target is None:
+        return False
+    keys_left = {key.casefold() for key in (target.resolve(left) or (left,))} | {left.casefold()}
+    keys_right = {key.casefold() for key in (target.resolve(right) or (right,))} | {right.casefold()}
+    return bool(keys_left & keys_right)
+
+
+def _target(definition: Any) -> Any:
+    """The evaluator's field binding for *definition*'s language, or ``None`` when it has none."""
+    if definition is None:
+        return None
+    from ..connectors.query import target_for
+
+    try:
+        return target_for(definition)
+    except ValueError:
+        return None
+
+
+def _record_keys(before: Mapping[str, Mapping[str, Any]], connector: str,
+                 cache: dict[str, frozenset[str]]) -> frozenset[str]:
+    """Every top-level key *connector*'s records carry in the pre-state, computed once per connector."""
+    held = cache.get(connector)
+    if held is None:
+        held = cache[connector] = frozenset(key for record in before.values()
+                                            if str(record.get("server") or "") == connector for key in record)
+    return held
 
 
 def _clock(definitions: Mapping[str, Any], connector: str) -> datetime | None:
@@ -584,6 +639,7 @@ def grade_queries(case: EvalCase, spans: Sequence[Any], before: Mapping[str, Map
     designed = {(failure.node, failure.kind) for failure in case.trajectory.failures}
     threshold = overfetch_ratio()
 
+    present: dict[str, frozenset[str]] = {}
     calls: list[QueryCall] = []
     per_node: dict[str, list[tuple[dict[str, Any], QueryCall]]] = {node.id: [] for node in gold_nodes}
     for span in materialized:
@@ -593,7 +649,8 @@ def grade_queries(case: EvalCase, spans: Sequence[Any], before: Mapping[str, Map
             continue
         connector = tool.partition(".")[0]
         args = dict(span.get("args") or {})
-        clauses, entity = _call_clauses(known, connector, args, tool=tool.partition(".")[2] or None)
+        clauses, entity = _call_clauses(known, connector, args, tool=tool.partition(".")[2] or None,
+                                        keys=_record_keys(before, connector, present))
         attributed = str(span["node"]) if span.get("node") and str(span["node"]) in by_id else None
         node_id = attributed
         wrong_scope = False
