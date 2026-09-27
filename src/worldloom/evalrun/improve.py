@@ -775,6 +775,14 @@ class Improver:
         if self.repeats < 1:
             raise ValueError(f"repeats must be at least 1, not {self.repeats}")
         self._check_search()
+        # The budget caps what a round spends, screening or not: the finalists'
+        # full training runs are its floor, so a budget below them could never
+        # be kept and is refused rather than silently overrun.
+        floor = min(self.finalists, self.candidates) * self.repeats * len(train)
+        if self.round_budget is not None and self.round_budget < floor:
+            raise ValueError(f"round_budget {self.round_budget} is under the {floor} case-run(s) the finalists' "
+                             f"training runs cost ({min(self.finalists, self.candidates)} finalist(s) x "
+                             f"{self.repeats} repeat(s) x {len(train)} training case(s)); raise it or drop it")
         # A case is the same case when its id, request and row all match: case
         # ids are derived from a request's shape, so a corpus built from a
         # fresh seed reuses ids for different requests over a different world,

@@ -296,6 +296,11 @@ def test_a_round_budget_stops_screening_and_the_ranking_so_far_decides(
     screening = tight.rounds[0].screening
     assert screening is not None and screening.stopped == "budget" and not screening.stages
     assert screening.finalists == (1,), "with nothing screened the first candidate goes on"
+    # Under the finalists' own training runs no round can keep the cap, screening or not: refused up front.
+    for candidates in (1, 5):
+        with pytest.raises(ValueError, match="under the 11 case-run"):
+            _loop(corpus, tmp_path / f"under-{candidates}", _script(_FIVE), levers, candidates=candidates,
+                  screen_cases=4, round_budget=10)
 
 
 def test_candidates_1_is_the_narrow_loop_to_the_byte(corpus: Any, split: tuple[list[str], list[str]],
