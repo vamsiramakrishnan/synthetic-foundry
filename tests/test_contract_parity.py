@@ -305,3 +305,65 @@ def _salesforce(s: Session) -> None:
 def test_salesforce_parity_through_the_authored_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("salesforce", _salesforce_records(), cache, tmp_path, _salesforce)
     session.landing.settle()
+
+
+# -- Jira (the vendor's v3 contract) -------------------------------------------------------
+
+
+#: Anvil pages POST /search/jql by its body token and writes the envelope: the issues and nextPageToken, not isLast.
+JIRA_IS_LAST = "Anvil body-token paging: the page envelope does not carry Jira's isLast yet"
+
+
+def _jira_records() -> list[ConnectorRecord]:
+    issues = [("task", "open", "Sev-1"), ("bug", "todo", "Sev-2"), ("story", "review", "Sev-1"),
+              ("task", "done", "Sev-3"), ("bug", "open", "Sev-1")]
+    return [ConnectorRecord(id=f"rec-{n}", connector="jira", entity=entity, external_id=f"OPS-{n}",
+                            title=f"Issue {n} vendor onboarding",
+                            fields={"status": status, "project": "OPS", "summary": f"Issue {n} vendor onboarding",
+                                    "severity": severity, "assignee": "alice" if n % 2 else "bob",
+                                    "created_at": f"2026-09-0{n}T10:00:00+08:00"})
+            for n, (entity, status, severity) in enumerate(issues, start=1)]
+
+
+def _adf(text: str) -> dict[str, Any]:
+    return {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}]}
+
+
+def _jira(s: Session) -> None:
+    api = "/rest/api/3"
+    jql = 'project = OPS AND cf[10231] = "Sev-1" ORDER BY created ASC'
+    status, page = s.http("POST", f"{api}/search/jql", {"jql": jql, "maxResults": 2})
+    mine = s.local("search_issues", query=jql, max_results=2)[1]
+    assert status == 200 and page["issues"] == mine["items"] and page["nextPageToken"]
+    s.landing.expect(page.get("isLast") is False, JIRA_IS_LAST)
+    status, page = s.http("POST", f"{api}/search/jql", {"jql": jql, "maxResults": 2, "nextPageToken": page["nextPageToken"]})
+    mine = s.local("search_issues", query=jql, max_results=2, start_at=2)[1]
+    assert status == 200 and page["issues"] == mine["items"] and "nextPageToken" not in page
+    s.landing.expect(page.get("isLast") is True, JIRA_IS_LAST)
+    assert s.http("GET", f"{api}/issue/OPS-2") == s.local("get_issue", id="OPS-2")
+    status, created = s.http("POST", f"{api}/issue", {"fields": {
+        "summary": "Vendor follow-up", "project": {"key": "OPS"}, "issuetype": {"name": "Task"},
+        "customfield_10231": {"value": "Sev-2"}, "description": _adf("Chase the signed form")}})
+    mine = s.local("create_issue", entity="task", name="Vendor follow-up",
+                   fields={"project": "OPS", "severity": "Sev-2", "summary": "Vendor follow-up",
+                           "description": "Chase the signed form"})[1]
+    assert (status, created) == (201, {key: mine[key] for key in ("id", "key", "self")})
+    assert s.http("PUT", f"{api}/issue/OPS-1", {"fields": {"summary": "Renamed"}})[0] in (200, 204)
+    s.local("update_issue", id="OPS-1", fields={"summary": "Renamed"})
+    assert s.http("POST", f"{api}/issue/{created['key']}/transitions", {"transition": {"id": "21"}})[0] in (201, 204)
+    s.local("transition_issue", id=created["key"], state="open")
+    status, comment = s.http("POST", f"{api}/issue/OPS-1/comment", {"body": _adf("Checked with the vendor")})
+    s.local("add_comment", id="OPS-1", body="Checked with the vendor")
+    assert status == 201 and comment["body"] == "Checked with the vendor"
+    assert s.http("GET", f"{api}/issue/OPS-404") == s.local("get_issue", id="OPS-404")
+    assert s.http("POST", f"{api}/issue/OPS-4/transitions", {"transition": {"id": "21"}}) == s.local(
+        "transition_issue", id="OPS-4", state="open")
+    assert s.http("POST", f"{api}/search/jql", {"jql": "project = OPS AND"}) == s.local(
+        "search_issues", query="project = OPS AND")
+    assert s.http("GET", f"{api}/issue/OPS-1") == s.local("get_issue", id="OPS-1")
+
+
+@needs_anvil
+def test_jira_parity_through_the_vendor_v3_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("jira", _jira_records(), cache, tmp_path, _jira)
+    session.landing.settle()
