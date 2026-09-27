@@ -1,6 +1,6 @@
 {
  "schema": "worldloom.contract-lock/v1",
- "about": "The vendor contract each connector is served behind through Anvil, pinned by the sha256 of its exact bytes. `worldloom contracts fetch` downloads each vendor source (or copies an authored one out of the package) and refuses bytes that hash to anything else; `worldloom contracts build CONNECTOR` compiles it under its profile with Anvil; `worldloom contracts coverage` reports what each profile exposes and what the mapping models. vendor_operations counts the whole source; profiled_operations is what the profile exposes and the mapping must cover. anvil_source_hash is Anvil's snapshot identity for the locked bytes.",
+ "about": "The vendor contract each connector is served behind through Anvil, pinned by the sha256 of its exact bytes. `worldloom contracts fetch` downloads each vendor source (or copies an authored one out of the package) and refuses bytes that hash to anything else; `worldloom contracts build CONNECTOR` compiles it under its profile with Anvil; `worldloom contracts coverage` reports what each profile exposes and what the mapping models. vendor_operations counts the whole source; profiled_operations is what the profile exposes and the mapping must cover. anvil_source_hash is Anvil's snapshot identity for the locked bytes. anvil_profile names Anvil's own reviewed profile for the same source (in the Anvil repository), whose source pin agrees with this digest; the Worldloom profile is narrower, the operations the connector models and their neighbours.",
  "contracts": {
   "confluence": {
    "provenance": "vendor",
@@ -19,7 +19,8 @@
    "profiled_operations": 28,
    "profile": "anvil/profiles/confluence.yaml",
    "manifest": "anvil/manifests/confluence.yaml",
-   "note": "The manifest chooses basic auth among the two the spec declares. v2 has no CQL search; a page or post listing is answered as the CQL its filters mean."
+   "note": "The manifest chooses basic auth among the two the spec declares. v2 has no CQL search; a page or post listing is answered as the CQL its filters mean.",
+   "anvil_profile": "examples/profiles/confluence/profile.yaml"
   },
   "drive": {
    "provenance": "vendor",
@@ -37,7 +38,8 @@
    "anvil_source_hash": "sha256:2b611b79f1e1c1c2eaccc4d110f6796e91da7eeca1452e48c7062d9b99cc2d26",
    "vendor_operations": 64,
    "profiled_operations": 18,
-   "profile": "anvil/profiles/drive.yaml"
+   "profile": "anvil/profiles/drive.yaml",
+   "anvil_profile": "examples/profiles/google-drive/profile.yaml"
   },
   "jira": {
    "provenance": "vendor",
@@ -56,7 +58,8 @@
    "profiled_operations": 26,
    "profile": "anvil/profiles/jira.yaml",
    "manifest": "anvil/manifests/jira.yaml",
-   "note": "The profile selects the 26 operations of Anvil's Jira backtest; the manifest chooses basic auth among the two the spec declares."
+   "note": "The profile selects the 26 operations of Anvil's Jira backtest; the manifest chooses basic auth among the two the spec declares.",
+   "anvil_profile": "examples/profiles/jira/profile.yaml"
   },
   "onedrive": {
    "provenance": "vendor",
@@ -74,7 +77,8 @@
    "vendor_operations": 17870,
    "profiled_operations": 20,
    "profile": "anvil/profiles/onedrive.yaml",
-   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile.",
+   "anvil_profile": "examples/profiles/microsoft-graph/profile.yaml"
   },
   "outlook": {
    "provenance": "vendor",
@@ -92,7 +96,8 @@
    "vendor_operations": 17870,
    "profiled_operations": 26,
    "profile": "anvil/profiles/outlook.yaml",
-   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile.",
+   "anvil_profile": "examples/profiles/microsoft-graph/profile.yaml"
   },
   "salesforce": {
    "provenance": "authored",
@@ -161,7 +166,8 @@
    "vendor_operations": 17870,
    "profiled_operations": 36,
    "profile": "anvil/profiles/sharepoint.yaml",
-   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile.",
+   "anvil_profile": "examples/profiles/microsoft-graph/profile.yaml"
   },
   "slack": {
    "provenance": "vendor",
@@ -178,7 +184,8 @@
    "anvil_source_hash": "sha256:020232ace971d2e74205a8b6979f0cda47a88763d10fbcc67e67bbece878a207",
    "vendor_operations": 174,
    "profiled_operations": 30,
-   "profile": "anvil/profiles/slack.yaml"
+   "profile": "anvil/profiles/slack.yaml",
+   "anvil_profile": "examples/profiles/slack/profile.yaml"
   },
   "teams": {
    "provenance": "vendor",
@@ -196,7 +203,8 @@
    "vendor_operations": 17870,
    "profiled_operations": 41,
    "profile": "anvil/profiles/teams.yaml",
-   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile.",
+   "anvil_profile": "examples/profiles/microsoft-graph/profile.yaml"
   }
  },
  "uncontracted": {

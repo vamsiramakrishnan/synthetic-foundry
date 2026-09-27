@@ -52,10 +52,14 @@ Serving only; nothing a seed generates changes.
 - **Parity per connector.** `tests/test_contract_parity.py` compiles the
   committed trims and runs one call sequence per connector through Anvil
   and in process: records, errors and state diffs agree. The assertions on
-  envelope fields still landing in Anvil (Jira's `isLast`, Confluence's
-  `_links.next`, Slack's `response_metadata.next_cursor` and
-  `messages.matches`, Drive's `kind`, single-record reads served as pages)
-  xfail naming the capability.
+  envelope fields still landing in Anvil (Jira's `isLast`, Slack's
+  `response_metadata.next_cursor` and `messages.matches`, Drive's `kind`,
+  single-record reads served as pages) xfail naming the capability;
+  Confluence's `_links.next` and Graph's `@odata.nextLink` are asserted
+  outright now that Anvil writes them. Each Graph, Jira, Confluence, Slack
+  and Drive lock entry names Anvil's reviewed profile for the same source
+  (`anvil_profile`), and a test holds the two pins equal. Page answers carry
+  the match count and the query ran as provider `meta` for Anvil's trace.
 
 ### Reader-grade documents: four edges a live narration showed
 

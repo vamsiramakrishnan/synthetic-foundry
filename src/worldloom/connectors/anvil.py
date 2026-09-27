@@ -910,6 +910,11 @@ def answer(mapping: AnvilMapping, backend: Backend, request: Mapping[str, Any]) 
         response = _refusal("validation_error", str(error), upstream="serving", mapping=mapping)
     except OperationRefused as refused:
         response = _refusal(refused.code, refused.message, upstream=refused.upstream, mapping=mapping)
+    if response.get("ok") and isinstance(result, Mapping) and "total" in result:
+        # Anvil writes `meta` to its call trace and never to the response: the
+        # match count and the vendor query the evaluator ran, for whoever reads
+        # the trace.
+        response = {**response, "meta": {"total": result.get("total"), "query": result.get("native_query")}}
     return Answer(response, called=True, tool=planned.tool, args=planned.args)
 
 

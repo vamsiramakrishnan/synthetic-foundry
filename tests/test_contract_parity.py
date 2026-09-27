@@ -372,11 +372,6 @@ def test_jira_parity_through_the_vendor_v3_contract(cache: Path, tmp_path: Path)
 # -- Confluence (the vendor's v2 contract) --------------------------------------------------
 
 
-#: Anvil pages Confluence's cursor lists and writes the envelope: `results`, and its own continuation field.
-CONFLUENCE_NEXT = ("Anvil cursor paging: the page envelope writes a top-level next_cursor, not Confluence's "
-                   "_links.next link")
-
-
 def _confluence_records() -> list[ConnectorRecord]:
     pages = [ConnectorRecord(id=f"cf-{n}", connector="confluence", entity="page", external_id=str(1000 + n),
                              title=f"Runbook {n}", fields={"space": "OPS", "body": f"Step {n}"}) for n in range(1, 5)]
@@ -393,7 +388,9 @@ def _confluence(s: Session) -> None:
     status, first = s.http("GET", "/pages", query={"limit": 3})
     mine = s.local("search", entity="page", query='type = "page"', max_results=3)[1]
     assert status == 200 and first["results"] == mine["items"] and len(mine["items"]) == 3
-    s.landing.expect(str(first.get("_links", {}).get("next", "")).startswith("/wiki/api/v2/pages?cursor="), CONFLUENCE_NEXT)
+    # Confluence writes the continuation as a link carrying the cursor; Anvil's is absolute on the served base.
+    link = urllib.parse.urlsplit(str(first.get("_links", {}).get("next", "")))
+    assert link.path.endswith("/pages") and urllib.parse.parse_qs(link.query).get("cursor") == ["3"], first
     status, posts = s.http("GET", "/blogposts")
     assert status == 200 and posts["results"] == s.local("search", entity="blogpost", query='type = "blogpost"')[1]["items"]
     assert s.http("GET", "/pages/1001") == s.local("get_page", id="1001")
@@ -580,8 +577,6 @@ def test_drive_parity_through_the_vendor_discovery_contract(cache: Path, tmp_pat
 # -- Microsoft Graph: Outlook mail ----------------------------------------------------------
 
 
-#: Anvil pages Graph lists by $skiptoken and writes `value`; the `@odata.nextLink` continuation is the part pending.
-GRAPH_NEXT = "Anvil OData paging: the page envelope does not carry Graph's @odata.nextLink yet"
 #: GET .../content reads one item's bytes; Anvil classifies it as a list and serves a page.
 GRAPH_CONTENT = "Anvil paging classification: a driveItem's GET .../content is served as a page"
 
@@ -605,7 +600,7 @@ def _outlook(s: Session) -> None:
     mine = s.local("list_messages", query=f"$filter={flt}", max_results=1)[1]
     assert status == 200 and body["value"] == mine["items"] and len(mine["items"]) == 1
     link = urllib.parse.urlsplit(str(body.get("@odata.nextLink", "")))
-    s.landing.expect(urllib.parse.parse_qs(link.query).get("$skiptoken") == ["1"], GRAPH_NEXT)
+    assert urllib.parse.parse_qs(link.query).get("$skiptoken") == ["1"], body
     status, body = s.http("GET", "/me/messages", query={"$filter": flt, "$top": 1, "$skiptoken": "1"})
     assert status == 200 and body["value"] == s.local("list_messages", query=f"$filter={flt}", max_results=1, start_at=1)[1]["items"]
     status, body = s.http("GET", "/me/messages", query={"$search": '"timetable"'})

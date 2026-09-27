@@ -102,6 +102,9 @@ class LockedContract:
     vendor_operations: int
     profiled_operations: int
     anvil_source_hash: str | None = None
+    #: Anvil's own reviewed profile for the same source (a path in the Anvil
+    #: repository), whose source pin must agree with this lock's digest.
+    anvil_profile: str | None = None
     documentation: tuple[str, ...] = ()
     note: str | None = None
 
@@ -179,6 +182,7 @@ def parse_lock(document: Mapping[str, Any], *, origin: str = "_contracts.json") 
             vendor_operations=int(_require(raw, "vendor_operations", where)),
             profiled_operations=int(_require(raw, "profiled_operations", where)),
             anvil_source_hash=raw.get("anvil_source_hash"),
+            anvil_profile=raw.get("anvil_profile"),
             documentation=tuple(raw.get("documentation") or ()),
             note=raw.get("note"),
         )

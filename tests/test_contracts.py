@@ -119,6 +119,31 @@ def test_a_lock_entry_that_cannot_be_verified_is_refused(change: dict[str, Any],
         parse_lock(authored)
 
 
+def _anvil_checkout() -> Path | None:
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "anvil" / "examples" / "profiles"
+        if candidate.is_dir():
+            return parent / "anvil"
+    return None
+
+
+@pytest.mark.skipif(_anvil_checkout() is None, reason="needs an Anvil checkout beside this one")
+def test_the_lock_agrees_with_the_source_pins_of_anvils_reviewed_profiles() -> None:
+    import re
+
+    checkout = _anvil_checkout()
+    assert checkout is not None
+    referenced = {name: contract for name, contract in load_lock().contracts.items() if contract.anvil_profile}
+    assert set(referenced) == {"jira", "confluence", "slack", "drive", "outlook", "onedrive", "sharepoint", "teams"}
+    for name, contract in referenced.items():
+        text = (checkout / str(contract.anvil_profile)).read_text(encoding="utf-8")
+        pins = dict(re.findall(r"^\s+(url|sha256|content_sha256):\s*(\S+)", text, flags=re.MULTILINE))
+        assert pins["url"] == contract.source.url, name
+        # Drive's pin, like its lock, is of the canonical JSON Google's reordering cannot move.
+        key = "content_sha256" if contract.source.canonical == "json" else "sha256"
+        assert pins[key] == f"sha256:{contract.source.sha256}", name
+
+
 def test_an_uncontracted_connector_says_why_when_asked_for_its_contract() -> None:
     with pytest.raises(ContractError, match="no contract: a provider-neutral mailbox"):
         load_lock().contract("email")
