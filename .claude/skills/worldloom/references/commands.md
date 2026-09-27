@@ -1058,6 +1058,88 @@ worldloom inspect <CORPUS>
 | `--facts` | List facts. |
 | `--lore` | List lore commitments. |
 
+### `worldloom interview`
+
+Interview a harness (or a script) layer by layer into a company, its people, processes, paperwork, history and evals; then build it.
+
+### `worldloom interview answer`
+
+Judge one reply to the question in progress and record the round; refused replies name every finding.
+
+```
+worldloom interview answer <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--reply` | The reply JSON: {request_id, answer} or {request_id, questions}. |
+
+### `worldloom interview build`
+
+Build, narrate, render and validate the interviewed world, then generate and prove its eval cases per level.
+
+```
+worldloom interview build <DIRECTORY> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--model-id` | Who wrote the prose; recorded in the ledger. |
+| `--narrate-exec` | A writer adapter for narration (the `narrate loop --exec` contract); default is the deterministic writer. |
+| `--narrate-harness` | An installed coding harness as the writer, by the name `narrate loop --harness` takes. |
+| `--prove` | Run the reference agent over every level's case set and refuse a case it cannot pass. |
+| `--seed` |  |
+| `-f`, `--format` | Formats to render (default docx, xlsx, pptx, markdown). |
+
+### `worldloom interview measure`
+
+Print what an interviewed world holds: employees by level, systems, records, documents, revisions, events, cases.
+
+```
+worldloom interview measure <OUTPUT>
+```
+
+### `worldloom interview next`
+
+The request for the question in progress: answer it and pass the reply to `interview answer`.
+
+```
+worldloom interview next <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `-o`, `--output` | Write the request here instead of stdout. |
+
+### `worldloom interview run`
+
+Interview until every layer is settled, refusing each answer with findings until it lints clean.
+
+```
+worldloom interview run <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exec` | Your own adapter: one request JSON on stdin, one reply JSON on stdout. |
+| `--harness` | An installed coding harness as the interviewee, by the name `narrate loop --harness` takes. |
+| `--max-rounds` | Attempts per question before stopping (policy world.interview.max_rounds). |
+| `--script` | A scripted interviewee: fixture answers per question (offline, deterministic). |
+| `--stop-after` | Settle at most this many questions, then pause; run again to resume. |
+| `--timeout` | Seconds a harness may take per question. |
+
+### `worldloom interview status`
+
+What is settled, what is next, and the findings holding the question in progress.
+
+```
+worldloom interview status <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the status as JSON. |
+
 ### `worldloom mcp`
 
 Serve Worldloom's readings and gates as MCP tools, over stdio.
