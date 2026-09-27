@@ -120,6 +120,8 @@ class Arg:
     parts: Mapping[str, Any] | None = None
     values: Mapping[str, Any] | None = None
     rename: Mapping[str, str] | None = None
+    #: Further locations tried in order when ``source`` is absent.
+    fallbacks: tuple[str, ...] = ()
 
     @property
     def label(self) -> str:
@@ -202,12 +204,14 @@ def _arg(name: str, raw: Any, where: str) -> Arg:
         for key, location in parts.items():
             _location(location, f"{where}: argument {name!r}.{key}")
         return Arg(source=None, parts=dict(parts), transform=transform, required=required, values=chosen, rename=renamed)
-    if not isinstance(raw["from"], str):
-        raise MappingError(f"{where}: argument {name!r} needs a `from` location")
-    source = str(raw["from"])
-    if source.split(".", 1)[0] not in _LOCATIONS:
-        raise MappingError(f"{where}: argument {name!r} reads {source!r}; locations are {', '.join(_LOCATIONS)}")
-    return Arg(source=source, transform=transform, required=required, values=chosen, rename=renamed)
+    sources = raw["from"] if isinstance(raw["from"], list) else [raw["from"]]
+    if not sources or not all(isinstance(item, str) for item in sources):
+        raise MappingError(f"{where}: argument {name!r} needs a `from` location, or a list of them tried in order")
+    for source in sources:
+        if source.split(".", 1)[0] not in _LOCATIONS:
+            raise MappingError(f"{where}: argument {name!r} reads {source!r}; locations are {', '.join(_LOCATIONS)}")
+    return Arg(source=sources[0], transform=transform, required=required, values=chosen, rename=renamed,
+               fallbacks=tuple(sources[1:]))
 
 
 def parse_mapping(document: Mapping[str, Any], *, origin: str = "mapping") -> AnvilMapping:
@@ -451,7 +455,12 @@ def read_arg(request: Mapping[str, Any], spec: Arg) -> Any:
         return out if out else _MISSING
     if spec.source is None:
         return spec.constant
-    return read_location(request, spec.source)
+    value = read_location(request, spec.source)
+    for fallback in spec.fallbacks:
+        if value is not _MISSING:
+            break
+        value = read_location(request, fallback)
+    return value
 
 
 def adf_text(value: Any) -> str:
@@ -874,19 +883,21 @@ def _refusal(code: str, message: str, *, upstream: str | None = None, mapping: A
     return {"ok": False, "error": error}
 
 
-_CODED = re.compile(r"^([A-Z][A-Z_]+):\s*(.*)$", re.DOTALL)
+_CODED = re.compile(r"^([A-Za-z][A-Za-z_]*)(?::\s*(.+))?$", re.DOTALL)
 
 
 def _fill(template: Any, message: str) -> Any:
     """*template* with ``{message}`` filled; ``{errorCode}`` and ``{text}`` split a ``CODE: text`` message.
 
     Salesforce's messages carry their error code (``NOT_FOUND: The requested
-    resource does not exist``) and its body names the two apart.
+    resource does not exist``) and its body names the two apart; a Graph
+    message is its code alone (``ErrorItemNotFound``), which is then both.
+    A message with words before any colon has no code.
     """
 
     if isinstance(template, str):
         coded = _CODED.match(message)
-        code, text = (coded.group(1), coded.group(2)) if coded else ("", message)
+        code, text = (coded.group(1), coded.group(2) or coded.group(1)) if coded else ("", message)
         return template.replace("{message}", message).replace("{errorCode}", code).replace("{text}", text)
     if isinstance(template, list):
         return [_fill(item, message) for item in template]

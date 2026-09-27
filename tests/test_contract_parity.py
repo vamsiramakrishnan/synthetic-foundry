@@ -573,3 +573,76 @@ def _drive(s: Session) -> None:
 def test_drive_parity_through_the_vendor_discovery_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("drive", _drive_records(), cache, tmp_path, _drive)
     session.landing.settle()
+
+
+# -- Microsoft Graph: Outlook mail ----------------------------------------------------------
+
+
+#: Anvil pages Graph lists by $skiptoken and writes `value`; the `@odata.nextLink` continuation is the part pending.
+GRAPH_NEXT = "Anvil OData paging: the page envelope does not carry Graph's @odata.nextLink yet"
+
+
+def _outlook_records() -> list[ConnectorRecord]:
+    folders = [ConnectorRecord(id=f"ol-f{n}", connector="outlook", entity="mail_folder", external_id=f"AAMkFolder{n}",
+                               title=name, fields={"name": name}) for n, name in enumerate(("Inbox", "Archive"), start=1)]
+    messages = [ConnectorRecord(id=f"ol-m{n}", connector="outlook", entity="message", external_id=f"AAMkMsg{n}",
+                                title=subject, fields={"subject": subject, "sender": sender, "recipients": ["ops@contoso.com"],
+                                                       "is_read": n % 2 == 0, "body": f"Body {n}", "state": "sent",
+                                                       "received_at": f"2026-09-0{n}T09:00:00Z"})
+                for n, (subject, sender) in enumerate((("Invoice 104 overdue", "ap@vendor.com"),
+                                                       ("Close timetable", "controller@contoso.com"),
+                                                       ("Invoice 105 received", "ap@vendor.com")), start=1)]
+    return [*folders, *messages]
+
+
+def _outlook(s: Session) -> None:
+    flt = "from/emailAddress/address eq 'ap@vendor.com'"
+    status, body = s.http("GET", "/me/messages", query={"$filter": flt, "$top": 1})
+    mine = s.local("list_messages", query=f"$filter={flt}", max_results=1)[1]
+    assert status == 200 and body["value"] == mine["items"] and len(mine["items"]) == 1
+    link = urllib.parse.urlsplit(str(body.get("@odata.nextLink", "")))
+    s.landing.expect(urllib.parse.parse_qs(link.query).get("$skiptoken") == ["1"], GRAPH_NEXT)
+    status, body = s.http("GET", "/me/messages", query={"$filter": flt, "$top": 1, "$skiptoken": "1"})
+    assert status == 200 and body["value"] == s.local("list_messages", query=f"$filter={flt}", max_results=1, start_at=1)[1]["items"]
+    status, body = s.http("GET", "/me/messages", query={"$search": '"timetable"'})
+    assert status == 200 and body["value"] == s.local("list_messages", query='$search="timetable"')[1]["items"]
+    assert s.http("GET", "/me/messages/AAMkMsg2") == s.local("get_message", id="AAMkMsg2")
+    status, body = s.http("GET", "/me/mailFolders")
+    assert status == 200 and body["value"] == s.local("list_folders")[1]["items"]
+    # Draft, mark read, reply, forward, move, send, delete.
+    draft = {"subject": "Payment run", "body": {"contentType": "text", "content": "Run on Friday"},
+             "toRecipients": [{"emailAddress": {"address": "treasury@contoso.com"}}]}
+    status, created = s.http("POST", "/me/messages", draft)
+    mine = s.local("create_draft", entity="message", name="Payment run",
+                   fields={"subject": "Payment run", "body": "Run on Friday", "recipients": ["treasury@contoso.com"]})[1]
+    assert (status, created) == (201, mine)
+    assert s.http("PATCH", "/me/messages/AAMkMsg1", {"isRead": True}) == s.local(
+        "update_message", id="AAMkMsg1", fields={"is_read": True})
+    assert s.http("POST", "/me/messages/AAMkMsg1/reply", {"comment": "Paid today"})[0] in (200, 201, 202, 204)
+    s.local("reply_message", id="AAMkMsg1", body="Paid today")
+    assert s.http("POST", "/me/messages/AAMkMsg3/forward", {
+        "comment": "For filing", "toRecipients": [{"emailAddress": {"address": "records@contoso.com"}}]})[0] in (200, 201, 202, 204)
+    s.local("forward_message", id="AAMkMsg3", to=["records@contoso.com"], body="For filing")
+    # The contract spells the move body PascalCase (DestinationId) and keeps only declared fields.
+    status, moved = s.http("POST", "/me/messages/AAMkMsg2/move", {"DestinationId": "AAMkFolder2"})
+    assert status in (200, 201) and moved == s.local("move_message", id="AAMkMsg2", parent="AAMkFolder2")[1]
+    assert s.http("POST", "/me/sendMail", {"message": {"subject": "Close done", "body": {"contentType": "text", "content": "All done"},
+                                                        "toRecipients": [{"emailAddress": {"address": "cfo@contoso.com"}}]},
+                                           "saveToSentItems": True})[0] in (200, 201, 202, 204)
+    s.local("send_message", entity="message", name="Close done",
+            fields={"subject": "Close done", "body": "All done", "recipients": ["cfo@contoso.com"]})
+    assert s.http("DELETE", "/me/messages/AAMkMsg3")[0] in (200, 204)
+    s.local("delete_message", id="AAMkMsg3")
+    # Errors: a message that does not exist, a filter Graph refuses, a draft with no subject.
+    assert s.http("GET", "/me/messages/AAMkNope") == s.local("get_message", id="AAMkNope")
+    assert s.http("GET", "/me/messages", query={"$filter": "subject eq"}) == s.local("list_messages", query="$filter=subject eq")
+    assert s.http("POST", "/me/messages", {"body": {"contentType": "text", "content": "x"}}) == s.local(
+        "create_draft", entity="message", fields={"body": "x"})
+    status, _ = s.http("POST", "/me/messages/AAMkMsg1/replyAll", {"comment": "x"})
+    assert status >= 400
+
+
+@needs_anvil
+def test_outlook_parity_through_the_vendor_graph_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("outlook", _outlook_records(), cache, tmp_path, _outlook)
+    session.landing.settle()
