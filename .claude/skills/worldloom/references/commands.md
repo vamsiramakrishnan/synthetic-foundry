@@ -744,11 +744,13 @@ worldloom evalrun run <CORPUS>
 | `--contract` | With --connectors anvil: a contract bundle (or its air.json) to serve, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
+| `--harness-mode` | How the --exec child acts: turns (one call per turn, the default) or sdk-program (it writes one Python program per case against a generated client; Worldloom runs it and grades the calls it made). |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
 | `--max-turns` | Turns the --exec child may take per case (default: the agent pack's max_turns, else policy `evalrun.max_turns`, 64). |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
+| `--program-timeout` | With --harness-mode sdk-program: seconds the program may run per case before it is killed. |
 | `--progress` | Print one line per case to stderr as it is graded: id, status, score, calls and seconds when --timed. |
 | `--rater` | grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam). |
 | `--rater-timeout` | Seconds an exec: rater child may run per answer. |

@@ -434,6 +434,55 @@ def test_a_case_served_through_anvil_grades_exactly_as_the_same_calls_in_process
 
 
 @needs_anvil
+def test_lineage_through_an_anvil_served_run_links_what_the_agent_sent_to_what_it_saw(contract: Path,
+                                                                                      tmp_path: Path) -> None:
+    # The agent read the key off the vendor's search response and put it in
+    # the transition's URL path; lineage reads those, not the replay's arguments.
+    case = case_from_row(_triage_row())
+    serving = AnvilServing({"jira": contract}, command=ANVIL, workdir=tmp_path / "anvil")
+    served = run_case(service_for((case,), _records(), query_engine="native"), case,
+                      CallableAgent(_over_http, name="http"), anvil=serving)
+    assert served.graded and served.score is not None, served.error
+    assert [span["consumed_from"] for span in served.spans] == [[], ["s1"]]
+    dag = served.score.plan.nodes.dag
+    assert dag is not None and dag.edge_recall == 1.0 and dag.missing == () and dag.findings == ()
+    assert "OPS-1" in dag.executed.edges[0].values
+
+
+@needs_anvil
+def test_an_sdk_program_runs_against_anvil_and_is_graded_with_lineage(contract: Path, tmp_path: Path) -> None:
+    from worldloom.evalrun.program import ProgramAgent
+
+    program = (
+        "import json, os, urllib.request\n"
+        "base, token = os.environ['ANVIL_BASE_URL'], os.environ['ANVIL_TOKEN']\n"
+        "def http(method, path, body):\n"
+        "    request = urllib.request.Request(base + path, method=method, data=json.dumps(body).encode(),\n"
+        "                                     headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token})\n"
+        "    with urllib.request.urlopen(request, timeout=60) as response:\n"
+        "        return json.loads(response.read().decode() or 'null')\n"
+        f"found = http('POST', '/rest/api/2/search/jql', {{'jql': {TRIAGE_JQL!r}}})\n"
+        "key = found['issues'][0]['key']\n"
+        "http('POST', '/rest/api/2/issue/' + key + '/transitions', {'transition': {'id': '31'}})\n"
+        "print(json.dumps({'answer': key + ' is in review.'}))\n"
+    )
+    writer = tmp_path / "writer.py"
+    writer.write_text("import json, sys\n"
+                      "document = json.load(sys.stdin)\n"
+                      "assert document['anvil']['base_url_env'] == 'ANVIL_BASE_URL'\n"
+                      f"print(json.dumps({{'program': {program!r}}}))\n", encoding="utf-8")
+    case = case_from_row(_triage_row())
+    serving = AnvilServing({"jira": contract}, command=ANVIL, workdir=tmp_path / "anvil")
+    result = run_case(service_for((case,), _records(), query_engine="native"), case,
+                      ProgramAgent(f"{sys.executable} {writer}", program_timeout=120), anvil=serving)
+    assert result.graded and result.score is not None, result.error
+    assert result.score.passed and result.answer == "OPS-1 is in review."
+    assert result.program is not None and result.program["exit_code"] == 0
+    assert [span["consumed_from"] for span in result.spans] == [[], ["s1"]]
+    assert result.score.plan.nodes.dag.edge_recall == 1.0
+
+
+@needs_anvil
 def test_calls_anvil_answers_itself_and_in_process_calls_are_refusals_on_the_ledger(contract: Path,
                                                                                      tmp_path: Path) -> None:
     from worldloom.connectors.serving import ServingError

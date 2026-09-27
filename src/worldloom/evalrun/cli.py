@@ -270,6 +270,8 @@ def run_command(
     connectors: str = typer.Option("emulator", "--connectors", help="What serves the connectors: emulator (in process, the default) or anvil (`anvil simulate serve` over each --contract, the agent calling the vendor API at $ANVIL_BASE_URL)."),
     contract: list[str] | None = typer.Option(None, "--contract", help="With --connectors anvil: a contract bundle (or its air.json) to serve, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector."),
     anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
+    harness_mode: str = typer.Option("turns", "--harness-mode", help="How the --exec child acts: turns (one call per turn, the default) or sdk-program (it writes one Python program per case against a generated client; Worldloom runs it and grades the calls it made)."),
+    program_timeout: float = typer.Option(300.0, "--program-timeout", help="With --harness-mode sdk-program: seconds the program may run per case before it is killed."),
 ) -> None:
     """Run one agent over the case set, one isolated connector state per case, and grade.
 
@@ -292,6 +294,13 @@ def run_command(
     $ANVIL_TOKEN, and the calls Anvil traced are replayed into the case's run,
     so every axis and stage is graded by the same code. Each case's state,
     traces and server logs are kept under `--out`/anvil.
+
+    `--harness-mode sdk-program` asks the `--exec` child once per case for a
+    Python program (a `worldloom.evalrun-program/v1` document on stdin, with a
+    generated client module and the tool endpoint), runs it in a subprocess
+    against the run's serving path (a local HTTP shim, or Anvil), and grades
+    the calls it made. The program and the plan read off its source are kept
+    on the ledger.
     """
     from ..cli import _refuse
     from .rater import GroundedRater
@@ -313,6 +322,13 @@ def run_command(
     )
 
     # Before the corpus: a typo in --harness should not wait on a build.
+    if harness_mode not in {"turns", "sdk-program"}:
+        _refuse("unknown_harness_mode", f"--harness-mode {harness_mode!r}; use turns or sdk-program")
+    if harness_mode == "sdk-program" and exec_command is None:
+        _refuse("missing_flag", "--harness-mode sdk-program needs --exec <command>: the child that writes the program"
+                + (" (the bundled --harness adapters speak the turn protocol)" if harness else ""))
+    if harness_mode == "sdk-program" and agent_pack is not None:
+        _refuse("cannot_combine", "--agent-pack shapes the turn protocol; it does not apply to --harness-mode sdk-program")
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     policy = _agent_pack(agent_pack, exec_command)
     shard_at: tuple[int, int] | None = None
@@ -344,7 +360,13 @@ def run_command(
             _refuse("cannot_combine", "--exec and --agent both name the agent under test; give one")
         from .harness import ExecAgent
 
-        under_test: Any = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=policy)
+        under_test: Any
+        if harness_mode == "sdk-program":
+            from .program import ProgramAgent
+
+            under_test = ProgramAgent(exec_command, timeout=timeout, shell=shell, program_timeout=program_timeout)
+        else:
+            under_test = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=policy)
     else:
         under_test = _agent(agent, cases)
     grader: Any = None

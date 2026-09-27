@@ -185,6 +185,27 @@ if TYPE_CHECKING:
     from .improve import (
         RoundReceipt as RoundReceipt,
     )
+    from .lineage import (
+        DagGrade as DagGrade,
+    )
+    from .lineage import (
+        DeclaredDivergence as DeclaredDivergence,
+    )
+    from .lineage import (
+        ExecutedDag as ExecutedDag,
+    )
+    from .lineage import (
+        Lineage as Lineage,
+    )
+    from .lineage import (
+        LineageLink as LineageLink,
+    )
+    from .lineage import (
+        derive_lineage as derive_lineage,
+    )
+    from .lineage import (
+        grade_dag as grade_dag,
+    )
     from .plans import (
         PLAN_SCHEMA as PLAN_SCHEMA,
     )
@@ -229,6 +250,12 @@ if TYPE_CHECKING:
     )
     from .plans import (
         reference_plan as reference_plan,
+    )
+    from .program import (
+        ProgramAgent as ProgramAgent,
+    )
+    from .program import (
+        declared_from_program as declared_from_program,
     )
     from .rater import (
         RATING_SCHEMA as RATING_SCHEMA,
@@ -493,6 +520,15 @@ _EXPORTS: dict[str, str] = {
     'grade_queries': '.stages',
     'grade_plan_nodes': '.stages',
     'grade_output': '.stages',
+    'DagGrade': '.lineage',
+    'DeclaredDivergence': '.lineage',
+    'ExecutedDag': '.lineage',
+    'Lineage': '.lineage',
+    'LineageLink': '.lineage',
+    'derive_lineage': '.lineage',
+    'grade_dag': '.lineage',
+    'ProgramAgent': '.program',
+    'declared_from_program': '.program',
 }
 
 
@@ -660,6 +696,16 @@ __all__ = [
     "grade_queries",
     "grade_plan_nodes",
     "grade_output",
+    # Plans as data flow: the executed DAG from lineage, graded edge by edge; the sdk-program harness mode.
+    "DagGrade",
+    "DeclaredDivergence",
+    "ExecutedDag",
+    "Lineage",
+    "LineageLink",
+    "derive_lineage",
+    "grade_dag",
+    "ProgramAgent",
+    "declared_from_program",
     # The grader, frozen by digest, and its agreement with Eval Studio's.
     "AgreementReport",
     "GraderDrift",
