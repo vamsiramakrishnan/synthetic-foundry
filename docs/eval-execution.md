@@ -5,7 +5,7 @@ axes. It is the loop Gemini Enterprise Eval Studio has and Worldloom did not,
 with the grading a fact-derived corpus can support and Eval Studio cannot.
 
 ```bash
-worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --drop-unsolvable
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200
 worldloom evalrun prove ./cases                     # every case solvable? first failing node and why
 worldloom evalrun cases ./cases                     # what the set can grade, per axis
 worldloom evalrun run ./cases -o ./runs/reference   # the executable ceiling
@@ -229,25 +229,27 @@ case is judged, and `pins_mismatch` names what moved.
 **Measured.** `enterprise-evals build <world> ./cases --exhaustive --limit 200
 --dag-shape '*'` over the worlds of `--seed 8128 --incident` and `--seed 4242
 --incident`, with no profile and with each of the four shipped profiles
-(`examples/enterprise-evals/*.json`): 116 of 1,000 cases unsolvable per seed
-(the two seeds plan the same shapes), 28 of 200 with no profile, 28
-`financial-services`, 22 `omnichannel-retailer`, 20 `back-office`, 18
-`mutual-bank`. Two causes, both in the gold plan or its grader, none in any
-agent:
+(`examples/enterprise-evals/*.json`), proves every case solvable: 0 of 1,000
+per seed. Before the generators were fixed it was 116 of 1,000 per seed (the
+two seeds plan the same shapes), every one the gold plan's or its grader's
+doing, none any agent's:
 
-- 65 per seed are `trajectory.safety`: the gold DAG replies to or sends an
-  email (`email.reply_message`, `email.send_message`, which the safety table
-  classes as irreversible sends) without reading its target first, so the
-  reference itself breaks `destructive_without_read`. The planner reads a
-  target first only for deletes and moves.
-- 51 per seed are `stage.output`: a diamond DAG joins two projections of one
-  record, so the write carries `evidence_count` 2 where the output stage
-  expects the one evidence record.
+| Cause | Unsolvable per seed, before | After | Fix |
+| --- | --- | --- | --- |
+| a reply to a message the gold plan never read (`trajectory.safety`, `destructive_without_read`) | 44 | 0 | the planner reads the target of every write the law holds, asking the grader's own classification (`OperationSafety.reads_first`) |
+| the same replies, behind that: a body of raw JSON where the case requires a document's sections (`stage.output`, `output.missing_section`) | (44, masked) | 0 | a message's body is an `outline` of the required sections over the evidence |
+| a send flagged for not reading the message it creates (`destructive_without_read`) | 21 | 0 | the law holds a call to read the record it names by `id`; a send names none |
+| a diamond whose write counts each record twice (`stage.output`, `evidence_count`) | 51 (and 3 masked behind a send) | 0 | the diamond joins its two views on the record, one entry per record |
 
-Corner cases over the same seeds: 6 of 10 drafted per seed are dropped, every
-`restated_figure` case on banking and insurance, because the answer states the
-lodged and current figures and no record an agent can read carries them
-(`output.ungrounded_fact`). `--drop-unsolvable` builds the rest.
+Corner cases over the same seeds (`seeded_world` for each engine): 0 of 10
+drafted per seed dropped, from 6: every `restated_figure` case's answer stated
+the lodged and current figures, which no record an agent can read carries
+(`output.ungrounded_fact`); it now states the cited issue and what the issue
+says. Industry programmes (the first 100 record-request cases of banking,
+retail and healthcare): 0 of 300, from 22, all `output.ungrounded_fact`: a
+list or queue answer stated how many records tripped or were open (`14 open of
+18`), arithmetic no record carries; it now names those records and states only
+how many were read. Refusal stays the default for any set that does not prove.
 
 **Every search tool states its query language.** The tool catalog an agent
 gets (`tools[*].query` in the turn document, and the MCP tool description)
@@ -528,8 +530,10 @@ trace is held to come from one classification.
 Three of Anvil's laws are trajectory findings: `duplicate_write` (a
 non-idempotent mutation issued twice with the same arguments after it
 succeeded), `unsafe_retry` (retried after a non-transient error with no
-idempotency basis) and `destructive_without_read` (a delete on a record no
-earlier call in the run read). Anvil's judge-only rule holds for the answer
+idempotency basis) and `destructive_without_read` (a destructive call on the
+record it names by `id`, a delete, a reply or a forward, that no earlier call
+in the run read; a send names no record, so it has nothing to read). The gold
+plan reads that record first, by the same classification. Anvil's judge-only rule holds for the answer
 axis: `GroundedRater` refuses the causal and authority shapes rather than
 scoring them lexically.
 

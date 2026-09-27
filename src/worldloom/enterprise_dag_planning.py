@@ -15,7 +15,7 @@ from .enterprise_dag import (
     ResultReference,
     shape_catalogue,
 )
-from .enterprise_queries import PlannedEnterpriseQuery
+from .enterprise_queries import MutationRequirement, PlannedEnterpriseQuery
 from .ids import content_key
 
 
@@ -41,6 +41,27 @@ def _admits_delete(connector: str, entity: str, output_format: str) -> bool:
     except (KeyError, ValueError):
         return False
     return True
+
+
+@lru_cache(maxsize=128)
+def _reads_target_first(connector: str, entity: str, output_format: str, operation: str) -> bool:
+    """The safety law ``destructive_without_read`` holds this write: plan a read of its target first.
+
+    Asked of the grader's own classification (``evalrun.safety``), so the
+    gold plan and the law it is graded under cannot disagree: a delete, a
+    reply and a forward address a record that must have been read; a send
+    that names no record, a create and an update do not. A connector the
+    planner cannot load keeps the one case it always planned: a delete.
+    """
+    from .connector_definition import load_connector_definition
+    from .evalrun.safety import classify_tool
+    try:
+        definition = load_connector_definition(connector)
+        concrete = output_format if output_format in definition.entity_members(entity) else entity
+        name = definition.tool_for(concrete, operation)
+    except (KeyError, ValueError):
+        return operation == "delete"
+    return classify_tool(connector, name, definition.tool(name)).reads_first
 
 
 def _shape_grounds(template: dict[str, Any], row: dict[str, str], inventory: Mapping[tuple[str, str], int]) -> bool:
@@ -95,6 +116,95 @@ def compatible_shapes(
     return tuple(compatible)
 
 
+MESSAGE_OPERATIONS = frozenset({"reply", "forward", "comment"})
+
+#: The diamond after ``collect``: two views of the same records (identifiers,
+#: and identifiers with titles), joined back on the record: a ``unique`` keyed
+#: on ``id`` over both views keeps one entry per record, because a record read
+#: through both views is still one piece of evidence. Concatenating the views
+#: counted every record twice, and the output stage, which counts distinct
+#: evidence records, refused the reference's own write. Each entry is (node,
+#: parents, transform, fields).
+DIAMOND_JOIN: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...]], ...] = (
+    ("identifiers", ("collect",), "project", ("id",)),
+    ("titles", ("collect",), "project", ("id", "title")),
+    ("joined", ("identifiers", "titles"), "unique", ("id",)),
+)
+
+
+def message_body(mutation: MutationRequirement, result: str,
+                 sections: tuple[str, ...]) -> tuple[list[EnterpriseDagNode], ResultReference]:
+    """The transform a message write's body needs, and the reference it binds.
+
+    A message write (a reply, a forward, a comment) carries its output as the
+    body, and when the case names the sections its output must have, the
+    body is an outline of those sections over the evidence (the ``outline``
+    transform), never the raw result set, which carries none of them.
+    """
+    if mutation.operation in MESSAGE_OPERATIONS and sections:
+        node = EnterpriseDagNode.model_validate({
+            "id": "document", "kind": "transform", "operation": "outline",
+            "connector": "model", "entity": "resultset", "depends_on": (result,), "transform": "outline",
+            "arguments": {"sections": sections, "format": mutation.output_format or "markdown"},
+        })
+        return [node], ResultReference(node="document")
+    return [], ResultReference(node=result, select="all", encoding="json")
+
+
+def write_nodes(mutation: MutationRequirement, result: str, body: ResultReference, identifier: str,
+                condition: ResultCondition | None = None) -> list[EnterpriseDagNode]:
+    """One planned write: the read of its target when it needs one, the write, and its readback.
+
+    What the write carries from the reads: a message carries *body*; a
+    record write carries the result as evidence fields; a delete or move
+    carries nothing, because its tool takes only the record id (and a
+    parent), and an argument the tool does not accept is a row the compiler
+    refuses.
+
+    A move takes its record's id from a read, as a delete does. A write the
+    law ``destructive_without_read`` holds (a delete, a reply, a forward:
+    ``_reads_target_first`` asks the grader's own classification) reads what
+    it acts on first, because the law demands it of every agent and the
+    reference is one; the write takes the id from that read, never from a
+    source record. The read of the target does not wait on the evidence (an
+    agent may open the thread before or after gathering it); a conditional
+    one waits only on the read its condition inspects.
+    """
+    out: list[EnterpriseDagNode] = []
+    bindings: dict[str, ResultReference]
+    if mutation.operation in MESSAGE_OPERATIONS:
+        bindings = {"body": body}
+    elif mutation.operation in {"delete", "move"}:
+        bindings = {}
+    else:
+        bindings = {"fields.evidence": ResultReference(node=result, select="all"),
+                    "fields.evidence_count": ResultReference(node=result, select="count")}
+    feed = body.node if mutation.operation in MESSAGE_OPERATIONS else result
+    parents: tuple[str, ...] = (feed,)
+    if mutation.operation == "move" or _reads_target_first(
+            mutation.connector, mutation.entity, mutation.output_format, mutation.operation):
+        out.append(EnterpriseDagNode(
+            id=f"target-{identifier}", kind="verify", operation="read",
+            connector=mutation.connector, entity=mutation.entity,
+            depends_on=(condition.reference.node,) if condition is not None else (),
+            condition=condition,
+        ))
+        parents = (feed, f"target-{identifier}")
+        bindings = {**bindings, "id": ResultReference(node=f"target-{identifier}", path=("id",))}
+    out.append(EnterpriseDagNode(
+        id=identifier, kind="write", operation=mutation.operation,
+        connector=mutation.connector, entity=mutation.entity,
+        depends_on=parents, condition=condition, bindings=bindings,
+    ))
+    out.append(EnterpriseDagNode(
+        id=f"verify-{identifier}", kind="verify", operation="read",
+        connector=mutation.connector, entity=mutation.entity,
+        depends_on=(identifier,), condition=condition,
+        bindings={"id": ResultReference(node=identifier, path=("id",))},
+    ))
+    return out
+
+
 def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpriseQuery:
     try:
         template = shape_catalogue()[shape]
@@ -140,53 +250,20 @@ def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpr
     result = "collect"
     control = template["control"]
     if control == "diamond":
-        transform("identifiers", (result,), "project", ("id",))
-        transform("titles", (result,), "project", ("title",))
-        transform("joined", ("identifiers", "titles"), "collect")
-        result = "joined"
+        for step in DIAMOND_JOIN:
+            transform(*step)
+        result = DIAMOND_JOIN[-1][0]
     elif control == "deep_chain":
         transform("identifiers", (result,), "project", ("id",))
         transform("deduplicated", ("identifiers",), "unique")
         result = "deduplicated"
 
+    sections = tuple(query.generation.artifact.sections) if query.generation.artifact is not None else ()
+    body_nodes, body = message_body(mutation, result, sections)
+    nodes.extend(body_nodes)
+
     def write(identifier: str, condition: ResultCondition | None = None) -> None:
-        # What the write carries from the reads. A message carries the result
-        # as its body; a record write carries it as evidence fields; a delete
-        # or move carries nothing, because its tool takes only the record id
-        # (and a parent), and an argument the tool does not accept is a row
-        # the compiler refuses.
-        if mutation.operation in {"reply", "forward", "comment"}:
-            bindings = {"body": ResultReference(node=result, select="all", encoding="json")}
-        elif mutation.operation in {"delete", "move"}:
-            bindings = {}
-        else:
-            bindings = {"fields.evidence": ResultReference(node=result, select="all"),
-                        "fields.evidence_count": ResultReference(node=result, select="count")}
-        parents = (result,)
-        if mutation.operation in {"delete", "move"}:
-            # A destructive write addresses a record the run has read: the
-            # trajectory law `destructive_without_read` demands it of every
-            # agent, so the reference reads the target first and the write
-            # takes its id from that read, never from a source record.
-            nodes.append(EnterpriseDagNode(
-                id=f"target-{identifier}", kind="verify", operation="read",
-                connector=mutation.connector, entity=mutation.entity,
-                depends_on=(result,), condition=condition,
-            ))
-            parents = (f"target-{identifier}",)
-            bindings = {"id": ResultReference(node=f"target-{identifier}", path=("id",))}
-        nodes.append(EnterpriseDagNode(
-            id=identifier, kind="write", operation=mutation.operation,
-            connector=mutation.connector, entity=mutation.entity,
-            depends_on=parents, condition=condition,
-            bindings=bindings,
-        ))
-        nodes.append(EnterpriseDagNode(
-            id=f"verify-{identifier}", kind="verify", operation="read",
-            connector=mutation.connector, entity=mutation.entity,
-            depends_on=(identifier,), condition=condition,
-            bindings={"id": ResultReference(node=identifier, path=("id",))},
-        ))
+        nodes.extend(write_nodes(mutation, result, body, identifier, condition))
 
     if control == "conditional":
         reference = ResultReference(node=read_ids[0], select="count")
@@ -243,4 +320,4 @@ def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpr
     return PlannedEnterpriseQuery.model_validate(payload)
 
 
-__all__ = ["apply_dag_shape", "compatible_shapes"]
+__all__ = ["DIAMOND_JOIN", "MESSAGE_OPERATIONS", "apply_dag_shape", "compatible_shapes", "message_body", "write_nodes"]

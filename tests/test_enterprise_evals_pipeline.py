@@ -307,15 +307,18 @@ SHIPPED_RETAIL_PROFILE = Path("examples/enterprise-evals/omnichannel-retailer.js
 #: (email:thread)` findings. It never produced a corpus. All 145 rows of the
 #: 312 that read no thread are among the 171; the other 26 cover interactions
 #: an email row used to cover. The plan below pins a profile whose every
-#: source grounds, so a change to the walk itself still shows.
-NARROWED_PLAN_DIGEST = "3191831f48b10f448fc2858e31409c3f227b556f7f9206784eb3244b330b0e66"
+#: source grounds, so a change to the walk itself still shows. Moved once
+#: since, when the diamond began joining its two views on the record (so a
+#: record counts once): the 9 diamond rows changed, the other 162 did not.
+NARROWED_PLAN_DIGEST = "bccc633dbc7365c0a89d93fe71fe6c5e062b056643fccf55a8ea7c9885186fe4"
 
 #: SHA-256 of the first 40 rows the same narrowing plans for `examples/hospital`
 #: when its connectors are `jira`, `confluence` and `sharepoint`, all of which
 #: the world grounds. Captured from the code at 29b40bd, before the planner
 #: read the inventory, so this is the byte-identity claim: a plan whose
-#: sources all ground is the plan it was.
-GROUNDED_PLAN_DIGEST = "10cc12a288714350cebb5eaef9b4425eda39776b0b3ba6b43796eb39239d3372"
+#: sources all ground is the plan it was. Moved once since, with the diamond
+#: join (6 diamond rows changed, the other 34 did not).
+GROUNDED_PLAN_DIGEST = "7d5c8e6fe496f67dd8b6d2f3a86c9811a97af615f147d88e1a4a088c72c90543"
 
 
 def _narrowed_retail_profile(path: Path) -> Path:

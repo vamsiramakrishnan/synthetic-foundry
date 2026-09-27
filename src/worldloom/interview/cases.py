@@ -55,6 +55,7 @@ from ..enterprise_dag import (
     ResultReference,
     dag_metrics,
 )
+from ..enterprise_dag_planning import message_body, write_nodes
 from ..enterprise_queries import (
     ArtifactRequirement,
     GenerationRequirement,
@@ -155,21 +156,12 @@ def _requirement(read: Any, resolution: Mapping[str, Any]) -> tuple[SourceRequir
             sentence, provenance)
 
 
-def _write_nodes(nodes: list[EnterpriseDagNode], mutation: MutationRequirement, result: str, identifier: str,
-                 condition: ResultCondition | None = None) -> None:
-    """The write and its readback, bound the way ``apply_dag_shape`` binds them."""
-    if mutation.operation in {"reply", "forward", "comment"}:
-        bindings = {"body": ResultReference(node=result, select="all", encoding="json")}
-    else:
-        bindings = {"fields.evidence": ResultReference(node=result, select="all"),
-                    "fields.evidence_count": ResultReference(node=result, select="count")}
-    nodes.append(EnterpriseDagNode(id=identifier, kind="write", operation=mutation.operation,
-                                   connector=mutation.connector, entity=mutation.entity, depends_on=(result,),
-                                   condition=condition, bindings=bindings))
-    nodes.append(EnterpriseDagNode(id=f"verify-{identifier}", kind="verify", operation="read",
-                                   connector=mutation.connector, entity=mutation.entity, depends_on=(identifier,),
-                                   condition=condition,
-                                   bindings={"id": ResultReference(node=identifier, path=("id",))}))
+def _write_nodes(nodes: list[EnterpriseDagNode], mutation: MutationRequirement, result: str, body: ResultReference,
+                 identifier: str, condition: ResultCondition | None = None) -> list[str]:
+    """The write and its readback, planned by ``apply_dag_shape``'s own rule; returns the node ids added."""
+    added = write_nodes(mutation, result, body, identifier, condition)
+    nodes.extend(added)
+    return [node.id for node in added]
 
 
 def _transform(nodes: list[EnterpriseDagNode], identifier: str, parents: tuple[str, ...], op: str,
@@ -217,23 +209,26 @@ def plan_intent(intent: Any, resolution: Mapping[str, Any], counts: Mapping[int,
         _transform(nodes, "deduplicated", ("identifiers",), "unique")
         result = "deduplicated"
     asked = {"question": "evals", "intent": intent.id}
-    for identifier in ("collect", "identifiers", "deduplicated"):
+    artifact = _ARTIFACTS.get(deliver.format)
+    body_nodes, body = message_body(mutation, result, tuple(artifact.sections) if artifact is not None else ())
+    nodes.extend(body_nodes)
+    for identifier in ("collect", "identifiers", "deduplicated", *(node.id for node in body_nodes)):
         if any(node.id == identifier for node in nodes):
             provenance[identifier] = asked
     text = intent.ask.rstrip() + packkit.text("world.interview.case.sources", sources="; ".join(sentences))
     if intent.branch is not None:
         reference = ResultReference(node=f"read-{intent.branch.read}", select="count")
-        _write_nodes(nodes, mutation, result, "write-primary",
-                     ResultCondition(reference=reference, operator="gte", value=intent.branch.at_least))
-        _write_nodes(nodes, mutation, result, "write-fallback",
-                     ResultCondition(reference=reference, operator="lt", value=intent.branch.at_least))
+        added = [*_write_nodes(nodes, mutation, result, body, "write-primary",
+                               ResultCondition(reference=reference, operator="gte", value=intent.branch.at_least)),
+                 *_write_nodes(nodes, mutation, result, body, "write-fallback",
+                               ResultCondition(reference=reference, operator="lt", value=intent.branch.at_least))]
         text += packkit.text("world.interview.case.branch", source=sentences[intent.branch.read],
                              count=intent.branch.at_least)
-        for identifier in ("write-primary", "verify-write-primary", "write-fallback", "verify-write-fallback"):
+        for identifier in added:
             provenance[identifier] = {**asked, "branch": f"read-{intent.branch.read}"}
     else:
-        _write_nodes(nodes, mutation, result, "write")
-        provenance["write"] = provenance["verify-write"] = asked
+        for identifier in _write_nodes(nodes, mutation, result, body, "write"):
+            provenance[identifier] = asked
     if intent.per_entity:
         text += packkit.text("world.interview.case.map")
     label = deliver.entity.replace("_", " ") if deliver.format == "record" else f"a {deliver.format.upper()} {deliver.entity.replace('_', ' ')}"
@@ -256,7 +251,7 @@ def plan_intent(intent: Any, resolution: Mapping[str, Any], counts: Mapping[int,
         id=identifier, workflow=f"interview_{intent.level}", query=text, dimensions=dimensions,
         generation=GenerationRequirement(
             process=str(provenance["read-0"].get("process") or provenance["read-0"].get("step", "").split(".")[0]),
-            source_requirements=tuple(sources), mutation=mutation, artifact=_ARTIFACTS.get(deliver.format)),
+            source_requirements=tuple(sources), mutation=mutation, artifact=artifact),
         expected_dag=tuple(node.model_dump(mode="json", exclude_none=True) for node in dag.nodes),
     )
     return Planned(intent=intent.id, level=intent.level, query=query, provenance=provenance)

@@ -263,6 +263,17 @@ def test_a_case_set_writer_refuses_unsolvable_cases_or_drops_them_with_the_reaso
 
 def test_the_enterprise_build_refuses_unsolvable_cases_and_drops_them_on_request(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The shipped planner proves clean (see `test_solvable_generation`), so an
+    # unsolvable set is made the way the planner used to make one: a diamond
+    # that concatenates its two views, writing an evidence count of two for
+    # each record read.
+    import worldloom.enterprise_dag_planning as planning
+
+    monkeypatch.setattr(planning, "DIAMOND_JOIN", (
+        ("identifiers", ("collect",), "project", ("id",)),
+        ("titles", ("collect",), "project", ("title",)),
+        ("joined", ("identifiers", "titles"), "collect", ()),
+    ))
     args = ["enterprise-evals", "build", "examples/retail-close", "--exhaustive", "--limit", "40", "--dag-shape", "*"]
     monkeypatch.setenv("WORLDLOOM_OUTPUT", "json")
     refused = runner.invoke(app, [*args[:3], str(tmp_path / "refused"), *args[3:]])

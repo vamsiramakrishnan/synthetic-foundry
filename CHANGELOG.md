@@ -13,6 +13,53 @@ first written up, before the waves above it landed.
 
 ### Solvable case sets
 
+- **The shipped generators prove solvable (Generation).** `evalrun prove`
+  over `enterprise-evals build --exhaustive --limit 200 --dag-shape '*'` on the
+  `--seed 8128 --incident` and `--seed 4242 --incident` worlds, with no profile
+  and each shipped profile, now finds 0 of 1,000 cases unsolvable per seed
+  (was 116); corner cases 0 of 10 drafted per seed dropped (was 6); the first
+  100 record-request cases of the banking, retail and healthcare programmes 0
+  of 300 (was 22). Each cause was fixed where the case is made, not by
+  loosening a grade:
+  - A write the trajectory law `destructive_without_read` holds is planned
+    after a read of its target. The planner asks the grader's own
+    classification (`OperationSafety.reads_first`: a destructive tool that
+    names its record by `id`, so a delete, a reply, a forward), so the two
+    cannot drift. The law reads the record a call names as its target as well
+    as what it wrote: a reply acts on the message it answers, and before this
+    a reply was checked against the reply it created, which no call can read
+    first. A send names no record and creates the one it acts on, so it has
+    nothing to read and the law no longer holds it (every send, by any agent,
+    was a finding). The target read waits on no evidence read, so an agent
+    that opens the thread first is not out of order. 44 replies and 21 sends
+    per seed.
+  - A message's body (a reply, a forward, a comment) is an `outline` of the
+    sections its case's document requires over the evidence, a new local
+    transform in `enterprise-dag@1`, in place of the raw result set, which
+    carried none of them. The 44 replies failed this too, behind the law.
+  - The diamond joins its two views on the record (`DIAMOND_JOIN`: its
+    `joined` node is a `unique` keyed on `id` over both projections, where it
+    was a `collect`; `unique` takes optional key `fields`), so its write
+    carries one evidence entry per record read, with the same node count. It concatenated them, and the
+    output stage, which counts distinct evidence records, found an evidence
+    count of two for one record. 51 per seed (54 with those behind a send).
+  - A `restated_figure` corner's answer is the cited issue and what the issue
+    says, not the lodged and current figures, which no record an agent can read
+    carries.
+  - A programme answer (`sor.answer`) for a list or a queue names the records
+    that tripped or are open and states only how many were read; `14 open of
+    18` stated a count no record carries.
+  What changes, for every seed: an enterprise plan's reply, forward, delete
+  and move rows (a `target-<write>` read, and for a message the `document`
+  node), its diamond rows (nodes and the shape's instruction text), and so
+  those rows' compiled cases and case-set digests; `restated_figure` corner
+  cases' `expected_answer` (banking and insurance worlds); and every industry
+  programme request whose intent answers as a list or a ranked list (its
+  `expected_answer`). Other rows are byte-identical: of the pinned narrowed
+  hospital plans, 9 of 171 rows and 6 of 40 moved, all diamonds. The
+  documented builds no longer carry `--drop-unsolvable`; refusal stays the
+  default.
+
 - **Default change: the vendor query engine.** The policy
   `connectors.query.engine` now defaults to `native`: a search tool's `query`
   runs as the vendor's own language through the shared evaluator
