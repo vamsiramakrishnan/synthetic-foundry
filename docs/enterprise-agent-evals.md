@@ -52,7 +52,7 @@ A world that grounds no row of any selected workflow is refused as
 worldloom enterprise-evals space
 worldloom enterprise-evals plan dist/retail-close queries.jsonl --strength 2
 worldloom enterprise-evals plan dist/retail-close shard.jsonl --exhaustive --limit 10000
-worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --exhaustive --limit 500 --render-limit 50 --profile examples/enterprise-evals/omnichannel-retailer.json --drop-unsolvable
+worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --exhaustive --limit 500 --render-limit 50 --profile examples/enterprise-evals/omnichannel-retailer.json
 worldloom enterprise-evals validate dist/enterprise-evals
 worldloom enterprise-evals simulate dist/enterprise-evals --limit 500
 worldloom enterprise-evals score query.json trace.json --fixture fixture.json

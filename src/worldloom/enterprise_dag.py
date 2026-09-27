@@ -58,7 +58,7 @@ class EnterpriseDagNode(Model):
     bindings: dict[str, ResultReference] = Field(default_factory=dict)
     condition: ResultCondition | None = None
     for_each: ResultIteration | None = None
-    transform: Literal["collect", "project", "unique"] | None = None
+    transform: Literal["collect", "project", "unique", "outline"] | None = None
 
     @model_validator(mode="after")
     def _contract(self) -> EnterpriseDagNode:
@@ -67,7 +67,7 @@ class EnterpriseDagNode(Model):
             "search": {"search"},
             "verify": {"read", "get", "download", "readback", "cross_system"},
             "write": {"create", "draft", "send", "post", "upload", "update", "patch", "upsert", "reply", "forward", "comment", "transition", "delete", "move"},
-            "transform": {"collect", "project", "unique"},
+            "transform": {"collect", "project", "unique", "outline"},
         }
         if self.operation not in admitted[self.kind]:
             raise ValueError(f"{self.id}: {self.kind} cannot execute {self.operation!r}")
@@ -196,16 +196,58 @@ def transform_results(node: EnterpriseDagNode, outputs: Mapping[str, list[Any]],
                 raise ValueError(f"{node.id}: missing projection field")
             projected.append({field: value[field] for field in fields})
         return projected
+    if node.transform == "outline":
+        sections = [str(section) for section in node.arguments.get("sections", ())]
+        if not sections:
+            raise ValueError(f"{node.id}: outline requires sections")
+        return [outline_document(values, sections, str(node.arguments.get("format") or "markdown"))]
     if node.transform == "unique":
+        # With `fields`, two values are one when they agree on those fields
+        # (the first is kept): a join of two views of the same records on
+        # their id keeps one entry per record.
+        keys = tuple(node.arguments.get("fields", ()))
         seen: set[str] = set()
         unique = []
         for value in values:
-            token = json.dumps(value, sort_keys=True, separators=(",", ":"))
+            if keys and (not isinstance(value, Mapping) or any(key not in value for key in keys)):
+                raise ValueError(f"{node.id}: missing unique key field")
+            keyed = {key: value[key] for key in keys} if keys else value
+            token = json.dumps(keyed, sort_keys=True, separators=(",", ":"))
             if token not in seen:
                 seen.add(token)
                 unique.append(value)
         return unique
     return values
+
+
+def outline_document(values: Sequence[Any], sections: Sequence[str], fmt: str) -> str:
+    """A document skeleton: the named section headings, each over the evidence it rests on.
+
+    Structure, not prose. The first section states how many records the
+    document rests on and every later one lists them by id (and title, when
+    the record carries one), so a message that must be a document with those
+    sections carries them and cites every record it was written from.
+    """
+
+    def entry(value: Any) -> str:
+        if isinstance(value, Mapping):
+            identifier = str(value.get("id", ""))
+            title = value.get("title")
+            return f"{identifier}: {title}" if title and str(title) != identifier else identifier
+        return json.dumps(value, sort_keys=True, separators=(",", ":")) if not isinstance(value, str) else value
+
+    entries = [entry(value) for value in values]
+    lead = f"{len(entries)} evidence record(s)."
+    blocks: list[tuple[str, list[str]]] = [(section, [lead] if index == 0 else entries) for index, section in enumerate(sections)]
+    if len(sections) == 1:
+        blocks = [(sections[0], [lead, *entries])]
+    if fmt == "html":
+        from html import escape
+        return "".join(f"<h2>{escape(heading)}</h2>" + (f"<p>{escape(lines[0])}</p>" if lines == [lead]
+                                                          else "<ul>" + "".join(f"<li>{escape(line)}</li>" for line in lines) + "</ul>")
+                       for heading, lines in blocks)
+    return "\n\n".join(f"## {heading}\n\n" + "\n".join(lines if lines == [lead] else (f"- {line}" for line in lines))
+                        for heading, lines in blocks)
 
 
 def dag_metrics(dag: EnterpriseDag) -> dict[str, int]:
@@ -276,4 +318,4 @@ def shape_coverage(queries: Iterable[Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-__all__ = ["GRAMMAR_VERSION", "EnterpriseDag", "EnterpriseDagNode", "ResultReference", "ResultCondition", "ResultIteration", "dag_metrics", "default_shapes", "resolve_shapes", "shape_catalogue", "shape_coverage"]
+__all__ = ["GRAMMAR_VERSION", "EnterpriseDag", "EnterpriseDagNode", "ResultReference", "ResultCondition", "ResultIteration", "dag_metrics", "default_shapes", "outline_document", "resolve_shapes", "shape_catalogue", "shape_coverage"]

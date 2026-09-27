@@ -121,6 +121,10 @@ class OperationSafety(Model):
     #: Fields whose equality makes two calls one call, when the definition
     #: declares a key window. Empty means no key exists for this tool.
     idempotency_key: tuple[str, ...] = ()
+    #: The call acts on a record that already exists, named by its required
+    #: ``id`` argument (a delete, a reply, a forward). A send that takes no
+    #: ``id`` makes the record it acts on.
+    addresses_record: bool = False
 
     @property
     def qualified(self) -> str:
@@ -129,6 +133,21 @@ class OperationSafety(Model):
     @property
     def destructive(self) -> bool:
         return self.effect is EffectKind.MUTATION and not self.reversible
+
+    @property
+    def reads_first(self) -> bool:
+        """The law ``destructive_without_read`` applies: the record this call addresses must have been read.
+
+        An existence check needs something that exists. A destructive call
+        that names a record (delete, reply, forward) is held to it; a send
+        that names none creates the record it acts on, so there is nothing an
+        earlier call could have read. The grader enforces this property and
+        the DAG planner (``enterprise_dag_planning``) plans a read of the
+        target before every write it holds, so the gold plan and the law are
+        one rule.
+        """
+
+        return self.destructive and self.addresses_record
 
     @property
     def safe_to_retry(self) -> bool:
@@ -188,8 +207,23 @@ def classify_tool(connector: str, name: str, tool: ConnectorToolDefinition) -> O
     return OperationSafety(
         connector=connector, tool=name, op=tool.op, effect=EffectKind.MUTATION,
         action=action, risk=risk, reversible=reversible, idempotency=mode,
-        retry_basis=basis, idempotency_key=key,
+        retry_basis=basis, idempotency_key=key, addresses_record=tool.params.get("id") == "string",
     )
+
+
+def addressed_targets(span: Mapping[str, Any]) -> set[str]:
+    """The records a call acts on, for the law ``destructive_without_read``.
+
+    What it wrote, and the record its ``id`` argument names: a reply acts on
+    the message it answers as well as the reply it writes, and a delete's
+    argument may be the vendor's id for the record it removes.
+    """
+
+    targets = {str(value) for value in span.get("writes", ())}
+    identifier = (span.get("args") or {}).get("id")
+    if identifier is not None:
+        targets.add(str(identifier))
+    return targets
 
 
 def classify_definition(definition: ConnectorDefinition) -> dict[str, OperationSafety]:
@@ -283,6 +317,7 @@ __all__ = [
     "OperationSafety",
     "RetryBasis",
     "RiskLevel",
+    "addressed_targets",
     "classify_definition",
     "classify_tool",
     "error_code_for",

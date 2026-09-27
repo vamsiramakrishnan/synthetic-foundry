@@ -338,7 +338,6 @@ def _restated_figure(ctx: _World) -> tuple[list[_Draft], list[str]]:
         words = _RESTATEMENTS[restating.kind]
         project = str(after.fields.get("project_key") or "WL")
         prior, fact = moved[0]
-        figures = "; ".join(f"{new.kind} {old.value} -> {new.value}" for old, new in moved[:4])
         for variant in ("as_reported", "current", "unspecified"):
             source, label, as_of = (before, original.kind, original.occurred_at) if variant == "as_reported" \
                 else (after, restating.kind, restating.occurred_at)
@@ -368,7 +367,12 @@ def _restated_figure(ctx: _World) -> tuple[list[_Draft], list[str]]:
                     {"type": "reads_contain", "node": "read-0", "records": [source.id]},
                     {"type": "state_equals", "node": "write", "field": "source_ref", "state": source.external_id},
                 ],
-                "expected_answer": f"{source.external_id} ({variant.replace('_', ' ')}): {figures}",
+                # The answer is what the cited issue says, not the figures it
+                # stands for: no record an agent can read carries the moved
+                # values (they are facts, projected to no field), so an answer
+                # stating them could not be grounded by any agent, the
+                # reference included.
+                "expected_answer": f"{source.external_id} ({variant.replace('_', ' ')}): {_clip(source.title, 160)}",
             }
             question = "none"
             if variant == "unspecified":
@@ -528,8 +532,8 @@ TEMPLATES: tuple[CornerTemplate, ...] = (
         title="Figures on the record superseded by a restatement or a strengthening",
         events=("return_restated", "reserves_strengthened"),
         activities={"return_restated": "r2c.06", "reserves_strengthened": "r2r.02"},
-        difficulty=("two records hold the figures, one as originally reported and one as restated; the as-of "
-                    "decides which, and a request that names none has to be asked about"),
+        difficulty=("two records stand for the figures, one as originally reported and one as restated; the "
+                    "as-of decides which to cite, and a request that names none has to be asked about"),
         expressed_as=("reads_contain", "state_equals", "question_required", "as_of"),
         build=_restated_figure,
     ),

@@ -39,6 +39,7 @@ from worldloom.evalrun.corners import (
     write_corner_set,
     write_frontier,
 )
+from worldloom.evalrun.proof import prove_cases
 from worldloom.evalrun.runner import case_set_digest
 from worldloom.scenarios import MonthEndClose
 
@@ -74,12 +75,7 @@ def batches(worlds: dict[str, World]) -> dict[str, CornerBatch]:
 
 @pytest.fixture(scope="module")
 def drafts(worlds: dict[str, World]) -> dict[str, CornerBatch]:
-    """Every case each template finds, before the proof: the template's mechanics, solvable or not.
-
-    `restated_figure` is drafted on banking and then dropped by the gold-plan
-    proof: its answer states the lodged and current figures, which no record
-    an agent can read carries, so the output stage finds them ungrounded.
-    """
+    """Every case each template finds, before the proof: the template's mechanics, solvable or not."""
     from worldloom.evalrun.corners import world_records
 
     out = {}
@@ -186,7 +182,7 @@ def test_the_difficulty_is_the_event(batches: dict[str, CornerBatch], worlds: di
     score = run_cases(service_for((handover,), records), (handover,), carried).results[0].score
     assert score is not None and not score.passed and "state_mismatch:write" in score.assertion_fails
 
-    # The restatement's mechanics, on the drafted cases (the proof drops them; see `drafts`).
+    # The restatement's mechanics, on the drafted cases.
     banking = drafts["banking"]
     by_variant = {case.dimensions["variant"]: case for case in _of(banking, "restated_figure")}
     assert set(by_variant) == {"as_reported", "current", "unspecified"}
@@ -226,12 +222,26 @@ def test_every_generated_case_is_solved_by_the_reference_or_dropped_with_a_reaso
     assert total >= 4
 
 
-def test_the_gold_plan_proof_drops_a_restatement_whose_answer_no_read_grounds(
-        batches: dict[str, CornerBatch], drafts: dict[str, CornerBatch]) -> None:
-    drafted = {case.id for case in _of(drafts["banking"], "restated_figure")}
-    dropped = {drop.case_id: drop.reason for drop in batches["banking"].drops if drop.template == "restated_figure"}
-    assert drafted and set(dropped) == drafted
-    assert all("stage.output" in reason and "output.ungrounded_fact" in reason for reason in dropped.values())
+def test_a_restatement_proves_solvable_and_its_answer_states_only_what_the_cited_issue_carries(
+        batches: dict[str, CornerBatch], drafts: dict[str, CornerBatch], worlds: dict[str, World]) -> None:
+    # Its answer used to state the lodged and current figures, which no record
+    # an agent can read carries, so the proof dropped every restatement for an
+    # ungrounded fact. The answer is now the cited issue and what it says.
+    drafted = _of(drafts["banking"], "restated_figure")
+    kept = {case.id for case in _of(batches["banking"], "restated_figure")}
+    assert drafted and kept == {case.id for case in drafted}
+    assert not [drop for drop in batches["banking"].drops if drop.template == "restated_figure"]
+    moved = {str(getattr(fact.value, "amount", fact.value)) for fact in worlds["banking"].facts
+             if fact.supersedes and fact.value is not None}
+    assert moved
+    records = {record.external_id: record for record in drafts["banking"].records}
+    for case in drafted:
+        answer = case.row["expected_answer"]
+        cited = answer.split(" ", 1)[0]
+        assert cited in records and records[cited].title[:40] in answer
+        assert not any(value in answer for value in moved), answer
+    proof = prove_cases(drafted, drafts["banking"].records)
+    assert proof.unsolvable == 0, [item.failure for item in proof.unsolvable_cases()]
 
 
 def test_an_unsolvable_case_is_dropped_not_kept(worlds: dict[str, World]) -> None:

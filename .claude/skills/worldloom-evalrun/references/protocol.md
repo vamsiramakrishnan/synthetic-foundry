@@ -80,7 +80,8 @@ or, to finish:
   the vendor's own error. `"argument": "predicate"` means the tool reads no
   vendor language: pass `predicate` as `{"where": [{"field", "op", "value"}]}`.
 - `annotations.destructiveHint` marks a call that cannot be undone; a
-  destructive call on a record no earlier call read is `destructive_without_read`.
+  destructive call on a record it names by `id` (a delete, a reply, a
+  forward) that no earlier call read is `destructive_without_read`.
 - Ask when the request is ambiguous, a required parameter is missing, or a
   call would be destructive and the request did not authorise it. The row
   declares which questions it requires (`question_required` assertions,

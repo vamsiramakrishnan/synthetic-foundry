@@ -19,10 +19,10 @@ worldloom enterprise-evals plan examples/retail-close queries.jsonl --exhaustive
 
 # The whole catalogue, on a corpus with enough evidence for the two that need it.
 worldloom enterprise-evals plan examples/retail-close queries.jsonl --exhaustive --limit 100 --dag-shape '*'
-worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape map_read --dag-shape conditional --drop-unsolvable
+worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape map_read --dag-shape conditional
 
 # The single-write trajectory the grammar produced before shapes existed.
-worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape none --drop-unsolvable
+worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape none
 ```
 
 A mapped source requires at least two records. The materializer supplies them
@@ -58,7 +58,7 @@ catalogue is not present in this repository.
 | `fan_in` | Read each source, collect evidence, write one result, read it back. |
 | `read_chain` | Read two or more sources in dependency order, then collect, write, verify. |
 | `map_read` | Search each source, fetch each returned record within its bound, join, write, verify. |
-| `diamond` | Independently project identifiers and titles, join the projections, write, verify. |
+| `diamond` | Independently project identifiers and titles, join the projections on the record (one entry per record), write, verify. |
 | `deep_chain` | Read, collect, project, deduplicate, write, verify. |
 | `conditional` | Inspect the first search result count, execute one of two complementary writes, verify the selected write. |
 | `fan_out` | Create two independently named outputs from shared evidence and verify both. |
@@ -99,8 +99,22 @@ ResultReference(node="collect", select="count")
 Binding names use dotted argument paths such as `fields.evidence_count`.
 Conditions compare a reference using `eq`, `ne`, `gt`, `gte`, `lt`, or `lte`.
 They inspect returned values, never a preselected branch flag. Local transforms
-are `collect`, `project`, and stable `unique`. They do not claim to generate
-prose or to invoke a model.
+are `collect`, `project`, stable `unique` (with optional key `fields`, so
+two values that agree on them are one: the diamond joins its two views on
+`id`), and `outline`, which lays a
+message's body out as the section headings the case's document requires over
+the evidence it rests on (the count, then each record's id and title). They do
+not claim to generate prose or to invoke a model.
+
+A write the trajectory law `destructive_without_read` holds (a delete, a reply
+or a forward: a destructive tool that names its record by `id`, as
+`evalrun.safety.OperationSafety.reads_first` decides) is planned after a
+`target-<write>` read of that record, and takes its id from it; a move reads
+its target the same way. The planner asks the grader's own classification, so
+the gold plan and the law it is graded under cannot disagree. The target read
+waits on no evidence read (a conditional one waits on the read its condition
+inspects), so an agent may open the record before or after gathering the
+evidence.
 
 The compiler refuses unknown tools, invalid entity/operation combinations,
 duplicate node identifiers, cyclic or unresolved dependencies, references to
