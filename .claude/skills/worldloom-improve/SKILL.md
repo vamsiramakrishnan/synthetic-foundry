@@ -35,6 +35,14 @@ for receipt in report.rounds:
     print(receipt.round, receipt.decision, receipt.reasons[:1])
 ```
 
+## Two levers: the agent and the interface
+
+`evalrun autopsy` names each failing finding's owner (`agent`, `interface`,
+`world`, `grader`). When the interface owns a large share, add `--levers
+agent,interface --contract jira=./generated/jira --transfer-agent ./second`:
+a round may then propose an Anvil manifest overlay, gated like a pack and on
+the second agent, written out for a human to approve (`references/interface-lever.md`).
+
 `agent` and `proposer` also take any callable (a pack to an agent; an
 interview request to a reply), which is how a test drives the loop offline.
 
@@ -71,9 +79,10 @@ interview request to a reply), which is how a test drives the loop offline.
 - **Never tune on the holdout.** The proposer sees the training brief only. Do
   not paste held-out ids, results or failures into a proposal, and do not
   export held-out cases as training data.
-- **Generated content lives only in the agent pack.** A proposal changes the
-  pack's policy and its skills tree, nothing else: no edits to `src/`, the
-  grader, the cases or the connector fixtures.
+- **Generated content lives only in the agent pack, or in an interface
+  overlay's agent-facing keys.** No edits to `src/`, the grader, the cases,
+  the corpus, the provider, the contract source or vendor behaviour; a
+  promoted overlay is never applied outside the loop.
 - **Promotion only through both gates.** A candidate is the champion only when
   its receipt says `promoted`. Never copy a rejected candidate's pack forward
   by hand, and never lower the delta band to let one through.
@@ -87,4 +96,5 @@ interview request to a reply), which is how a test drives the loop offline.
 - `references/scale.md`: concurrency, shards, merge and resume for the runs a loop pays for.
 - `references/training-data.md`: exporting runs as SFT, pairs or rewards; the holdout guard.
 - `references/recursion.md`: the proposer's own policy pack and `evalrun improve-proposer`, which improves the improver.
+- `references/interface-lever.md`: failure ownership, the interface lever, its lint, the transfer gate, promotion output.
 - `references/campaigns.md`: `worldloom evalrun campaign`, stages of fresh cases after `no_failures`, the held-out ledger.

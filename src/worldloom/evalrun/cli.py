@@ -571,8 +571,13 @@ def summarize_command(
     run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Recompute a run's summary from its results ledger."""
+    """Recompute a run's summary from its results ledger.
+
+    Beside the summary, the failing findings' owners (`evalrun.ownership`:
+    agent, interface, world, grader) and each owner's share.
+    """
     from ..cli import _refuse
+    from .ownership import owner_line, ownership
     from .results import summarize
 
     try:
@@ -580,6 +585,10 @@ def summarize_command(
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", f"{run}: {error}")
     _print_summary(summarize(report), json_output)
+    if not json_output:
+        owned = ownership(report)
+        if owned.failing:
+            typer.echo(owner_line(owned))
 
 
 @app.command("compare")
@@ -592,9 +601,12 @@ def compare_command(
 
     Joined on case id, never on query text. Eval Studio's ±0.10 bands decide
     improvement and regression; a case graded on one side and errored on the
-    other is reported as a reliability change, not a score change.
+    other is reported as a reliability change, not a score change. The failing
+    findings' owners on each side (`evalrun.ownership`) are printed beside the
+    deltas.
     """
     from ..cli import _refuse
+    from .ownership import compare_ownership, ownership
     from .results import compare
 
     try:
@@ -618,6 +630,11 @@ def compare_command(
         typer.echo("stage deltas: " + ", ".join(f"{stage} {value}" for stage, value in result.stage_deltas.items()))
     if result.newly_errored or result.newly_graded:
         typer.echo(f"reliability: {len(result.newly_errored)} newly errored, {len(result.newly_graded)} newly graded")
+    owners = compare_ownership(ownership(left), ownership(right))
+    if any(side["baseline"] or side["recent"] for side in owners.values()):
+        typer.echo("owners: " + ", ".join(f"{owner} {side['baseline']} -> {side['recent']} finding(s)"
+                                          f" (share {side['share_delta']:+})"
+                                          for owner, side in owners.items() if side["baseline"] or side["recent"]))
     for item in result.deltas:
         if item.verdict == "regression":
             moved = f" stages {item.stages}" if item.stages else ""
@@ -768,6 +785,10 @@ def autopsy_command(
     top: int = typer.Option(12, "--top", min=1, help="Clusters to report in full; the rest are counted."),
     out: Path | None = typer.Option(None, "--out", "-o", help="Write the autopsy as JSON here."),
     json_output: bool = typer.Option(False, "--json", help="Print the autopsy as JSON instead of the brief."),
+    owners: bool = typer.Option(True, "--owners/--no-owners", help="Attribute every failing finding to an owner (agent, interface, world or grader) and print the shares."),
+    reference_run: Path | None = typer.Option(None, "--reference-run", help="A reference-agent run over the same cases: a finding it shares is the world's."),
+    proofs: Path | None = typer.Option(None, "--proofs", help="A directory holding solvability proof records (proofs.jsonl or solvability.jsonl): a case they prove unsolvable is the world's."),
+    peer: list[Path] | None = typer.Option(None, "--peer", help="Another run over the same cases (a repeat): the identical trajectory scored differently is the grader's. Repeat per run."),
 ) -> None:
     """Cluster a run's failing cases by finding and print a brief an improver can act on.
 
@@ -776,16 +797,23 @@ def autopsy_command(
     report their share of the failures, the dimensions they concentrate in
     with lift against the whole run, and bounded evidence from one or two
     example cases. The brief is plain text, ready to hand an improving harness.
+    Every finding is also given an owner by deterministic rules
+    (`evalrun.ownership`): the agent, the interface it was served, the world
+    (the case or corpus), or the grader.
     """
     from ..cli import _refuse
     from ..corpus import write_json
     from .autopsy import autopsy, render_brief
+    from .ownership import read_proofs
 
     try:
         report = _read_run(run)
+        reference = _read_run(reference_run) if reference_run is not None else None
+        peers = [_read_run(item) for item in peer or ()]
     except (OSError, ValueError) as error:
         _refuse("run_unreadable", f"{run}: {error}")
-    result = autopsy(report, top=top)
+    result = autopsy(report, top=top, attribute=owners, reference=reference, peers=peers,
+                     proofs=read_proofs(proofs) if proofs is not None else None)
     payload = result.model_dump(mode="json", by_alias=True)
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -986,6 +1014,11 @@ def improve_command(
     finalists: int | None = typer.Option(None, "--finalists", min=1, help="Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1)."),
     parents: str | None = typer.Option(None, "--parents", help="Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion)."),
     round_budget: int | None = typer.Option(None, "--round-budget", min=1, help="Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit)."),
+    levers: str | None = typer.Option(None, "--levers", help="What a round may change: agent (the policy pack; the default), interface (an Anvil manifest overlay per served connector), or agent,interface (the first candidate goes to the lever that owns more failing findings; --candidates mixes both). interface needs --contract."),
+    contract: list[str] | None = typer.Option(None, "--contract", help="With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface."),
+    anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
+    source_root: list[str] | None = typer.Option(None, "--source-root", help="CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it."),
+    transfer_agent: str | None = typer.Option(None, "--transfer-agent", help="A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
 ) -> None:
     """Improve an agent's policy: failures become a revised `agent` pack, kept only if it wins on held-out cases.
@@ -995,6 +1028,14 @@ def improve_command(
     lints clean), runs the candidate on the same cases, and only if it gains
     there runs both on the held-out cases the proposer never saw. The grader is
     pinned by digest for the whole loop. Every round leaves a receipt.
+
+    `--levers interface` (or `agent,interface`) also lets a round change the
+    interface the agent is served: an Anvil manifest overlay per `--contract`
+    bundle, proposed from the interface-owned findings, recompiled with
+    `anvil compile`, gated like an agent candidate and then on
+    `--transfer-agent`. A promoted overlay is written under
+    `--out`/interface/promoted as a manifest diff and a simulation-only
+    approvals record; approving it for production is a human step.
     """
     from ..cli import _refuse
     from ..packkit.authoring import run_exec_exchange
@@ -1004,6 +1045,17 @@ def improve_command(
     from .runner import default_concurrency, run_cases, service_for
 
     _check_parents(parents)
+    from .interface import parse_levers
+
+    try:
+        chosen_levers = parse_levers(levers)
+    except ValueError as error:
+        _refuse("unknown_lever", str(error))
+    if "interface" not in chosen_levers and (contract or anvil_cmd or source_root or transfer_agent):
+        _refuse("cannot_combine", "--contract, --anvil-cmd, --source-root and --transfer-agent belong to the "
+                "interface lever; add --levers interface or --levers agent,interface")
+    if "interface" in chosen_levers and not contract:
+        _refuse("missing_flag", "--levers interface needs at least one --contract <bundle> to reshape")
     exec_command = _harness_exec(harness, exec_command, timeout=timeout)
     if exec_command is None:
         _refuse("missing_flag", "the agent under test is an --exec or --harness child; a policy means nothing to the "
@@ -1060,6 +1112,41 @@ def improve_command(
     def agent_for(pack: Any) -> Any:
         return ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns, policy=pack)
 
+    lever_options: dict[str, Any] = {}
+    if "interface" in chosen_levers:
+        from .anvil import AnvilError, resolve_contracts
+        from .interface import InterfaceLever
+
+        served: dict[str, Any] = {}
+
+        def serve(subset: Any, agent: Any, serving: Any) -> Any:
+            key = case_set_digest(subset)
+            if key not in served:
+                try:
+                    # Anvil's provider searches with the shared vendor query
+                    # evaluator, so the replay's service does too.
+                    served[key] = service_for(subset, held_records if key == held_key else records,
+                                              concurrency=workers, query_engine="native")
+                except Exception as error:  # ServingError and its causes are all refusals here
+                    _refuse("service_unbuildable", str(error))
+            return run_cases(served[key], subset, agent, principal=principal, rater=grader, concurrency=workers,
+                             anvil=serving)
+
+        roots: dict[str, str] = {}
+        for spec in source_root or ():
+            name, sep, where = spec.partition("=")
+            if not sep or not name or not where:
+                _refuse("missing_flag", f"--source-root takes CONNECTOR=DIR, not {spec!r}")
+            roots[name] = where
+        try:
+            lever_options["interface"] = InterfaceLever.from_contracts(
+                resolve_contracts(contract or []), serve=serve, out=out, command=anvil_cmd, source_roots=roots)
+        except AnvilError as error:
+            _refuse("anvil_unavailable", str(error))
+        lever_options["levers"] = chosen_levers
+        if transfer_agent is not None:
+            lever_options["transfer"] = ExecAgent(transfer_agent, timeout=timeout, shell=shell, max_turns=max_turns)
+
     try:
         report = improve(champion, cases, run=run, agent_for=agent_for,
                          exchange=run_exec_exchange(proposer, timeout=timeout, proposer=_proposer_policy(proposer_pack),
@@ -1067,7 +1154,7 @@ def improve_command(
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
                          ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
                          repeats=repeats, brief=brief, reference_run=reference, candidates=candidates, screen_cases=screen_cases, finalists=finalists,
-                         parents=parents, round_budget=round_budget)
+                         parents=parents, round_budget=round_budget, **lever_options)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
@@ -1091,6 +1178,16 @@ def improve_command(
                        f"{screen.cost} case-run(s); finalist(s): {', '.join(map(str, screen.finalists)) or 'none'}")
         if item.spent is not None:
             typer.echo(f"  spent {item.spent} case-run(s)")
+        if item.interface is not None:
+            transfer_state = item.interface.get("transfer") or {}
+            if "skipped" in transfer_state:
+                typer.echo(f"  transfer gate skipped: {transfer_state['skipped']}")
+            elif item.transfer is not None:
+                typer.echo(f"  transfer gate {'passed' if item.transfer.passed else 'failed'} "
+                           f"({item.transfer.mean_delta:+})")
+            if item.interface.get("promotion"):
+                typer.echo(f"  overlay written to {out / 'interface' / 'promoted' / f'{item.round:03d}'}: a manifest "
+                           "diff and a simulation-only approvals record; production approval is a human step")
     if report.spent is not None:
         typer.echo(f"{report.spent} case-run(s) spent across {len(report.rounds)} round(s)")
     typer.echo(f"champion: {report.champion['ref']}@{report.champion['digest'][:12]}"

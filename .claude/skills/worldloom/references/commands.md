@@ -424,6 +424,10 @@ worldloom evalrun autopsy <RUN>
 | --- | --- |
 | `--json` | Print the autopsy as JSON instead of the brief. |
 | `--out`, `-o` | Write the autopsy as JSON here. |
+| `--owners` | Attribute every failing finding to an owner (agent, interface, world or grader) and print the shares. |
+| `--peer` | Another run over the same cases (a repeat): the identical trajectory scored differently is the grader's. Repeat per run. |
+| `--proofs` | A directory holding solvability proof records (proofs.jsonl or solvability.jsonl): a case they prove unsolvable is the world's. |
+| `--reference-run` | A reference-agent run over the same cases: a finding it shares is the world's. |
 | `--top` | Clusters to report in full; the rest are counted. |
 
 ### `worldloom evalrun campaign`
@@ -611,15 +615,18 @@ worldloom evalrun improve <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent-pack` | The champion to start from: agent:<name>[@<digest>] or a pack file. |
+| `--anvil-cmd` | The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH). |
 | `--brief` | What the proposer is shown: summary (the failure clusters) or traces (also the connectors' own error messages, the arguments behind them, the tools' contracts and failing trajectories). Default: policy `evalrun.improve.brief`, summary. |
 | `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
+| `--contract` | With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface. |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
 | `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
 | `--json` | Emit improve.json on stdout. |
+| `--levers` | What a round may change: agent (the policy pack; the default), interface (an Anvil manifest overlay per served connector), or agent,interface (the first candidate goes to the lever that owns more failing findings; --candidates mixes both). interface needs --contract. |
 | `--limit` | Use only the first N cases of CORPUS. |
 | `--max-turns` |  |
 | `--no-ablate` | Send the candidate to the holdout whole, without taking out hunks that carry nothing. |
@@ -637,7 +644,9 @@ worldloom evalrun improve <CORPUS>
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--source-root` | CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it. |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
+| `--transfer-agent` | A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
 
 ### `worldloom evalrun improve-proposer`
