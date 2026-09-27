@@ -1,0 +1,265 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Salesforce Platform REST API: query, search and sObjects",
+    "version": "61.0",
+    "description": "Authored by Worldloom from Salesforce's public REST API Developer Guide, because Salesforce publishes no full OpenAPI document for the Platform REST API (its OpenAPI beta covers sObjects only, generated per org). It covers SOQL query with nextRecordsUrl paging, queryAll, SOSL search, the global and per-object describe, sObject rows (get, create, update, delete) and limits, as the guide documents them for API version 61.0: the {totalSize, done, records, nextRecordsUrl} query envelope, the {id, success, errors} create answer, 204 for an update or a delete, and the [{message, errorCode, fields}] error body. Sources: https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_query.htm, https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_queryall.htm, https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_search.htm, https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_describeGlobal.htm, https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_describe.htm, https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_retrieve.htm, https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_limits.htm, https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/errorcodes.htm"
+  },
+  "servers": [{"url": "https://{instance}.my.salesforce.com", "variables": {"instance": {"default": "instance"}}}],
+  "security": [{"bearerAuth": []}],
+  "tags": [
+    {"name": "Query", "description": "SOQL queries and their continuation."},
+    {"name": "Search", "description": "SOSL search."},
+    {"name": "sObjects", "description": "Describe and change individual records."},
+    {"name": "Limits", "description": "The org's API limits."}
+  ],
+  "paths": {
+    "/services/data/v61.0/query": {
+      "get": {
+        "operationId": "query",
+        "tags": ["Query"],
+        "summary": "Execute a SOQL query",
+        "description": "Runs the SOQL in q. When more records match than one batch holds, done is false and nextRecordsUrl names the next batch.",
+        "parameters": [
+          {"name": "q", "in": "query", "required": true, "description": "A SOQL query.", "schema": {"type": "string"}},
+          {"$ref": "#/components/parameters/QueryOptions"}
+        ],
+        "responses": {
+          "200": {"description": "The matching records.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/QueryResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/services/data/v61.0/query/{queryLocator}": {
+      "get": {
+        "operationId": "queryMore",
+        "tags": ["Query"],
+        "summary": "Retrieve the next batch of a query",
+        "description": "The locator is the last segment of the previous batch's nextRecordsUrl.",
+        "parameters": [
+          {"name": "queryLocator", "in": "path", "required": true, "description": "The query locator.", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "The next batch.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/QueryResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/services/data/v61.0/queryAll": {
+      "get": {
+        "operationId": "queryAll",
+        "tags": ["Query"],
+        "summary": "Execute a SOQL query including deleted and archived records",
+        "parameters": [
+          {"name": "q", "in": "query", "required": true, "description": "A SOQL query.", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "The matching records, deleted ones included.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/QueryResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}
+        }
+      }
+    },
+    "/services/data/v61.0/search": {
+      "get": {
+        "operationId": "search",
+        "tags": ["Search"],
+        "summary": "Execute a SOSL search",
+        "parameters": [
+          {"name": "q", "in": "query", "required": true, "description": "A SOSL search, FIND {terms} IN ... RETURNING ....", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "The search records.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SearchResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}
+        }
+      }
+    },
+    "/services/data/v61.0/sobjects": {
+      "get": {
+        "operationId": "describeGlobal",
+        "tags": ["sObjects"],
+        "summary": "List the org's objects",
+        "responses": {
+          "200": {"description": "Every object the user can see.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DescribeGlobal"}}}}
+        }
+      }
+    },
+    "/services/data/v61.0/sobjects/{sObject}/describe": {
+      "get": {
+        "operationId": "describeSObject",
+        "tags": ["sObjects"],
+        "summary": "Describe an object's fields",
+        "parameters": [{"$ref": "#/components/parameters/sObject"}],
+        "responses": {
+          "200": {"description": "The object's metadata.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DescribeSObject"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/services/data/v61.0/sobjects/{sObject}": {
+      "post": {
+        "operationId": "createSObject",
+        "tags": ["sObjects"],
+        "summary": "Create a record",
+        "description": "Inserts one record of the object. Each call inserts a new record; there is no idempotency key.",
+        "parameters": [{"$ref": "#/components/parameters/sObject"}],
+        "requestBody": {"$ref": "#/components/requestBodies/SObjectBody"},
+        "responses": {
+          "201": {"description": "The new record's id.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SaveResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/services/data/v61.0/sobjects/{sObject}/{id}": {
+      "parameters": [
+        {"$ref": "#/components/parameters/sObject"},
+        {"name": "id", "in": "path", "required": true, "description": "The record's 15 or 18 character id.", "schema": {"type": "string"}}
+      ],
+      "get": {
+        "operationId": "getSObject",
+        "tags": ["sObjects"],
+        "summary": "Retrieve a record",
+        "parameters": [
+          {"name": "fields", "in": "query", "description": "The fields to return, comma-separated.", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "The record.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SObject"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "patch": {
+        "operationId": "updateSObject",
+        "tags": ["sObjects"],
+        "summary": "Update a record",
+        "requestBody": {"$ref": "#/components/requestBodies/SObjectBody"},
+        "responses": {
+          "204": {"description": "The record was updated."},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "operationId": "deleteSObject",
+        "tags": ["sObjects"],
+        "summary": "Delete a record",
+        "responses": {
+          "204": {"description": "The record was deleted."},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/services/data/v61.0/limits": {
+      "get": {
+        "operationId": "limits",
+        "tags": ["Limits"],
+        "summary": "The org's limits and how much of each is used",
+        "responses": {
+          "200": {"description": "Each limit's Max and Remaining.", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": {"type": "object", "properties": {"Max": {"type": "integer"}, "Remaining": {"type": "integer"}}}}}}}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {"type": "http", "scheme": "bearer", "description": "An OAuth access token or session id."}
+    },
+    "parameters": {
+      "sObject": {"name": "sObject", "in": "path", "required": true, "description": "The object's API name: Account, Contact, Opportunity, Lead, Case, Task, or any other.", "schema": {"type": "string"}},
+      "QueryOptions": {"name": "Sforce-Query-Options", "in": "header", "description": "batchSize=N, from 200 to 2000.", "schema": {"type": "string"}}
+    },
+    "requestBodies": {
+      "SObjectBody": {
+        "required": true,
+        "description": "The record's fields by API name.",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SObjectFields"}}}
+      }
+    },
+    "responses": {
+      "BadRequest": {"description": "A malformed query, a missing required field, or a validation rule.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Errors"}}}},
+      "Unauthorized": {"description": "The session is invalid or expired.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Errors"}}}},
+      "NotFound": {"description": "The object or the record does not exist.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Errors"}}}}
+    },
+    "schemas": {
+      "Attributes": {
+        "type": "object",
+        "properties": {"type": {"type": "string"}, "url": {"type": "string"}}
+      },
+      "SObject": {
+        "type": "object",
+        "description": "One record: attributes, Id, and its fields by API name.",
+        "properties": {
+          "attributes": {"$ref": "#/components/schemas/Attributes"},
+          "Id": {"type": "string"},
+          "Name": {"type": "string"},
+          "LastModifiedDate": {"type": "string"}
+        },
+        "additionalProperties": true
+      },
+      "SObjectFields": {
+        "type": "object",
+        "description": "Fields by API name.",
+        "properties": {
+          "Name": {"type": "string"},
+          "Subject": {"type": "string"},
+          "Status": {"type": "string"},
+          "StageName": {"type": "string"},
+          "Amount": {"type": "number"},
+          "CloseDate": {"type": "string"},
+          "LastName": {"type": "string"},
+          "Company": {"type": "string"}
+        },
+        "additionalProperties": true
+      },
+      "QueryResult": {
+        "type": "object",
+        "required": ["totalSize", "done", "records"],
+        "properties": {
+          "totalSize": {"type": "integer"},
+          "done": {"type": "boolean"},
+          "nextRecordsUrl": {"type": "string"},
+          "records": {"type": "array", "items": {"$ref": "#/components/schemas/SObject"}}
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {"searchRecords": {"type": "array", "items": {"$ref": "#/components/schemas/SObject"}}}
+      },
+      "SaveResult": {
+        "type": "object",
+        "required": ["id", "success", "errors"],
+        "properties": {
+          "id": {"type": "string"},
+          "success": {"type": "boolean"},
+          "errors": {"type": "array", "items": {"$ref": "#/components/schemas/Error"}}
+        }
+      },
+      "DescribeGlobal": {
+        "type": "object",
+        "properties": {
+          "encoding": {"type": "string"},
+          "maxBatchSize": {"type": "integer"},
+          "sobjects": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "label": {"type": "string"}, "queryable": {"type": "boolean"}}}}
+        }
+      },
+      "DescribeSObject": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "label": {"type": "string"},
+          "fields": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "type": {"type": "string"}, "nillable": {"type": "boolean"}}}}
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {"type": "string"},
+          "errorCode": {"type": "string"},
+          "fields": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "Errors": {"type": "array", "items": {"$ref": "#/components/schemas/Error"}}
+    }
+  }
+}

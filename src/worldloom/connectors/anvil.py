@@ -136,6 +136,18 @@ class OperationMap:
     route: str | None = None
     vendor: str | None = None
     unmodelled: str | None = None
+    #: ``(location, {value: tool})``: an operation whose tool depends on the request,
+    #: as ServiceNow's one Table API route serves every table.
+    tool_by: tuple[str, Mapping[str, str]] | None = None
+
+    @property
+    def tools(self) -> tuple[str, ...]:
+        """Every tool this entry can run."""
+
+        if self.tool is None:
+            return ()
+        chosen = [self.tool, *(self.tool_by[1].values() if self.tool_by else ())]
+        return tuple(dict.fromkeys(chosen))
 
 
 @dataclass(frozen=True)
@@ -241,9 +253,16 @@ def parse_mapping(document: Mapping[str, Any], *, origin: str = "mapping") -> An
         cursor = raw.get("cursor")
         if cursor is not None and (not isinstance(cursor, str) or cursor.split(".", 1)[0] not in _LOCATIONS):
             raise MappingError(f"{where}: `cursor` is a request location")
+        tool_by = raw.get("tool_by")
+        chosen_by: tuple[str, Mapping[str, str]] | None = None
+        if tool_by is not None:
+            if (not isinstance(tool_by, Mapping) or not isinstance(tool_by.get("from"), str)
+                    or tool_by["from"].split(".", 1)[0] not in _LOCATIONS or not isinstance(tool_by.get("map"), Mapping)):
+                raise MappingError(f"{where}: `tool_by` reads a request location (`from`) and maps its values to tools (`map`)")
+            chosen_by = (str(tool_by["from"]), {str(key): str(value) for key, value in tool_by["map"].items()})
         operations[operation_id] = OperationMap(
             operation_id, tool=tool, args={name: _arg(name, args[name], where) for name in sorted(args)},
-            result=dict(result), cursor=cursor, route=route, vendor=vendor,
+            result=dict(result), cursor=cursor, route=route, vendor=vendor, tool_by=chosen_by,
         )
     transitions = tuple(dict(item) for item in document.get("transitions") or ())
     for item in transitions:
@@ -378,14 +397,15 @@ def lint_mapping(mapping: AnvilMapping, operations: Sequence[ContractOperation],
             advisories.append(f"not_served: {entry.operation_id} is mapped but the contract does not expose it")
         if entry.unmodelled is not None or definition is None or entry.tool is None:
             continue
-        try:
-            tool = definition.tool(definition.canonical_tool(entry.tool))
-        except KeyError:
-            errors.append(f"unknown_tool: {entry.operation_id} maps to {mapping.connector}.{entry.tool}, which the definition does not declare")
-            continue
-        unknown = sorted(set(entry.args) - set(tool.params))
-        if unknown:
-            errors.append(f"unknown_arguments: {entry.operation_id} passes {unknown} to {mapping.connector}.{entry.tool}")
+        for name in entry.tools:
+            try:
+                tool = definition.tool(definition.canonical_tool(name))
+            except KeyError:
+                errors.append(f"unknown_tool: {entry.operation_id} maps to {mapping.connector}.{name}, which the definition does not declare")
+                continue
+            unknown = sorted(set(entry.args) - set(tool.params))
+            if unknown:
+                errors.append(f"unknown_arguments: {entry.operation_id} passes {unknown} to {mapping.connector}.{name}")
     return tuple(errors), tuple(sorted(advisories))
 
 
@@ -687,7 +707,11 @@ def plan_call(mapping: AnvilMapping, entry: OperationMap, request: Mapping[str, 
         start_at = _offset(None if token is _MISSING else token)
         if start_at and shape in {"page", "token_page", "list"}:
             args["start_at"] = start_at
-    return PlannedCall(tool=entry.tool, args=args, start_at=start_at)
+    tool = entry.tool
+    if entry.tool_by is not None:
+        chosen = read_location(request, entry.tool_by[0])
+        tool = entry.tool_by[1].get(str(chosen), tool) if chosen is not _MISSING else tool
+    return PlannedCall(tool=tool, args=args, start_at=start_at)
 
 
 def _offset(cursor: Any) -> int:

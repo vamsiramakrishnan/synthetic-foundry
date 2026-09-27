@@ -1,0 +1,306 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ServiceNow REST API: Table, Aggregate and Attachment",
+    "version": "washingtondc",
+    "description": "Authored by Worldloom from ServiceNow's public REST API reference, because ServiceNow publishes no full OpenAPI document for the platform REST APIs. It covers the Table API (/api/now/table), the Aggregate API (/api/now/stats) and the Attachment API (/api/now/attachment) as the reference documents them: the sysparm query parameters, the {\"result\": ...} envelope, offset paging with sysparm_limit and sysparm_offset, and the {\"error\": {\"message\", \"detail\"}, \"status\": \"failure\"} error body. Sources: https://www.servicenow.com/docs/bundle/washingtondc-api-reference/page/integrate/inbound-rest/concept/c_TableAPI.html, https://www.servicenow.com/docs/bundle/washingtondc-api-reference/page/integrate/inbound-rest/concept/c_AggregateAPI.html, https://www.servicenow.com/docs/bundle/washingtondc-api-reference/page/integrate/inbound-rest/concept/c_AttachmentAPI.html"
+  },
+  "servers": [{"url": "https://{instance}.service-now.com", "variables": {"instance": {"default": "instance"}}}],
+  "security": [{"basicAuth": []}],
+  "tags": [
+    {"name": "Table API", "description": "Create, read, update and delete records in any table."},
+    {"name": "Aggregate API", "description": "Aggregate statistics over a table."},
+    {"name": "Attachment API", "description": "Files attached to records."}
+  ],
+  "paths": {
+    "/api/now/table/{tableName}": {
+      "parameters": [{"$ref": "#/components/parameters/tableName"}],
+      "get": {
+        "operationId": "getTableRecords",
+        "tags": ["Table API"],
+        "summary": "Retrieve multiple records",
+        "description": "Returns the records of the table that match sysparm_query, sysparm_limit at a time from sysparm_offset. The Link header names the first, previous, next and last pages; X-Total-Count is the number of matching records.",
+        "parameters": [
+          {"$ref": "#/components/parameters/sysparm_query"},
+          {"$ref": "#/components/parameters/sysparm_display_value"},
+          {"$ref": "#/components/parameters/sysparm_exclude_reference_link"},
+          {"$ref": "#/components/parameters/sysparm_fields"},
+          {"$ref": "#/components/parameters/sysparm_limit"},
+          {"$ref": "#/components/parameters/sysparm_offset"},
+          {"$ref": "#/components/parameters/sysparm_view"},
+          {"$ref": "#/components/parameters/sysparm_no_count"}
+        ],
+        "responses": {
+          "200": {
+            "description": "The matching records.",
+            "headers": {
+              "Link": {"description": "Links to the first, prev, next and last pages.", "schema": {"type": "string"}},
+              "X-Total-Count": {"description": "How many records match the query.", "schema": {"type": "integer"}}
+            },
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecordList"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "post": {
+        "operationId": "createTableRecord",
+        "tags": ["Table API"],
+        "summary": "Create a record",
+        "description": "Inserts one record in the table. Each call inserts a new record; there is no idempotency key.",
+        "parameters": [
+          {"$ref": "#/components/parameters/sysparm_display_value"},
+          {"$ref": "#/components/parameters/sysparm_exclude_reference_link"},
+          {"$ref": "#/components/parameters/sysparm_fields"},
+          {"$ref": "#/components/parameters/sysparm_input_display_value"}
+        ],
+        "requestBody": {"$ref": "#/components/requestBodies/RecordBody"},
+        "responses": {
+          "201": {"description": "The created record.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecordResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/api/now/table/{tableName}/{sys_id}": {
+      "parameters": [{"$ref": "#/components/parameters/tableName"}, {"$ref": "#/components/parameters/sys_id"}],
+      "get": {
+        "operationId": "getTableRecord",
+        "tags": ["Table API"],
+        "summary": "Retrieve a record",
+        "parameters": [
+          {"$ref": "#/components/parameters/sysparm_display_value"},
+          {"$ref": "#/components/parameters/sysparm_exclude_reference_link"},
+          {"$ref": "#/components/parameters/sysparm_fields"},
+          {"$ref": "#/components/parameters/sysparm_view"}
+        ],
+        "responses": {
+          "200": {"description": "The record.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecordResult"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "patch": {
+        "operationId": "updateTableRecord",
+        "tags": ["Table API"],
+        "summary": "Update a record",
+        "description": "Sets the fields the body names and leaves the others.",
+        "parameters": [
+          {"$ref": "#/components/parameters/sysparm_display_value"},
+          {"$ref": "#/components/parameters/sysparm_exclude_reference_link"},
+          {"$ref": "#/components/parameters/sysparm_fields"},
+          {"$ref": "#/components/parameters/sysparm_input_display_value"}
+        ],
+        "requestBody": {"$ref": "#/components/requestBodies/RecordBody"},
+        "responses": {
+          "200": {"description": "The updated record.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecordResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "operationId": "replaceTableRecord",
+        "tags": ["Table API"],
+        "summary": "Modify a record",
+        "description": "Sets the fields the body names. ServiceNow documents PUT and PATCH on this path with the same behaviour.",
+        "parameters": [
+          {"$ref": "#/components/parameters/sysparm_display_value"},
+          {"$ref": "#/components/parameters/sysparm_exclude_reference_link"},
+          {"$ref": "#/components/parameters/sysparm_fields"},
+          {"$ref": "#/components/parameters/sysparm_input_display_value"}
+        ],
+        "requestBody": {"$ref": "#/components/requestBodies/RecordBody"},
+        "responses": {
+          "200": {"description": "The updated record.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecordResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "operationId": "deleteTableRecord",
+        "tags": ["Table API"],
+        "summary": "Delete a record",
+        "responses": {
+          "204": {"description": "The record was deleted."},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/api/now/stats/{tableName}": {
+      "parameters": [{"$ref": "#/components/parameters/tableName"}],
+      "get": {
+        "operationId": "getTableStats",
+        "tags": ["Aggregate API"],
+        "summary": "Aggregate a table",
+        "parameters": [
+          {"$ref": "#/components/parameters/sysparm_query"},
+          {"name": "sysparm_count", "in": "query", "description": "Return the number of matching records.", "schema": {"type": "boolean"}},
+          {"name": "sysparm_group_by", "in": "query", "description": "Fields to group the result by, comma-separated.", "schema": {"type": "string"}},
+          {"name": "sysparm_avg_fields", "in": "query", "description": "Fields to average, comma-separated.", "schema": {"type": "string"}},
+          {"name": "sysparm_sum_fields", "in": "query", "description": "Fields to sum, comma-separated.", "schema": {"type": "string"}},
+          {"$ref": "#/components/parameters/sysparm_display_value"}
+        ],
+        "responses": {
+          "200": {"description": "The aggregate.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatsResult"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/now/attachment": {
+      "get": {
+        "operationId": "getAttachments",
+        "tags": ["Attachment API"],
+        "summary": "Retrieve attachment metadata",
+        "parameters": [
+          {"$ref": "#/components/parameters/sysparm_query"},
+          {"$ref": "#/components/parameters/sysparm_limit"},
+          {"$ref": "#/components/parameters/sysparm_offset"}
+        ],
+        "responses": {
+          "200": {"description": "Attachment metadata.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AttachmentList"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/now/attachment/{sys_id}": {
+      "parameters": [{"$ref": "#/components/parameters/sys_id"}],
+      "get": {
+        "operationId": "getAttachment",
+        "tags": ["Attachment API"],
+        "summary": "Retrieve one attachment's metadata",
+        "responses": {
+          "200": {"description": "The attachment's metadata.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AttachmentResult"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "operationId": "deleteAttachment",
+        "tags": ["Attachment API"],
+        "summary": "Delete an attachment",
+        "responses": {
+          "204": {"description": "The attachment was deleted."},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "basicAuth": {"type": "http", "scheme": "basic", "description": "An instance user's name and password."}
+    },
+    "parameters": {
+      "tableName": {"name": "tableName", "in": "path", "required": true, "description": "The table: incident, change_request, problem, kb_knowledge, sc_request, cmdb_ci, or any other.", "schema": {"type": "string"}},
+      "sys_id": {"name": "sys_id", "in": "path", "required": true, "description": "The record's sys_id.", "schema": {"type": "string"}},
+      "sysparm_query": {"name": "sysparm_query", "in": "query", "description": "An encoded query: field operator value clauses joined by ^ (AND) and ^OR, with ^ORDERBY and ^ORDERBYDESC.", "schema": {"type": "string"}},
+      "sysparm_display_value": {"name": "sysparm_display_value", "in": "query", "description": "Return display values (true), actual values (false), or both (all).", "schema": {"type": "string", "enum": ["true", "false", "all"], "default": "false"}},
+      "sysparm_exclude_reference_link": {"name": "sysparm_exclude_reference_link", "in": "query", "description": "Leave out the link of each reference field.", "schema": {"type": "boolean"}},
+      "sysparm_fields": {"name": "sysparm_fields", "in": "query", "description": "The fields to return, comma-separated.", "schema": {"type": "string"}},
+      "sysparm_limit": {"name": "sysparm_limit", "in": "query", "description": "The most records to return.", "schema": {"type": "integer", "default": 10000}},
+      "sysparm_offset": {"name": "sysparm_offset", "in": "query", "description": "How many matching records to skip.", "schema": {"type": "integer", "default": 0}},
+      "sysparm_view": {"name": "sysparm_view", "in": "query", "description": "The UI view whose fields to return.", "schema": {"type": "string", "enum": ["desktop", "mobile", "both"]}},
+      "sysparm_no_count": {"name": "sysparm_no_count", "in": "query", "description": "Skip the count query behind X-Total-Count.", "schema": {"type": "boolean"}},
+      "sysparm_input_display_value": {"name": "sysparm_input_display_value", "in": "query", "description": "Read the body's values as display values.", "schema": {"type": "boolean"}}
+    },
+    "requestBodies": {
+      "RecordBody": {
+        "required": true,
+        "description": "The record's fields by column name.",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Record"}}}
+      }
+    },
+    "responses": {
+      "BadRequest": {"description": "The request is malformed or a mandatory field is empty.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "Unauthorized": {"description": "No valid credentials.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "Forbidden": {"description": "The user lacks the role or ACL to do this.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "NotFound": {"description": "No record found.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+    },
+    "schemas": {
+      "Reference": {
+        "type": "object",
+        "description": "A reference field: the referenced record's sys_id, its display value and its link.",
+        "properties": {
+          "value": {"type": "string"},
+          "display_value": {"type": "string"},
+          "link": {"type": "string"}
+        }
+      },
+      "Record": {
+        "type": "object",
+        "description": "One record: its columns by name. A reference column is a Reference; every other column is a string.",
+        "properties": {
+          "sys_id": {"type": "string", "readOnly": true},
+          "number": {"type": "string"},
+          "short_description": {"type": "string"},
+          "description": {"type": "string"},
+          "state": {"type": "string"},
+          "priority": {"type": "string"},
+          "caller_id": {"oneOf": [{"type": "string"}, {"$ref": "#/components/schemas/Reference"}]},
+          "assignment_group": {"oneOf": [{"type": "string"}, {"$ref": "#/components/schemas/Reference"}]},
+          "cmdb_ci": {"oneOf": [{"type": "string"}, {"$ref": "#/components/schemas/Reference"}]},
+          "work_notes": {"type": "string", "writeOnly": true},
+          "sys_created_on": {"type": "string", "readOnly": true},
+          "sys_updated_on": {"type": "string", "readOnly": true}
+        },
+        "additionalProperties": true
+      },
+      "RecordResult": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {"result": {"$ref": "#/components/schemas/Record"}}
+      },
+      "RecordList": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {"result": {"type": "array", "items": {"$ref": "#/components/schemas/Record"}}}
+      },
+      "StatsResult": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "object",
+            "properties": {
+              "stats": {"type": "object", "additionalProperties": true},
+              "groupby_fields": {"type": "array", "items": {"type": "object", "additionalProperties": true}}
+            }
+          }
+        }
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "sys_id": {"type": "string"},
+          "file_name": {"type": "string"},
+          "content_type": {"type": "string"},
+          "size_bytes": {"type": "string"},
+          "table_name": {"type": "string"},
+          "table_sys_id": {"type": "string"},
+          "download_link": {"type": "string"}
+        }
+      },
+      "AttachmentResult": {"type": "object", "properties": {"result": {"$ref": "#/components/schemas/Attachment"}}},
+      "AttachmentList": {"type": "object", "properties": {"result": {"type": "array", "items": {"$ref": "#/components/schemas/Attachment"}}}},
+      "Error": {
+        "type": "object",
+        "required": ["error", "status"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {"message": {"type": "string"}, "detail": {"type": "string"}}
+          },
+          "status": {"type": "string", "enum": ["failure"]}
+        }
+      }
+    }
+  }
+}

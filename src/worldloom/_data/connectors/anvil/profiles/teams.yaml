@@ -1,0 +1,30 @@
+# Worldloom exposure profile for Microsoft Teams in Microsoft Graph v1.0.
+#
+# Teams, channels, chats, channel and chat messages, replies and members,
+# which the teams connector's tools model; and the neighbours an agent might
+# reach for instead: archiving a team, soft-deleting a message, channel
+# membership, chat membership changes and the signed-in user's joined teams.
+profile: worldloom-teams
+description: Teams, channels, chats and messages as the Worldloom teams connector models them, with the neighbours an agent might misuse.
+select:
+  - path:
+      - "/teams"
+      - "/teams/{team-id}"
+      - "/teams/{team-id}/archive"
+      - "/teams/{team-id}/unarchive"
+      - "/teams/{team-id}/channels"
+      - "/teams/{team-id}/channels/{channel-id}"
+      - "/teams/{team-id}/channels/{channel-id}/members"
+      - "/teams/{team-id}/channels/{channel-id}/messages"
+      - "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}"
+      - "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies"
+      - "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/softDelete"
+      - "/teams/{team-id}/members"
+      - "/teams/{team-id}/members/{conversationMember-id}"
+      - "/chats"
+      - "/chats/{chat-id}"
+      - "/chats/{chat-id}/members"
+      - "/chats/{chat-id}/messages"
+      - "/chats/{chat-id}/messages/{chatMessage-id}"
+      - "/me/joinedTeams"
+unexposed: skip

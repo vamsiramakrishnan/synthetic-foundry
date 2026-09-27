@@ -1,0 +1,29 @@
+# Worldloom exposure profile for the Google Drive API v3 (Discovery).
+#
+# Files (list with q, get, create, update, delete, copy, export), which the
+# drive connector's tools model; and the neighbours an agent might reach for
+# instead: permissions, comments and replies, revisions, emptying the trash,
+# generating ids, and shared drives.
+profile: worldloom-drive
+description: Drive files as the Worldloom drive connector models them, with the neighbours an agent might misuse.
+select:
+  - operation_id:
+      - drive.files.list
+      - drive.files.get
+      - drive.files.create
+      - drive.files.update
+      - drive.files.delete
+      - drive.files.copy
+      - drive.files.export
+      - drive.files.emptyTrash
+      - drive.files.generateIds
+      - drive.permissions.list
+      - drive.permissions.create
+      - drive.permissions.delete
+      - drive.comments.list
+      - drive.comments.create
+      - drive.replies.create
+      - drive.revisions.list
+      - drive.drives.list
+      - drive.about.get
+unexposed: skip

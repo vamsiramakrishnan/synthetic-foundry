@@ -1,0 +1,42 @@
+# Worldloom exposure profile for the Slack Web API.
+#
+# Conversations, messages, threads, files and users, which the slack
+# connector's tools model; and the neighbours an agent might reach for
+# instead: ephemeral and scheduled messages, reactions, pins, invites and
+# kicks, joining and leaving, renaming and topics, file deletion and upload,
+# and looking a user up by email.
+profile: worldloom-slack
+description: Slack conversations, messages, files and users as the Worldloom slack connector models them, with the neighbours an agent might misuse.
+select:
+  - operation_id:
+      - conversations_list
+      - conversations_info
+      - conversations_history
+      - conversations_replies
+      - conversations_create
+      - conversations_archive
+      - conversations_unarchive
+      - conversations_invite
+      - conversations_kick
+      - conversations_join
+      - conversations_leave
+      - conversations_rename
+      - conversations_setTopic
+      - conversations_members
+      - chat_postMessage
+      - chat_update
+      - chat_delete
+      - chat_postEphemeral
+      - chat_scheduleMessage
+      - chat_getPermalink
+      - search_messages
+      - files_list
+      - files_info
+      - files_delete
+      - files_upload
+      - users_list
+      - users_info
+      - users_lookupByEmail
+      - reactions_add
+      - pins_add
+unexposed: skip

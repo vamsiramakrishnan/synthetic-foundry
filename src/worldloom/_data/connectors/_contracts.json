@@ -1,0 +1,207 @@
+{
+ "schema": "worldloom.contract-lock/v1",
+ "about": "The vendor contract each connector is served behind through Anvil, pinned by the sha256 of its exact bytes. `worldloom contracts fetch` downloads each vendor source (or copies an authored one out of the package) and refuses bytes that hash to anything else; `worldloom contracts build CONNECTOR` compiles it under its profile with Anvil; `worldloom contracts coverage` reports what each profile exposes and what the mapping models. vendor_operations counts the whole source; profiled_operations is what the profile exposes and the mapping must cover. anvil_source_hash is Anvil's snapshot identity for the locked bytes.",
+ "contracts": {
+  "confluence": {
+   "provenance": "vendor",
+   "service": "confluence",
+   "source": {
+    "url": "https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json",
+    "format": "openapi3",
+    "sha256": "fd741c62ef1fa7f34c7e8548444bab557ce39909443ed84c6fbde2f6fb597c3c",
+    "bytes": 613818,
+    "filename": "confluence.json",
+    "version": "2.0.0",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:d7d2162c6d29c2f9de03ef3a28beccb2b6b423f72184cee66239bdf1df5f3be4",
+   "vendor_operations": 218,
+   "profiled_operations": 28,
+   "profile": "anvil/profiles/confluence.yaml",
+   "manifest": "anvil/manifests/confluence.yaml",
+   "note": "The manifest chooses basic auth among the two the spec declares. v2 has no CQL search; a page or post listing is answered as the CQL its filters mean."
+  },
+  "drive": {
+   "provenance": "vendor",
+   "service": "drive",
+   "source": {
+    "url": "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+    "format": "discovery",
+    "sha256": "953aedec3e742606cce48e400434431989b34e521648619685f217404fd6873f",
+    "bytes": 269730,
+    "filename": "drive-v3.discovery.json",
+    "version": "v3 (revision 20260923)",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:fe4bb0f302e82334dee6c68d1a6c3e7b05a068a4fe97c52a28ed8f289a3d42da",
+   "vendor_operations": 64,
+   "profiled_operations": 18,
+   "profile": "anvil/profiles/drive.yaml"
+  },
+  "jira": {
+   "provenance": "vendor",
+   "service": "jira",
+   "source": {
+    "url": "https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
+    "format": "openapi3",
+    "sha256": "6ecc461bb85e92a46331a4316b6c63c91c16ed6baf5f06b03ab616da3f1ab3d7",
+    "bytes": 2473752,
+    "filename": "jira.json",
+    "version": "1001.0.0-SNAPSHOT-44cdd07c042959317ed5591bf79dbcd9369f3610",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:0fc9d1d069a011ce141ab53bbdcc09781544ba0765d26c221cc46c2339d161b9",
+   "vendor_operations": 619,
+   "profiled_operations": 26,
+   "profile": "anvil/profiles/jira.yaml",
+   "manifest": "anvil/manifests/jira.yaml",
+   "note": "The profile selects the 26 operations of Anvil's Jira backtest; the manifest chooses basic auth among the two the spec declares."
+  },
+  "onedrive": {
+   "provenance": "vendor",
+   "service": "onedrive",
+   "source": {
+    "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-metadata/master/openapi/v1.0/openapi.yaml",
+    "format": "openapi3",
+    "sha256": "77c1a39c94ab0a72c0a2e07ff74f221903141e8913e748fddcc189b98da42feb",
+    "bytes": 44334960,
+    "filename": "msgraph-v1.0.openapi.yaml",
+    "version": "v1.0",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "vendor_operations": 17870,
+   "profiled_operations": 20,
+   "profile": "anvil/profiles/onedrive.yaml",
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+  },
+  "outlook": {
+   "provenance": "vendor",
+   "service": "outlook",
+   "source": {
+    "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-metadata/master/openapi/v1.0/openapi.yaml",
+    "format": "openapi3",
+    "sha256": "77c1a39c94ab0a72c0a2e07ff74f221903141e8913e748fddcc189b98da42feb",
+    "bytes": 44334960,
+    "filename": "msgraph-v1.0.openapi.yaml",
+    "version": "v1.0",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "vendor_operations": 17870,
+   "profiled_operations": 26,
+   "profile": "anvil/profiles/outlook.yaml",
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+  },
+  "salesforce": {
+   "provenance": "authored",
+   "service": "salesforce",
+   "source": {
+    "path": "anvil/contracts/salesforce.openapi.json",
+    "format": "openapi3",
+    "sha256": "d0c110cf114e72a7db754982c4e872d2abba3144944a2081db774343d5506855",
+    "bytes": 12837,
+    "filename": "salesforce.openapi.json",
+    "version": "61.0",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:64105880fb583c3a3cd2600c18dbf26cd88212637290ac417dcc9d0a4c5dc149",
+   "vendor_operations": 11,
+   "profiled_operations": 11,
+   "profile": "anvil/profiles/salesforce.yaml",
+   "documentation": [
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_query.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_queryall.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_search.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_describeGlobal.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_describe.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_retrieve.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_limits.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/errorcodes.htm"
+   ],
+   "note": "Salesforce publishes no full OpenAPI document for the Platform REST API (its OpenAPI beta covers sObjects only, per org); this one was written from the REST API Developer Guide."
+  },
+  "servicenow": {
+   "provenance": "authored",
+   "service": "servicenow",
+   "source": {
+    "path": "anvil/contracts/servicenow.openapi.json",
+    "format": "openapi3",
+    "sha256": "092ad24689cbbf52b8e7606cb01f90223d3088ed8cce67df29e9d7184fde048c",
+    "bytes": 16836,
+    "filename": "servicenow.openapi.json",
+    "version": "washingtondc",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:ff4397391e708fafdef03101f367dbd4df9d540aa261c1739ec7971acf069481",
+   "vendor_operations": 10,
+   "profiled_operations": 10,
+   "profile": "anvil/profiles/servicenow.yaml",
+   "documentation": [
+    "https://www.servicenow.com/docs/bundle/washingtondc-api-reference/page/integrate/inbound-rest/concept/c_TableAPI.html",
+    "https://www.servicenow.com/docs/bundle/washingtondc-api-reference/page/integrate/inbound-rest/concept/c_AggregateAPI.html",
+    "https://www.servicenow.com/docs/bundle/washingtondc-api-reference/page/integrate/inbound-rest/concept/c_AttachmentAPI.html"
+   ],
+   "note": "ServiceNow publishes no full OpenAPI document for its platform REST APIs; this one was written from the REST API reference."
+  },
+  "sharepoint": {
+   "provenance": "vendor",
+   "service": "sharepoint",
+   "source": {
+    "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-metadata/master/openapi/v1.0/openapi.yaml",
+    "format": "openapi3",
+    "sha256": "77c1a39c94ab0a72c0a2e07ff74f221903141e8913e748fddcc189b98da42feb",
+    "bytes": 44334960,
+    "filename": "msgraph-v1.0.openapi.yaml",
+    "version": "v1.0",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "vendor_operations": 17870,
+   "profiled_operations": 36,
+   "profile": "anvil/profiles/sharepoint.yaml",
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+  },
+  "slack": {
+   "provenance": "vendor",
+   "service": "slack",
+   "source": {
+    "url": "https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json",
+    "format": "swagger2",
+    "sha256": "742a5c977180a829df8767cf57bc417d99b3713583aee83741efb9c08ca731e7",
+    "bytes": 1237332,
+    "filename": "slack_web_openapi_v2.json",
+    "version": "1.7.0",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:f21636c8815f877626f7f2a4ab6c996e4cc9222b8c4328240c83e6b71305b5e1",
+   "vendor_operations": 174,
+   "profiled_operations": 30,
+   "profile": "anvil/profiles/slack.yaml"
+  },
+  "teams": {
+   "provenance": "vendor",
+   "service": "teams",
+   "source": {
+    "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-metadata/master/openapi/v1.0/openapi.yaml",
+    "format": "openapi3",
+    "sha256": "77c1a39c94ab0a72c0a2e07ff74f221903141e8913e748fddcc189b98da42feb",
+    "bytes": 44334960,
+    "filename": "msgraph-v1.0.openapi.yaml",
+    "version": "v1.0",
+    "locked": "2026-09-27"
+   },
+   "anvil_source_hash": "sha256:bd1cffb814a45305c14424beeadc5bf9fce1aff4d989e9a2e91a3c16e3406991",
+   "vendor_operations": 17870,
+   "profiled_operations": 41,
+   "profile": "anvil/profiles/teams.yaml",
+   "note": "One Microsoft Graph source serves four connectors, each under its own profile."
+  }
+ },
+ "uncontracted": {
+  "email": "a provider-neutral mailbox (vendor_product 'Worldloom Email'); no vendor API is implied, so no vendor contract applies",
+  "rovo": "Atlassian publishes no REST contract for Rovo search",
+  "sor": "the generic system of record over the process catalogue's object models; no single vendor API",
+  "teamwork_graph": "Atlassian Teamwork Graph is served over GraphQL and is in early access; no published contract to lock"
+ }
+}

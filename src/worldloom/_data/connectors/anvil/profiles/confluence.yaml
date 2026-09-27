@@ -1,0 +1,39 @@
+# Worldloom exposure profile for the Confluence Cloud REST API v2.
+#
+# Pages and blog posts (list, get, create, update), footer comments and
+# attachments, which the confluence connector's tools model; and the
+# neighbours an agent might reach for instead: deleting a page or post,
+# retitling, versions, labels, likes, children and ancestors, and spaces.
+profile: worldloom-confluence
+description: Confluence pages, blog posts, comments and attachments as the Worldloom confluence connector models them, with the neighbours an agent might misuse.
+select:
+  - operation_id:
+      - getPages
+      - getPageById
+      - createPage
+      - updatePage
+      - deletePage
+      - updatePageTitle
+      - getPageVersions
+      - getPageLabels
+      - getPageLikeCount
+      - getChildPages
+      - getPageAncestors
+      - getPageFooterComments
+      - getPageAttachments
+      - getBlogPosts
+      - getBlogPostById
+      - createBlogPost
+      - updateBlogPost
+      - deleteBlogPost
+      - createFooterComment
+      - getFooterCommentById
+      - updateFooterComment
+      - deleteFooterComment
+      - getAttachments
+      - getAttachmentById
+      - deleteAttachment
+      - getSpaces
+      - getSpaceById
+      - getLabels
+unexposed: skip
