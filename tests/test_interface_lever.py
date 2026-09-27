@@ -576,3 +576,88 @@ def test_the_cli_prints_owners_and_refuses_lever_flags_that_do_not_combine(tmp_p
     assert result.exit_code == 2 and "belong to the interface lever" in " ".join(result.output.split()), result.output
     result = runner.invoke(app, [*base, "--levers", "interface"])
     assert result.exit_code == 2 and "needs at least one --contract" in " ".join(result.output.split()), result.output
+
+
+# -- the lever on the contract surface, in process ----------------------------------------
+
+
+def _contract_follower(name: str) -> CallableAgent:
+    """The description reader, on the contract surface: it reads the tool list the run presents and calls it in process."""
+
+    def run(task: Any, tools: Any) -> AgentResponse:
+        catalog = {entry.get("operation"): entry for entry in tools.tools()}
+        search, move = catalog["jira.jql.search"], catalog["jira.transitions.create"]
+        matched = _REQUEST.match(task.query)
+        assert matched is not None, task.query
+        status, severity, entity, project, target = matched.groups()
+        if _grammar(str(search.get("description") or "")):
+            jql = f'project = {project} AND issuetype = {entity} AND status = {status} AND cf[10231] = "{severity}"'
+        else:
+            jql = f"{status} {severity} {entity} in {project}"
+        try:
+            found = tools.call(search["name"], body={"jql": jql})
+        except Exception:  # the vendor's refusal, as the agent sees it
+            return AgentResponse(answer="I could not search for the issue.")
+        if not found.get("issues"):
+            return AgentResponse(answer="I could not search for the issue.")
+        key = found["issues"][0]["key"]
+        tools.call(move["name"], issue_id_or_key=key, body={"transition": {"id": TRANSITIONS[target]}})
+        return AgentResponse(answer=f"{key} moved to {target}.")
+
+    return CallableAgent(run, name=name)
+
+
+@needs_anvil
+def test_the_interface_lever_serves_its_candidates_in_process_on_the_contract_surface(
+        contract: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldloom.connectors import surface as surfaces
+    from worldloom.evalrun.anvil import AnvilCase
+    from worldloom.evalrun.interface import ContractServing
+
+    def no_server(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("on the contract surface no Anvil server is started for a case")
+
+    monkeypatch.setattr(AnvilCase, "start", no_server)
+    projected: list[str] = []
+    real_project = surfaces.project
+
+    def counting(bundle: Any, connector: str, **options: Any) -> Any:
+        projected.append(str(bundle))
+        return real_project(bundle, connector, **options)
+
+    monkeypatch.setattr(surfaces, "project", counting)
+    records = _records()
+
+    def serve(cases: Any, agent: Any, serving: Any) -> Any:
+        assert isinstance(serving, ContractServing)
+        service = service_for(cases, records, query_engine="native", surface=serving.surfaces)
+        return run_cases(service, cases, agent)
+
+    out = tmp_path / "loop"
+    lever = InterfaceLever.from_contracts({"jira": contract}, serve=serve, out=out, command=ANVIL, surface="contract")
+    # The overlay changes the surface the in-process run presents, exactly as it changes Anvil's.
+    base = lever.serving(lever.base)
+    before = next(tool for tool in base.projected["jira"].tools if tool.operation == "jira.jql.search")
+    assert not _grammar(str(before.definition.get("description")))
+    candidate, findings = lever.lint(lever.base, diffs.render(lever.base.tree, _overlay(lever.base.tree, inert=False)))
+    assert candidate is not None, findings
+    after = next(tool for tool in lever.serving(candidate).projected["jira"].tools if tool.operation == "jira.jql.search")
+    assert _grammar(str(after.definition.get("description")))
+    assert lever.identity(candidate)["serving"] == "contract-surface"
+    # Each bundle is projected once and read back from the cache after.
+    lever.serving(candidate)
+    assert len(projected) == len(set(projected)) == 2
+    cases = _cases()
+    train, held = cases[:4], cases[6:9]
+    report = improve(packkit.resolve("agent:baseline"), train, run=_never,
+                     agent_for=lambda pack: _contract_follower("reader"), exchange=_proposer(_overlay), out=out,
+                     holdout=held, rounds=1, levers=("interface",), interface=lever)
+    receipt = report.rounds[0]
+    assert receipt.decision == "promoted", receipt.reasons
+    assert receipt.lever == "interface"
+    assert receipt.train is not None and receipt.train.mean_delta >= 0.1
+    held_run = json.loads(next((out / "runs").glob("baseline@*+if-*/holdout/results.jsonl")).read_text(
+        encoding="utf-8").splitlines()[0])
+    # Graded as the connector calls the mapping made of the contract calls.
+    assert [span["tool"] for span in held_run["spans"]] == ["jira.search_issues", "jira.transition_issue"]
+    assert held_run["score"]["passed"] is True

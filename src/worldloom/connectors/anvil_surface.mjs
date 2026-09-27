@@ -63,12 +63,42 @@ const convert = (shape, strategy) =>
   });
 
 function firstArrayField(schema) {
-  const props = schema?.properties;
-  if (typeof props !== "object" || props === null) return undefined;
-  for (const [name, prop] of Object.entries(props)) {
+  for (const [name, prop] of Object.entries(propertiesOf(schema))) {
     if (prop && (prop.type === "array" || typeof prop.items === "object")) return name;
   }
   return undefined;
+}
+
+// The declared response, cut to what the simulator's envelope writer reads:
+// types, fixed values (a `const`, a one-member `enum`, a scalar `default`) and
+// `required`, three levels deep, with `allOf` members' properties merged in.
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function propertiesOf(schema) {
+  const props = {};
+  if (!isRecord(schema)) return props;
+  for (const part of [schema, ...(Array.isArray(schema.allOf) ? schema.allOf : [])]) {
+    if (isRecord(part) && isRecord(part.properties)) Object.assign(props, part.properties);
+  }
+  return props;
+}
+function shape(schema, depth) {
+  if (!isRecord(schema)) return undefined;
+  const out = {};
+  if (schema.type !== undefined) out.type = schema.type;
+  if (schema.const !== undefined) out.const = schema.const;
+  if (Array.isArray(schema.enum) && schema.enum.length === 1) out.enum = schema.enum;
+  const dflt = schema.default;
+  if (typeof dflt === "string" || typeof dflt === "number" || typeof dflt === "boolean") out.default = dflt;
+  if (Array.isArray(schema.required)) out.required = schema.required;
+  if (isRecord(schema.items)) out.items = {};
+  const props = propertiesOf(schema);
+  if (depth > 0 && Object.keys(props).length > 0) {
+    out.properties = {};
+    for (const [name, prop] of Object.entries(props)) out.properties[name] = shape(prop, depth - 1) ?? {};
+  }
+  return out;
 }
 
 function binding(op) {
@@ -110,6 +140,7 @@ function binding(op) {
       bare: declared?.type === "array",
       itemsField: op.pagination?.itemsField ?? firstArrayField(declared) ?? "items",
     },
+    response: shape(declared, 3) ?? null,
     successStatuses:
       airLib.wireProtocolFor(op.sourceRef) === "http_json" ? (op.output.successStatuses ?? []) : [],
     errors: op.errors,

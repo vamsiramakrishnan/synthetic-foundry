@@ -160,3 +160,68 @@ def coverage_command(
         elif row.mapping_matches_profile is False:
             line += "  the mapping and the profile disagree on the operation count"
         typer.echo(line)
+
+
+@app.command("surface")
+def surface_command(
+    connectors: list[str] = typer.Argument(None, help="Connectors to project; every locked one by default."),
+    spec_dir: Path | None = typer.Option(None, "--spec-dir", help="Compile each connector's trim <DIR>/<connector>.spec.json.gz instead of the locked bytes (the committed trims are tests/fixtures/anvil/contracts)."),
+    bundle: list[str] | None = typer.Option(None, "--bundle", help="Project this compiled bundle instead of building one, as CONNECTOR=PATH. Repeat per connector."),
+    write: bool = typer.Option(False, "--write", help="Write each projection as the package's shipped surface (_data/connectors/anvil/surfaces/<connector>.json.gz)."),
+    check: bool = typer.Option(False, "--check", help="Exit 1 when a projection differs from the shipped surface: the drift gate."),
+    cache: Path | None = typer.Option(None, "--cache", help="Cache directory for sources and bundles."),
+    anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, split like a shell command."),
+    as_json: bool = typer.Option(False, "--json", help="Print one row per connector as JSON."),
+) -> None:
+    """Project each contract's tools exactly as Anvil's MCP server lists them: the surface `--surface contract` serves in process.
+
+    Builds the bundle (or takes `--bundle`), runs Anvil's own MCP projection
+    over it one tool at a time and records beside each tool how Anvil carries
+    a call to the wire. `--write` refreshes the shipped surfaces the contract
+    surface serves without Anvil; `--check` compares with them.
+    """
+
+    import gzip
+
+    from .connectors.contracts import ContractError, build
+    from .connectors.surface import SurfaceError, project, shipped_path, write_shipped
+
+    lock = _lock()
+    anvil = _anvil(anvil_cmd)
+    given: dict[str, Path] = {}
+    for item in bundle or ():
+        name, sep, where = item.partition("=")
+        if not sep or not name or not where:
+            _refuse("missing_flag", f"--bundle takes CONNECTOR=PATH, not {item!r}")
+        given[name] = Path(where)
+    names = list(connectors or ()) or (sorted(given) if given else sorted(lock.contracts))
+    rows: list[dict[str, Any]] = []
+    drifted = []
+    for name in names:
+        try:
+            path = given.get(name)
+            if path is None:
+                spec = spec_dir / f"{name}.spec.json.gz" if spec_dir is not None else None
+                path = build(name, lock=lock, cache=cache, anvil=anvil, spec=spec).bundle
+            document = project(path, name, anvil=anvil)
+        except (ContractError, SurfaceError) as error:
+            _refuse("contract_refused", str(error))
+        shipped = shipped_path(name)
+        held = json.loads(gzip.decompress(shipped.read_bytes())) if shipped.is_file() else None
+        same = held is not None and {k: v for k, v in held.items() if k != "source"} == \
+            {k: v for k, v in document.items() if k != "source"}
+        if not same:
+            drifted.append(name)
+        if write:
+            write_shipped(document, Path(str(shipped)))
+        rows.append({"connector": name, "tools": len(document["tools"]), "unprojected": sorted(document["failed"]),
+                     "shipped": "same" if same else ("written" if write else "differs"), "bundle": str(path)})
+    if as_json:
+        typer.echo(json.dumps(rows, indent=1))
+    else:
+        for row in rows:
+            refused = [str(item) for item in row["unprojected"]]
+            note = f"  Anvil's converter refused: {', '.join(refused)}" if refused else ""
+            typer.echo(f"{row['connector']:<12} {row['tools']:>3} tools  shipped {row['shipped']}{note}")
+    if check and drifted and not write:
+        raise typer.Exit(1)

@@ -295,8 +295,14 @@ class ContractSurface:
         if args.pop(PROJECTION, None) is not None:
             raise ContractCallError(400, _envelope(binding, "validation_error", request_id, message=(
                 f"{PROJECTION} is not served in process; call without it and read the fields you need")))
-        # Anvil's MCP server validates with zod, which strips a key the schema does not name.
+        # Anvil's MCP server validates with zod, which strips a key the schema
+        # does not name and refuses a value the schema does not admit.
         args = {key: value for key, value in args.items() if key in tool.properties}
+        invalid = _schema_errors(tool.input_schema, args)
+        if invalid:
+            raise ContractCallError(400, _envelope(binding, "validation_error", request_id,
+                                                   message="Input validation error: " + "; ".join(invalid[:3]),
+                                                   details={"invalid": invalid}))
         missing = [key for key in _required_keys(binding) if args.get(key) in (None, "")]
         if missing:
             raise ContractCallError(400, _envelope(binding, "validation_error", request_id,
@@ -393,13 +399,24 @@ class ContractSurface:
             cursor = next_cursor if isinstance(next_cursor, str) and next_cursor else None
             return _success_status(binding, {"items": items}), self._envelope(tool, request, items, cursor)
         output = raw.get("result")
+        if isinstance(output, Mapping):
+            # A record answer gets the fields its declared response fixes (Slack's `ok: true`).
+            output = dict(output)
+            _fill_fixed(output, binding.get("response"), defaults=False)
         return _success_status(binding, output), output
 
     def _envelope(self, tool: ContractTool, request: Mapping[str, Any], items: list[Any], cursor: str | None) -> Any:
-        """A page in the envelope the contract declares (the simulator's ``envelope``)."""
+        """A page in the envelope the contract declares (the simulator's ``pageEnvelope``).
+
+        The items where the contract puts them, the continuation at its
+        ``nextField`` (a URL for link paging), the fields the declared response
+        fixes to one value, the page markers it declares (``isLast``,
+        ``has_more``) and a page-numbered position block (Slack's ``paging``).
+        """
         binding = tool.binding
         pagination = binding.get("pagination") or {}
         shape = binding.get("envelope") or {}
+        declared = binding.get("response")
         bare = bool(shape.get("bare"))
         following: str | None = cursor
         as_url = pagination.get("style") == "link" or (bare and pagination.get("in") != "body")
@@ -408,9 +425,20 @@ class ContractSurface:
         if bare:
             return items
         body: dict[str, Any] = {}
-        _set_path(body, str(shape.get("itemsField") or "items"), items)
-        if following is not None:
+        _fill_fixed(body, declared, defaults=True)
+        items_field = str(shape.get("itemsField") or "items")
+        more = following is not None
+        _page_markers(body, declared, _field_path(items_field), more)
+        _set_path(body, items_field, items)
+        paging = pagination.get("pagingField") if pagination.get("style") == "page" else None
+        if paging:
+            page = request.get("page") or {}
+            _paging_block(body, declared, str(paging), len(items), more, page.get("cursor"), page.get("size"))
+        if following is not None and (pagination.get("nextField") or not paging):
             _set_path(body, str(pagination.get("nextField") or "next_cursor"), following)
+        elif pagination.get("nextField") and _required_string(declared, str(pagination["nextField"])):
+            # A continuation the contract requires is present on the last page too, empty.
+            _set_path(body, str(pagination["nextField"]), "")
         return body
 
     def _next_url(self, tool: ContractTool, request: Mapping[str, Any], cursor_param: str, cursor: str) -> str:
@@ -443,12 +471,33 @@ class ContractSurface:
         reads from the call (ServiceNow's table, Salesforce's sObject type) is
         the addressed *record*'s, as a client that fetched it would send.
         """
+        reasons: list[str] = []
+        attempts = [dict(args)]
+        # A vendor names a record by its own handle (a Confluence page's
+        # numeric id, a Jira key): when the plan's reference is not one the
+        # contract admits, the call is carried again by the record's handle.
+        for handle in _handles(definition, record):
+            if args.get("id") is not None and str(handle) != str(args["id"]):
+                attempts.append({**args, "id": handle})
+                if isinstance(handle, str) and handle.isdigit():
+                    attempts.append({**args, "id": int(handle)})  # a numeric handle, typed as the contract types it
+        for attempt in attempts:
+            try:
+                return self._carry(tool, attempt, definition, record, reasons)
+            except SurfaceError:
+                continue
+        raise SurfaceError(f"no exposed {self.connector} operation carries {self.connector}.{tool}"
+                           + (f": {'; '.join(list(dict.fromkeys(reasons))[:3])}" if reasons else ""))
+
+    def _carry(self, tool: str, args: Mapping[str, Any], definition: ConnectorDefinition,
+               record: Mapping[str, Any] | None, reasons: list[str]) -> Carried:
         wanted = expressible(definition, tool, args)
         if not wanted.get("start_at"):
             wanted.pop("start_at", None)  # the first page: no continuation to carry
         by_operation = {item.operation: item for item in self.tools}
-        found, reasons = placements(self.mapping, tool, wanted, definition=definition,
-                                    cursor=lambda entry: self._cursor_location(by_operation.get(entry.operation_id)))
+        found, why = placements(self.mapping, tool, wanted, definition=definition,
+                                cursor=lambda entry: self._cursor_location(by_operation.get(entry.operation_id)))
+        reasons.extend(why)
         # An operation answered with the tool's own result first: one answered
         # from part of the record (its comments, its transitions) runs the
         # same tool for another question.
@@ -464,6 +513,10 @@ class ContractSurface:
             except ValueError as error:
                 reasons.append(f"{placed.entry.operation_id}: {error}")
                 continue
+            invalid = _schema_errors(exposed.input_schema, arguments)
+            if invalid:
+                reasons.append(f"{exposed.name} refuses the arguments: {invalid[0]}")
+                continue
             request = self.request(exposed, arguments)
             try:
                 planned = plan_call(self.mapping, placed.entry, request, definition)
@@ -473,14 +526,13 @@ class ContractSurface:
             chosen = planned.tool
             record_chosen = placed.entry.tool_by is not None and placed.entry.tool_by[0].startswith("record.")
             if (chosen != tool and not (record_chosen and tool in placed.entry.tools)) \
-                    or _canonical(planned.args) != _canonical(_taken(
-                        definition, tool, {key: value for key, value in wanted.items() if key not in placed.dropped})):
+                    or _canonical(_ids_as_text(planned.args)) != _canonical(_ids_as_text(_taken(
+                        definition, tool, {key: value for key, value in wanted.items() if key not in placed.dropped}))):
                 reasons.append(f"{placed.entry.operation_id} carries it as {self.connector}.{chosen}"
                                f"({_canonical(planned.args)}), not the call asked for")
                 continue
             return Carried(exposed.name, arguments, placed.entry.operation_id)
-        raise SurfaceError(f"no exposed {self.connector} operation carries {self.connector}.{tool}"
-                           + (f": {'; '.join(reasons[:3])}" if reasons else ""))
+        raise SurfaceError(f"{self.connector}.{tool} is not carried")
 
     def _coordinates(self, tool: ContractTool, arguments: Mapping[str, Any], definition: ConnectorDefinition,
                      record: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -566,6 +618,31 @@ class Dispatched:
     body: Any
 
 
+def _ids_as_text(args: Mapping[str, Any]) -> dict[str, Any]:
+    """A call with its record reference as text: a path carries ``1001`` whether the call typed it a number or not."""
+    return {key: (str(value) if key == "id" and value is not None else value) for key, value in args.items()}
+
+
+def _handles(definition: ConnectorDefinition, record: Mapping[str, Any] | None) -> list[Any]:
+    """The vendor's own names for *record*: its catalog ``stable_id`` and its payload ``id``, in that order."""
+    if record is None:
+        return []
+    from ..connector_payload import shape_payload
+
+    try:
+        payload = shape_payload(definition, record)
+    except (KeyError, TypeError, ValueError):
+        return []
+    catalog = definition.catalog.entities if definition.catalog is not None and definition.catalog.entities else {}
+    names = [item.stable_id for item in catalog.values() if item.stable_id] + ["id", "Id", "key", "sys_id"]
+    out: list[Any] = []
+    for name in names:
+        value = next((payload[key] for key in payload if str(key).casefold() == str(name).casefold()), None)
+        if value is not None and value not in out:
+            out.append(value)
+    return out
+
+
 def _json_type(schema: Any) -> str:
     if not isinstance(schema, Mapping):
         return "any"
@@ -583,6 +660,83 @@ def _wire_text(value: Any) -> str:
     return str(value)
 
 
+def _field_path(field: str) -> list[str]:
+    return [field] if field.startswith("@") else field.split(".")
+
+
+def _props(schema: Any) -> Mapping[str, Any]:
+    found = schema.get("properties") if isinstance(schema, Mapping) else None
+    return found if isinstance(found, Mapping) else {}
+
+
+def _schema_at(schema: Any, path: Sequence[str]) -> Any:
+    cursor = schema
+    for key in path:
+        cursor = _props(cursor).get(key)
+        if not isinstance(cursor, Mapping):
+            return None
+    return cursor
+
+
+def _fill_fixed(target: dict[str, Any], declared: Any, *, defaults: bool) -> None:
+    """The top-level fields a declared response fixes to one value, where the answer left them out."""
+    for name, prop in _props(declared).items():
+        if name in target or not isinstance(prop, Mapping):
+            continue
+        if "const" in prop:
+            target[name] = prop["const"]
+        elif isinstance(prop.get("enum"), list) and len(prop["enum"]) == 1:
+            target[name] = prop["enum"][0]
+        elif defaults and isinstance(prop.get("default"), str | int | float | bool):
+            target[name] = prop["default"]
+
+
+_LAST_PAGE = frozenset({"isLast", "is_last"})
+_MORE_PAGES = frozenset({"has_more", "hasMore"})
+
+
+def _page_markers(body: dict[str, Any], declared: Any, items_path: Sequence[str], more: bool) -> None:
+    parents: list[list[str]] = [[]]
+    if len(items_path) > 1:
+        parents.append(list(items_path[:-1]))
+    for parent in parents:
+        for name, prop in _props(declared if not parent else _schema_at(declared, parent)).items():
+            if not isinstance(prop, Mapping) or prop.get("type") != "boolean":
+                continue
+            value = (not more) if name in _LAST_PAGE else (more if name in _MORE_PAGES else None)
+            if value is not None:
+                _set_path(body, ".".join([*parent, name]), value)
+
+
+_PAGING_KEYS = ("count", "per_page", "page", "pages", "total")
+
+
+def _paging_block(body: dict[str, Any], declared: Any, field: str, served: int, more: bool, cursor: Any,
+                  size: Any) -> None:
+    try:
+        asked = int(str(cursor))
+    except (TypeError, ValueError):
+        asked = 0
+    number = asked if asked > 0 else 1
+    count = int(size) if size else served
+    total = None if more else (number - 1) * count + served
+    values = {"count": count, "per_page": count, "page": number,
+              "pages": None if total is None else max(1, -(-total // max(1, count))), "total": total}
+    declared_keys = list(_props(_schema_at(declared, _field_path(field))))
+    keys = [key for key in _PAGING_KEYS if key in declared_keys] if declared_keys \
+        else [key for key in _PAGING_KEYS if key != "per_page"]
+    _set_path(body, field, {key: values[key] for key in keys if values[key] is not None})
+
+
+def _required_string(declared: Any, field: str) -> bool:
+    path = _field_path(field)
+    parent = declared if len(path) == 1 else _schema_at(declared, path[:-1])
+    required = parent.get("required") if isinstance(parent, Mapping) else None
+    prop = _props(parent).get(path[-1])
+    return isinstance(required, list) and path[-1] in required and isinstance(prop, Mapping) \
+        and prop.get("type") == "string"
+
+
 def _set_path(target: dict[str, Any], path: str, value: Any) -> None:
     keys = [path] if path.startswith("@") else path.split(".")
     cursor = target
@@ -592,6 +746,27 @@ def _set_path(target: dict[str, Any], path: str, value: Any) -> None:
             nested = cursor[key] = {}
         cursor = nested
     cursor[keys[-1]] = value
+
+
+def _schema_errors(schema: Mapping[str, Any], args: Mapping[str, Any]) -> list[str]:
+    """Where *args* break the tool's published input schema, when ``jsonschema`` is installed.
+
+    The check the MCP server makes before Anvil's runtime sees a call, so a
+    missing required input is refused here as it is there. Without
+    ``jsonschema`` (an optional package) values are not checked, the
+    runtime's own required-input check (``_required_keys``) answers for a
+    missing one, and the mapping's refusals stand for the rest.
+    """
+    try:
+        from jsonschema import Draft7Validator
+    except ImportError:
+        return []
+    checked = {key: value for key, value in schema.items() if key != "$schema"}
+    found = []
+    for error in sorted(Draft7Validator(checked).iter_errors(dict(args)), key=lambda item: list(item.absolute_path)):
+        where = ".".join(str(part) for part in error.absolute_path) or "(arguments)"
+        found.append(f"{where}: {error.message[:200]}")
+    return found
 
 
 def _required_keys(binding: Mapping[str, Any]) -> list[str]:

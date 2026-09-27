@@ -1090,7 +1090,7 @@ def improve_command(
     parents: str | None = typer.Option(None, "--parents", help="Where each round's parent comes from: champion, or archive (a seeded draw from the Pareto frontier over failure clusters of every candidate evaluated in full) (default: policy `evalrun.improve.parents`, champion)."),
     round_budget: int | None = typer.Option(None, "--round-budget", min=1, help="Case-runs a round's screening plus its finalists' training runs may cost; screening stops before a stage that would exceed it (default: policy `evalrun.improve.round_budget`, no limit)."),
     levers: str | None = typer.Option(None, "--levers", help="What a round may change: agent (the policy pack; the default), interface (an Anvil manifest overlay per served connector), or agent,interface (the first candidate goes to the lever that owns more failing findings; --candidates mixes both). interface needs --contract."),
-    contract: list[str] | None = typer.Option(None, "--contract", help="With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface."),
+    contract: list[str] | None = typer.Option(None, "--contract", help="With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface, or in process on the contract surface its bundles project with --surface contract (no Anvil server per case)."),
     anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
     source_root: list[str] | None = typer.Option(None, "--source-root", help="CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it."),
     transfer_agent: str | None = typer.Option(None, "--transfer-agent", help="A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why."),
@@ -1191,22 +1191,27 @@ def improve_command(
     lever_options: dict[str, Any] = {}
     if "interface" in chosen_levers:
         from .anvil import AnvilError, resolve_contracts
-        from .interface import InterfaceLever
+        from .interface import ContractServing, InterfaceLever
 
         served: dict[str, Any] = {}
 
         def serve(subset: Any, agent: Any, serving: Any) -> Any:
-            key = case_set_digest(subset)
+            # On the contract surface each variant presents its own tools, in
+            # process; through Anvil the service replays what Anvil served.
+            in_process = isinstance(serving, ContractServing)
+            base = case_set_digest(subset)
+            key = (json.dumps(serving.identity(), sort_keys=True) + base) if in_process else base
             if key not in served:
                 try:
                     # Anvil's provider searches with the shared vendor query
                     # evaluator, so the replay's service does too.
-                    served[key] = service_for(subset, held_records if key == held_key else records,
-                                              concurrency=workers, query_engine="native")
+                    served[key] = service_for(subset, held_records if base == held_key else records,
+                                              concurrency=workers, query_engine="native",
+                                              **({"surface": serving.surfaces} if in_process else {}))
                 except Exception as error:  # ServingError and its causes are all refusals here
                     _refuse("service_unbuildable", str(error))
             return run_cases(served[key], subset, agent, principal=principal, rater=grader, concurrency=workers,
-                             anvil=serving)
+                             anvil=None if in_process else serving)
 
         roots: dict[str, str] = {}
         for spec in source_root or ():
@@ -1216,7 +1221,8 @@ def improve_command(
             roots[name] = where
         try:
             lever_options["interface"] = InterfaceLever.from_contracts(
-                resolve_contracts(contract or []), serve=serve, out=out, command=anvil_cmd, source_roots=roots)
+                resolve_contracts(contract or []), serve=serve, out=out, command=anvil_cmd, source_roots=roots,
+                surface="contract" if surface == "contract" else "anvil")
         except AnvilError as error:
             _refuse("anvil_unavailable", str(error))
         lever_options["levers"] = chosen_levers
