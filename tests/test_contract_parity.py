@@ -373,7 +373,8 @@ def test_jira_parity_through_the_vendor_v3_contract(cache: Path, tmp_path: Path)
 
 
 #: Anvil pages Confluence's cursor lists and writes the envelope: `results`, and its own continuation field.
-CONFLUENCE_NEXT = "Anvil cursor paging: the page envelope does not carry Confluence's _links.next yet"
+CONFLUENCE_NEXT = ("Anvil cursor paging: the page envelope writes a top-level next_cursor, not Confluence's "
+                   "_links.next link")
 
 
 def _confluence_records() -> list[ConnectorRecord]:
@@ -432,7 +433,8 @@ def test_confluence_parity_through_the_vendor_v2_contract(cache: Path, tmp_path:
 
 #: Anvil pages Slack's lists and writes the envelope itself: the items and a top-level `next_cursor`,
 #: without Slack's `ok`, `has_more` and `response_metadata.next_cursor`.
-SLACK_ENVELOPE = "Anvil cursor paging: the page envelope does not carry Slack's ok and response_metadata.next_cursor yet"
+SLACK_ENVELOPE = ("Anvil cursor paging: the page envelope writes a top-level next_cursor, not Slack's ok and "
+                  "response_metadata.next_cursor")
 #: search.messages nests its matches (`messages.matches`) and pages by page number; Anvil writes a flat `items`.
 SLACK_SEARCH = "Anvil page-number paging: a nested items field (search.messages' messages.matches) is written as a flat items"
 #: conversations.info and users.info are not paged in the AIR, but the simulator pages them.
