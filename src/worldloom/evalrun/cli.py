@@ -267,6 +267,9 @@ def run_command(
     concurrency: int | None = typer.Option(None, "--concurrency", min=1, help="Cases in flight at once, each on its own fork (default: policy `evalrun.concurrency`, 1). The ledger is in case order whatever order they finish in."),
     resume: bool = typer.Option(False, "--resume", help="Keep the ledger already in --out when its run.json names this agent, principal and case set (and shard); grade only the cases it lacks."),
     shard: str | None = typer.Option(None, "--shard", help="Run only shard i of n (1-based, e.g. 2/4), a partition by a stable hash of case id; `evalrun merge` joins the shard directories."),
+    connectors: str = typer.Option("emulator", "--connectors", help="What serves the connectors: emulator (in process, the default) or anvil (`anvil simulate serve` over each --contract, the agent calling the vendor API at $ANVIL_BASE_URL)."),
+    contract: list[str] | None = typer.Option(None, "--contract", help="With --connectors anvil: a contract bundle (or its air.json) to serve, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector."),
+    anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
 ) -> None:
     """Run one agent over the case set, one isolated connector state per case, and grade.
 
@@ -283,6 +286,12 @@ def run_command(
     transcript so far as its only memory. An agent that raises, exits
     non-zero or breaks the turn contract produces an error row, excluded from
     every mean and carrying the child's stderr tail.
+
+    `--connectors anvil --contract <bundle>` serves each case through Anvil
+    instead: the agent calls the vendor's REST API at $ANVIL_BASE_URL with
+    $ANVIL_TOKEN, and the calls Anvil traced are replayed into the case's run,
+    so every axis and stage is graded by the same code. Each case's state,
+    traces and server logs are kept under `--out`/anvil.
     """
     from ..cli import _refuse
     from .rater import GroundedRater
@@ -312,6 +321,20 @@ def run_command(
         if not (index_text.isdigit() and count_text.isdigit() and 1 <= int(index_text) <= int(count_text)):
             _refuse("evalrun_shard_invalid", f"--shard {shard!r}: give i/n with 1 <= i <= n, e.g. 2/4")
         shard_at = (int(index_text), int(count_text))
+    serving: Any = None
+    if connectors not in {"emulator", "anvil"}:
+        _refuse("unknown_connectors", f"--connectors {connectors!r}; use emulator or anvil")
+    if connectors == "emulator" and (contract or anvil_cmd):
+        _refuse("cannot_combine", "--contract and --anvil-cmd serve connectors through Anvil; add --connectors anvil")
+    if connectors == "anvil":
+        from .anvil import AnvilError, AnvilServing, resolve_contracts
+
+        if not contract:
+            _refuse("missing_flag", "--connectors anvil needs at least one --contract <bundle>")
+        try:
+            serving = AnvilServing(resolve_contracts(contract), command=anvil_cmd, workdir=out / "anvil")
+        except AnvilError as error:
+            _refuse("anvil_unavailable", str(error))
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
@@ -341,7 +364,10 @@ def run_command(
     try:
         # Over the whole set even for one shard: the service a case runs in
         # is then the one a single process would have given it.
-        service = service_for(cases, loaded.connector_data.records, concurrency=workers)
+        # Anvil's provider searches with the shared vendor query evaluator, so
+        # the run's own service does too: the replay must answer as it did.
+        extra: dict[str, Any] = {"query_engine": "native"} if serving is not None else {}
+        service = service_for(cases, loaded.connector_data.records, concurrency=workers, **extra)
     except Exception as error:  # ServingError and its causes are all refusals here
         _refuse("service_unbuildable", str(error))
     selected = list(cases)
@@ -351,7 +377,7 @@ def run_command(
         shard_doc = shard_document(shard_at[0], shard_at[1], cases)
     # The identity this run will write (agent, principal, grader, agent pack),
     # read off an empty run so it is whatever `run_cases` itself records.
-    identity = run_cases(service, (), under_test, principal=principal, clock=clock, rater=grader)
+    identity = run_cases(service, (), under_test, principal=principal, clock=clock, rater=grader, anvil=serving)
     identity = identity.model_copy(update={"case_set": case_set_digest(selected)})
     prior: list[Any] = []
     if resume:
@@ -386,7 +412,7 @@ def run_command(
 
     try:
         report = run_cases(service, pending, under_test, principal=principal, clock=clock, rater=grader,
-                           on_result=_checkpoint, concurrency=workers)
+                           on_result=_checkpoint, concurrency=workers, anvil=serving)
     except ConcurrencyRefused as error:
         _refuse("concurrency_refused", str(error))
     if prior or shard_doc is not None:

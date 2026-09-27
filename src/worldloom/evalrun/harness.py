@@ -53,6 +53,14 @@ policies existed, and a policy without ``files`` adds nothing beyond the
 fields above. The agent's ``name`` carries the policy
 (``exec:python+agent:careful@<digest[:12]>``), and ``pack_record`` is what a
 run writes to ``run.json`` as ``agent_pack``.
+
+**Served through Anvil.** When the run's connectors are served by Anvil
+(``evalrun run --connectors anvil``, ``evalrun.anvil``), the child's
+environment gains ``ANVIL_BASE_URL``, ``ANVIL_<CONNECTOR>_BASE_URL``,
+``ANVIL_CONNECTORS`` and ``ANVIL_TOKEN``, and the turn document an ``anvil``
+block naming the same URLs. The child calls the vendor API over HTTP; a
+``call`` document is refused, since the calls graded are the ones Anvil
+served. Otherwise the child's environment is exactly the parent's.
 """
 
 from __future__ import annotations
@@ -185,6 +193,12 @@ class ExecAgent:
         transcript: list[dict[str, Any]] = []
         catalog = [dict(tool) for tool in tools.tools()]
         extra: dict[str, Any] = {}
+        # Served by Anvil (``evalrun.anvil``): the child reaches the vendor API
+        # over HTTP, told where by its environment and by the turn document.
+        environment: Mapping[str, str] | None = getattr(tools, "environment", None)
+        base_urls: Mapping[str, str] | None = getattr(tools, "base_urls", None)
+        if base_urls:
+            extra["anvil"] = {"base_urls": dict(base_urls), "base_url_env": "ANVIL_BASE_URL", "token_env": "ANVIL_TOKEN"}
         findings: tuple[str, ...] = ()
         rules: list[str] | None = None
         if self.policy is not None:
@@ -208,7 +222,7 @@ class ExecAgent:
                 "instructions": turn_instructions() if rules is None else list(rules), **extra,
             }
             try:
-                reply = run_exec(self.command, payload, timeout=self.timeout, shell=self.shell)
+                reply = run_exec(self.command, payload, timeout=self.timeout, shell=self.shell, env=environment)
             except ExecError as error:
                 tail = getattr(error, "stderr_tail", "")
                 raise RuntimeError(f"{error.code}: {error}" + (f"\n{tail}" if tail else "")) from error

@@ -738,7 +738,10 @@ worldloom evalrun run <CORPUS>
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
 | `--agent-pack` | An `agent` pack the --exec/--harness child runs under: agent:<name>[@<digest>] or a pack file. Its standing instruction, rule overlays and tool advice reach the child, and run.json records its reference and digest. |
+| `--anvil-cmd` | The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH). |
 | `--concurrency` | Cases in flight at once, each on its own fork (default: policy `evalrun.concurrency`, 1). The ledger is in case order whatever order they finish in. |
+| `--connectors` | What serves the connectors: emulator (in process, the default) or anvil (`anvil simulate serve` over each --contract, the agent calling the vendor API at $ANVIL_BASE_URL). |
+| `--contract` | With --connectors anvil: a contract bundle (or its air.json) to serve, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. |
 | `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--harness` | An installed coding harness as the agent, using its own login: codex or claude. Shorthand for the bundled --exec adapter. |
 | `--json` | Emit the summary as JSON. |

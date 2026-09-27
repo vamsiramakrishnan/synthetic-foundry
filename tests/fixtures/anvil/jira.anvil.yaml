@@ -1,0 +1,115 @@
+# Anvil manifest for the parity test's Jira contract.
+#
+# The operation policies are Anvil's own Jira backtest manifest
+# (docs/backtesting/reproduce/manifests/jira.anvil.yaml in the Anvil
+# repository), with its comments shortened. One change: the service auth is
+# `basic`, one of the two alternatives the Jira spec declares. Under the
+# published `oauth2` every operation compiled `blocked` ("custom_header auth
+# must name its credential carrier"), so nothing could be served.
+#
+# The test compiles tests/fixtures/anvil/jira.spec.json.gz (the Jira Cloud
+# platform v3 spec trimmed to the backtest's 26 curated operations) with this
+# manifest and `--service jira`.
+service:
+  name: jira
+  display_name: Jira Cloud platform REST API
+  owner: backtesting
+  environment: prod
+
+auth:
+  type: basic
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - manage:jira-project
+
+operations:
+  # Jira assigns a new key on every create and has no dedupe key.
+  createIssue:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Creates a new Jira issue; retrying after a failure may create a duplicate.
+    retries:
+      enabled: false
+    state: approved
+
+  # Each call appends a new comment.
+  addComment:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Adds a comment; retrying after a failure may post it twice.
+    retries:
+      enabled: false
+    state: approved
+
+  # Re-issuing a transition to the state an issue is already in is a no-op.
+  doTransition:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: natural
+    state: approved
+
+  addWatcher:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: natural
+    state: approved
+
+  addWorklog:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Logs work time on the issue; retrying after a failure may double it.
+    retries:
+      enabled: false
+    state: approved
+
+  linkIssues:
+    side_effect: mutation
+    risk: medium
+    idempotency:
+      strategy: none
+    confirmation:
+      required: true
+      risk: medium
+      reason: Links two issues; retrying after a failure may create a duplicate link.
+    retries:
+      enabled: false
+    state: approved
+
+  getFieldsPaginated: { state: approved }
+  getIssue: { state: approved }
+  editIssue: { state: approved }
+  deleteIssue: { state: approved }
+  assignIssue: { state: approved }
+  getComments: { state: approved }
+  updateComment: { state: approved }
+  deleteComment: { state: approved }
+  getTransitions: { state: approved }
+  getIssueWatchers: { state: approved }
+  removeWatcher: { state: approved }
+  getIssueWorklog: { state: approved }
+  deleteIssueLink: { state: approved }
+  getIssueLinkTypes: { state: approved }
+  getIssueTypesForProject: { state: approved }
+  searchProjects: { state: approved }
+  getProject: { state: approved }
+  getProjectComponents: { state: approved }
+  getProjectVersions: { state: approved }
+  searchAndReconsileIssuesUsingJqlPost: { state: approved }

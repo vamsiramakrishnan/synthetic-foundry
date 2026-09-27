@@ -1,0 +1,262 @@
+[
+ {
+  "action": "search",
+  "kind": "search",
+  "method": "GET",
+  "operationId": "jira.field.search",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/field/search",
+  "resource": "field",
+  "toolName": "jira_get_fields_paginated"
+ },
+ {
+  "action": "create",
+  "kind": "create",
+  "method": "POST",
+  "operationId": "jira.issue.create",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue",
+  "resource": "issue",
+  "toolName": "jira_create_issue"
+ },
+ {
+  "action": "get",
+  "kind": "read",
+  "method": "GET",
+  "operationId": "jira.issue.get",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}",
+  "resource": "issue",
+  "toolName": "jira_get_issue"
+ },
+ {
+  "action": "replace",
+  "kind": "update",
+  "method": "PUT",
+  "operationId": "jira.issue.replace",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}",
+  "resource": "issue",
+  "toolName": "jira_edit_issue"
+ },
+ {
+  "action": "delete",
+  "kind": "delete",
+  "method": "DELETE",
+  "operationId": "jira.issue.delete",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}",
+  "resource": "issue",
+  "toolName": "jira_delete_issue"
+ },
+ {
+  "action": "replace",
+  "kind": "update",
+  "method": "PUT",
+  "operationId": "jira.assignee.replace",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/assignee",
+  "resource": "assignee",
+  "toolName": "jira_assign_issue"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.comment.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/comment",
+  "resource": "comment",
+  "toolName": "jira_get_comments"
+ },
+ {
+  "action": "create",
+  "kind": "create",
+  "method": "POST",
+  "operationId": "jira.comment.create",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/comment",
+  "resource": "comment",
+  "toolName": "jira_add_comment"
+ },
+ {
+  "action": "replace",
+  "kind": "update",
+  "method": "PUT",
+  "operationId": "jira.comment.replace",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/comment/{id}",
+  "resource": "comment",
+  "toolName": "jira_update_comment"
+ },
+ {
+  "action": "delete",
+  "kind": "delete",
+  "method": "DELETE",
+  "operationId": "jira.comment.delete",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/comment/{id}",
+  "resource": "comment",
+  "toolName": "jira_delete_comment"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.transitions.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/transitions",
+  "resource": "transition",
+  "toolName": "jira_get_transitions"
+ },
+ {
+  "action": "create",
+  "kind": "create",
+  "method": "POST",
+  "operationId": "jira.transitions.create",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/transitions",
+  "resource": "transition",
+  "toolName": "jira_do_transition"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.watchers.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/watchers",
+  "resource": "watcher",
+  "toolName": "jira_get_issue_watchers"
+ },
+ {
+  "action": "create",
+  "kind": "create",
+  "method": "POST",
+  "operationId": "jira.watchers.create",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/watchers",
+  "resource": "watcher",
+  "toolName": "jira_add_watcher"
+ },
+ {
+  "action": "delete",
+  "kind": "delete",
+  "method": "DELETE",
+  "operationId": "jira.watchers.delete",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/watchers",
+  "resource": "watcher",
+  "toolName": "jira_remove_watcher"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.worklog.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/worklog",
+  "resource": "worklog",
+  "toolName": "jira_get_issue_worklog"
+ },
+ {
+  "action": "create",
+  "kind": "create",
+  "method": "POST",
+  "operationId": "jira.worklog.create",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issue/{issueIdOrKey}/worklog",
+  "resource": "worklog",
+  "toolName": "jira_add_worklog"
+ },
+ {
+  "action": "create",
+  "kind": "create",
+  "method": "POST",
+  "operationId": "jira.issue_link.create",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issueLink",
+  "resource": "issueLink",
+  "toolName": "jira_link_issues"
+ },
+ {
+  "action": "delete",
+  "kind": "delete",
+  "method": "DELETE",
+  "operationId": "jira.issue_link.delete",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/issueLink/{linkId}",
+  "resource": "issueLink",
+  "toolName": "jira_delete_issue_link"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.issue_link_type.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/issueLinkType",
+  "resource": "issueLinkType",
+  "toolName": "jira_get_issue_link_types"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.project.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/issuetype/project",
+  "resource": "project",
+  "toolName": "jira_get_issue_types_for_project"
+ },
+ {
+  "action": "search",
+  "kind": "search",
+  "method": "GET",
+  "operationId": "jira.project.search",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/project/search",
+  "resource": "project",
+  "toolName": "jira_search_projects"
+ },
+ {
+  "action": "get",
+  "kind": "read",
+  "method": "GET",
+  "operationId": "jira.project.get",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/project/{projectIdOrKey}",
+  "resource": "project",
+  "toolName": "jira_get_project"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.components.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/project/{projectIdOrKey}/components",
+  "resource": "component",
+  "toolName": "jira_get_project_components"
+ },
+ {
+  "action": "list",
+  "kind": "list",
+  "method": "GET",
+  "operationId": "jira.versions.list",
+  "paged": true,
+  "pathTemplate": "/rest/api/2/project/{projectIdOrKey}/versions",
+  "resource": "version",
+  "toolName": "jira_get_project_versions"
+ },
+ {
+  "action": "search",
+  "kind": "search",
+  "method": "POST",
+  "operationId": "jira.jql.search",
+  "paged": false,
+  "pathTemplate": "/rest/api/2/search/jql",
+  "resource": "jql",
+  "toolName": "jira_search_and_reconsile_issues_using_jql_post"
+ }
+]

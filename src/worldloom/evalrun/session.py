@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from ..packkit.authoring import Exchange
     from ..packkit.resolve import ResolvedPack
     from .agreement import AgreementReport
+    from .anvil import AnvilServing
     from .autopsy import Autopsy
     from .campaign import CampaignLoop
     from .curriculum import Curriculum, Escalation
@@ -298,20 +299,28 @@ class EvalSession:
             return cls.from_export(source, **options)
         return cls.from_corpus(source, **options)
 
-    def service(self, *, concurrency: int = 1) -> ConnectorEvaluationService:
+    def service(self, *, concurrency: int = 1, query_engine: str | None = None) -> ConnectorEvaluationService:
         """A fresh service over the session's rows and records. Runs do not share state."""
 
         return service_for(self.cases, self._records, concurrency=concurrency,
-                           definitions=self._definitions or None)
+                           definitions=self._definitions or None, query_engine=query_engine)
 
     def coverage(self) -> AxisCoverage:
         return axis_coverage(self.cases)
 
     def run(self, agent: AgentUnderTest, *, clock: Clock | None = None,
             rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None = None,
-            label: str | None = None, concurrency: int = 1) -> RunReport:
-        report = run_cases(self.service(concurrency=concurrency), self.cases, agent, principal=self.principal,
-                           clock=clock, rater=rater, concurrency=concurrency)
+            label: str | None = None, concurrency: int = 1, anvil: AnvilServing | None = None) -> RunReport:
+        """Run *agent* over every case. With ``anvil``, Anvil serves the connectors (``evalrun.anvil``).
+
+        The agent then reaches the vendor API over HTTP at the URLs its
+        surface carries (``tools.base_urls``, ``tools.environment``), and the
+        run's searches use the shared vendor query evaluator, as the
+        provider behind Anvil does.
+        """
+        service = self.service(concurrency=concurrency, query_engine="native" if anvil is not None else None)
+        report = run_cases(service, self.cases, agent, principal=self.principal,
+                           clock=clock, rater=rater, concurrency=concurrency, anvil=anvil)
         self.runs[label or agent.name] = report
         return report
 

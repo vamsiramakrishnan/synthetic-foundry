@@ -18,7 +18,12 @@ from typing import Any
 from .. import packkit
 from ..connector_data import ConnectorRecord
 from ..connector_definition import ConnectorDefinition, builtin_connector_definitions
-from ..connector_emulator import ConnectorEmulator, ConnectorError, ConnectorSpan
+from ..connector_emulator import (
+    QUERY_ENGINES,
+    ConnectorEmulator,
+    ConnectorError,
+    ConnectorSpan,
+)
 from ..connector_keys import RECORDED_ALIAS_KEYS
 from ..connector_trace import grade_trace
 
@@ -105,7 +110,10 @@ class ConnectorEvaluationService:
     lock. Two runs proceed in parallel; one run's calls stay strictly ordered.
     ``run_prefix`` is prepended to every run id (``w3-run-1``) so ids minted
     by different processes serving the same rows never collide; without one
-    the ids are the plain ``run-<n>`` they always were.
+    the ids are the plain ``run-<n>`` they always were. ``query_engine``
+    runs every run's searches under that engine (``connector_emulator``'s
+    ``predicate`` or ``native``); unset, the policy
+    ``connectors.query.engine`` decides, as it always has.
     """
 
     def __init__(
@@ -117,7 +125,11 @@ class ConnectorEvaluationService:
         allowed_tools: Iterable[str] | None = None,
         limits: ServingLimits | None = None,
         run_prefix: str = "",
+        query_engine: str | None = None,
     ) -> None:
+        if query_engine is not None and query_engine not in QUERY_ENGINES:
+            raise ServingError(f"query_engine: one of {', '.join(QUERY_ENGINES)}")
+        self.query_engine = query_engine
         if run_prefix and not all(char.isalnum() or char in "-_." for char in run_prefix):
             raise ServingError("run_prefix: letters, digits, '-', '_' and '.' only")
         self.run_prefix = run_prefix
@@ -258,6 +270,8 @@ class ConnectorEvaluationService:
         else:
             emulator = source.transaction(fresh=True)
         emulator.actor = principal
+        if self.query_engine is not None:
+            emulator.query_engine = self.query_engine
         return emulator
 
     def _run(self, principal: str, run_id: str) -> _Run:
@@ -665,6 +679,29 @@ class ConnectorEvaluationService:
                 if str(item["point"]).startswith("confirm-"):
                     behaviours.add("confirm_before")
         return behaviours
+
+    def record_refusal(self, principal: str, run_id: str, name: str, arguments: Iterable[str], message: str) -> None:
+        """Record a call another surface refused before any connector saw it.
+
+        An Anvil server answers some calls itself (auth, an injected fault,
+        an idempotent replay, an unmodelled operation): no span exists for
+        them, and they are the run's attempts all the same, kept where the
+        service keeps its own refusals.
+        """
+        with self._held(principal, run_id) as run:
+            run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message,
+                                 "index": len(run.spans)})
+
+    def lookup(self, principal: str, run_id: str, connector: str, reference: Any) -> dict[str, Any] | None:
+        """One record of the run's *connector* state by any name it answers to, copied; ``None`` if absent."""
+        with self._held(principal, run_id) as run:
+            emulator = run.emulators.get(connector)
+            if emulator is None:
+                return None
+            try:
+                return dict(emulator.records[emulator.resolve(reference)])
+            except ConnectorError:
+                return None
 
     def snapshot(self, principal: str, run_id: str) -> dict[str, dict[str, Any]]:
         """The run's connector state, every record by fid, copied.

@@ -24,7 +24,9 @@ node's gold is its ``expected_reads`` (exhaustive, so precision and
 over-fetch are graded) or its fixture (a floor, so only recall is). The
 structural checks read what the call carried: the entity it scoped, the
 fields its predicate or native query constrains (the native query read back
-through the emulator's own parser, not a new one), and any window clause,
+through the shared vendor query evaluator the emulator and the Anvil provider
+execute with, else the emulator's historical parser; never a new one), and
+any window clause,
 evaluated on the gold records and against the connector's as-of clock.
 
 **Plan nodes** match the agent's declared DAG (or, when it declared none,
@@ -339,11 +341,15 @@ def _where(value: Any) -> list[tuple[str, str, Any]]:
     return clauses
 
 
-def _call_clauses(definitions: Mapping[str, Any], connector: str, args: Mapping[str, Any]) -> tuple[list[tuple[str, str, Any]] | None, str | None]:
-    """What the call filtered on, and the entity it named, as the emulator reads them.
+def _call_clauses(definitions: Mapping[str, Any], connector: str, args: Mapping[str, Any], *,
+                  tool: str | None = None) -> tuple[list[tuple[str, str, Any]] | None, str | None]:
+    """What the call filtered on, and the entity it named, as the connector reads them.
 
-    A native query is read back through the emulator's own parser: this
-    module never parses a query language itself. A query that parser cannot
+    A native query is read back through the shared vendor query evaluator
+    (``worldloom.connectors.query``), the parser the emulator's ``native``
+    engine and the Anvil provider execute with, and only when that parser
+    refuses it through the emulator's historical conjunctive parser. This
+    module never parses a query language itself. A query neither parser can
     read gives ``None`` (unknown), which is not the same as no filter.
     """
 
@@ -358,6 +364,9 @@ def _call_clauses(definitions: Mapping[str, Any], connector: str, args: Mapping[
             definition = definitions.get(connector)
             if definition is None:
                 return None, entity
+            evaluated = _evaluator_clauses(definition, str(args["query"]), entity=entity, tool=tool)
+            if evaluated is not None:
+                return evaluated
             from ..connector_query import parse_native
 
             parsed = parse_native(definition, str(args["query"]), entity=entity)
@@ -366,6 +375,98 @@ def _call_clauses(definitions: Mapping[str, Any], connector: str, args: Mapping[
         return None, entity
     clauses = [("name", "eq", args["name"])] if args.get("name") is not None else []
     return clauses, entity
+
+
+#: The clause a language states its record type with, lifted out as the
+#: call's entity the way the historical parser lifts it (``issuetype = bug``).
+_TYPE_FIELDS = {"jql": "issuetype", "cql": "type"}
+_AST_OPS = {"eq": "eq", "ne": "ne", "gt": "gt", "ge": "gte", "lt": "lt", "le": "lte"}
+
+
+def _evaluator_clauses(definition: Any, text: str, *, entity: str | None,
+                       tool: str | None) -> tuple[list[tuple[str, str, Any]], str | None] | None:
+    """*text* read by the shared evaluator as ``(field, op, value)`` clauses, or ``None`` to fall back.
+
+    Fields come back under their semantic names (``cf[10231]`` is
+    ``severity``), as the historical parser named them, so a gold node's
+    fields compare the same way. A time bound is a ``RelativeTime`` from the
+    connector's clock, which is what the historical parser produced for
+    ``-7d`` and resolves to the instant the evaluator computed. A conjunct
+    that is not a plain field condition (a disjunction, a negation, a
+    collection test) still names the fields it constrains, under the
+    operator ``any``, which no window check reads.
+    """
+
+    from ..connector_query import _infer_entity, _semantic_field
+    from ..connectors.query import (
+        AnyOf,
+        Compare,
+        Const,
+        In,
+        IsEmpty,
+        Node,
+        QueryError,
+        TextMatch,
+        TimeWindow,
+        canonical_language,
+        parse,
+        tool_language,
+    )
+    from ..connectors.query.ast import And, fields_of
+
+    language = tool_language(definition, tool) if tool else canonical_language(str(definition.query_language))
+    if language is None:
+        return None
+    try:
+        clock = datetime.fromisoformat(str(definition.clock))
+        parsed = parse(language, text, clock=clock)
+    except (QueryError, ValueError, TypeError):
+        return None
+
+    def relative(value: Any) -> Any:
+        if isinstance(value, datetime):
+            try:
+                delta = value - clock
+            except TypeError:
+                return value.isoformat()
+            return RelativeTime(days=delta.days, seconds=delta.seconds)
+        return value
+
+    chosen = entity
+    if parsed.source is not None:
+        chosen = chosen or _infer_entity(definition, parsed.source)
+    conjuncts: tuple[Node, ...] = parsed.where.items if isinstance(parsed.where, And) else (parsed.where,)
+    clauses: list[tuple[str, str, Any]] = []
+    type_field = _TYPE_FIELDS.get(language)
+    for node in conjuncts:
+        if isinstance(node, Const):
+            continue
+        if (type_field is not None and isinstance(node, Compare) and node.field.casefold() == type_field
+                and node.op.value == "eq" and isinstance(node.value, str)):
+            chosen = chosen or (node.value if language == "jql" else _infer_entity(definition, node.value))
+            continue
+        if isinstance(node, Compare):
+            clauses.append((_semantic_field(definition, node.field), _AST_OPS[node.op.value], relative(node.value)))
+        elif isinstance(node, In):
+            clauses.append((_semantic_field(definition, node.field), "in",
+                            tuple(relative(value) for value in node.values)))
+        elif isinstance(node, IsEmpty):
+            clauses.append((_semantic_field(definition, node.field), "eq", None))
+        elif isinstance(node, TimeWindow):
+            field = _semantic_field(definition, node.field)
+            if node.start is not None:
+                clauses.append((field, "gte", relative(node.start)))
+            if node.end is not None:
+                clauses.append((field, "lt", relative(node.end)))
+        elif isinstance(node, TextMatch):
+            if node.field is not None:
+                clauses.append((_semantic_field(definition, node.field), "contains", node.text))
+        elif isinstance(node, AnyOf):
+            clauses.append((_semantic_field(definition, node.field), "any", None))
+        else:
+            clauses.extend((_semantic_field(definition, field), "any", None)
+                           for field in dict.fromkeys(fields_of(node)))
+    return clauses, chosen
 
 
 def _gold_fields(case: EvalCase, node: NodeContract) -> tuple[str, ...]:
@@ -492,7 +593,7 @@ def grade_queries(case: EvalCase, spans: Sequence[Any], before: Mapping[str, Map
             continue
         connector = tool.partition(".")[0]
         args = dict(span.get("args") or {})
-        clauses, entity = _call_clauses(known, connector, args)
+        clauses, entity = _call_clauses(known, connector, args, tool=tool.partition(".")[2] or None)
         attributed = str(span["node"]) if span.get("node") and str(span["node"]) in by_id else None
         node_id = attributed
         wrong_scope = False

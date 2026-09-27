@@ -48,6 +48,12 @@ worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300
      before `eval_end` and keep each document, then
      `worldloom evalrun import-served ./cases scores.jsonl -o ./runs/served`
      collects them into a run comparable with a local one.
+   - The vendor's real REST API: add `--connectors anvil --contract <bundle>`
+     to `--exec`, and each case's connectors are served by Anvil (`anvil
+     simulate serve`) over the case's own records. The child finds
+     `ANVIL_BASE_URL` and `ANVIL_TOKEN` in its environment and calls the
+     vendor's paths; the calls Anvil traced are replayed into the case and
+     graded by the same code. Contract in `references/protocol.md`.
 4. **Compare by case id, never by eye.** `compare` reports improvements and
    regressions under ±0.10 bands, which axis moved, and cases graded on one
    side and errored on the other as reliability changes, not score changes.
