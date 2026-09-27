@@ -1,0 +1,160 @@
+{
+  "schema": "worldloom.anvil-mapping/v1",
+  "connector": "sharepoint",
+  "service": "sharepoint",
+  "contract": "Microsoft Graph v1.0 OpenAPI (msgraph-metadata openapi/v1.0/openapi.yaml), compiled under profiles/sharepoint.yaml with --service sharepoint",
+  "error_body": {"error": {"code": "{errorCode}", "message": "{text}"}},
+  "operations": {
+    "sharepoint.drives.search": {
+      "route": "GET /drives/{drive-id}/search(q='{q}')",
+      "vendor": "drives.drive.search",
+      "tool": "search_files",
+      "args": {
+        "query": {"from": "path.q", "required": true},
+        "fields": {"from": "query.$select", "transform": "csv"},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "sharepoint.items.get.drives": {
+      "route": "GET /drives/{drive-id}/items/{driveItem-id}",
+      "vendor": "drives.GetItems",
+      "tool": "get_file",
+      "tool_by": {"from": "record.entity", "map": {"folder": "list_folder"}},
+      "args": {
+        "id": {"from": "path.driveItem-id", "required": true},
+        "fields": {"from": "query.$select", "transform": "csv"}
+      },
+      "result": "record"
+    },
+    "sharepoint.children.create": {
+      "route": "POST /drives/{drive-id}/items/{driveItem-id}/children",
+      "vendor": "drives.items.CreateChildren",
+      "tool": "create_file",
+      "tool_by": {"from": "body.folder", "map": {"*": "create_folder"}},
+      "args": {
+        "entity": {"from": "body", "transform": "drive_item_entity", "required": true},
+        "name": {"from": "body.name", "required": true},
+        "parent": {"from": "path.driveItem-id", "required": true},
+        "fields": {"object": {"name": "body.name", "description": "body.description"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "sharepoint.items.update.drives": {
+      "route": "PATCH /drives/{drive-id}/items/{driveItem-id}",
+      "vendor": "drives.UpdateItems",
+      "tool": "update_file",
+      "tool_by": {"from": "body.parentReference.id", "map": {"*": "move_file"}},
+      "args": {
+        "id": {"from": "path.driveItem-id", "required": true},
+        "parent": "body.parentReference.id",
+        "fields": {"object": {"name": "body.name", "description": "body.description"}, "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "sharepoint.items.delete.drives": {
+      "route": "DELETE /drives/{drive-id}/items/{driveItem-id}",
+      "vendor": "drives.DeleteItems",
+      "tool": "delete_file",
+      "args": {"id": {"from": "path.driveItem-id", "required": true}},
+      "result": "empty"
+    },
+    "sharepoint.items.list": {
+      "route": "GET /sites/{site-id}/lists/{list-id}/items",
+      "vendor": "sites.lists.ListItems",
+      "tool": "get_list_items",
+      "args": {
+        "entity": {"value": "list_item"},
+        "query": {"object": {"$filter": "query.$filter", "$orderby": "query.$orderby"}, "transform": "odata"},
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "sharepoint.items.create": {
+      "route": "POST /sites/{site-id}/lists/{list-id}/items",
+      "vendor": "sites.lists.CreateItems",
+      "tool": "create_list_item",
+      "args": {
+        "entity": {"value": "list_item"},
+        "name": "body.fields.Title",
+        "parent": "path.list-id",
+        "fields": {"object": {"fields": "body.fields"}, "required": true}
+      },
+      "result": "record"
+    },
+    "sharepoint.items.delete.lists": {
+      "route": "DELETE /sites/{site-id}/lists/{list-id}/items/{listItem-id}",
+      "vendor": "sites.lists.DeleteItems",
+      "tool": "delete_list_item",
+      "args": {"id": {"from": "path.listItem-id", "required": true}},
+      "result": "empty"
+    },
+    "sharepoint.pages.list": {
+      "route": "GET /sites/{site-id}/pages",
+      "vendor": "sites.ListPages",
+      "tool": "search_pages",
+      "args": {
+        "query": "query.$search",
+        "max_results": {"from": "query.$top", "transform": "int"}
+      },
+      "cursor": "query.$skiptoken",
+      "result": {"shape": "list", "envelope": {"value": "$items"}}
+    },
+    "sharepoint.pages.get": {
+      "route": "GET /sites/{site-id}/pages/{baseSitePage-id}",
+      "vendor": "sites.GetPages",
+      "tool": "get_page",
+      "args": {"id": {"from": "path.baseSitePage-id", "required": true}},
+      "result": "record"
+    },
+    "sharepoint.pages.create": {
+      "route": "POST /sites/{site-id}/pages",
+      "vendor": "sites.CreatePages",
+      "tool": "create_page",
+      "args": {
+        "entity": {"value": "site_page"},
+        "name": {"from": "body.name", "required": true},
+        "parent": "path.site-id",
+        "fields": {"object": {"title": "body.title", "name": "body.name", "description": "body.description"},
+                   "transform": "fields"}
+      },
+      "result": "record"
+    },
+    "sharepoint.pages.update": {
+      "route": "PATCH /sites/{site-id}/pages/{baseSitePage-id}",
+      "vendor": "sites.UpdatePages",
+      "tool": "update_page",
+      "args": {
+        "id": {"from": "path.baseSitePage-id", "required": true},
+        "fields": {"object": {"title": "body.title", "description": "body.description"}, "transform": "fields", "required": true}
+      },
+      "result": "record"
+    },
+    "sharepoint.items.get.lists": {"route": "GET /sites/{site-id}/lists/{list-id}/items/{listItem-id}", "vendor": "sites.lists.GetItems", "unmodelled": "the sharepoint definition reads list items by listing them, not one by id"},
+    "sharepoint.items.update.lists": {"route": "PATCH /sites/{site-id}/lists/{list-id}/items/{listItem-id}", "vendor": "sites.lists.UpdateItems", "unmodelled": "Graph merges a list item's fields where the emulator replaces them; served, the two would disagree"},
+    "sharepoint.fields.list": {"route": "GET /sites/{site-id}/lists/{list-id}/items/{listItem-id}/fields", "vendor": "sites.lists.items.GetFields", "unmodelled": "the sharepoint definition reads list items by listing them, not one by id"},
+    "sharepoint.fields.update": {"route": "PATCH /sites/{site-id}/lists/{list-id}/items/{listItem-id}/fields", "vendor": "sites.lists.items.UpdateFields", "unmodelled": "Graph merges a list item's fields where the emulator replaces them; served, the two would disagree"},
+    "sharepoint.fields.delete": {"route": "DELETE /sites/{site-id}/lists/{list-id}/items/{listItem-id}/fields", "vendor": "sites.lists.items.DeleteFields", "unmodelled": "a list item's fields are not deleted apart from the item"},
+    "sharepoint.pages.delete": {"route": "DELETE /sites/{site-id}/pages/{baseSitePage-id}", "vendor": "sites.DeletePages", "unmodelled": "the sharepoint definition declares no page delete"},
+    "sharepoint.children.list": {"route": "GET /drives/{drive-id}/items/{driveItem-id}/children", "vendor": "drives.items.ListChildren", "unmodelled": "the sharepoint definition reads a folder; it does not list the folder's children"},
+    "sharepoint.copy.create": {"route": "POST /drives/{drive-id}/items/{driveItem-id}/copy", "vendor": "drives.drive.items.driveItem.copy", "unmodelled": "copies are not modelled; the definition's only derived file is a conversion"},
+    "sharepoint.checkin.create": {"route": "POST /drives/{drive-id}/items/{driveItem-id}/checkin", "vendor": "drives.drive.items.driveItem.checkin", "unmodelled": "check-in and check-out are not modelled"},
+    "sharepoint.checkout.create": {"route": "POST /drives/{drive-id}/items/{driveItem-id}/checkout", "vendor": "drives.drive.items.driveItem.checkout", "unmodelled": "check-in and check-out are not modelled"},
+    "sharepoint.create_link.create": {"route": "POST /drives/{drive-id}/items/{driveItem-id}/createLink", "vendor": "drives.drive.items.driveItem.createLink", "unmodelled": "sharing is the corpus's access control list, not records the connector writes"},
+    "sharepoint.permissions.list": {"route": "GET /drives/{drive-id}/items/{driveItem-id}/permissions", "vendor": "drives.items.ListPermissions", "unmodelled": "sharing is the corpus's access control list, not records the connector writes"},
+    "sharepoint.permissions.create": {"route": "POST /drives/{drive-id}/items/{driveItem-id}/permissions", "vendor": "drives.items.CreatePermissions", "unmodelled": "sharing is the corpus's access control list, not records the connector writes"},
+    "sharepoint.sites.list": {"route": "GET /sites", "vendor": "sites.site.ListSite", "unmodelled": "sites are the corpus's workspace layout, not records"},
+    "sharepoint.sites.get": {"route": "GET /sites/{site-id}", "vendor": "sites.site.GetSite", "unmodelled": "sites are the corpus's workspace layout, not records"},
+    "sharepoint.sites.update": {"route": "PATCH /sites/{site-id}", "vendor": "sites.site.UpdateSite", "unmodelled": "sites are the corpus's workspace layout, not records"},
+    "sharepoint.drive.list": {"route": "GET /sites/{site-id}/drive", "vendor": "sites.GetDrive", "unmodelled": "the document library is the corpus's workspace layout, not a record"},
+    "sharepoint.lists.list": {"route": "GET /sites/{site-id}/lists", "vendor": "sites.ListLists", "unmodelled": "lists are containers of the corpus's layout; their items are the records"},
+    "sharepoint.lists.create": {"route": "POST /sites/{site-id}/lists", "vendor": "sites.CreateLists", "unmodelled": "lists are containers of the corpus's layout; their items are the records"},
+    "sharepoint.lists.get": {"route": "GET /sites/{site-id}/lists/{list-id}", "vendor": "sites.GetLists", "unmodelled": "lists are containers of the corpus's layout; their items are the records"},
+    "sharepoint.lists.update": {"route": "PATCH /sites/{site-id}/lists/{list-id}", "vendor": "sites.UpdateLists", "unmodelled": "lists are containers of the corpus's layout; their items are the records"},
+    "sharepoint.lists.delete": {"route": "DELETE /sites/{site-id}/lists/{list-id}", "vendor": "sites.DeleteLists", "unmodelled": "lists are containers of the corpus's layout; their items are the records"},
+    "sharepoint.columns.list": {"route": "GET /sites/{site-id}/lists/{list-id}/columns", "vendor": "sites.lists.ListColumns", "unmodelled": "a list's columns are the definition's schema, not records"},
+    "sharepoint.columns.create": {"route": "POST /sites/{site-id}/lists/{list-id}/columns", "vendor": "sites.lists.CreateColumns", "unmodelled": "a list's columns are the definition's schema, not records"}
+  }
+}

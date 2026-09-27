@@ -706,3 +706,65 @@ def _onedrive(s: Session) -> None:
 def test_onedrive_parity_through_the_vendor_graph_contract(cache: Path, tmp_path: Path) -> None:
     session = _run("onedrive", _drive_items("onedrive", "od"), cache, tmp_path, _onedrive)
     session.landing.settle()
+
+
+# -- Microsoft Graph: SharePoint ------------------------------------------------------------
+
+
+def _sharepoint_records() -> list[ConnectorRecord]:
+    items = [ConnectorRecord(id=f"sp-l{n}", connector="sharepoint", entity="list_item", external_id=f"LI{n}", title=title,
+                             fields={"fields": {"Title": title, "Status": status}, "status": status})
+             for n, (title, status) in enumerate((("Renew lease", "Open"), ("Replace badge readers", "Done"),
+                                                  ("Audit fire exits", "Open")), start=1)]
+    pages = [ConnectorRecord(id="sp-p1", connector="sharepoint", entity="site_page", external_id="PAGE1", title="Onboarding",
+                             fields={"title": "Onboarding", "name": "Onboarding.aspx", "body": "Start here"})]
+    return [*_drive_items("sharepoint", "sp"), *items, *pages]
+
+
+def _sharepoint(s: Session) -> None:
+    drive, site = "/drives/b!site1", "/sites/contoso.sharepoint.com,1,2"
+    status, body = s.http("GET", f"{drive}/search(q='budget')")
+    mine = s.local("search_files", query="budget")[1]
+    assert status == 200 and body["value"] == mine["items"] and len(mine["items"]) == 2
+    assert s.http("GET", f"{drive}/items/01ITEM1") == s.local("get_file", id="01ITEM1")
+    assert s.http("GET", f"{drive}/items/01FOLDER2") == s.local("list_folder", id="01FOLDER2")
+    status, created = s.http("POST", f"{drive}/items/01FOLDER1/children", {"name": "Q3 plan.docx", "file": {}})
+    mine = s.local("create_file", entity="docx", name="Q3 plan.docx", parent="01FOLDER1", fields={"name": "Q3 plan.docx"})[1]
+    assert (status, created) == (201, mine)
+    assert s.http("PATCH", f"{drive}/items/01ITEM2", {"name": "Budget model v2.xlsx"}) == s.local(
+        "update_file", id="01ITEM2", fields={"name": "Budget model v2.xlsx"})
+    assert s.http("PATCH", f"{drive}/items/01ITEM3", {"parentReference": {"id": "01FOLDER2"}}) == s.local(
+        "move_file", id="01ITEM3", parent="01FOLDER2")
+    # List items: an OData filter over the item's fields, a create, a delete.
+    flt = "fields/Status eq 'Open'"
+    status, body = s.http("GET", f"{site}/lists/L1/items", query={"$filter": flt})
+    mine = s.local("get_list_items", entity="list_item", query=f"$filter={flt}")[1]
+    assert status == 200 and body["value"] == mine["items"] and len(mine["items"]) == 2
+    status, item = s.http("POST", f"{site}/lists/L1/items", {"fields": {"Title": "Order chairs", "Status": "Open"}})
+    mine = s.local("create_list_item", entity="list_item", name="Order chairs", parent="L1",
+                   fields={"fields": {"Title": "Order chairs", "Status": "Open"}})[1]
+    assert (status, item) == (201, mine)
+    assert s.http("DELETE", f"{site}/lists/L1/items/LI2")[0] in (200, 204)
+    s.local("delete_list_item", id="LI2")
+    # Site pages.
+    status, body = s.http("GET", f"{site}/pages")
+    assert status == 200 and body["value"] == s.local("search_pages")[1]["items"]
+    assert s.http("GET", f"{site}/pages/PAGE1") == s.local("get_page", id="PAGE1")
+    status, page = s.http("POST", f"{site}/pages", {"name": "Travel.aspx", "title": "Travel policy"})
+    mine = s.local("create_page", entity="site_page", name="Travel.aspx", parent="contoso.sharepoint.com,1,2",
+                   fields={"title": "Travel policy", "name": "Travel.aspx"})[1]
+    assert (status, page) == (201, mine)
+    assert s.http("PATCH", f"{site}/pages/PAGE1", {"title": "Onboarding guide"}) == s.local(
+        "update_page", id="PAGE1", fields={"title": "Onboarding guide"})
+    # Errors: a file that does not exist, a filter Graph refuses.
+    assert s.http("GET", f"{drive}/items/01NOPE") == s.local("get_file", id="01NOPE")
+    assert s.http("GET", f"{site}/lists/L1/items", query={"$filter": "fields/Status eq"}) == s.local(
+        "get_list_items", entity="list_item", query="$filter=fields/Status eq")
+    status, _ = s.http("PATCH", f"{site}/lists/L1/items/LI1/fields", {"Status": "Done"})
+    assert status >= 400
+
+
+@needs_anvil
+def test_sharepoint_parity_through_the_vendor_graph_contract(cache: Path, tmp_path: Path) -> None:
+    session = _run("sharepoint", _sharepoint_records(), cache, tmp_path, _sharepoint)
+    session.landing.settle()
