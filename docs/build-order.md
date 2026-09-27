@@ -835,6 +835,8 @@ A world is reproduced from *both*, plus the generation ledger and generator vers
 
 The same interview transcript, model output cache, seed, and generator version reproduce the same world.
 
+Built as `worldloom interview`: a layered interview whose transcript replays through the lints, assembled into one pack; see [interview to world](interview-to-world.md).
+
 ---
 
 ## 10. Add bounded fan-out and artifact recipes

@@ -1,0 +1,24 @@
+{
+  "texts": {
+    "world.interview.role": "You are being interviewed about one company so Worldloom can build its world. Answer exactly one question: read `question`, `context` (what earlier answers settled), `draft` and `findings`, then reply with one JSON object matching `response_schema`.",
+    "world.interview.rule.01": "Answer only the question asked. `context` is the boundary: rely on nothing it does not state, and never contradict an answer it records as accepted.",
+    "world.interview.rule.02": "When `findings` is not empty, the previous answer was refused; fix every finding, not the first, and keep everything else as it was.",
+    "world.interview.rule.03": "When you cannot answer without the operator, reply with at most five `questions` instead of an `answer`.",
+    "world.interview.rule.04": "Every key you name (a role, a process, an event kind, a document type, a system) must be one `context` lists or one this answer declares.",
+    "world.interview.case.step": "the {step} records in {system} for {period}",
+    "world.interview.case.document": "the {document} for {period} on {system}",
+    "world.interview.case.document_revised": "the revised {document} for {period} on {system} (only a version with a revision history)",
+    "world.interview.case.all_periods": "every period",
+    "world.interview.case.sources": " Read {sources}.",
+    "world.interview.case.branch": " If {source} returns at least {count} records, write the result; otherwise write the fallback. Verify only the write that ran.",
+    "world.interview.case.map": " Fetch each matching record individually, collect them, and keep each identifier once before writing.",
+    "world.interview.case.deliver": " Then {action} the result in {system} as {label}, and read it back to verify it.",
+    "world.interview.ask.company": "Describe the industry and the company as one company specification in `answer.spec` (the `worldloom pack spec` document): engine, industry, geography, facets, and `identity.company_name`, which is required so the world is a particular company.",
+    "world.interview.ask.lobs": "Name the lines of business in `answer.lobs`: at least two, each with a name, title, purpose and its roles (`key`, `title`, `function`, `reports_to`), rooted at `ceo`. A role key the company's table lists keeps its meaning.",
+    "world.interview.ask.employees": "Give every role the lines of business declared a seniority level in `answer.levels`: `ic`, `manager`, `director` or `executive`. Nobody sits above the person they report to, the root is an executive, and every level holds at least one role.",
+    "world.interview.ask.processes": "Describe the processes the {lob} line of business runs, as `answer.episodes` (episode specifications). Key `answer.systems` by `Process.event_kind` and list, for every event, the systems it leaves a record in. Seat the processes with `answer.slot_bindings` and state who answers for what with `answer.responsibilities`, both using this LOB's roles.",
+    "world.interview.ask.documents": "Declare every document type the processes plan that no engine ships, in `answer.doctypes`, and give every planned document type a review chain in `answer.chains`: its `reviewer` and `approver` (role keys, each at or above the author's level, the approver above it) and the systems it is `published_on`. Managers, directors and executives each author at least one type.",
+    "world.interview.ask.timeline": "Describe how the company changes over time in `answer`: the first period (`start`, YYYY-MM), how many monthly periods run, the periods with an operational incident, the org changes (`departure`, `reorganisation`, `hire`) and the policy commitments (`policies`), at least one taking effect after the first period so later documents are written under it.",
+    "world.interview.ask.evals": "Say what an employee at each level would ask an agent to do across these systems, in `answer.intents`. An individual contributor reads one system once; a manager reads two systems; a director reads a document at a stated period and the write depends on the data (`branch`); an executive reads across at least two lines of business and maps over each entity (`per_entity`). Every step read names a system its process step declared."
+  }
+}

@@ -364,6 +364,23 @@ LOB roles extend the organisation. Responsibility edges and process-slot
 bindings derive participation; they are not copied into a second manually
 maintained roster.
 
+## A whole world from an interview
+
+```python
+from worldloom import interview
+
+run = interview.run(interview.ScriptedInterviewee.load("examples/interviews/kestrel-vale.json"), "./interview")
+state = run.opened.state                  # the accepted answers, question by question
+pack = interview.pack_of(state)           # one packs.Pack: lobs, episodes, artifact types, lore
+blueprint = interview.blueprint_of(state) # an ordinary Blueprint, enterprise realism
+realised = interview.realise(state)       # built, run, narrated, rendered, validated; cases per level
+interview.export(realised, "./out")
+```
+
+`interview.run` takes any exchange (a function from request to reply);
+`interview.exec_exchange(command)` is a harness over the exec seam. The same
+directory resumes. See [interview to world](interview-to-world.md).
+
 ## Querying a world
 
 The underlying `World` exposes typed collections:

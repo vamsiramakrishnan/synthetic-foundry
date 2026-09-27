@@ -114,6 +114,7 @@ evals_app.add_typer(dataset_app, name="dataset")
 # Keep operational generation in its own command module, not this monolith.
 from .evalrun.cli import app as evalrun_app
 from .gemini_enterprise.cli import app as gemini_enterprise_app
+from .interview_cli import app as interview_app
 from .packkit_cli import install_commands as _install_pack_commands
 from .seams_cli import seams_command
 from .studio_cli import studio_app
@@ -125,6 +126,7 @@ app.add_typer(studio_app, name="studio")
 _install_pack_commands(pack_app)
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 app.add_typer(evalrun_app, name="evalrun")
+app.add_typer(interview_app, name="interview")
 
 
 @enterprise_evals_app.command("space")
@@ -693,6 +695,8 @@ _REFUSALS: dict[str, str] = {
     "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",
     "dataset_rejected": "dataset plan, source or checkpoint was refused; detail names the contract",
     "studio_rejected": "company project, harness proposal or run was refused; detail names the contract",
+    "interview_refused": "a world interview answer, transcript or realisation was refused; data.findings names each rule",
+    "interview_incomplete": "the world interview stopped before every question was settled; the directory resumes it",
     "dataset_incomplete": "dataset quotas, diversity or split obligations remain; the run can be inspected or resumed",
     "doctor_unhealthy": "this installation cannot do everything the docs promise",
     "duplicate_facet": "one facet dimension was given two values",

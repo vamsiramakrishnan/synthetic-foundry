@@ -200,6 +200,7 @@ ignore = [
 "src/worldloom/cli.py" = ["B008"]
 "src/worldloom/gemini_enterprise/cli.py" = ["B008"]
 "src/worldloom/evalrun/cli.py" = ["B008"]
+"src/worldloom/interview_cli.py" = ["B008"]
 
 # Type gate. This package ships `py.typed`, and a typed public surface nobody
 # checks is an advisory type system — by this repository's own principle, not
