@@ -22,6 +22,7 @@ def serve_command(
     max_calls: int | None = typer.Option(None, min=1, help="Calls one run may make (default: policy `connectors.serving.max_calls_per_run`)."),
     worker_id: str | None = typer.Option(None, "--worker-id", help="Prefix every run id with this worker's name (w3 mints w3-run-1), so ids from several server processes never collide. Each process keeps its own runs: route every call for a run id to the process that began it."),
     check: bool = typer.Option(False, "--check", help="Validate the server configuration and exit without listening."),
+    surface: str | None = typer.Option(None, "--surface", help="The tools served: native (each connector definition's own, the default: policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP)."),
 ) -> None:
     """Serve isolated enterprise evaluations as StreamableHTTP MCP connector tools.
 
@@ -71,11 +72,14 @@ def serve_command(
                          max_calls_per_run=policy.max_calls_per_run if max_calls is None else max_calls)
         service = ConnectorEvaluationService.from_corpus(
             corpus, allowed_tools=tools or None, limits=limits,
-            run_prefix=f"{worker_id}-" if worker_id else "",
+            run_prefix=f"{worker_id}-" if worker_id else "", surface=surface,
         )
         app = create_connector_app(service, host=host, bearer_tokens=tokens, allowed_hosts=allowed_hosts or ())
         if check:
-            typer.echo(json.dumps({"queries": len(service.rows), "connector_tools": len(service.tools),
+            contracted = set(service.surfaces.connectors) if service.surfaces is not None else set()
+            served = len(service.contract_tools) + sum(1 for connector, _ in service.tools.values()
+                                                       if connector not in contracted)
+            typer.echo(json.dumps({"queries": len(service.rows), "surface": service.surface, "connector_tools": served,
                                    "evaluation_tools": 5, "transport": "streamable-http", "path": "/mcp"}, sort_keys=True))
             return
         import uvicorn

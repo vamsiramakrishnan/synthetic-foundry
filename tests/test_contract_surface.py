@@ -176,6 +176,47 @@ def test_a_refusal_is_anvils_envelope_and_counts_against_the_mapped_tool() -> No
     assert service.spans("agent", run)[-1].error["code"] == 404
 
 
+def test_the_mcp_server_serves_the_contract_tools_with_anvils_schemas() -> None:
+    pytest.importorskip("mcp")
+    from starlette.testclient import TestClient
+
+    from worldloom.connectors.serving import create_connector_app
+
+    headers = {"Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25",
+               "Authorization": "Bearer alice-private-evaluation-secret"}
+
+    def rpc(client: TestClient, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        response = client.post("/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": method,
+                                                              "params": params})
+        assert response.status_code == 200, response.text
+        return dict(response.json()["result"])
+
+    service = _jira_service("contract")
+    app = create_connector_app(service, bearer_tokens={"alice": "alice-private-evaluation-secret"})
+    surface = shipped_surface("jira")
+    with TestClient(app, base_url="http://localhost") as client:
+        rpc(client, "initialize", {"protocolVersion": "2025-11-25", "capabilities": {},
+                                   "clientInfo": {"name": "external-agent", "version": "1"}})
+        listed = {tool["name"]: tool for tool in rpc(client, "tools/list", {})["tools"]}
+        assert {name for name in listed if not name.startswith("eval_")} == set(surface.names)
+        for tool in surface.tools:
+            served = listed[tool.name]
+            # The evaluation server adds the run id every one of its tools takes; the rest is Anvil's.
+            schema = dict(served["inputSchema"])
+            assert schema["properties"].pop("run_id")["type"] == "string"
+            assert schema["required"][0] == "run_id"
+            assert {**schema, "required": schema["required"][1:]} == {**tool.input_schema,
+                                                                    "required": list(tool.input_schema.get("required") or ())}
+            assert served["description"] == tool.definition["description"]
+        run = json.loads(rpc(client, "tools/call", {"name": "eval_begin", "arguments": {"query_id": "q1"}})
+                         ["content"][0]["text"])["run_id"]
+        got = rpc(client, "tools/call", {"name": "jira_get_issue", "arguments": {"run_id": run, "issue_id_or_key": "OPS-2"}})
+        assert not got.get("isError") and json.loads(got["content"][0]["text"])["key"] == "OPS-2"
+        missing = rpc(client, "tools/call", {"name": "jira_get_issue", "arguments": {"run_id": run, "issue_id_or_key": "OPS-404"}})
+        assert missing["isError"] and '"not_found"' in missing["content"][0]["text"]
+    assert [span.tool for span in service.spans("alice", run)] == ["jira.get_issue", "jira.get_issue"]
+
+
 def test_carry_is_the_mapping_run_backwards_and_checked_forwards() -> None:
     surface = shipped_surface("jira")
     definition = load_connector_definition("jira")

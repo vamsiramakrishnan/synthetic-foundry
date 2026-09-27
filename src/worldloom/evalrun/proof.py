@@ -39,6 +39,7 @@ proof record still runs, with a warning, so older sets are not stranded.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -73,6 +74,7 @@ CHECKS: dict[str, str] = {
     "write.error": "a gold write failed",
     "write.state": "a gold write did not produce the expected state",
     "node.unexecuted": "the reference could not execute the gold node",
+    "contract.gap": "on the contract surface, no exposed operation carries the gold call (connectors.surface)",
     "trajectory.safety": "the gold trajectory breaks a safety law",
     "axis.plan": "the reference plan does not score 1.0",
     "axis.trajectory": "the reference trajectory does not score 1.0",
@@ -438,6 +440,12 @@ def _run_failures(case: EvalCase, result: CaseResult) -> list[ProofFailure]:
             continue
         own = [span for span in spans if span.get("node") == node.id]
         errors = [span for span in own if span.get("error")]
+        gap = _note_for(result.notes, node.id)
+        if not own and gap is not None and "contract_gap" in gap:
+            # Before the designed-failure skip: a node the contract cannot
+            # carry never reached the failure the case designed for it.
+            out.append(ProofFailure(node=node.id, check="contract.gap", reason=gap.split("contract_gap: ", 1)[-1]))
+            continue
         if node.id in failing:
             continue  # a designed failure is expected to error; the trajectory grade judges it
         if not own:
@@ -843,12 +851,15 @@ def prove_for_writing(cases: Sequence[EvalCase], records: Sequence[Any], *, drop
 
 def render_proof(report: ProofReport) -> str:
     """The text verdict: one line per case, first failing node and why."""
+    surface = ", contract surface" if isinstance(report.pins.get("surface"), dict) else ""
     lines = [f"{report.solvable} of {len(report.cases)} case(s) solvable under the {report.query_engine} engine"
-             f" ({report.serving}); proof {report.digest[:16]}"]
+             f" ({report.serving}{surface}); proof {report.digest[:16]}"]
     if report.skipped:
         lines.append(f"skipped: {report.skipped}")
     for check, count in report.reasons.items():
         lines.append(f"  {count} x {check}: {CHECKS.get(check, check)}")
+    for call, count in contract_gaps(report).items():
+        lines.append(f"  gap: {count} x {call}")
     for item in report.cases:
         if item.solvable:
             lines.append(f"ok   {item.case_id}")
@@ -859,6 +870,20 @@ def render_proof(report: ProofReport) -> str:
         assert item.failure is not None
         lines.append(f"drop {item.case_id} node {item.failure.node} [{item.failure.check}] {item.failure.reason}")
     return "\n".join(lines)
+
+
+_GAP_CALL = re.compile(r"carries (\S+?): ")
+
+
+def contract_gaps(report: ProofReport) -> dict[str, int]:
+    """Per gold call the contract surface cannot carry (``connector.tool``), how many cases' first failure it is."""
+    counts: Counter[str] = Counter()
+    for item in report.cases:
+        failure = item.failure
+        if failure is not None and failure.check == "contract.gap":
+            found = _GAP_CALL.search(failure.reason)
+            counts[found.group(1) if found else failure.reason[:60]] += 1
+    return dict(sorted(counts.items(), key=lambda pair: (-pair[1], pair[0])))
 
 
 class Gate(Model):
