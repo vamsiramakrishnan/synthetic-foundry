@@ -940,3 +940,111 @@ cases, K = 1) screening cost 24 case-runs and the finalist 11: 35 against
 `evalrun campaign` takes the same flags and passes them to every stage's
 loop, and `session.improver(...)` takes `candidates=`, `screen_cases=`,
 `finalists=`, `parents=` and `round_budget=`.
+
+## Two levers: the agent and the interface
+
+The pilot above charged every failure to the agent, and most were not the
+agent's. Its search tools were served as a generic `query: string` with no
+grammar, no example and no template, and the emulator's parser refused
+valid SOQL; the agent guessed a query language, the vendor refused it, and
+everything downstream (a read that never ran, a question asked because
+nothing was found, a write never reached) landed in the agent's brief. The
+loop could only rewrite the agent's policy, so it wrote advice about
+retrying. A tool description is not the agent's to change: it belongs to the
+connector layer a company deploys, which Anvil regenerates (MCP tools, SDKs,
+the skill) from a manifest.
+
+### Who owns a failure
+
+`evalrun.ownership` gives every failing finding one owner, by deterministic
+rules applied in order, each attribution carrying the rule that fired and
+the evidence it read:
+
+| Owner | What it means | Rules |
+|---|---|---|
+| `world` | the case or corpus: evidence unreachable, request ambiguous, data contradictory | a solvability proof record (`proofs.jsonl`, `solvability.jsonl`, or `row.proof`) says the case cannot be solved, or names the missing node unreachable; the reference agent fails the case with the same key |
+| `grader` | the measurement | a peer run left the identical trajectory (calls, arguments, errors, answer) with a different verdict; the Anvil replay diverged from what was served; `unclassified`, `assertion.fail`, `outcomes.answer_unrated` |
+| `interface` | the surface misled the agent or could not express the need | `error:validation_error`, `schema_mismatch`, `unsupported_operation`; a refused call; a malformed query on a tool whose served surface shows no grammar; a validation `query.error`; a short-paged search on a tool that declares no pagination; a missing node whose tool the surface does not expose; a serving error; and, in a case where no read node was served successfully because of one of those, the findings that follow from never getting evidence (named as consequences of the root finding) |
+| `agent` | planning and behaviour | everything else |
+
+`evalrun autopsy` prints the shares (`--no-owners` to leave them out;
+`--reference-run`, `--proofs` and `--peer` give the rules more to read),
+`evalrun summarize` prints an `owners:` line, and `evalrun compare` prints
+each owner's findings on both sides and the change in share. Reclassified
+this way, the pilot's six training runs (120 failing case-runs, 554
+findings) split 54% interface (300 findings: 119 validation errors and 181
+of their consequences) and 46% agent; no finding was the world's (the
+reference agent passes all 20 cases) or the grader's.
+
+### The interface lever
+
+With `--levers interface` (or `agent,interface`) and the served bundles
+(`--contract CONNECTOR=<bundle>`, each compiled with `--manifest`), a round
+may change the interface instead of the agent: an Anvil manifest overlay per
+connector.
+
+```bash
+worldloom evalrun improve ./cases --agent-pack agent:baseline --exec ./agent \
+  --proposer-exec ./proposer --holdout-corpus ./fresh \
+  --levers agent,interface --contract jira=./generated/jira \
+  --anvil-cmd "node /path/to/anvil/packages/cli/dist/bin-anvil.js" \
+  --transfer-agent ./second-agent -o ./improve
+```
+
+1. **Serving.** Every run goes through Anvil under the champion interface.
+   The agent is also handed the tools as the bundle projects them (name,
+   description, intent examples, parameters, body fields, pagination,
+   retries, workflows), at `$ANVIL_<CONNECTOR>_SURFACE` and on the tool
+   surface as `surfaces`. Grading replays Anvil's trace of provider calls, so
+   a composite workflow is graded as the calls it made and cannot hide a query.
+2. **Proposal.** The proposer is shown the interface-owned findings with their
+   evidence, every failing call grouped by tool and the vendor's own error
+   with the arguments the agent sent, and the surface as the agent saw it
+   (`surface`); it answers with a unified diff over `draft_tree`, one
+   `<connector>/manifest.yaml` per served connector. The interview rides the
+   pack interview's wire format with kind `anvil-overlay`.
+3. **Lint.** A diff is refused with findings until it is clean: it must apply;
+   touch only the served manifests; change only agent-facing keys (under an
+   operation `description`, `display_name`, `intent_examples`, `name`,
+   `pagination`, `retries`; the `workflows` and `query_templates` sections);
+   compile with `anvil compile` from the locked source snapshot (copied into
+   the loop's own workspace); keep every approval the base bundle had (an
+   approval granted after the base compile is re-granted with `anvil approve`
+   for simulation); leave every workflow it adds approved; and, read back
+   from the compiled AIR, leave each operation's effect, inputs, outputs,
+   errors, idempotency, confirmation, auth and state exactly as they were.
+   The vendor API, the contract source, the provider, the corpus and the
+   grader are not in the tree it patches.
+4. **Gates.** The recompiled bundle (cached by manifest digest under
+   `<out>/interface/bundles`) runs the training cases and faces the same
+   training gate, the same ablation (each hunk of the manifest diff taken out,
+   relinted, recompiled and rerun) and the same holdout as an agent
+   candidate, noise-aware at `--repeats` above one.
+5. **Transfer.** An interface is for every agent a company serves, so a
+   candidate that passed the holdout is also run with a second agent
+   (`--transfer-agent`) on the held-out cases under both interfaces; it must
+   not lose more than the delta band on the mean or any axis, nor error where
+   it was graded. Without a transfer agent the gate is skipped and the
+   receipt says why.
+6. **Promotion.** A promoted overlay is written under
+   `<out>/interface/promoted/NNN/` as `<connector>.manifest.diff` (reviewable),
+   the full `<connector>.manifest.yaml`, and `<connector>.approvals.jsonl`, one
+   line in Anvil's approvals record format with reviewer `unrecorded`, the
+   bundle hashes before and after, the operations whose surface changed, and
+   a note that marks it simulation-only. Nothing is applied to a bundle
+   outside the loop's directory. **Production approval is a human step**: a
+   person reviews the diff, recompiles the bundle with the manifest, and runs
+   `anvil approve --reviewer <id>` on it.
+
+Receipts gain `lever` (`agent` or `interface`), `interface` (the overlay
+digest per connector, the recompiled and the base contract digests, the
+transfer gate's status and, when promoted, the promotion record) and
+`transfer` (the gate); `improve.json` gains `levers` and `interface` (the
+initial and final interface). With both levers a round's first candidate
+goes to the lever that owns more of the failing findings and the rest
+alternate, so `--candidates` mixes agent-pack and interface candidates
+through the same screening; the archive holds agent policies only. With
+`--levers agent` (the default) none of this runs and every receipt, run and
+file is byte-identical to a loop without the option. From Python:
+`session.improver(..., levers="agent,interface", contracts={"jira": bundle},
+transfer_agent=second)`.

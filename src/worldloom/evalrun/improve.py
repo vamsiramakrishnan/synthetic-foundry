@@ -62,6 +62,23 @@ clusters ``parents="archive"`` draws the round's parent from; and a
 training gate, ablation and the holdout against the current champion. At
 the defaults a round is the narrow one above, receipts to the byte.
 
+**Two levers** (``levers``, ``evalrun.interface``): besides the agent's
+policy, a round may change the *interface* the agent is served, an Anvil
+manifest overlay per connector, when the loop is given an ``InterfaceLever``
+over the served contract bundles. Every run is then served through Anvil
+under the champion interface; the autopsy attributes each finding to an
+owner (``evalrun.ownership``), and an interface candidate is proposed from
+the interface-owned findings, the failing arguments and vendor errors, and
+the tools as the agent saw them, through an interview refused with findings
+until ``anvil compile`` and the surface check pass. It is judged by exactly
+the gates an agent candidate is (training gate, ablation over its hunks,
+holdout) and then by a **transfer** gate: a second agent, run on the
+held-out cases under both interfaces, must not regress. A promoted overlay
+is written as a reviewable manifest diff and a simulation-only approvals
+record (``interface.write_promotion``); it is never applied outside the
+loop's directory. With ``levers=("agent",)`` and no lever object, nothing
+below reads any of it and every receipt keeps its bytes.
+
 The grader is pinned by digest before the first round and checked around
 every run: a loop that could move its own measuring stick would be measuring
 nothing. Nothing here edits source code; what changes is a pack, which is
@@ -395,6 +412,15 @@ class RoundReceipt(Model):
     screening: Screening | None = None
     #: Case-runs this round executed (runs read back from disk cost nothing).
     spent: int | None = None
+    #: The lever the round's candidate pulled, when the loop has an interface
+    #: lever (``agent`` or ``interface``); absent otherwise.
+    lever: str | None = None
+    #: An interface candidate's record: its overlay digests per connector, the
+    #: recompiled contract digests, the base's, the transfer gate's status and,
+    #: when promoted, where its reviewable diff and approvals record were written.
+    interface: dict[str, Any] | None = None
+    #: The transfer gate: a second agent on the held-out cases under both interfaces.
+    transfer: Gate | None = None
 
     @model_serializer(mode="wrap")
     def _narrow_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -405,8 +431,8 @@ class RoundReceipt(Model):
         return data
 
 
-#: Receipt fields only wide search fills, and so only its receipts carry.
-_WIDE_FIELDS: tuple[str, ...] = ("parent", "screening", "spent")
+#: Receipt fields only wide search, or the interface lever, fills, and so only their receipts carry.
+_WIDE_FIELDS: tuple[str, ...] = ("parent", "screening", "spent", "lever", "interface", "transfer")
 
 
 class ImproveReport(Model):
@@ -430,13 +456,17 @@ class ImproveReport(Model):
     #: round of this loop executed, in total.
     search: dict[str, Any] | None = None
     spent: int | None = None
+    #: With an interface lever: the levers the loop pulled, and the interface
+    #: it started from and ended with (digests); absent otherwise.
+    levers: tuple[str, ...] | None = None
+    interface: dict[str, Any] | None = None
 
     @model_serializer(mode="wrap")
     def _single_run_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.repeats == 1:
             data.pop("repeats", None)
-        for name in ("search", "spent"):
+        for name in ("search", "spent", "levers", "interface"):
             if data.get(name, False) is None:
                 data.pop(name)
         return data
@@ -477,6 +507,17 @@ class _Proposal:
     #: Its unified diff against the champion (what the gates judge).
     diff: str = ""
     duplicate_of: int | None = None
+    #: ``agent`` (a revised pack in ``candidate``) or ``interface`` (a revised
+    #: interface in ``variant``; ``candidate`` is then the champion pack it runs).
+    lever: str = "agent"
+    variant: Any = None
+
+    @property
+    def digest(self) -> str:
+        """What names this proposal's candidate: the pack's digest, or the interface variant's."""
+        if self.lever == "interface" and self.variant is not None:
+            return str(self.variant.digest)
+        return self.candidate.digest if self.candidate is not None else ""
 
     def brief_line(self) -> str:
         """What a later candidate of the round is told about this one: a summary and a size, never content."""
@@ -489,6 +530,13 @@ class _Proposal:
         return f"- candidate {self.index}: refused by the lint"
 
     def record(self, **update: Any) -> CandidateRecord:
+        if self.lever == "interface":
+            return CandidateRecord(index=self.index, status=update.pop("status", self.status),
+                                   ref=None if self.variant is None else _interface_ref(self.variant),
+                                   digest=None if self.variant is None else self.variant.digest,
+                                   summary=self.summary, diff_stat=diff_stat(self.diff) if self.diff else "",
+                                   duplicate_of=self.duplicate_of, reasons=self.reasons, authoring=self.authoring,
+                                   **update)
         return CandidateRecord(index=self.index, status=update.pop("status", self.status),
                                ref=None if self.candidate is None else self.candidate.ref,
                                digest=None if self.candidate is None else self.candidate.digest,
@@ -558,6 +606,18 @@ class Improver:
     finalists: int = 1
     parents: str = "champion"
     round_budget: int | None = None
+    #: The levers a round may pull (``agent``, ``interface``). ``interface``
+    #: needs ``interface``, an ``evalrun.interface.InterfaceLever`` over the
+    #: served bundles; with one, every run is served through Anvil under the
+    #: champion interface. At ``("agent",)`` without a lever the loop is the
+    #: one above, receipts to the byte.
+    levers: tuple[str, ...] = ("agent",)
+    interface: Any = None
+    #: The second agent the transfer gate runs on the held-out cases under
+    #: both interfaces; without one the gate is skipped with a recorded reason.
+    transfer: AgentUnderTest | None = None
+    _variant: Any = None
+    _variants: dict[str, Any] = field(default_factory=dict)
     _runs: dict[tuple[str, str, str], RunReport] = field(default_factory=dict)
     _candidates: dict[str, ResolvedPack] = field(default_factory=dict)
     #: Case-runs this loop has executed (a run read back from disk is free).
@@ -569,17 +629,18 @@ class Improver:
         return self.candidates > 1 or self.parents != "champion" or self.round_budget is not None
 
     def _pinned_runs(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str,
-                     grader: dict[str, Any]) -> tuple[RunReport, ...]:
+                     grader: dict[str, Any], *, variant: Any = None) -> tuple[RunReport, ...]:
         """*pack* over *cases*, ``repeats`` times: each an ordinary pinned run in ``<label>/rep-<i>``.
 
         At one repeat it is the single run in ``<label>`` itself, where a
-        loop without repeats has always written it.
+        loop without repeats has always written it. *variant* is the
+        interface it is served under, the champion interface when ``None``.
         """
         if self.repeats < 1:
             raise ValueError(f"repeats must be at least 1, not {self.repeats}")
         if self.repeats == 1:
-            return (self._pinned_run(pack, cases, label, grader),)
-        return tuple(self._pinned_run(pack, cases, label, grader, repeat=index)
+            return (self._pinned_run(pack, cases, label, grader, variant=variant),)
+        return tuple(self._pinned_run(pack, cases, label, grader, repeat=index, variant=variant)
                      for index in range(1, self.repeats + 1))
 
     def _gate(self, champion: Sequence[RunReport], candidate: Sequence[RunReport], *, name: str, min_delta: float,
@@ -600,23 +661,34 @@ class Improver:
         return float(packkit.policy("evalrun.improve.min_train_ci")) if self.min_train_ci is None else self.min_train_ci
 
     def _pinned_run(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str, grader: dict[str, Any],
-                    repeat: int | None = None) -> RunReport:
+                    repeat: int | None = None, *, variant: Any = None, agent: AgentUnderTest | None = None,
+                    slug: str | None = None) -> RunReport:
         # The agent is built first, so a run is reused only when this agent
         # made it: one pack run by two different agents (another command,
         # another harness) is two runs. It is built here so a skill tree it
         # materialises lands in this loop's output directory, not the user's
         # cache.
-        with skills_cache_in(self.out / "skills-cache"):
-            agent = self.agent_for(pack)
+        if agent is None:
+            with skills_cache_in(self.out / "skills-cache"):
+                agent = self.agent_for(pack)
         identity = fingerprint(agent)
+        served = None
+        if self.interface is not None:
+            # Served through Anvil under an interface: the interface is part
+            # of what ran, so it is part of the run's identity and directory.
+            served = variant if variant is not None else self._variant
+            identity = {**identity, "serving": self.interface.identity(served)}
+            if slug is None and served.digest != self.interface.base.digest:
+                slug = f"{_slug(pack)}+if-{served.digest[:12]}"
         # A repeat is its own run: its own cache entry and its own directory
         # under the label's, so a resumed loop reuses every repeat it finished.
         place = label if repeat is None else f"{label}/rep-{repeat}"
-        key = (pack.digest, place, json.dumps(identity, sort_keys=True, default=str))
+        key = (pack.digest if slug is None else f"{pack.digest}\0{slug}", place,
+               json.dumps(identity, sort_keys=True, default=str))
         held = self._runs.get(key)
         if held is not None:
             return held
-        directory = self.out / "runs" / _slug(pack) / label
+        directory = self.out / "runs" / (slug or _slug(pack)) / label
         if repeat is not None:
             directory = directory / f"rep-{repeat}"
         # A run already on disk for this exact policy, agent, case set and
@@ -634,7 +706,7 @@ class Improver:
                 self._runs[key] = stored
                 return stored
         check_frozen(grader, self.rater)
-        report = self.run(cases, agent)
+        report = self.run(cases, agent) if served is None else self.interface.run(cases, agent, served)
         self._spent += len(cases)
         check_frozen(grader, self.rater)
         update: dict[str, Any] = {"grader": grader, "agent_pack": report.agent_pack or _identity(pack),
@@ -775,6 +847,7 @@ class Improver:
         if self.repeats < 1:
             raise ValueError(f"repeats must be at least 1, not {self.repeats}")
         self._check_search()
+        self._check_levers()
         # The budget caps what a round spends, screening or not: the finalists'
         # full training runs are its floor, so a budget below them could never
         # be kept and is refused rather than silently overrun.
@@ -802,6 +875,10 @@ class Improver:
         grader = grader_identity(self.rater)
         stem = round_stem(champion.name)
         initial = champion
+        if self.interface is not None and self._variant is None:
+            self._variant = self.interface.base
+            self._variants[self._variant.digest] = self._variant
+        initial_variant = self._variant
         receipts: list[RoundReceipt] = []
         self.out.mkdir(parents=True, exist_ok=True)
         last, protected = self._earlier()
@@ -820,7 +897,10 @@ class Improver:
                 (self.out / "rounds" / f"{number:03d}.diff").write_text(receipt.diff, encoding="utf-8", newline="")
             # The round is receipted, so its proposals no longer need keeping for a resume.
             self._journal_path(number).unlink(missing_ok=True)
-            if receipt.decision == "promoted":
+            if receipt.decision == "promoted" and receipt.lever == "interface":
+                assert receipt.candidate is not None
+                self._variant = self._variants[receipt.candidate["digest"]]
+            elif receipt.decision == "promoted":
                 assert receipt.candidate is not None
                 champion = self._candidates[receipt.candidate["digest"]]
             elif receipt.decision in {"no_failures", "questions", "proposer_error"}:
@@ -834,7 +914,10 @@ class Improver:
                                promotions=sum(item.decision == "promoted" for item in receipts),
                                held_out_dropped=held_out_dropped, repeats=self.repeats,
                                search=self._search_settings() if self.wide else None,
-                               spent=sum(item.spent or 0 for item in receipts) if self.wide else None)
+                               spent=sum(item.spent or 0 for item in receipts) if self.wide else None,
+                               levers=self.levers if self.interface is not None else None,
+                               interface=self._interface_summary(initial_variant) if self.interface is not None
+                               else None)
         _write(self.out / "improve.json", report.model_dump(mode="json", by_alias=True))
         return report
 
@@ -853,10 +936,23 @@ class Improver:
         # revises (the champion, or the parent wide search drew): the proposer
         # is shown one run, as it always was, and the repeats only sharpen the
         # judging.
-        found = autopsy(parent_train[0], cases=train)
+        if self.interface is None:
+            found = autopsy(parent_train[0], cases=train)
+        else:
+            # Served under an interface, every finding gets an owner: the
+            # served surface's facts, the other repeats and the reference
+            # run are what the ownership rules read.
+            found = autopsy(parent_train[0], cases=train, attribute=True, surface=self.interface.facts(self._variant),
+                            peers=parent_train[1:], reference=self.reference_run)
         if found.failing == 0:
             return RoundReceipt(**base, **wide, decision="no_failures",
                                 reasons=("the champion passes every training case; escalate the curriculum",))
+        pulls = self._pullable(found)
+        if not pulls:
+            return RoundReceipt(**base, **wide, decision="no_failures", failing=found.failing,
+                                clusters=tuple(cluster.key for cluster in found.clusters),
+                                reasons=("no failing finding is owned by a lever this loop may pull "
+                                         f"({', '.join(self.levers)}); see the autopsy's owners",))
         brief = self._fitted_brief(found, parent, number, run=parent_train[0], train=train, holdout=holdout)
         clusters = tuple(cluster.key for cluster in found.clusters)
         brief_digest = hashlib.sha256(brief.encode()).hexdigest()[:16]
@@ -866,7 +962,19 @@ class Improver:
         # than asking again, so its finished screens are read back, not re-run.
         proposals = self._restore(number, parent, brief_digest, champion) if self.wide else []
         for index in range(len(proposals) + 1, total + 1):
+            lever = pulls[(index - 1) % len(pulls)]
             try:
+                if lever == "interface":
+                    proposals.append(self._propose_interface(index, total, number, found, parent_train[0], champion,
+                                                             proposals))
+                    if proposals[-1].status == "questions":
+                        item = proposals.pop()
+                        return RoundReceipt(**common, **self._screening(total, proposals), decision="questions",
+                                            authoring=item.authoring, questions=item.reasons, lever="interface",
+                                            reasons=("the proposer asked questions only the operator can answer",))
+                    if self.wide:
+                        self._journal(number, parent, brief_digest, proposals)
+                    continue
                 authored = self._propose(parent, brief, number, stem, protected,
                                          index=None if total == 1 else index, total=total,
                                          earlier=[item.brief_line() for item in proposals], judged_against=champion)
@@ -884,11 +992,13 @@ class Improver:
         valid = [item for item in proposals if item.status == "valid"]
         if not valid:
             pick = next((item for item in proposals if item.status != "refused"), proposals[0])
+            tag: dict[str, Any] = {"lever": pick.lever} if self.interface is not None else {}
             if pick.status == "refused" or pick.candidate is None:
-                return RoundReceipt(**common, **self._screening(total, proposals), decision="refused",
+                return RoundReceipt(**common, **self._screening(total, proposals), **tag, decision="refused",
                                     authoring=pick.authoring, reasons=pick.reasons)
-            return RoundReceipt(**common, **self._screening(total, proposals), decision="unchanged",
-                                authoring=pick.authoring, candidate=_identity(pick.candidate), reasons=pick.reasons)
+            named = _identity(pick.candidate) if pick.lever == "agent" else self._interface_identity(pick.variant)
+            return RoundReceipt(**common, **self._screening(total, proposals), **tag, decision="unchanged",
+                                authoring=pick.authoring, candidate=named, reasons=pick.reasons)
         finalists, screen = list(valid), None
         if total > 1:
             finalists, screen = self._screen(valid, champion_train, train, number, grader)
@@ -899,10 +1009,11 @@ class Improver:
         for item in finalists:
             assert item.candidate is not None
             self._candidates[item.candidate.digest] = item.candidate
-            runs = self._pinned_runs(item.candidate, train, "train", grader)
+            runs = self._pinned_runs(item.candidate, train, "train", grader, variant=item.variant)
             gate = self._gate(champion_train, runs, name="train", min_delta=min_train, strict=False,
                               max_fall=max_fall, values=self.values)
-            if archive is not None:
+            # The archive holds agent policies; an interface candidate is not one.
+            if archive is not None and item.lever == "agent":
                 self._archive_add(archive, item.candidate, runs, train, number, parent)
             judged.append((item, runs, gate))
         passing = [position for position, entry in enumerate(judged) if entry[2].passed]
@@ -910,6 +1021,12 @@ class Improver:
                    key=lambda position: (-judged[position][2].mean_delta, position))
         chosen, candidate_train, train_gate = judged[best]
         extra = self._screening(total, proposals, judged=judged, screen=screen)
+        if chosen.lever == "interface":
+            return self._finish_interface(number, {**common, **extra}, champion, chosen, champion_train,
+                                          candidate_train, train_gate, train, holdout, grader,
+                                          min_train=min_train, min_held=min_held, max_fall=max_fall)
+        if self.interface is not None:
+            extra = {**extra, "lever": "agent"}
         assert chosen.candidate is not None
         candidate: ResolvedPack = chosen.candidate
         rounds = chosen.authoring
@@ -1042,7 +1159,8 @@ class Improver:
             label = f"screen/{case_set_digest(ran)[:12]}"
             for item in alive:
                 assert item.candidate is not None
-                scores[item.index].update(case_scores((self._pinned_run(item.candidate, ran, label, grader),)))
+                scores[item.index].update(case_scores((self._pinned_run(item.candidate, ran, label, grader,
+                                                                        variant=item.variant),)))
             spent += cost
             subset = order[:size]
             deltas = {item.index: paired_delta(scores[item.index], baseline, subset) for item in alive}
@@ -1051,7 +1169,7 @@ class Improver:
             keep = halving_keep(len(ranked), self.finalists, whole)
             stages.append(ScreenStage(
                 stage=len(stages) + 1, cases=tuple(subset), ran=tuple(fresh),
-                scores=tuple(ScreenScore(index=item.index, digest=item.candidate.digest if item.candidate else "",
+                scores=tuple(ScreenScore(index=item.index, digest=item.digest,
                                          mean_delta=deltas[item.index], cases=len(subset)) for item in ranked),
                 advanced=tuple(item.index for item in ranked[:keep]), cost=cost))
             alive = ranked[:keep]
@@ -1175,7 +1293,10 @@ class Improver:
                            "reasons": list(item.reasons), "summary": item.summary, "duplicate_of": item.duplicate_of,
                            "ref": None if item.candidate is None else item.candidate.ref,
                            "digest": None if item.candidate is None else item.candidate.digest,
-                           "envelope": None if item.candidate is None else _envelope(item.candidate)}
+                           "envelope": None if item.candidate is None else _envelope(item.candidate),
+                           # An interface proposal keeps its manifests, from which it is rebuilt.
+                           **({"lever": "interface", "tree": item.variant.tree if item.variant is not None else None}
+                              if item.lever == "interface" else {})}
                           for item in proposals]})
 
     def _restore(self, number: int, parent: ResolvedPack, brief_digest: str,
@@ -1193,6 +1314,12 @@ class Improver:
         for entry in document.get("proposals") or ():
             if not isinstance(entry, dict) or entry.get("index") != len(restored) + 1:
                 break
+            if entry.get("lever") == "interface":
+                restored_item = self._restore_interface(entry, len(restored) + 1, champion)
+                if restored_item is None:
+                    break
+                restored.append(restored_item)
+                continue
             candidate = None
             if isinstance(entry.get("digest"), str):
                 candidate = self._materialise(str(entry.get("ref")), entry["digest"], entry.get("envelope"))
@@ -1309,6 +1436,265 @@ class Improver:
         self._candidates[current.digest] = current
         return current, current_run, ablation.model_copy(update={"reduced": True, "reduced_train": gate})
 
+    # -- the interface lever ------------------------------------------------------
+
+    def _check_levers(self) -> None:
+        from .interface import LEVERS
+
+        if not self.levers or any(lever not in LEVERS for lever in self.levers):
+            raise ValueError(f"levers are {', '.join(LEVERS)}; got {', '.join(self.levers) or 'none'}")
+        if "interface" in self.levers and self.interface is None:
+            raise ValueError("the interface lever needs the served contract bundles (an InterfaceLever: "
+                             "--connectors anvil --contract CONNECTOR=<bundle>)")
+
+    def _pullable(self, found: Any) -> tuple[str, ...]:
+        """The levers this round may pull, in the order its candidates take them.
+
+        Without an interface lever it is the agent, always. With one lever
+        allowed, it is pulled only when it owns a failing finding. With both,
+        the first candidate goes to the lever that owns more of them (the
+        agent on a tie) and the rest alternate, so wide search tries both;
+        when neither owns one (every finding is the world's or the grader's)
+        nothing is pulled.
+        """
+        if self.interface is None or found.ownership is None:
+            return tuple(self.levers)
+        owned = {share.owner: share.findings for share in found.ownership.owners}
+        if not any(owned.get(lever, 0) for lever in self.levers):
+            return ()
+        if len(self.levers) == 1:
+            return tuple(self.levers)
+        return ("interface", "agent") if owned["interface"] > owned["agent"] else ("agent", "interface")
+
+    def _interface_identity(self, variant: Any) -> dict[str, Any]:
+        return {"ref": _interface_ref(variant), "digest": variant.digest}
+
+    def _interface_record(self, variant: Any) -> dict[str, Any]:
+        """What a receipt records of an interface candidate: overlays, recompiled contracts, the base's."""
+        from .interface import overlay_digests
+
+        lever = self.interface
+        compiled = lever.compile(variant)
+        record: dict[str, Any] = {
+            "variant": variant.digest, "champion": self._variant.digest,
+            "overlays": overlay_digests(lever.base, variant),
+            "contracts": dict(sorted(compiled.digests.items())),
+            "base_contracts": {name: source.contract_digest for name, source in sorted(lever.sources.items())}}
+        if compiled.approved_for_simulation:
+            record["approved_for_simulation"] = {name: list(ids) for name, ids
+                                                 in sorted(compiled.approved_for_simulation.items())}
+        return record
+
+    def _interface_summary(self, initial: Any) -> dict[str, Any]:
+        from .interface import overlay_digests
+
+        compiled = self.interface.compile(self._variant)
+        return {"initial": initial.digest, "champion": self._variant.digest,
+                "overlays": overlay_digests(self.interface.base, self._variant),
+                "contracts": dict(sorted(compiled.digests.items()))}
+
+    def _propose_interface(self, index: int, total: int, number: int, found: Any, run: RunReport,
+                           champion: ResolvedPack, earlier: Sequence[_Proposal]) -> _Proposal:
+        """One interface interview: the interface-owned findings and their traces, answered with an overlay diff."""
+        from ..packkit.authoring import MAX_MESSAGE
+        from .interface import author_overlay, interface_brief
+
+        parent = self._variant
+        label = f"interface@{parent.digest[:12]}"
+        notes = ""
+        if total > 1:
+            notes = "\n\n" + packkit.text("evalrun.improve.rule.candidates", index=index, total=total,
+                                          earlier="\n".join(item.brief_line() for item in earlier) or "(none yet)")
+        skeleton = packkit.text("evalrun.improve.interface.message", round=number, champion=label, brief="")
+        brief, touched = interface_brief(found, run, room=max(MAX_MESSAGE - len(skeleton) - len(notes), 400))
+        message = packkit.text("evalrun.improve.interface.message", round=number, champion=label, brief=brief) + notes
+
+        def exchange(payload: dict[str, Any]) -> dict[str, Any]:
+            try:
+                return self.exchange(payload)
+            except _PROPOSER_ERRORS as error:
+                raise _ProposerFailed(error) from error
+
+        name = f"interface-r{number}" + ("" if total == 1 else f"-c{index}")
+        authored = author_overlay(message, exchange, self.interface, parent, name=name,
+                                  max_rounds=self.authoring_rounds, touched=touched)
+        verdict = authored.verdict
+        rounds = tuple(authored.rounds)
+        summary = summary_line(verdict.message)
+        if verdict.status == "questions":
+            return _Proposal(index, "questions", rounds, reasons=verdict.questions, summary=summary, lever="interface")
+        if verdict.status != "accepted" or verdict.variant is None:
+            return _Proposal(index, "refused", rounds, reasons=tuple(verdict.findings[:12]), summary=summary,
+                             lever="interface")
+        variant = verdict.variant
+        self._variants[variant.digest] = variant
+        diff = diffs.render(parent.tree, variant.tree)
+        if variant.digest == parent.digest or not diff:
+            return _Proposal(index, "unchanged", rounds, champion, ("the proposal restates the champion interface",),
+                             summary, lever="interface", variant=variant)
+        for item in earlier:
+            if item.lever == "interface" and item.status == "valid" and item.variant is not None \
+                    and item.variant.digest == variant.digest:
+                return _Proposal(index, "duplicate", rounds, champion, (f"the same change as candidate {item.index}",),
+                                 summary, diff, duplicate_of=item.index, lever="interface", variant=variant)
+        return _Proposal(index, "valid", rounds, champion, (), summary, diff, lever="interface", variant=variant)
+
+    def _restore_interface(self, entry: Mapping[str, Any], index: int, champion: ResolvedPack) -> _Proposal | None:
+        """A journaled interface proposal, rebuilt from its manifests; ``None`` when it no longer can be."""
+        from .interface import InterfaceVariant
+
+        tree = entry.get("tree")
+        status = str(entry.get("status"))
+        if self.interface is None:
+            return None
+        variant = None
+        if isinstance(tree, dict):
+            variant = InterfaceVariant.from_tree(tree)
+            self._variants[variant.digest] = variant
+        elif status in {"valid", "duplicate", "unchanged"}:
+            return None
+        return _Proposal(index=index, status=status, authoring=tuple(entry.get("authoring") or ()),
+                         candidate=champion if variant is not None else None,
+                         reasons=tuple(entry.get("reasons") or ()), summary=str(entry.get("summary", "")),
+                         diff=diffs.render(self._variant.tree, variant.tree) if variant is not None else "",
+                         duplicate_of=entry.get("duplicate_of"), lever="interface", variant=variant)
+
+    def _finish_interface(self, number: int, common: Mapping[str, Any], champion: ResolvedPack, chosen: _Proposal,
+                          champion_train: Sequence[RunReport], candidate_train: Sequence[RunReport], train_gate: Gate,
+                          train: Sequence[EvalCase], holdout: Sequence[EvalCase], grader: dict[str, Any], *,
+                          min_train: float, min_held: float, max_fall: float) -> RoundReceipt:
+        """The gates after training for an interface candidate: ablation, holdout, transfer, then promotion."""
+        from .interface import write_promotion
+
+        variant = chosen.variant
+        rounds = chosen.authoring
+        changed: dict[str, Any] = {"diff": chosen.diff, "diff_hunks": len(diffs.hunks(chosen.diff))}
+        if not train_gate.passed:
+            return RoundReceipt(**common, **changed, lever="interface", decision="rejected", authoring=rounds,
+                                candidate=self._interface_identity(variant), interface=self._interface_record(variant),
+                                train=train_gate, reasons=train_gate.reasons)
+        ablation = None
+        if self.ablate:
+            variant, candidate_train, ablation = self._ablate_interface(
+                champion, variant, champion_train, candidate_train, train, grader, min_train=min_train,
+                max_fall=max_fall)
+            if ablation.reduced:
+                assert ablation.reduced_train is not None
+                train_gate = ablation.reduced_train
+                reduced = diffs.render(self._variant.tree, variant.tree)
+                changed = {"diff": reduced, "diff_hunks": len(diffs.hunks(reduced))}
+        # Only now are the held-out cases run, as for an agent candidate.
+        champion_held = self._pinned_runs(champion, holdout, "holdout", grader)
+        candidate_held = self._pinned_runs(champion, holdout, "holdout", grader, variant=variant)
+        held_gate = self._gate(champion_held, candidate_held, name="holdout", min_delta=min_held, strict=True,
+                               max_fall=max_fall,
+                               values=self.holdout_values if self.holdout_values is not None else self.values)
+        record = self._interface_record(variant)
+        reasons = list(held_gate.reasons)
+        transfer: Gate | None = None
+        if not held_gate.passed:
+            record["transfer"] = {"skipped": "the holdout gate failed, so the transfer agent was never run"}
+        else:
+            transfer, skipped = self._transfer_gate(champion, variant, holdout, grader, max_fall=max_fall)
+            if transfer is None:
+                record["transfer"] = {"skipped": skipped}
+            else:
+                record["transfer"] = {"passed": transfer.passed}
+                reasons.extend(f"transfer: {reason}" for reason in transfer.reasons)
+        promoted = held_gate.passed and (transfer is None or transfer.passed)
+        if promoted:
+            record["promotion"] = write_promotion(self.interface, self._variant, variant, round_number=number)
+        return RoundReceipt(**common, **changed, lever="interface", decision="promoted" if promoted else "rejected",
+                            authoring=rounds, candidate=self._interface_identity(variant), train=train_gate,
+                            holdout=held_gate, transfer=transfer, interface=record, reasons=tuple(reasons),
+                            ablation=ablation)
+
+    def _transfer_gate(self, champion: ResolvedPack, variant: Any, holdout: Sequence[EvalCase],
+                       grader: dict[str, Any], *, max_fall: float) -> tuple[Gate | None, str]:
+        """The second agent on the held-out cases under the champion interface and under *variant*.
+
+        An interface change is for every agent a company serves, not the one
+        it was tuned on: the second agent must not lose more than the delta
+        band on the mean or any axis, nor error where it was graded.
+        """
+        if self.transfer is None:
+            return None, "no transfer agent was given (--transfer-agent); the gate was skipped"
+        ident = hashlib.sha256(json.dumps(fingerprint(self.transfer), sort_keys=True,
+                                          default=str).encode()).hexdigest()[:12]
+
+        def runs(served: Any) -> tuple[RunReport, ...]:
+            slug = f"transfer@{ident}" + ("" if served.digest == self.interface.base.digest
+                                          else f"+if-{served.digest[:12]}")
+            repeats: list[int | None] = [None] if self.repeats == 1 else list(range(1, self.repeats + 1))
+            return tuple(self._pinned_run(champion, holdout, "holdout", grader, repeat=repeat, variant=served,
+                                          agent=self.transfer, slug=slug) for repeat in repeats)
+
+        before, after = runs(self._variant), runs(variant)
+        if self.repeats == 1:
+            return judge(compare(before[0], after[0]), name="transfer", min_delta=-max_fall, strict=False,
+                         max_axis_regression=max_fall), ""
+        return judge_paired(self._paired(before, after), name="transfer", min_delta=-max_fall, strict=False,
+                            max_axis_regression=max_fall, min_ci=-max_fall), ""
+
+    def _ablate_interface(self, champion: ResolvedPack, variant: Any, champion_train: Sequence[RunReport],
+                          candidate_train: Sequence[RunReport], train: Sequence[EvalCase], grader: dict[str, Any], *,
+                          min_train: float, max_fall: float) -> tuple[Any, tuple[RunReport, ...], Ablation]:
+        """``_ablate`` for an overlay: each hunk of the manifest diff taken out in turn, relinted and recompiled."""
+        tolerance = delta_band() / 2 if self.ablation_tolerance is None else self.ablation_tolerance
+        parent = self._variant
+        proposed_diff = diffs.render(parent.tree, variant.tree)
+        every = diffs.hunks(proposed_diff)
+        keep = list(range(len(every)))
+        current, current_run = variant, tuple(candidate_train)
+        records: list[HunkContribution] = []
+        for position, hunk in enumerate(every):
+            if position >= self.ablation_max_hunks:
+                records.append(_contribution(hunk, position, decision="untested",
+                                             reason="past the policy `evalrun.improve.ablation_max_hunks`"))
+                continue
+            remaining = [index for index in keep if index != position]
+            if not remaining:
+                cost = self._cost(champion_train, current_run)[0]
+                records.append(_contribution(hunk, position, decision="kept", contribution=cost,
+                                             reason="the last hunk left; without it the candidate is the champion"))
+                continue
+            trial, findings = self.interface.lint(parent, diffs.join(every[index] for index in remaining))
+            if trial is None:
+                records.append(_contribution(hunk, position, decision="kept",
+                                             reason=f"the rest does not lint without it: {'; '.join(findings[:2])}"))
+                continue
+            self._variants[trial.digest] = trial
+            trial_run = self._pinned_runs(champion, train, "train", grader, variant=trial)
+            cost, bounds = self._cost(trial_run, current_run)
+            low, high = (None, None) if bounds is None else bounds
+            ceiling = cost if high is None else high
+            if ceiling < tolerance:
+                keep = remaining
+                current, current_run = trial, trial_run
+                why = (f"removing it cost {cost}, under the tolerance {tolerance}" if bounds is None
+                       else f"removing it cost at most {ceiling} (mean {cost}), under the tolerance {tolerance}")
+                records.append(_contribution(hunk, position, decision="dropped", contribution=cost, reason=why,
+                                             ci_low=low, ci_high=high))
+            else:
+                records.append(_contribution(hunk, position, decision="kept", contribution=cost,
+                                             ci_low=low, ci_high=high))
+        ablation = Ablation(proposed=self._interface_identity(variant), proposed_diff=proposed_diff,
+                            tolerance=tolerance, hunks=tuple(records))
+        if current is variant:
+            return variant, tuple(candidate_train), ablation
+        gate = self._gate(champion_train, current_run, name="train", min_delta=min_train, strict=False,
+                          max_fall=max_fall, values=self.values)
+        if not gate.passed:
+            return variant, tuple(candidate_train), ablation.model_copy(update={
+                "reduced_train": gate,
+                "reason": "the reduced candidate fails the training gate; the proposed one goes to the holdout"})
+        return current, current_run, ablation.model_copy(update={"reduced": True, "reduced_train": gate})
+
+
+def _interface_ref(variant: Any) -> str:
+    """An interface candidate's reference: ``interface:`` and the connectors it covers."""
+    return "interface:" + "+".join(connector for connector, _ in variant.manifests)
+
 
 def _contribution(hunk: diffs.Hunk, position: int, decision: str, contribution: float | None = None,
                   reason: str = "", ci_low: float | None = None, ci_high: float | None = None) -> HunkContribution:
@@ -1358,7 +1744,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             min_train_ci: float | None = None, brief: str | None = None,
             reference_run: RunReport | None = None, candidates: int | None = None, screen_cases: int | None = None,
             finalists: int | None = None, parents: str | None = None,
-            round_budget: int | None = None) -> ImproveReport:
+            round_budget: int | None = None, levers: Sequence[str] | str | None = None, interface: Any = None,
+            transfer: AgentUnderTest | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
@@ -1384,8 +1771,15 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     archive; *round_budget* (``.round_budget``, none) caps the case-runs a
     round's screening and finalists may cost. At the defaults a round is the
     narrow loop, receipts to the byte.
+
+    *levers* (``agent``, ``interface`` or both; default ``agent``) says what a
+    round may change. ``interface`` needs *interface*, an
+    ``evalrun.interface.InterfaceLever`` over the served contract bundles;
+    *transfer* is the second agent an interface candidate must not regress
+    on the held-out cases (the gate is skipped, and says so, without one).
     """
     from .evidence import admit_reference, brief_mode
+    from .interface import parse_levers
 
     dropped = 0
     if holdout is None:
@@ -1422,7 +1816,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
                         else int(finalists),
                         parents=str(packkit.policy("evalrun.improve.parents")) if parents is None else parents,
                         round_budget=_optional_int(packkit.policy("evalrun.improve.round_budget"))
-                        if round_budget is None else int(round_budget))
+                        if round_budget is None else int(round_budget),
+                        levers=parse_levers(levers), interface=interface, transfer=transfer)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,
