@@ -123,9 +123,9 @@ def test_a_reply_that_opens_the_thread_first_is_not_penalised_and_one_that_never
 
 
 def test_a_send_proves_solvable_without_a_target_read(world_dir: Path) -> None:
-    # The documented build's first 200 rows no longer reach a send (the cover
-    # moved when Confluence and Salesforce writes, `unserved` evidence places,
-    # left the space), so the digest's email sends are planned here.
+    # The documented build's first 200 rows may not reach a send (the cover
+    # moves with the evidence places the contract carries), so the digest's
+    # email sends are planned here.
     from worldloom.enterprise_specs import SpecRegistry
 
     builtin = builtin_registry()

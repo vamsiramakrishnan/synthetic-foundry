@@ -105,13 +105,13 @@
    "source": {
     "path": "anvil/contracts/salesforce.openapi.json",
     "format": "openapi3",
-    "sha256": "d0c110cf114e72a7db754982c4e872d2abba3144944a2081db774343d5506855",
-    "bytes": 12837,
+    "sha256": "ef468180ba4d02c68c41f5648502cdec900be710ac5034b7729a37c7bb55be0f",
+    "bytes": 13706,
     "filename": "salesforce.openapi.json",
     "version": "61.0",
     "locked": "2026-09-27"
    },
-   "anvil_source_hash": "sha256:64105880fb583c3a3cd2600c18dbf26cd88212637290ac417dcc9d0a4c5dc149",
+   "anvil_source_hash": "sha256:8bc1e52aa6cf681df7578ca2040a3b757c7ca4f66805dba00d00034a8faa937e",
    "vendor_operations": 11,
    "profiled_operations": 11,
    "profile": "anvil/profiles/salesforce.yaml",
@@ -123,7 +123,12 @@
     "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_describe.htm",
     "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_retrieve.htm",
     "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_limits.htm",
-    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/errorcodes.htm"
+    "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/errorcodes.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_account.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_case.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contact.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_lead.htm",
+    "https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_opportunity.htm"
    ],
    "note": "Salesforce publishes no full OpenAPI document for the Platform REST API (its OpenAPI beta covers sObjects only, per org); this one was written from the REST API Developer Guide."
   },

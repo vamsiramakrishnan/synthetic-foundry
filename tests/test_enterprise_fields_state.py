@@ -182,7 +182,7 @@ def test_authored_profile_reaches_cli_without_a_second_manifest_file(tmp_path):
 def test_explicit_state_field_checks_an_entity_without_a_workflow():
     registry = _registry(required=False)
     # A SharePoint file has no workflow, and its evidence place is carried
-    # (a Salesforce account, used before, is an `unserved` place now).
+    # on both surfaces.
     registry.connectors["sharepoint"] = builtin_registry().connectors["sharepoint"]
     workflow = next(iter(registry.workflows.values()))
     registry.workflows[workflow.name] = workflow.model_copy(update={"destinations": (

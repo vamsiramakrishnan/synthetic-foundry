@@ -208,7 +208,8 @@
           "Amount": {"type": "number"},
           "CloseDate": {"type": "string"},
           "LastName": {"type": "string"},
-          "Company": {"type": "string"}
+          "Company": {"type": "string"},
+          "Description": {"type": "string", "description": "A text description of the record (textarea, up to 32,000 characters). Account, Contact, Lead, Opportunity and Case each carry it under this API name, per the Object Reference for the Salesforce Platform: https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_account.htm, https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contact.htm, https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_lead.htm, https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_opportunity.htm, https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_case.htm"}
         },
         "additionalProperties": true
       },

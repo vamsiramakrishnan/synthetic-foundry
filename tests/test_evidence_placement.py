@@ -105,8 +105,9 @@ def test_an_unserved_place_is_never_planned() -> None:
                 constants, operation)
     destinations = {(dict(lane.constants)["destination"], dict(lane.constants)["destination_entity"])
                     for lane in lanes if lane.operations}
-    assert ("confluence", "page") not in destinations and ("salesforce", "account") not in destinations
-    assert ("sharepoint", "file") in destinations and ("drive", "file") in destinations
+    assert ("confluence", "page") not in destinations
+    assert {("sharepoint", "file"), ("drive", "file"), ("salesforce", "account"), ("salesforce", "case"),
+            ("salesforce", "opportunity")} <= destinations
 
 
 # -- the planner --------------------------------------------------------------------------
@@ -193,6 +194,22 @@ def test_a_confluence_page_put_restates_the_page_it_read() -> None:
     assert body["id"] == "10000001" and body["status"] == "current" and body["title"] == "Runbook"
     assert body["version"] == {"number": 3}  # the page is at version 2; a PUT asks for the next
     assert body["body"] == {"value": "<p>x</p>", "representation": "storage"}
+
+
+def test_a_salesforce_update_carries_its_evidence_and_state_by_the_vendors_field_names() -> None:
+    # The authored sObject body declares Description; a state the plan sets on
+    # the connector's `stage` or `status` travels as StageName or Status.
+    definition = load_connector_definition("salesforce")
+    surface = shipped_surface("salesforce")
+    for entity, fields, wire in (
+        ("opportunity", {"Description": "## Evidence", "stage": "Develop"}, {"description": "## Evidence", "stage_name": "Develop"}),
+        ("case", {"Description": "## Evidence", "status": "escalated"}, {"description": "## Evidence", "status": "escalated"}),
+    ):
+        record = {"fid": "r1", "ident": "0061000000ABCDEFGH", "entity": entity, "title": "Probe"}
+        carried = surface.carry("update_record", {"id": "0061000000ABCDEFGH", "fields": fields}, definition, record=record)
+        assert carried.tool == "salesforce_update_s_object"
+        assert {key: carried.arguments[key] for key in wire} == wire, carried.arguments
+        assert carried.arguments["s_object"] == entity.capitalize()
 
 
 def test_confluence_selects_pages_by_their_numeric_ids_or_their_title() -> None:
