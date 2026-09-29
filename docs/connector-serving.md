@@ -571,7 +571,7 @@ so a new connector, or a pack's, declares its own and no code changes:
 | Confluence | a page's `body` (storage format) | html | `read_first`: a page `PUT` restates the page's id, status, title and next version, so the plan reads the page first; `unserved` (below) |
 | Jira | an issue's `description` | markdown | |
 | ServiceNow | a record's `work_notes` | markdown | |
-| Salesforce | a record's `Description` | markdown | `unserved` (below) |
+| Salesforce | a record's `Description` | markdown | the authored contract declares it on the sObject body, citing the Object Reference for each object the cases write |
 | Email, Outlook, Teams | a message's `body` | html | |
 | Slack | a message's `text` | markdown | |
 
@@ -590,15 +590,35 @@ there. A connector that declares no place keeps the generic `evidence` and
 
 A place the shipped contract cannot carry says why (`unserved`), and the
 planner does not plan an evidence write to it: the case would be unsolvable
-by construction. Two do today. Confluence's page body is typed as an
-exclusive union (`oneOf`) of two alternatives that both admit every body
+by construction. One does today. Confluence's page body is typed as an
+exclusive union (`oneOf`) of two alternatives (`PageBodyWrite`, and
+`PageNestedBodyWrite` keyed by representation) that both admit every body
 object, so Anvil's MCP server (zod's exclusive union) refuses every page,
-blog post and footer comment write that carries a body. Salesforce's sObject
-body declares a fixed field list (Name, Subject, Status, StageName, Amount,
-CloseDate, LastName, Company): no `Description`, and no `WhatId` to relate
-a Task to the record. Either returns the moment its contract carries the
-place; `tests/test_evidence_placement.py` holds every declaration to the
-shipped surfaces, so the flag cannot outlive the gap. Outlook, Teams and
+blog post and footer comment write that carries a body. The real API takes
+a storage-format body (`{"representation": "storage", "value": ...}`), and
+pinning the write to that alternative is a reviewed overlay Anvil cannot
+yet express: a manifest's `params` retypes an input only to a scalar
+(`string`, `number`, `integer`, `boolean`), and nothing in a manifest or a
+profile selects one branch of a union or gives an input an object schema.
+The place returns when Anvil can narrow a union by manifest (a `params`
+entry that keeps one `oneOf` alternative, the narrowing direction only),
+and relaxing `oneOf` to `anyOf` globally is not the fix. `tests/test_evidence_placement.py`
+holds every declaration to the shipped surfaces, so the flag cannot
+outlive the gap.
+
+Salesforce's place is carried. Salesforce ships no single OpenAPI document,
+so its sObject body is Worldloom's authored contract; it declared a fixed
+field list (Name, Subject, Status, StageName, Amount, CloseDate, LastName,
+Company) and now also declares `Description`, the textarea Account,
+Contact, Lead, Opportunity and Case each have, with the Object Reference
+page for each in the property's description and in the lock's
+`documentation`. `WhatId` is not added: a Task is not an evidence place
+and no case relates one to a record. A record update restates the record's
+state as the vendor names it, so the update's mapping renames `StageName`
+to the connector's `stage` and `Status` to `status` (the pairs the
+definition's `query_fields` already declare), and an opportunity moved to
+`Develop` or a case escalated is carried as `PATCH {"StageName": ...}` or
+`{"Status": ...}`. Outlook, Teams and
 Slack declare their places too, and no shipped workflow writes to them yet;
 their contracts take a message body as Graph's `itemBody` object (or Slack's
 signed form), which a write's string field does not become, so a plan that
@@ -632,13 +652,23 @@ proves 500 of 500 on both surfaces, and `--seed 4242 --incident` at
 3, up to 10 per world: 30 cases) prove 30 of 30 on both surfaces, from 12
 of 30 on the contract surface (a Jira create restated its issue type in its
 fields). The telecom programme's 2,927 record requests prove on both (they
-search the system of record, which ships no contract). Because Confluence
-and Salesforce writes are no longer planned, the standard build's writes
-now land on SharePoint, Drive and email. Two generators are not yet
-contract-solvable: an interview's case sets (they deliver into Confluence
-and Slack, and read SharePoint list items, Outlook messages by custom field
-and Slack search, which the mappings cannot yet express; the interview's own
-proof serves them on the connector tools) and housekeeping's moves and
+search the system of record, which ships no contract). Confluence page
+writes are not planned while the page body is `unserved`; Salesforce
+writes are, so the standard build's 100 cases write 67 SharePoint files,
+14 Drive files, 13 email messages and 6 Salesforce accounts (before the
+Salesforce contract declared `Description`: 60, 21, 19 and none), and
+`--seed 4242` at `--limit 200` writes 12 Salesforce accounts, 6
+opportunities (to `Develop`) and 6 cases (escalated), each proved on both
+surfaces. Two generators are not yet
+contract-solvable: an interview's case sets (1 of 12 prove on the contract
+surface: they write Confluence page bodies and Slack messages (the
+gold `post_message` carries a record `name`, which `chat.postMessage` has
+no parameter for),
+search SharePoint by `artifact_type` (KQL has no such property), read
+SharePoint list items and Outlook messages filtered by the interview's
+custom fields (`interview_step`, `period`), search Confluence by them, and
+search Slack, whose query language the contract surface does not yet
+evaluate; the interview's own proof serves them on the connector tools) and housekeeping's moves and
 per-item writes, as are the pre-grammar single-write rows
 (`--dag-shape none`). Serve those with `--surface native`.
 

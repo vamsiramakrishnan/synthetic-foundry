@@ -59,6 +59,25 @@ first written up, before the waves above it landed.
   writes land on SharePoint, Drive and email (its 100 cases were 18
   Confluence and 11 Salesforce writes). `tests/test_evidence_placement.py`
   holds every declaration to the shipped surfaces.
+- **Salesforce writes are planned again (Generation).** The authored
+  Salesforce contract's sObject body declares `Description`, the textarea
+  Account, Contact, Lead, Opportunity and Case each have (the Object
+  Reference page for each is cited in the property and the lock's
+  `documentation`); the lock, the committed trim and the shipped surface
+  are rebuilt from it, and the place is no longer `unserved`. A record
+  update's mapping renames `StageName` to the connector's `stage` and
+  `Status` to `status`, so an opportunity moved to `Develop` or an
+  escalated case is carried as the vendor names the field. The standard
+  build's 100 cases write 67 SharePoint files, 14 Drive files, 13 email
+  messages and 6 Salesforce accounts (were 60, 21, 19 and none) and prove
+  100 of 100 on both surfaces; `--seed 4242` at `--limit 200` writes 12
+  Salesforce accounts, 6 opportunities and 6 cases and proves 200 of 200 on
+  both; corner cases 30 of 30 on both; the reference agent scores 1.0 on
+  every axis and stage on both. Confluence's page body stays `unserved`:
+  pinning the write to the storage representation needs a reviewed overlay
+  that keeps one alternative of a `oneOf`, and an Anvil manifest's `params`
+  retypes an input only to a scalar. An interview's case sets still prove
+  on the connector tools (1 of 12 on the contract surface).
 - **Searches select by what the vendor filters on (Generation).** A Drive
   search picks its files by name, as Drive's own disjunction
   (`(name = 'A' or name = 'B')`: `compile_native` wrote `name in (...)`,
