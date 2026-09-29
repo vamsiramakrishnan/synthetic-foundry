@@ -423,7 +423,9 @@ def run_command(
             typer.echo(f"warning: {warning}", err=True)
         if verdict.refusal is not None:
             _refuse("proof_stale_unsolvable", verdict.refusal,
-                    fix="regenerate the case set against the current environment (its writer re-proves it), or "
+                    fix="regenerate the case set against the current environment (its writer re-proves it), "
+                        "run it on the surface it was proved on (`--surface native` for a set proved before the "
+                        "contract surface became the default, or an interview set), or "
                         "`worldloom evalrun prove <cases> --record` once the cause is fixed")
     workers = concurrency if concurrency is not None else default_concurrency()
     if exec_command is not None:
