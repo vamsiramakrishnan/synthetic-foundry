@@ -101,25 +101,42 @@ def test_a_reply_reads_its_message_first_and_proves_solvable(
 
 def test_a_reply_that_opens_the_thread_first_is_not_penalised_and_one_that_never_reads_it_is(
         generated: tuple[tuple[EvalCase, ...], tuple[Any, ...]]) -> None:
-    cases, records = generated
-    case = _pick(cases, "reply", "fan_in")[0]
-    service = service_for([case], records)
-    reference = run_cases(service, [case], ReferenceAgent([case])).results[0]
-    calls = [(str(span["tool"]), dict(span["args"])) for span in reference.spans]
-    target = next(index for index, (tool, _) in enumerate(calls) if tool == "email.get_message")
-    # The thread opened before the evidence is gathered: the same work, in
-    # an order the plan allows, because the target read waits on no read.
-    early = [calls[target], *calls[:target], *calls[target + 1:]]
-    score = run_cases(service_for([case], records), [case], ScriptedAgent(early, name="thread-first")).results[0].score
-    assert score is not None and score.plan.passed and score.trajectory.safety == (), score.plan
-    blind = [call for index, call in enumerate(calls) if index != target]
-    score = run_cases(service_for([case], records), [case], ScriptedAgent(blind, name="blind")).results[0].score
-    assert score is not None and [finding.law for finding in score.trajectory.safety] == ["destructive_without_read"]
+    # The scripted agents replay the reference's connector calls by their
+    # own tool names (`email.get_message`), so they are served those tools.
+    from worldloom.connectors.surface import serving_surface
+
+    with serving_surface("native"):
+        cases, records = generated
+        case = _pick(cases, "reply", "fan_in")[0]
+        service = service_for([case], records)
+        reference = run_cases(service, [case], ReferenceAgent([case])).results[0]
+        calls = [(str(span["tool"]), dict(span["args"])) for span in reference.spans]
+        target = next(index for index, (tool, _) in enumerate(calls) if tool == "email.get_message")
+        # The thread opened before the evidence is gathered: the same work, in
+        # an order the plan allows, because the target read waits on no read.
+        early = [calls[target], *calls[:target], *calls[target + 1:]]
+        score = run_cases(service_for([case], records), [case], ScriptedAgent(early, name="thread-first")).results[0].score
+        assert score is not None and score.plan.passed and score.trajectory.safety == (), score.plan
+        blind = [call for index, call in enumerate(calls) if index != target]
+        score = run_cases(service_for([case], records), [case], ScriptedAgent(blind, name="blind")).results[0].score
+        assert score is not None and [finding.law for finding in score.trajectory.safety] == ["destructive_without_read"]
 
 
-def test_a_send_proves_solvable_without_a_target_read(
-        generated: tuple[tuple[EvalCase, ...], tuple[Any, ...]]) -> None:
-    cases, records = generated
+def test_a_send_proves_solvable_without_a_target_read(world_dir: Path) -> None:
+    # The documented build's first 200 rows may not reach a send (the cover
+    # moves with the evidence places the contract carries), so the digest's
+    # email sends are planned here.
+    from worldloom.enterprise_specs import SpecRegistry
+
+    builtin = builtin_registry()
+    digest = builtin.workflows["executive_digest"]
+    workflow = digest.model_copy(update={"destinations": tuple(
+        role for role in digest.destinations if role.connector == "email")})
+    registry = SpecRegistry(builtin.connectors.values(), (workflow,), builtin.processes.values())
+    queries, _ = plan_queries(World.load(world_dir), registry=registry, profile=CoverageProfile(strengths=2),
+                              strategy="exhaustive", limit=40, dag_shapes=resolve_shapes(["*"]))
+    corpus = materialize_corpus(World.load(world_dir), queries)
+    cases, records = cases_from_corpus(corpus), tuple(corpus.connector_data.records)
     sends = _pick(cases, "send")
     assert sends
     assert not any(node["id"].startswith("target-") for case in sends for node in case.row["expected_dag"]["nodes"])
@@ -157,9 +174,14 @@ def test_a_diamond_writes_one_evidence_entry_per_record_and_proves_solvable(
         writes = [span for span in result.spans if span.get("node") == "write" and not span.get("error")]
         if not writes:
             continue  # a designed failure refused the write
-        fields = writes[0]["args"]["fields"]
+        # The evidence is one document at the destination's declared place
+        # (`catalog.evidence`); it counts each record read once and cites it.
+        write = next(node for node in case.row["expected_dag"]["nodes"] if node["id"] == "write")
+        place = next(key.split(".", 1)[1] for key in write["bindings"] if key.startswith("fields."))
+        document = writes[0]["args"]["fields"][place]
         checked += 1
-        assert fields["evidence_count"] == len(fields["evidence"]) == len(wanted), (case.id, fields)
+        assert f"{len(wanted)} evidence record(s)." in document, (case.id, document)
+        assert all(rid in document for rid in wanted), (case.id, document)
     assert checked
     _prove(diamonds, records)
 

@@ -356,7 +356,9 @@ def _restated_figure(ctx: _World) -> tuple[list[_Draft], list[str]]:
                     _search_label("search-0", label),
                     _read("read-0", source),
                     {"id": "write", "server": "jira", "tool": "create_issue", "entity": "task", "op": "create",
-                     "payload": {"name": name, "fields": {"project": project, "issuetype": "Task", "summary": name,
+                     # The issue type is the entity (`task`), as Jira's create
+                     # reads it from `fields.issuetype` and no field keeps it.
+                     "payload": {"name": name, "fields": {"project": project, "summary": name,
                                                           "source_ref": source.external_id}}},
                     {"id": "verify-write", "server": "jira", "tool": "get_issue", "entity": "task", "op": "readback",
                      "reference_from": "write"},

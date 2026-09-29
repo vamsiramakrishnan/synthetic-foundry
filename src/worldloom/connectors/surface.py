@@ -510,8 +510,14 @@ class ContractSurface:
                 reasons.append(f"{placed.entry.operation_id} is not exposed by the {self.connector} contract")
                 continue
             try:
-                arguments = self._arguments(exposed, placed.params, placed.body)
-                arguments.update(self._coordinates(exposed, arguments, definition, record))
+                params, body = _restated(placed.entry, placed.params, placed.body, definition, record)
+                arguments = self._arguments(exposed, params, body)
+                # A create addresses no record yet; its coordinates are the
+                # kind it makes, as an update's are the kind it addresses.
+                addressed = record if record is not None else (
+                    {"entity": args["entity"]} if args.get("entity") else None)
+                arguments.update(self._coordinates(exposed, arguments, definition, addressed))
+                _body_defaults(exposed, arguments)
             except ValueError as error:
                 reasons.append(f"{placed.entry.operation_id}: {error}")
                 continue
@@ -599,6 +605,89 @@ class ContractSurface:
         if confirmation.get("required"):
             out[(binding.get("safetyKeys") or {}).get("confirm", "confirm")] = True
         return out
+
+
+def _restated(entry: OperationMap, params: Mapping[str, Mapping[str, Any]], body: Any,
+              definition: ConnectorDefinition, record: Mapping[str, Any] | None) -> tuple[dict[str, dict[str, Any]], Any]:
+    """*params* and *body* with the wire fields the entry restates from the addressed record (``restate``).
+
+    Read from the record as the vendor serves it (``shape_payload``), the way
+    a client that fetched the record would send them back: a Confluence page
+    ``PUT`` restates the page's id, status and title and asks for the next
+    version. A location the placement already filled is left alone; a record
+    that does not carry the field leaves it out, and the contract's schema
+    then says what is missing.
+    """
+    from .anvil import _place
+
+    placed = {where: dict(values) for where, values in params.items()}
+    holder: dict[str, Any] = {"body": json.loads(json.dumps(body)) if body is not None else None}
+    if not entry.restate or record is None:
+        return placed, holder["body"]
+    from ..connector_payload import shape_payload
+
+    try:
+        payload = shape_payload(definition, record)
+    except (KeyError, TypeError, ValueError):
+        return placed, holder["body"]
+    for location, (path, step) in sorted(entry.restate.items()):
+        where, _, rest = location.partition(".")
+        current: Any = holder["body"] if where == "body" else placed.get(where, {})
+        for key in rest.split(".") if rest else ():
+            current = current.get(key) if isinstance(current, Mapping) else None
+        if current is not None:
+            continue
+        value: Any = payload
+        for key in path.split("."):
+            value = value.get(key) if isinstance(value, Mapping) else None
+        if value is None:
+            continue
+        if step:
+            try:
+                value = int(value) + step
+            except (TypeError, ValueError):
+                continue
+        _place(placed, holder, location, value)
+    return placed, holder["body"]
+
+
+def _body_defaults(tool: ContractTool, arguments: dict[str, Any]) -> None:
+    """A whole body's required properties that its schema fixes, sent as the schema fixes them.
+
+    Microsoft Graph's driveItem body requires ``@odata.type`` and the
+    contract gives it one value (the schema's default, and the body's
+    ``x-ms-discriminator-value``): a client sends it, and it changes nothing
+    about the call. Only a property the schema itself decides is filled; any
+    other missing one stays missing and is refused by the schema check.
+    """
+
+    body = arguments.get("body")
+    schema = tool.properties.get("body")
+    if not isinstance(body, dict) or not isinstance(schema, Mapping):
+        return
+    parts = [schema, *(part for part in schema.get("allOf") or () if isinstance(part, Mapping))]
+    required = [str(name) for part in parts for name in part.get("required") or ()]
+    for name in dict.fromkeys(required):
+        if name in body:
+            continue
+        fixed: Any = None
+        found = [_props(part).get(name) for part in parts]
+        props = [prop for prop in found if isinstance(prop, Mapping)]
+        # A property may fix its value in its own allOf (Graph's message body).
+        props.extend(item for prop in list(props) for item in prop.get("allOf") or () if isinstance(item, Mapping))
+        for prop in props:
+            if "const" in prop:
+                fixed = prop["const"]
+            elif isinstance(prop.get("enum"), list) and len(prop["enum"]) == 1:
+                fixed = prop["enum"][0]
+            elif prop.get("default") is not None:
+                fixed = prop["default"]
+            if fixed is not None:
+                break
+        if fixed is None and name == "@odata.type":
+            fixed = schema.get("x-ms-discriminator-value")
+        if fixed is not None:
+            body[name] = fixed
 
 
 @dataclass(frozen=True)
@@ -1076,7 +1165,14 @@ _SURFACE: ContextVar[Any] = ContextVar("worldloom_connector_surface", default=No
 
 @contextmanager
 def serving_surface(choice: str | ContractSurfaces | None) -> Iterator[None]:
-    """Services built inside this block present *choice*: ``native``, ``contract``, or given surfaces."""
+    """Services built inside this block present *choice*: ``native``, ``contract``, or given surfaces.
+
+    ``None`` (a command given no ``--surface``) keeps the surface already in
+    force: an enclosing block's, else the policy's.
+    """
+    if choice is None:
+        yield
+        return
     token = _SURFACE.set(choice)
     try:
         yield

@@ -100,11 +100,13 @@ or, to finish:
 - `planned_dag`, `ttft` and `ttfa` are optional and only ever graded
   against what was observed.
 
-### The contract surface, in process (`--surface contract`)
+### The contract surface, in process (the default; `--surface native` for connector tools)
 
-`worldloom evalrun run ./cases --exec "<command>" --surface contract` keeps the
-run in process but shows the agent each contracted connector's real
-operations, exactly as Anvil's MCP server lists them for its contract: each
+`worldloom evalrun run ./cases --exec "<command>"` keeps the run in process
+and shows the agent each contracted connector's real operations, exactly as
+Anvil's MCP server lists them for its contract (policy `connectors.surface`,
+`contract` by default; `--surface native` shows every connector definition's
+own `connector.tool` entries instead): each
 entry in `tools` is Anvil's tool (`name` such as `jira_get_issue`, `title`,
 `description`, `inputSchema`, `annotations`) plus `connector`, `operation`,
 `method`, `path`, `params` (the argument names), `examples` and, for a tool
@@ -113,8 +115,10 @@ whose mapped call reads a vendor query, `query` with its `argument` (e.g.
 needs confirmation takes `"confirm": true`), and the result is the vendor's
 response body; a refused call's `error` also carries `envelope`, Anvil's
 `{"error": {code, message, ...}}`. A connector with no locked contract keeps
-its own `connector.tool` entries. The same flag proves a case set on that
-surface (`worldloom evalrun prove ./cases --surface contract`, naming each
+its own `connector.tool` entries. A write keeps its evidence where the
+vendor does (a file's `description`, a record's `work_notes`), which is the
+place a gold plan writes it and the output grade reads it from. The same
+surface proves a case set (`worldloom evalrun prove ./cases`, naming each
 gold call no operation carries as a `contract.gap`), and
 `worldloom contracts surface` refreshes or checks the surfaces the package
 ships (`docs/connector-serving.md`, "One surface from the contract").

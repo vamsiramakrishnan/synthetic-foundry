@@ -126,8 +126,16 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="module")
 def built_legacy(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The single-write trajectory, which `--dag-shape none` still plans."""
-    return _build(tmp_path_factory.mktemp("enterprise-evals-legacy"), shapes=["none"])
+    """The single-write trajectory, which `--dag-shape none` still plans.
+
+    Proved on the connector tools: its bare updates carry no evidence, so no
+    contract operation carries them (a named gap of the pre-grammar rows),
+    and the contract surface is the default.
+    """
+    from worldloom.connectors.surface import serving_surface
+
+    with serving_surface("native"):
+        return _build(tmp_path_factory.mktemp("enterprise-evals-legacy"), shapes=["none"])
 
 
 def test_build_plans_and_materialises(built: Path) -> None:
@@ -310,15 +318,21 @@ SHIPPED_RETAIL_PROFILE = Path("examples/enterprise-evals/omnichannel-retailer.js
 #: source grounds, so a change to the walk itself still shows. Moved once
 #: since, when the diamond began joining its two views on the record (so a
 #: record counts once): the 9 diamond rows changed, the other 162 did not.
-NARROWED_PLAN_DIGEST = "bccc633dbc7365c0a89d93fe71fe6c5e062b056643fccf55a8ea7c9885186fe4"
+#: Moved again when a write's evidence went to the place its connector
+#: declares (`catalog.evidence`): the same 171 rows, ids and order, each
+#: email draft now binding an evidence document to its `body` in place of
+#: the `evidence` and `evidence_count` fields.
+NARROWED_PLAN_DIGEST = "2af05a1c48a457c47607016e6910833ba4609b2b46e8f2bfb45d7ff6a7cdcdd5"
 
 #: SHA-256 of the first 40 rows the same narrowing plans for `examples/hospital`
 #: when its connectors are `jira`, `confluence` and `sharepoint`, all of which
 #: the world grounds. Captured from the code at 29b40bd, before the planner
 #: read the inventory, so this is the byte-identity claim: a plan whose
 #: sources all ground is the plan it was. Moved once since, with the diamond
-#: join (6 diamond rows changed, the other 34 did not).
-GROUNDED_PLAN_DIGEST = "7d5c8e6fe496f67dd8b6d2f3a86c9811a97af615f147d88e1a4a088c72c90543"
+#: join (6 diamond rows changed, the other 34 did not), and again with the
+#: declared evidence place: the same 40 rows, ids and order, each SharePoint
+#: write binding its evidence document to the file's `description`.
+GROUNDED_PLAN_DIGEST = "418b1601485d00a381aac3a467008736464f1f56f72c235748540b2c3ad3711e"
 
 
 def _narrowed_retail_profile(path: Path) -> Path:

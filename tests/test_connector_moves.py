@@ -25,6 +25,10 @@ from worldloom.connector_emulator import ConnectorEmulator, ConnectorError
 from worldloom.evalrun import ScriptedAgent, case_from_row, run_case, service_for
 from worldloom.evalrun.safety import classify_definition, tool_annotations
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 FILE_MOVES = {"drive": "move_file", "sharepoint": "move_file", "onedrive": "move_item"}
 
 

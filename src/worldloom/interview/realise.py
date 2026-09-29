@@ -107,14 +107,24 @@ def prove(realised: Realised) -> dict[str, dict[str, int]]:
     """Run the reference agent over every level's case set: the executable ceiling, per level.
 
     A case the reference agent cannot pass is a defect in the case, found
-    before any agent is evaluated on it.
+    before any agent is evaluated on it. Served on the connector tools: an
+    interview delivers into whatever systems the company uses, and the
+    contract surface (the default) cannot yet carry every call its cases
+    make (a Confluence page body, a Slack message named as a record, a
+    SharePoint search by ``artifact_type``, SharePoint list items and
+    Outlook messages filtered by the interview's own fields, a Slack
+    search), and a level's tool budget (``tool_budget``) is counted in
+    connector tools.
     """
+    from ..connectors.surface import serving_surface
     from ..evalrun import ReferenceAgent, cases_from_corpus, run_cases, service_for
 
     out: dict[str, dict[str, int]] = {}
     for level, corpus in case_sets(realised).items():
         cases = cases_from_corpus(corpus)
-        report = run_cases(service_for(cases, corpus.connector_data.records), cases, ReferenceAgent(cases))
+        with serving_surface("native"):
+            service = service_for(cases, corpus.connector_data.records)
+        report = run_cases(service, cases, ReferenceAgent(cases))
         passed = sum(1 for result in report.results if result.graded and result.score is not None and result.score.passed)
         out[level] = {"cases": len(cases), "passed": passed}
     return out

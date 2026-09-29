@@ -39,8 +39,13 @@ GRADER_SCHEMA = "worldloom.evalrun-grader/v1"
 #: digest, so two runs graded by different grading code never compare as if
 #: they were measured the same way. Version 2: the read-first safety law
 #: judges the record a destructive call names, and no longer applies to
-#: sends, which create the message they act on.
-GRADER_VERSION = "2"
+#: sends, which create the message they act on. Version 3: a record write's
+#: evidence is read from the place its connector declares
+#: (`catalog.evidence`): a field bound to an evidence document must cite
+#: every evidence record, as a field bound to the evidence set always had
+#: to, and a search in a language that names its columns (SOQL) is no
+#: longer held to carry the plan's `fields` beside its query.
+GRADER_VERSION = "3"
 
 #: Every policy key grading reads, plus the band a comparison's verdicts use.
 #: `grading.py` reads `evalrun.answer_pass_score` (an answer's pass mark);

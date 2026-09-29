@@ -28,6 +28,7 @@ from .enterprise_specs import (
     WorkflowSpec,
     builtin_registry,
 )
+from .evidence_placement import plannable
 from .ids import content_key
 from .models import Model
 from .predicates import Predicate, RelativeTime
@@ -322,8 +323,13 @@ def _row_lanes(
                     spec = registry.connectors[destination.connector]
                     for entity_name in destination.entities:
                         entity = spec.entity(entity_name)
+                        # An evidence write to a place the connector's
+                        # shipped contract cannot carry is not planned: no
+                        # agent on the contract surface could solve it
+                        # (`evidence_placement.plannable`).
                         operations = tuple(
                             op for op in destination.operations if op in entity.operations
+                            and plannable(destination.connector, entity_name, op.value)
                         )
                         formats = destination.formats or entity.formats or ("record",)
                         lane_key = content_key(

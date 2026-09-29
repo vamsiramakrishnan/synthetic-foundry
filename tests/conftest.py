@@ -77,3 +77,19 @@ def density_dense_build() -> TimedWorld:
     started = time.monotonic()
     world = build_density_world(eval_density=2.0)
     return TimedWorld(world=world, build_seconds=time.monotonic() - started)
+
+
+@pytest.fixture(scope="module")
+def native_surface() -> object:
+    """Serve every connector's own tools (`servicenow.get_record`) for a whole module.
+
+    The contract surface is the default (policy `connectors.surface`). A
+    module whose agents are scripted in the connector definitions' own tool
+    names, or whose generator plans writes the contract surface cannot yet
+    carry, says so with ``pytestmark = pytest.mark.usefixtures("native_surface")``;
+    module scope, so module-scoped fixtures that build services see it too.
+    """
+    from worldloom.connectors.surface import serving_surface
+
+    with serving_surface("native"):
+        yield

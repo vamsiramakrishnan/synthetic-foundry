@@ -440,6 +440,9 @@
           "read"
         ]
       }
+    },
+    "evidence": {
+      "field": "text"
     }
   }
 }

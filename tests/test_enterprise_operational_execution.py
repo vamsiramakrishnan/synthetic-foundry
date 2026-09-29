@@ -44,14 +44,16 @@ def test_operational_evidence_produces_verified_outcomes(vertical: str, dag_shap
     scenario = scenario.model_copy(update={"coverage": scenario.coverage.model_copy(update={"failures": ("none",)})})
     if dag_shape == "write_chain":
         # Email drafts deliberately have no update operation. Author a destination
-        # that admits the requested write/read/update/read trajectory.
+        # that admits the requested write/read/update/read trajectory: a
+        # SharePoint file, whose evidence place (the description) the contract
+        # carries; a Confluence page body is `unserved` and plans no write.
         workflow = scenario.additional_workflows[0].model_copy(update={
-            "destinations": (DestinationRole(connector="confluence", entities=("page",),
-                                             operations=(Operation.CREATE,), formats=("html",)),),
+            "destinations": (DestinationRole(connector="sharepoint", entities=("file",),
+                                             operations=(Operation.CREATE,), formats=("docx",)),),
         })
         scenario = scenario.model_copy(update={
             "additional_workflows": (workflow,),
-            "connectors": (*scenario.connectors, "confluence"),
+            "connectors": (*scenario.connectors, "sharepoint"),
         })
     elif dag_shape == "delete_chain":
         # A delete chain needs a destination whose connector can remove what it

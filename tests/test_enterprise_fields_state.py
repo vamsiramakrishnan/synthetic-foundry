@@ -181,10 +181,13 @@ def test_authored_profile_reaches_cli_without_a_second_manifest_file(tmp_path):
 
 def test_explicit_state_field_checks_an_entity_without_a_workflow():
     registry = _registry(required=False)
-    registry.connectors["salesforce"] = builtin_registry().connectors["salesforce"]
+    # A SharePoint file has no workflow, and its evidence place is carried
+    # on both surfaces.
+    registry.connectors["sharepoint"] = builtin_registry().connectors["sharepoint"]
     workflow = next(iter(registry.workflows.values()))
     registry.workflows[workflow.name] = workflow.model_copy(update={"destinations": (
-        DestinationRole(connector="salesforce", entities=("account",), operations=(Operation.UPDATE,), target_state="reviewed", target_state_field="review_status"),
+        DestinationRole(connector="sharepoint", entities=("file",), operations=(Operation.UPDATE,), formats=("docx",),
+                        target_state="reviewed", target_state_field="review_status"),
     )})
     queries, _ = plan_queries(World.load("examples/retail-close"), registry=registry, strategy="exhaustive", profile=CoverageProfile(failures=("none",)), limit=1)
     corpus = materialize_corpus(World.load("examples/retail-close"), tuple(queries))

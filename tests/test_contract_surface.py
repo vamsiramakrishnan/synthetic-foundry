@@ -99,11 +99,14 @@ def _operations(surface: Any) -> list[Any]:
             for tool in surface.tools]
 
 
-def test_the_native_surface_stays_the_default() -> None:
-    assert surface_in_force() == "native"
-    with serving_surface("contract"):
-        assert surface_in_force() == "contract"
-    assert surface_in_force() == "native"
+def test_the_contract_surface_is_the_default_and_native_stays_selectable() -> None:
+    # The default flipped once every generated case proved on the contract
+    # surface (the planner writes evidence where each vendor keeps it); the
+    # connector definitions' own tools are still one flag away.
+    assert surface_in_force() == "contract"
+    with serving_surface("native"):
+        assert surface_in_force() == "native"
+    assert surface_in_force() == "contract"
 
 
 def _jira_service(surface: str) -> Any:

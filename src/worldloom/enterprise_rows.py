@@ -125,17 +125,42 @@ def _fid(records_by_id: Mapping[str, str], record_id: str | None) -> str | None:
     return records_by_id.get(record_id, record_id)
 
 
+#: The extension a file of each format is named with. A file store reads a
+#: new item's format from its name (Graph's driveItem create has no other
+#: place for it), so a reference create names its file as a person would:
+#: `report.pptx`, never a bare `report` the store cannot type.
+FILE_EXTENSIONS = {"docx": ".docx", "xlsx": ".xlsx", "pptx": ".pptx", "pdf": ".pdf", "csv": ".csv",
+                   "html": ".html", "markdown": ".md"}
+
+
 def create_payload(
     definition: ConnectorDefinition, entity: str, query_id: str, node_id: str,
 ) -> dict[str, Any]:
     """An explicit reference payload satisfying the declared create contract."""
-    name = f"{query_id[:12]}-{node_id}"
+    name = f"{query_id[:12]}-{node_id}{FILE_EXTENSIONS.get(entity, '')}"
     supplied_by_name = {"name", "title", "summary", "Name", "Subject", "short_description", "issuetype"}
+    required = definition.entities[entity].required_on_create
     fields = {
-        field: name for field in definition.entities[entity].required_on_create
+        field: name for field in required
         if field not in supplied_by_name and field not in {"parent", "parents"}
     }
-    return {"name": name, "fields": fields, "parent": "worldloom-eval"}
+    # The vendor's create body names the record in the field it requires for
+    # the name (a driveItem's `name`, an incident's `short_description`, an
+    # issue's `summary`), so the record's own fields restate the name the
+    # request gave it, as the request a client sends does. The issue type is
+    # the entity, never a field.
+    fields.update({field: name for field in required if field in supplied_by_name and field != "issuetype"})
+    try:
+        tool = definition.tool(definition.tool_for(entity, "create"))
+        parent_required = tool.params.get("parent") == "string"
+    except (KeyError, ValueError):
+        parent_required = False
+    # A parent only where the record lives in one: a file in its folder, a
+    # record whose create requires it. An incident or a message has none, and
+    # a parent the vendor's create has no place for is a call no contract
+    # carries.
+    placed = parent_required or entity in FILE_EXTENSIONS or bool({"parent", "parents"} & set(required))
+    return {"name": name, "fields": fields, **({"parent": "worldloom-eval"} if placed else {})}
 
 
 def compile_row(

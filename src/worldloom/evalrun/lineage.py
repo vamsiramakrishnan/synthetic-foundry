@@ -52,6 +52,11 @@ the gold producer is the chosen call or one of its alternatives.
 with the same non-paging arguments and advances a paging argument (an
 offset past zero, a page past one, or any cursor) depends on that call.
 
+**Echoes.** A value a write sent is not produced again by a call that
+returns it, the write's own answer included: a readback of the page a write
+filled, or a second write's copy of the same evidence, depends on where the
+value came from, not on the call that showed the run its own write.
+
 **Unsourced values.** A record a call targeted, or a record handle in its
 request, that no earlier call produced and the request did not state is
 unsourced: the agent guessed it or had it hardcoded. It is counted, never
@@ -70,7 +75,7 @@ from pydantic import model_serializer
 from ..models import Model
 
 #: Bumped by hand whenever the rules above change which calls a trace links.
-LINEAGE_VERSION = "1"
+LINEAGE_VERSION = "2"  # 2: a value a write sent is not produced again by a read that echoes it
 
 _STOP = frozenset({"true", "false", "null", "none", "n/a", "nan", "yes", "no"})
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$")
@@ -434,6 +439,9 @@ def derive_lineage(spans: Sequence[Any], *, query: str = "", definitions: Mappin
     record_by: dict[str, list[int]] = {}
     requests: list[Any] = []
     targets: list[tuple[str, ...]] = []
+    # Values an earlier write sent: read back later, they are an echo of what
+    # the run itself stored, not something the read produced.
+    written: set[str] = set()
     for index, span in enumerate(materialized):
         span_id = str(span.get("id"))
         observed = seen.get(span_id) or {}
@@ -449,8 +457,18 @@ def derive_lineage(spans: Sequence[Any], *, query: str = "", definitions: Mappin
             targets.append(tuple(dict.fromkeys(str(fid) for fid in (*span.get("reads", ()), *span.get("writes", ())))))
         if span.get("error"):
             continue
+        if span.get("writes") and op not in _SEARCH_OPS:
+            # A write's own answer echoes what it sent (a sent message with
+            # its body) as much as a later read does. The record it addresses
+            # (its `id`, its handles) is not content: those stay the write's
+            # to produce.
+            addressed = {handle for fid in touched for handle in handles(fid)}
+            content = {key: value for key, value in request.items() if key != "id"} \
+                if isinstance(request, Mapping) else request
+            written.update(consumed_values(content, tool=tool, definitions=known) - addressed)
         for value in produced_values(response):
-            produced_by.setdefault(value, []).append(index)
+            if value not in written:
+                produced_by.setdefault(value, []).append(index)
         for fid in touched:
             record_by.setdefault(fid, []).append(index)
             for handle in handles(fid):

@@ -22,7 +22,7 @@ def serve_command(
     max_calls: int | None = typer.Option(None, min=1, help="Calls one run may make (default: policy `connectors.serving.max_calls_per_run`)."),
     worker_id: str | None = typer.Option(None, "--worker-id", help="Prefix every run id with this worker's name (w3 mints w3-run-1), so ids from several server processes never collide. Each process keeps its own runs: route every call for a run id to the process that began it."),
     check: bool = typer.Option(False, "--check", help="Validate the server configuration and exit without listening."),
-    surface: str | None = typer.Option(None, "--surface", help="The tools served: native (each connector definition's own, the default: policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP)."),
+    surface: str | None = typer.Option(None, "--surface", help="The tools served: contract (each locked contract's operations exactly as Anvil projects them for MCP; a connector with no locked contract keeps its own; the default: policy `connectors.surface`) or native (each connector definition's own)."),
 ) -> None:
     """Serve isolated enterprise evaluations as StreamableHTTP MCP connector tools.
 

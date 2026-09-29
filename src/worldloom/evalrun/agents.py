@@ -298,9 +298,12 @@ class ReferenceAgent:
         # A row that states its expected answer (a programme's record request
         # does: the answer is read off the records the plan searches) has the
         # reference say it, so the ceiling covers the answer axis too. A row
-        # without one reports what it did, as before.
+        # without one reports that it finished. It used to add how many calls
+        # it made, a figure no evidence record carries: once a plan made ten
+        # calls (a mapped read over three sources) the output stage graded
+        # the reference's own answer ungrounded.
         stated = str(row.get("expected_answer") or "").strip()
-        answer = stated or f"Completed {task.case_id}: {len(tools.spans)} calls."
+        answer = stated or f"Completed {task.case_id}."
         return AgentResponse(answer=answer, notes=tuple(notes))
 
     def _call(self, tools: ToolSurface, tool: str, /, **arguments: Any) -> Any:

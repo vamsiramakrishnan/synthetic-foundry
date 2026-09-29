@@ -45,6 +45,10 @@ from worldloom.packkit.authoring import MAX_MESSAGE, clip_message
 from worldloom.synthesis import IncidentRule, Simulator, retail, with_parameters
 from worldloom.synthesis.connectors import operational_profile
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 
 @pytest.fixture(scope="module")
 def world() -> dict[str, Any]:

@@ -166,7 +166,9 @@ session.plan(ExecPlanner("python3 my_planner.py"), label="planner")   # plan axi
 ```
 
 Any object with `.name` and `.run(task, tools) -> AgentResponse` is an agent;
-`tools.call("<connector.tool>", **arguments)` is the whole surface.
+`tools.call(name, **arguments)` with a name `tools` lists is the whole surface:
+a contract operation (`jira_get_issue`) for a connector with a locked
+contract, the default, else `connector.tool`.
 
 ## Rules
 

@@ -8,7 +8,9 @@ same :class:`worldloom.predicates.Predicate` instead of private filter DSLs.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 from .connector_definition import ConnectorDefinition
 from .predicates import FieldPredicate, Predicate, PredicateOp, RelativeTime, Scalar
@@ -77,6 +79,11 @@ def _compile_standard(field: str, item: FieldPredicate, *, language: str) -> str
         return f"{field} {_comparison_token(item.op, language)} {_quote(value)}"
     if item.op is PredicateOp.IN:
         assert isinstance(value, tuple)
+        if language == "drive_q":
+            # Drive's `q` has no `in` for a field's value (only `'x' in
+            # parents`): a set of values is a disjunction, as Drive's own
+            # search guide writes it.
+            return "(" + " or ".join(f"{field} = {_quote(part)}" for part in value) + ")"
         return f"{field} in ({', '.join(_quote(part) for part in value)})"
     if item.op is PredicateOp.CONTAINS:
         assert not isinstance(value, tuple)
@@ -128,14 +135,77 @@ def _atom(value: Scalar | RelativeTime) -> str:
     return rendered
 
 
+def selected_columns(language: str, fields: Sequence[str] | None = None) -> tuple[str, ...]:
+    """The columns a query in *language* selects: *fields*, else the language's default (``select`` in ``_query.json``).
+
+    Only a language that names its own columns has any (SOQL's ``SELECT``):
+    its answer carries those columns and nothing else, so a plan that needs
+    a field states it, and a gold result is snapshotted with the same list.
+    """
+    from .connectors.query.errors import language_config
+
+    try:
+        default = tuple(str(item) for item in language_config(language).get("select", ()))
+    except ValueError:
+        default = ()
+    return tuple(dict.fromkeys(str(item) for item in fields)) if fields else default
+
+
+def _compile_kql(predicate: Predicate) -> str:
+    """KQL property restrictions: ``filename="A"``, a set as ``(filename="A" OR filename="B")``, joined by AND.
+
+    A field is written as the KQL property whose value it is (the language's
+    `fields` in ``_query.json``: a file's ``name`` is ``filename``); KQL has
+    no property for a record id, so a predicate on one is refused.
+    """
+    from .connectors.query.errors import language_config
+
+    properties = {str(name): tuple(keys) for name, keys in language_config("kql").get("fields", {}).items()}
+
+    def prop(field: str) -> str:
+        if field in properties:
+            return field
+        found = next((name for name, keys in properties.items() if keys and keys[0] == field), None)
+        if found is None:
+            raise ValueError(f"KQL has no property for {field!r}")
+        return found
+
+    def literal(value: Any) -> str:
+        return '"' + str(value).replace('"', '\\"') + '"'
+
+    clauses = []
+    for item in predicate.where:
+        name = prop(item.field)
+        if item.op is PredicateOp.EQ:
+            clauses.append(f"{name}={literal(item.value)}")
+        elif item.op is PredicateOp.IN and isinstance(item.value, tuple):
+            clauses.append("(" + " OR ".join(f"{name}={literal(part)}" for part in item.value) + ")")
+        elif item.op is PredicateOp.CONTAINS:
+            clauses.append(f"{name}:{literal(item.value)}")
+        else:
+            raise ValueError(f"KQL cannot restrict {item.field!r} by {item.op.value}")
+    return " AND ".join(clauses)
+
+
 def compile_native(
     definition: ConnectorDefinition,
     predicate: Predicate,
     *,
     entity: str | None = None,
+    fields: Sequence[str] | None = None,
+    language: str | None = None,
 ) -> str:
-    """Compile one shared predicate into the connector's native query subset."""
+    """Compile one shared predicate into the connector's native query subset.
 
+    *fields* are the columns a language that names its own (SOQL's
+    ``SELECT``) returns; without them it selects the language's default
+    columns (``selected_columns``). *language* is a tool's own language
+    where it differs from the connector's (SharePoint's search takes KQL,
+    its list takes OData).
+    """
+
+    if language == "kql":
+        return _compile_kql(predicate)
     language = definition.query_language
     if language not in _SUPPORTED_LANGUAGES:
         raise ValueError(f"unsupported connector query language {language!r}")
@@ -167,7 +237,7 @@ def compile_native(
         if selected_entity is None:
             raise ValueError("SOQL compilation requires a predicate or explicit entity")
         source = definition.query_name_for(selected_entity)
-        return f"SELECT Id, Name FROM {source}" + (f" WHERE {body}" if body else "")
+        return f"SELECT {', '.join(selected_columns(language, fields))} FROM {source}" + (f" WHERE {body}" if body else "")
     if language == "cql" and selected_entity is not None:
         source = definition.query_name_for(selected_entity)
         prefix = f"type = {_quote(source)}"
@@ -266,11 +336,44 @@ def _split_clauses(language: str, query: str) -> list[str]:
     ]
 
 
+_DRIVE_EQUALS = re.compile(r"([A-Za-z_][\w.]*)\s*=\s*('(?:\\.|[^'\\])*')")
+
+
+def _drive_alternatives(definition: ConnectorDefinition, clause: str) -> FieldPredicate | None:
+    """``(name = 'a' or name = 'b')``, the disjunction ``compile_native`` writes for Drive, as the set it states."""
+
+    body = clause.strip()
+    if not (body.startswith("(") and body.endswith(")")):
+        return None
+    inner = body[1:-1].strip()
+    fields: list[str] = []
+    values: list[Scalar] = []
+    at = 0
+    while True:
+        match = _DRIVE_EQUALS.match(inner, at)
+        if match is None:
+            return None
+        fields.append(match.group(1))
+        values.append(_parse_atom(match.group(2)))
+        at = match.end()
+        rest = re.match(r"\s+or\s+", inner[at:], flags=re.IGNORECASE)
+        if rest is None:
+            break
+        at += rest.end()
+    if inner[at:].strip() or len(set(fields)) != 1:
+        return None
+    return FieldPredicate(field=_semantic_field(definition, fields[0]), op=PredicateOp.IN, value=tuple(values))
+
+
 def _parse_standard_clause(
     definition: ConnectorDefinition,
     language: str,
     clause: str,
 ) -> FieldPredicate:
+    if language == "drive_q":
+        alternatives = _drive_alternatives(definition, clause)
+        if alternatives is not None:
+            return alternatives
     contains_function = re.fullmatch(
         r"contains\(\s*([A-Za-z_][\w.\[\]/]*)\s*,\s*(.+)\s*\)",
         clause,
@@ -458,4 +561,4 @@ def parse_native(
     return Predicate(entity=inferred, where=parsed)
 
 
-__all__ = ["compile_native", "parse_native"]
+__all__ = ["compile_native", "parse_native", "selected_columns"]

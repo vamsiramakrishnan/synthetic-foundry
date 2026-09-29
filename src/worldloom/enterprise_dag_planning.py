@@ -16,6 +16,14 @@ from .enterprise_dag import (
     shape_catalogue,
 )
 from .enterprise_queries import MutationRequirement, PlannedEnterpriseQuery
+from .evidence_placement import (
+    CONTENTLESS_OPERATIONS,
+    MESSAGE_OPERATIONS,
+    carries_evidence,
+    document_arguments,
+    placement,
+    plannable,
+)
 from .ids import content_key
 
 
@@ -106,7 +114,11 @@ def compatible_shapes(
             continue
         if name == "fan_out" and row["operation"] not in {"create", "draft", "send"}:
             continue
-        if name == "write_chain" and not _admits_update(row["destination"], row["destination_entity"], row["output_format"]):
+        if name == "write_chain" and not (
+                _admits_update(row["destination"], row["destination_entity"], row["output_format"])
+                and plannable(row["destination"], row["destination_entity"], "update")):
+            # The marker is an update of the evidence's place: a place no
+            # update can reach on the contract surface cannot be marked.
             continue
         if name == "delete_chain" and not _admits_delete(row["destination"], row["destination_entity"], row["output_format"]):
             continue
@@ -115,8 +127,6 @@ def compatible_shapes(
         compatible.append(name)
     return tuple(compatible)
 
-
-MESSAGE_OPERATIONS = frozenset({"reply", "forward", "comment"})
 
 #: The diamond after ``collect``: two views of the same records (identifiers,
 #: and identifiers with titles), joined back on the record: a ``unique`` keyed
@@ -132,23 +142,60 @@ DIAMOND_JOIN: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...]], ...] = (
 )
 
 
-def message_body(mutation: MutationRequirement, result: str,
-                 sections: tuple[str, ...]) -> tuple[list[EnterpriseDagNode], ResultReference]:
-    """The transform a message write's body needs, and the reference it binds.
+#: The line a verification marker adds to the evidence document it rewrites.
+VERIFIED_NOTE = "Verified against the saved record."
+
+
+def _outline(identifier: str, parent: str, arguments: dict[str, Any]) -> EnterpriseDagNode:
+    return EnterpriseDagNode.model_validate({
+        "id": identifier, "kind": "transform", "operation": "outline",
+        "connector": "model", "entity": "resultset", "depends_on": (parent,), "transform": "outline",
+        "arguments": arguments,
+    })
+
+
+def write_body(mutation: MutationRequirement, result: str,
+               sections: tuple[str, ...]) -> tuple[list[EnterpriseDagNode], ResultReference]:
+    """The transform a write's content needs, and the reference it binds.
 
     A message write (a reply, a forward, a comment) carries its output as the
     body, and when the case names the sections its output must have, the
     body is an outline of those sections over the evidence (the ``outline``
     transform), never the raw result set, which carries none of them.
+
+    A record write carries its evidence where its connector declares it is
+    kept (``evidence_placement``): a document over the evidence, in the
+    place's format, under the case's sections or one ``Evidence`` section,
+    bound to that one field. A connector that declares no place keeps the
+    raw result set in the generic fields, which only the emulator takes.
     """
     if mutation.operation in MESSAGE_OPERATIONS and sections:
-        node = EnterpriseDagNode.model_validate({
-            "id": "document", "kind": "transform", "operation": "outline",
-            "connector": "model", "entity": "resultset", "depends_on": (result,), "transform": "outline",
-            "arguments": {"sections": sections, "format": mutation.output_format or "markdown"},
-        })
-        return [node], ResultReference(node="document")
+        return [_outline("document", result, {"sections": sections, "format": mutation.output_format or "markdown"})], \
+            ResultReference(node="document")
+    found = placement(mutation.connector, mutation.entity) if carries_evidence(mutation.operation) else None
+    if found is not None:
+        return [_outline("document", result, document_arguments(sections, found.format))], ResultReference(node="document")
     return [], ResultReference(node=result, select="all", encoding="json")
+
+
+#: The name ``write_body`` had while a message's body was the only content a write carried.
+message_body = write_body
+
+
+def _evidence_bindings(mutation: MutationRequirement, result: str, body: ResultReference) -> dict[str, ResultReference]:
+    """What a record write binds: the evidence document at the declared place, else the generic fields."""
+    found = placement(mutation.connector, mutation.entity)
+    if found is not None and body.node != result:
+        return {f"fields.{found.field}": body}
+    return {"fields.evidence": ResultReference(node=result, select="all"),
+            "fields.evidence_count": ResultReference(node=result, select="count")}
+
+
+def _restates_record(mutation: MutationRequirement) -> bool:
+    """The place's write restates an existing record (``read_first``), so a client reads it first."""
+    found = placement(mutation.connector, mutation.entity) if carries_evidence(mutation.operation) else None
+    return (found is not None and found.read_first and mutation.preexisting_record
+            and mutation.operation in {"update", "patch", "upsert"})
 
 
 def write_nodes(mutation: MutationRequirement, result: str, body: ResultReference, identifier: str,
@@ -156,33 +203,36 @@ def write_nodes(mutation: MutationRequirement, result: str, body: ResultReferenc
     """One planned write: the read of its target when it needs one, the write, and its readback.
 
     What the write carries from the reads: a message carries *body*; a
-    record write carries the result as evidence fields; a delete or move
-    carries nothing, because its tool takes only the record id (and a
-    parent), and an argument the tool does not accept is a row the compiler
-    refuses.
+    record write carries the evidence document at its connector's declared
+    place (``write_body``); a delete or move carries nothing, because its
+    tool takes only the record id (and a parent), and an argument the tool
+    does not accept is a row the compiler refuses.
 
     A move takes its record's id from a read, as a delete does. A write the
     law ``destructive_without_read`` holds (a delete, a reply, a forward:
     ``_reads_target_first`` asks the grader's own classification) reads what
     it acts on first, because the law demands it of every agent and the
     reference is one; the write takes the id from that read, never from a
-    source record. The read of the target does not wait on the evidence (an
-    agent may open the thread before or after gathering it); a conditional
-    one waits only on the read its condition inspects.
+    source record. A write whose place restates the record (a page ``PUT``
+    carries the page's title and next version) reads it first as well, and
+    still addresses its own destination. The read of the target does not
+    wait on the evidence (an agent may open the thread before or after
+    gathering it); a conditional one waits only on the read its condition
+    inspects.
     """
     out: list[EnterpriseDagNode] = []
     bindings: dict[str, ResultReference]
     if mutation.operation in MESSAGE_OPERATIONS:
         bindings = {"body": body}
-    elif mutation.operation in {"delete", "move"}:
+    elif mutation.operation in CONTENTLESS_OPERATIONS:
         bindings = {}
     else:
-        bindings = {"fields.evidence": ResultReference(node=result, select="all"),
-                    "fields.evidence_count": ResultReference(node=result, select="count")}
-    feed = body.node if mutation.operation in MESSAGE_OPERATIONS else result
+        bindings = _evidence_bindings(mutation, result, body)
+    feed = body.node if mutation.operation in MESSAGE_OPERATIONS or body.node != result else result
     parents: tuple[str, ...] = (feed,)
-    if mutation.operation == "move" or _reads_target_first(
-            mutation.connector, mutation.entity, mutation.output_format, mutation.operation):
+    addressed = mutation.operation == "move" or _reads_target_first(
+        mutation.connector, mutation.entity, mutation.output_format, mutation.operation)
+    if addressed or _restates_record(mutation):
         out.append(EnterpriseDagNode(
             id=f"target-{identifier}", kind="verify", operation="read",
             connector=mutation.connector, entity=mutation.entity,
@@ -190,7 +240,8 @@ def write_nodes(mutation: MutationRequirement, result: str, body: ResultReferenc
             condition=condition,
         ))
         parents = (feed, f"target-{identifier}")
-        bindings = {**bindings, "id": ResultReference(node=f"target-{identifier}", path=("id",))}
+        if addressed:
+            bindings = {**bindings, "id": ResultReference(node=f"target-{identifier}", path=("id",))}
     out.append(EnterpriseDagNode(
         id=identifier, kind="write", operation=mutation.operation,
         connector=mutation.connector, entity=mutation.entity,
@@ -201,6 +252,43 @@ def write_nodes(mutation: MutationRequirement, result: str, body: ResultReferenc
         connector=mutation.connector, entity=mutation.entity,
         depends_on=(identifier,), condition=condition,
         bindings={"id": ResultReference(node=identifier, path=("id",))},
+    ))
+    return out
+
+
+def marker_nodes(mutation: MutationRequirement, result: str, sections: tuple[str, ...]) -> list[EnterpriseDagNode]:
+    """``write_chain``'s tail: mark the record the readback returned as verified, then read it back again.
+
+    The marker goes where the evidence went: the evidence document again,
+    with a line saying it was verified, at the declared place, so the
+    evidence the first write left is still there after it. A connector that
+    declares no place keeps the generic ``verified`` field, which only the
+    emulator takes.
+    """
+    out: list[EnterpriseDagNode] = []
+    arguments: dict[str, Any] = {}
+    bindings = {"id": ResultReference(node="verify-write", path=("id",))}
+    parents: tuple[str, ...] = ("verify-write",)
+    found = placement(mutation.connector, mutation.entity)
+    if found is not None:
+        out.append(_outline("document-verified", result,
+                            document_arguments(sections, found.format, note=VERIFIED_NOTE)))
+        bindings[f"fields.{found.field}"] = ResultReference(node="document-verified")
+        parents = ("verify-write", "document-verified")
+    else:
+        arguments = {"fields": {"verified": True}}
+    out.extend((
+        EnterpriseDagNode(
+            id="write-marker", kind="write", operation="update",
+            connector=mutation.connector, entity=mutation.entity,
+            depends_on=parents, arguments=arguments, bindings=bindings,
+        ),
+        EnterpriseDagNode(
+            id="verify-marker", kind="verify", operation="read",
+            connector=mutation.connector, entity=mutation.entity,
+            depends_on=("write-marker",),
+            bindings={"id": ResultReference(node="write-marker", path=("id",))},
+        ),
     ))
     return out
 
@@ -259,7 +347,7 @@ def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpr
         result = "deduplicated"
 
     sections = tuple(query.generation.artifact.sections) if query.generation.artifact is not None else ()
-    body_nodes, body = message_body(mutation, result, sections)
+    body_nodes, body = write_body(mutation, result, sections)
     nodes.extend(body_nodes)
 
     def write(identifier: str, condition: ResultCondition | None = None) -> None:
@@ -274,20 +362,7 @@ def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpr
         if control == "fan_out":
             write("write-copy")
         elif control == "write_chain":
-            nodes.extend((
-                EnterpriseDagNode(
-                    id="write-marker", kind="write", operation="update",
-                    connector=mutation.connector, entity=mutation.entity,
-                    depends_on=("verify-write",), arguments={"fields": {"verified": True}},
-                    bindings={"id": ResultReference(node="verify-write", path=("id",))},
-                ),
-                EnterpriseDagNode(
-                    id="verify-marker", kind="verify", operation="read",
-                    connector=mutation.connector, entity=mutation.entity,
-                    depends_on=("write-marker",),
-                    bindings={"id": ResultReference(node="write-marker", path=("id",))},
-                ),
-            ))
+            nodes.extend(marker_nodes(mutation, result, sections))
         elif control == "delete_chain":
             # The delete addresses the record the readback returned, never the
             # write's own receipt, so an agent must have read what it removes;
@@ -320,4 +395,5 @@ def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpr
     return PlannedEnterpriseQuery.model_validate(payload)
 
 
-__all__ = ["DIAMOND_JOIN", "MESSAGE_OPERATIONS", "apply_dag_shape", "compatible_shapes", "message_body", "write_nodes"]
+__all__ = ["DIAMOND_JOIN", "MESSAGE_OPERATIONS", "VERIFIED_NOTE", "apply_dag_shape", "compatible_shapes", "marker_nodes",
+           "message_body", "write_body", "write_nodes"]

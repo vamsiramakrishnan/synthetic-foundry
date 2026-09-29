@@ -11,6 +11,158 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Evidence where the vendor keeps it; the contract surface is the default
+
+- **Default change: `connectors.surface` is `contract`.** `evalrun run`,
+  `evalrun prove`, `evalrun improve`, `enterprise-evals serve` and every
+  service built without a surface now present each connector with a locked
+  contract as the operations Anvil's MCP server lists for it; a connector
+  without one keeps its own tools, and `--surface native` presents every
+  connector's own tools as before. Before the flip the standard build
+  (`--seed 8128 --incident`, `enterprise-evals build --exhaustive --limit
+  100 --dag-shape '*'`) proved 100 of 100 natively and 32 of 100 on the
+  contract surface; after it, 100 of 100 on both, and the reference agent
+  scores 1.0 on plan, trajectory, outcomes and every stage on both. The
+  same world at `--limit 500` proves 500 of 500 on both surfaces and the
+  reference scores 1.0 on both; `--seed 4242 --incident` at `--limit 200`,
+  200 of 200 on both. Corner
+  cases (four engines, seeds 1 to 3, up to 10 per world, 30 cases): 30 of 30
+  on both surfaces, from 12 of 30 on the contract surface. The telecom
+  programme's 2,927 record requests: 2,927 on both (they search the system
+  of record, which ships no contract).
+- **Default change: `connectors.serving.max_tools` is 160 (was 100).** A
+  contract lists more operations than a definition has tools, and the limit
+  is held per query on the contract surface: a standard case reading three
+  contracted connectors is shown about a hundred tools, which the old
+  ceiling refused before any call.
+- **Evidence has a declared place (Generation).** A record write's evidence
+  was two fields no vendor has (`evidence`, `evidence_count`). Each
+  connector definition now declares where a write keeps it
+  (`catalog.evidence`, or a catalog entity's `evidence`:
+  `ConnectorEvidencePlacement`, `worldloom.evidence_placement`): a file's
+  `description` on SharePoint, OneDrive and Drive, an issue's `description`
+  on Jira, `work_notes` on ServiceNow, a message's `body` on email, Outlook
+  and Teams, `text` on Slack, a page's storage `body` on Confluence (read
+  first, since a page `PUT` restates the page), `Description` on
+  Salesforce. The planner writes an evidence document (the `outline`
+  transform: the case's sections, or one `Evidence` section, each record
+  cited) in the place's format to that one field, and `write_chain`'s
+  marker rewrites it there with a verification line where it set a
+  `verified` field. A connector that declares no place keeps the generic
+  fields.
+- **A place the contract cannot carry is not planned (Generation).**
+  `unserved` states why: Confluence's page body is an exclusive union of two
+  alternatives that both admit every body, so Anvil's MCP server refuses
+  every page write with a body; Salesforce's sObject body declares a fixed
+  field list with no `Description` and no `WhatId`. Confluence page and
+  Salesforce record writes are no longer generated, so the standard build's
+  writes land on SharePoint, Drive and email (its 100 cases were 18
+  Confluence and 11 Salesforce writes). `tests/test_evidence_placement.py`
+  holds every declaration to the shipped surfaces.
+- **Salesforce writes are planned again (Generation).** The authored
+  Salesforce contract's sObject body declares `Description`, the textarea
+  Account, Contact, Lead, Opportunity and Case each have (the Object
+  Reference page for each is cited in the property and the lock's
+  `documentation`); the lock, the committed trim and the shipped surface
+  are rebuilt from it, and the place is no longer `unserved`. A record
+  update's mapping renames `StageName` to the connector's `stage` and
+  `Status` to `status`, so an opportunity moved to `Develop` or an
+  escalated case is carried as the vendor names the field. The standard
+  build's 100 cases write 67 SharePoint files, 14 Drive files, 13 email
+  messages and 6 Salesforce accounts (were 60, 21, 19 and none) and prove
+  100 of 100 on both surfaces; `--seed 4242` at `--limit 200` writes 12
+  Salesforce accounts, 6 opportunities and 6 cases and proves 200 of 200 on
+  both; corner cases 30 of 30 on both; the reference agent scores 1.0 on
+  every axis and stage on both. Confluence's page body stays `unserved`:
+  pinning the write to the storage representation needs a reviewed overlay
+  that keeps one alternative of a `oneOf`, and an Anvil manifest's `params`
+  retypes an input only to a scalar. An interview's case sets still prove
+  on the connector tools (1 of 12 on the contract surface).
+- **Searches select by what the vendor filters on (Generation).** A Drive
+  search picks its files by name, as Drive's own disjunction
+  (`(name = 'A' or name = 'B')`: `compile_native` wrote `name in (...)`,
+  which Drive refuses), when the names pick out exactly those files; a
+  SharePoint search, whose tool takes KQL, picks them by `filename`
+  (`compile_native` writes KQL for a KQL tool; it wrote OData, which the
+  search read as free text and matched nothing). A
+  Confluence page search names the pages' numeric ids, the listing's `id`
+  filter (the mapping now reads it; the CQL transform inverts). A SOQL
+  search selects the columns the case reads (`Id`, `Name` and any required
+  field; the default list is `select` in `_query.json`) and its gold result
+  is snapshotted with the same columns.
+- **Creates are named as a client names them (Generation).** A file's name
+  carries its format's extension (`report.pptx`), the record's fields
+  restate the name in the field the vendor requires for it (a driveItem's
+  `name`, an incident's `short_description`, an issue's `summary`), and a
+  create carries a parent only where the record lives in one. A
+  `restated_figure` corner no longer restates its issue type in its fields.
+- **The contract carrier sends what a client sends.** A Graph driveItem
+  create carries its `file` facet; a required body property the schema
+  fixes (`@odata.type`) is sent as fixed; a numeric path step is an array
+  index (Drive's `parents`); a mapping entry may `restate` wire fields from
+  the addressed record (a Confluence page `PUT`'s id, status, title and next
+  version); a readback after a delete keeps the deleted record's
+  coordinates; an id predicate on a numbering vendor is restated on its
+  numeric handles.
+- **The reference agent's report states no figure.** A case with no
+  expected answer is answered `Completed <case>.`; it added the number of
+  calls, which the output stage grades as an ungrounded figure once a plan
+  makes ten (a mapped read over three sources).
+- **`serving_surface(None)` keeps the surface in force** (an enclosing
+  block's, else the policy's), so a command given no `--surface` inside a
+  block serves the block's surface.
+- **Grading (`GRADER_VERSION` 3).** The output stage reads a field bound to
+  an evidence document as it read one bound to the evidence set: every
+  evidence record must be cited in the written field. A search through a
+  vendor query is not held to carry the plan's `fields` beside it. The
+  evidence count is stated in the document and no longer graded as a field.
+- **Tests changed deliberately.** `test_contract_surface.py`: the default
+  is now `contract` (was `native`). `test_enterprise_dag.py`: the map and
+  marker tests read the document at `fields.description` where they read
+  `evidence_count` and `verified`. `test_evalset_proof.py`: the injected
+  break is a diamond joined on titles alone (an evidence count has no field
+  to land in now). `test_connector_serving.py`: a mapped create rebinds its
+  fields' name with its name. Modules whose agents are scripted in the
+  connector definitions' own tool names (`jira.get_issue`) pin the native
+  surface with the new `native_surface` fixture, since that is what they
+  exercise: `test_connector_serving`, `test_evalrun`, `test_evalrun_lineage`,
+  `test_evalrun_mutations`, `test_evalrun_questions`, `test_evalrun_scale`,
+  `test_evalrun_stages`, `test_evalset_proof`, `test_agent_packs` (its
+  pinned turn documents list connector tools), `test_anvil_provider`,
+  `test_autopsy_curriculum`, `test_connector_moves`, `test_corner_cases`,
+  `test_interface_lever`, `test_studio_trials`, `test_trace_brief`,
+  `test_trace_export`, and `test_housekeeping` (its moves and per-item
+  writes are not yet carried on the contract surface); so do the scripted
+  reply test in `test_solvable_generation` and the `--dag-shape none`
+  fixture in `test_enterprise_evals_pipeline`. `test_connector_packs`
+  expects the new `max_tools` default. Tests whose authored
+  destination was Confluence or Salesforce now write to SharePoint
+  (`test_enterprise_space`, `test_enterprise_queries`,
+  `test_enterprise_grounding`, `test_enterprise_fields_state`,
+  `test_enterprise_operational_execution`); the two pinned plan digests in
+  `test_enterprise_evals_pipeline` moved (same rows, ids and order; each
+  write binds its evidence document); `test_solvable_generation` plans its
+  sends itself (the first 200 rows no longer reach one) and reads the
+  diamond's evidence from the document; `test_evalrun_mutations` breaks the
+  evidence by writing a document that cites no record.
+- **Lineage (`LINEAGE_VERSION` 2).** A value a write sent is not produced
+  again by a call that returns it (the write's own answer, a later
+  readback): a second write of the same evidence depends on where the
+  evidence came from, not on the first write's echo. The addressed record's
+  id and handles stay the write's to produce.
+- **Remaining gaps, named.** Interview case sets deliver into systems the
+  contract surface cannot yet carry a write to (a Confluence page body, a
+  Slack message) and read through list and search operations whose vendor
+  filters the mapping cannot yet express (SharePoint list items, Outlook's
+  `$filter` on custom fields, Slack search); `interview.realise.prove`
+  serves them on the connector tools. Housekeeping's moves and per-item
+  writes on Drive, SharePoint, OneDrive, Outlook, Slack and Teams are not
+  yet carried either, nor the pre-grammar single-write rows
+  (`--dag-shape none`), whose bare updates carry no content. Outlook,
+  Teams and Slack declare their evidence places
+  but no shipped workflow writes to them, and their contracts take a body as
+  Graph's `itemBody` object or Slack's signed form.
+
 ### One surface from the contract
 
 Serving and grading; nothing a seed generates changes.

@@ -26,6 +26,10 @@ from worldloom.predicates import FieldPredicate, Predicate
 from worldloom.studio.trials import TrialReceipt, evaluate_trial
 from worldloom.world import World
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 
 @pytest.fixture(scope="module")
 def qualified(tmp_path_factory):

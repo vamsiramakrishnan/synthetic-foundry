@@ -56,7 +56,8 @@
       "tool": "update_record",
       "args": {
         "id": {"from": "path.id", "required": true},
-        "fields": {"from": "body", "transform": "fields", "required": true}
+        "fields": {"from": "body", "transform": "fields", "required": true,
+                   "rename": {"StageName": "stage", "Status": "status"}}
       },
       "result": "empty"
     },

@@ -18,8 +18,12 @@ Point an MCP client at `http://127.0.0.1:8000/mcp`. The client calls:
 
 1. `eval_list` to find the query ID and request. Results are paginated.
 2. `eval_begin(query_id)` to receive a `run_id`.
-3. Connector tools, such as `servicenow.get_record`, with that `run_id` and the
-   tool's declared arguments. `tools/list` describes required arguments,
+3. Connector tools with that `run_id` and the tool's declared arguments. A
+   connector with a locked contract serves its contract's operations, as
+   Anvil's MCP server lists them (`servicenow_get_table_record_by_sys_id`);
+   one without keeps its definition's own tools (`email.search_messages`).
+   `--surface native` serves every connector's own tools
+   (`servicenow.get_record`). `tools/list` describes required arguments,
    projections, paging and read/write annotations.
 4. `eval_trace(run_id)` to retrieve captured `worldloom.connector-trace/v1`
    spans. Follow `next_offset` until it is null.
@@ -41,9 +45,12 @@ run on its owning process.
 Use `--query-id` repeatedly to select a workload and `--tool` repeatedly to
 allow exact `connector.tool` names. Startup refuses an allowlist that removes a
 tool required by the selected queries. It also refuses an unknown definition
-or unexecutable compiled row. The default ceiling is 100 tools including the
-six evaluation tools. Select a smaller workload when its connector estate
-exceeds that ceiling.
+or unexecutable compiled row. The default ceiling is 160 tools including the
+six evaluation tools, held per query on the contract surface (the tools one
+run is shown: a contract lists more operations than a definition has tools,
+and a standard case reading three contracted connectors is shown about a
+hundred). Select a smaller workload when its connector estate exceeds that
+ceiling.
 
 Defaults permit 32 live runs, four per principal, 4,096 attempted connector calls
 per run, 64 KiB request bodies, 1 MiB connector responses and 100,000 initial
@@ -534,7 +541,8 @@ that language's grammar and examples against the argument that carries it
 (`query.argument`, e.g. `body.jql`). A connector with no locked contract
 (`email`, `rovo`, `teamwork_graph`, `sor`) keeps its own tools.
 `anvil_projection` is not served in process (it is refused, not ignored).
-The native surface stays the default (policy `connectors.surface`).
+The contract surface is the default (policy `connectors.surface`), and
+`--surface native` presents each connector definition's own tools instead.
 
 **Gold plans.** A gold plan names connector tools. The reference agent
 carries each node on the contract surface (`ContractSurface.carry`): the
@@ -550,21 +558,119 @@ record's. A node no exposed operation carries is a `contract.gap`, named.
 Grading reads a search made through a vendor query by what it read, not by
 the text of the plan's predicate.
 
+**Where evidence lives.** A gold plan that writes a record carries the
+evidence it was written from, and it carries it where the vendor keeps it,
+never in a field the vendor does not have. Each connector definition
+declares the place (`catalog.evidence`, or one catalog entity's
+`evidence`: `worldloom.connector_definition.ConnectorEvidencePlacement`),
+so a new connector, or a pack's, declares its own and no code changes:
+
+| Connector | Place | Format | Notes |
+|---|---|---|---|
+| SharePoint, OneDrive, Drive | a file's `description` | markdown | a create names the file with its format's extension (`report.pptx`), as a Graph driveItem create reads the kind from the name |
+| Confluence | a page's `body` (storage format) | html | `read_first`: a page `PUT` restates the page's id, status, title and next version, so the plan reads the page first; `unserved` (below) |
+| Jira | an issue's `description` | markdown | |
+| ServiceNow | a record's `work_notes` | markdown | |
+| Salesforce | a record's `Description` | markdown | the authored contract declares it on the sObject body, citing the Object Reference for each object the cases write |
+| Email, Outlook, Teams | a message's `body` | html | |
+| Slack | a message's `text` | markdown | |
+
+The planner (`enterprise_dag_planning.write_body`) renders the evidence as a
+document (the `outline` transform over the evidence: the case's sections,
+or one `Evidence` section, each record cited by id and title) in the
+place's format and binds it to `fields.<place>`; `write_chain`'s
+verification marker rewrites the same document at the same place with a
+line saying it was verified. The emulator keeps the write where the tool
+puts it, and the contract surface dispatches to the same connector tool
+with the same fields, so both surfaces leave the same state. The output
+stage (`evalrun.stages`) reads every field a write bound from the evidence
+back from the written record and requires each evidence record to be cited
+there. A connector that declares no place keeps the generic `evidence` and
+`evidence_count` fields, which only the emulator's own tools take.
+
+A place the shipped contract cannot carry says why (`unserved`), and the
+planner does not plan an evidence write to it: the case would be unsolvable
+by construction. One does today. Confluence's page body is typed as an
+exclusive union (`oneOf`) of two alternatives (`PageBodyWrite`, and
+`PageNestedBodyWrite` keyed by representation) that both admit every body
+object, so Anvil's MCP server (zod's exclusive union) refuses every page,
+blog post and footer comment write that carries a body. The real API takes
+a storage-format body (`{"representation": "storage", "value": ...}`), and
+pinning the write to that alternative is a reviewed overlay Anvil cannot
+yet express: a manifest's `params` retypes an input only to a scalar
+(`string`, `number`, `integer`, `boolean`), and nothing in a manifest or a
+profile selects one branch of a union or gives an input an object schema.
+The place returns when Anvil can narrow a union by manifest (a `params`
+entry that keeps one `oneOf` alternative, the narrowing direction only),
+and relaxing `oneOf` to `anyOf` globally is not the fix. `tests/test_evidence_placement.py`
+holds every declaration to the shipped surfaces, so the flag cannot
+outlive the gap.
+
+Salesforce's place is carried. Salesforce ships no single OpenAPI document,
+so its sObject body is Worldloom's authored contract; it declared a fixed
+field list (Name, Subject, Status, StageName, Amount, CloseDate, LastName,
+Company) and now also declares `Description`, the textarea Account,
+Contact, Lead, Opportunity and Case each have, with the Object Reference
+page for each in the property's description and in the lock's
+`documentation`. `WhatId` is not added: a Task is not an evidence place
+and no case relates one to a record. A record update restates the record's
+state as the vendor names it, so the update's mapping renames `StageName`
+to the connector's `stage` and `Status` to `status` (the pairs the
+definition's `query_fields` already declare), and an opportunity moved to
+`Develop` or a case escalated is carried as `PATCH {"StageName": ...}` or
+`{"Status": ...}`. Outlook, Teams and
+Slack declare their places too, and no shipped workflow writes to them yet;
+their contracts take a message body as Graph's `itemBody` object (or Slack's
+signed form), which a write's string field does not become, so a plan that
+wrote evidence there would not yet be carried.
+
+Searches select by what the vendor filters on. A search that must return
+exactly its fixture records names them by id where the vendor's query
+language has an id term; Confluence's page listing takes the numeric page
+ids (its `id` filter, which the mapping now reads), restated from the
+corpus's ids at call time. Drive's `q` has no id term, so a Drive search
+selects the files by name, written as Drive's own disjunction
+(`(name = 'A' or name = 'B')`), and only when the names pick out exactly
+those files; SharePoint's search takes KQL, so it selects them by
+`filename` (`(filename="A" OR filename="B")`). A language that names its columns (SOQL) selects the columns
+the case reads (`Id`, `Name` and any field the source requires; the
+default list is `select` in `_data/connectors/_query.json`), and the gold
+result is snapshotted with the same list, so native and contract serving
+return the same record.
+
 **Measured.** The standard build (`--seed 8128 --incident`,
 `enterprise-evals build --exhaustive --limit 100 --dag-shape '*'`) proves
-100 of 100 on the native surface and 32 of 100 under `--surface contract`.
-Every one of the 68 is the gold plan asking for something the contract has
-no place for, none an interface defect:
-
-| Cases | First failing gold call | Why no exposed operation carries it |
-|---:|---|---|
-| 21 | `sharepoint.update_file` | the plan writes its evidence as record fields (`evidence`, `evidence_count`); Graph's driveItem `PATCH` carries a name, a description and a parent, and its schema requires `@odata.type` |
-| 18 | `confluence.update_page` | the same evidence fields; Confluence's page `PUT` carries a title and a storage body |
-| 14 | `sharepoint.create_file` | the same evidence fields on a created driveItem |
-| 7 | `salesforce.update_record` | the same evidence fields; the sObject `PATCH` body declares its fields |
-| 4 | `salesforce.query` (graded `result_mismatch`) | SOQL returns only the fields it selects; the plan reads whole records |
-| 2 | `confluence.search` | the plan selects pages by record id; the v2 listing's filters are title and status |
-| 2 | `drive.search` (`Invalid Value`) | the plan selects files by record id; Drive's `q` has no id term |
+100 of 100 on both surfaces, and the reference agent scores 1.0 on plan,
+trajectory and outcomes and on every stage on both. Before evidence had a
+place it proved 32 of 100 on the contract surface: 62 gold writes of
+`evidence` and `evidence_count` fields no contract carries (21 SharePoint
+updates, 18 Confluence page updates, 14 SharePoint creates, 7 Salesforce
+updates), 4 SOQL reads graded `result_mismatch`, 2 Confluence and 2 Drive
+searches by the corpus's record id. The same world at `--limit 500`
+proves 500 of 500 on both surfaces, and `--seed 4242 --incident` at
+`--limit 200` 200 of 200. Corner cases (four engines, seeds 1 to
+3, up to 10 per world: 30 cases) prove 30 of 30 on both surfaces, from 12
+of 30 on the contract surface (a Jira create restated its issue type in its
+fields). The telecom programme's 2,927 record requests prove on both (they
+search the system of record, which ships no contract). Confluence page
+writes are not planned while the page body is `unserved`; Salesforce
+writes are, so the standard build's 100 cases write 67 SharePoint files,
+14 Drive files, 13 email messages and 6 Salesforce accounts (before the
+Salesforce contract declared `Description`: 60, 21, 19 and none), and
+`--seed 4242` at `--limit 200` writes 12 Salesforce accounts, 6
+opportunities (to `Develop`) and 6 cases (escalated), each proved on both
+surfaces. Two generators are not yet
+contract-solvable: an interview's case sets (1 of 12 prove on the contract
+surface: they write Confluence page bodies and Slack messages (the
+gold `post_message` carries a record `name`, which `chat.postMessage` has
+no parameter for),
+search SharePoint by `artifact_type` (KQL has no such property), read
+SharePoint list items and Outlook messages filtered by the interview's
+custom fields (`interview_step`, `period`), search Confluence by them, and
+search Slack, whose query language the contract surface does not yet
+evaluate; the interview's own proof serves them on the connector tools) and housekeeping's moves and
+per-item writes, as are the pre-grammar single-write rows
+(`--dag-shape none`). Serve those with `--surface native`.
 
 `tests/test_contract_surface.py` holds it: without Anvil, each shipped
 surface against its mapping and the service against the surface; with

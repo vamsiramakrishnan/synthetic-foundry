@@ -108,7 +108,9 @@ def _registry(*sources: SourceRole) -> SpecRegistry:
     builtin = builtin_registry()
     workflow = WorkflowSpec(
         name="grounding_probe", purpose="grounding probe", sources=sources,
-        destinations=(DestinationRole(connector="confluence", entities=("page",), operations=(Operation.CREATE,), formats=("markdown",)),),
+        # A destination whose evidence place the contract carries: a
+        # Confluence page body is `unserved`, so no case is planned onto it.
+        destinations=(DestinationRole(connector="sharepoint", entities=("file",), operations=(Operation.CREATE,), formats=("docx",)),),
         content_actions=(ContentAction.SUMMARIZE,), audiences=("analyst",), topologies=("chain",), verification=("readback",),
         prompt_template="Prepare the {purpose} for {company}. Use {sources}. {action_instruction} {output_label} in {destination}. {verification_instruction}.{failure_instruction}",
     )

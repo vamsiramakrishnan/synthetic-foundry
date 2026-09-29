@@ -32,6 +32,10 @@ from worldloom.evalrun.policy import (
     turn_rules,
 )
 
+# The turn documents pinned here list the connector definitions' own tools; the
+# contract surface, the default, lists the contract's operations instead.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 runner = CliRunner()
 
 

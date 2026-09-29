@@ -52,6 +52,10 @@ from worldloom.evalrun.agents import AgentResponse
 from worldloom.evalrun.anvil import AnvilServing, find_anvil, merge_traces
 from worldloom.evalrun.stages import _call_clauses
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 FIXTURES = Path(__file__).parent / "fixtures" / "anvil"
 SRC = Path(__file__).resolve().parent.parent / "src"
 runner = CliRunner()

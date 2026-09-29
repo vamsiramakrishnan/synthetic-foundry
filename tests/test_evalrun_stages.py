@@ -44,6 +44,10 @@ from worldloom.evalrun.evidence import collect, render_evidence
 from worldloom.evalrun.grader import axis_digest
 from worldloom.evalrun.runner import RunReport
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 GOLD = ("i1", "i2", "i3")
 SUBJECT = "Weekly incident digest"
 

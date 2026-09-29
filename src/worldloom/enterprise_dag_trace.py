@@ -109,11 +109,14 @@ def grade_execution_contract(
             # A search made through a vendor contract carries a vendor query,
             # never the plan's structured predicate (no vendor API takes one):
             # what it found is graded by the reads, not by the predicate's text.
+            # A language that names its columns (SOQL) carries the plan's
+            # `fields` inside that query too; the records it returned are held
+            # to the snapshot taken with the same columns.
             vendor_search = search and actual.get("query") is not None and actual.get("predicate") is None
             for key, value in args.items():
                 if key in {"id", "start_at", "max_results"}:
                     continue
-                if vendor_search and key in {"predicate", "entity"}:
+                if vendor_search and key in {"predicate", "entity", "fields"}:
                     continue
                 if actual.get(key) != value:
                     fails.append(f"argument_mismatch:{node.id}:{key}")

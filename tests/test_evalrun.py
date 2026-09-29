@@ -44,6 +44,10 @@ from worldloom.models import EvaluationType
 from worldloom.synthesis import IncidentRule, Simulator, retail, with_parameters
 from worldloom.synthesis.connectors import operational_profile
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 runner = CliRunner()
 
 

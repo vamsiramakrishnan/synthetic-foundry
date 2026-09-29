@@ -179,5 +179,5 @@ def test_the_connector_prompt_and_policy_keys_resolve() -> None:
     from worldloom.connectors.serving import ServingLimits
 
     assert ServingLimits() == ServingLimits(max_runs=32, max_runs_per_principal=4, max_calls_per_run=4096,
-                                            max_tools=100, max_request_bytes=65536, max_response_bytes=1048576,
+                                            max_tools=160, max_request_bytes=65536, max_response_bytes=1048576,
                                             max_records=100000)

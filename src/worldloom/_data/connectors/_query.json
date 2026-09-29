@@ -46,6 +46,7 @@
       }
     },
     "soql": {
+      "select": ["Id", "Name"],
       "unknown_field": "error",
       "fields": {
         "id": ["ident", "external_id", "id"],

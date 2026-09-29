@@ -86,6 +86,11 @@ class _Run:
     #: number of spans recorded before it and the reply it was given. A
     #: question is a turn: recorded here, never claimed by the agent.
     questions: list[dict[str, Any]] = field(default_factory=list)
+    #: The records planned calls addressed, by ``(connector, reference)``, as
+    #: they stood when last seen: a readback after a delete addresses a record
+    #: the state no longer holds, and its request still names the record's
+    #: coordinates (a Graph drive), as the client that deleted it knew them.
+    addressed: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
     #: Serialises everything that reads or changes this run. Runs share
     #: nothing but the read-only rows, definitions and base emulators, so each
     #: takes its own lock and a slow agent on one run never waits on a call
@@ -689,7 +694,15 @@ class ConnectorEvaluationService:
         surface = self.surfaces.get(connector)
         if surface is None:
             return self.call(principal, run_id, name, arguments)
-        record = self.lookup(principal, run_id, connector, arguments["id"]) if arguments.get("id") is not None else None
+        record = None
+        if arguments.get("id") is not None:
+            record = self.lookup(principal, run_id, connector, arguments["id"])
+            with self._held(principal, run_id) as run:
+                key = (connector, str(arguments["id"]))
+                if record is not None:
+                    run.addressed[key] = record
+                else:
+                    record = run.addressed.get(key)
         arguments = self._vendor_handles(principal, run_id, connector, tool, arguments)
         try:
             carried = surface.carry(tool, arguments, self.definitions[connector], record=record)
@@ -759,6 +772,10 @@ class ConnectorEvaluationService:
             if found(out):
                 return out
             where = []
+            # A vendor that numbers its records (a Confluence page id) is
+            # given numbers: its contract types the filter as integers.
+            numeric = definition.id.pattern == "numeric"
+            named = stable
             for item in predicate.where:
                 if item.field != "id":
                     where.append(item)
@@ -771,11 +788,19 @@ class ConnectorEvaluationService:
                     except ConnectorError:
                         return out
                     payload = shape_payload(definition, record)
-                    handle = next((payload[key] for key in payload if str(key).casefold() == stable.casefold()), None)
-                    if handle is None:
+                    # The catalog's handle as the payload spells it, else the
+                    # payload's own `id` (a Confluence page keeps `page_id` on
+                    # the record and serves it as `id`).
+                    key = next((key for key in payload if str(key).casefold() == stable.casefold()), None)
+                    if key is None and payload.get("id") is not None:
+                        key, named = "id", "id"
+                    if key is None:
                         return out
+                    handle = payload[key]
+                    if numeric and isinstance(handle, str) and handle.isdigit():
+                        handle = int(handle)
                     handles.append(handle)
-                where.append(item.model_copy(update={"field": stable,
+                where.append(item.model_copy(update={"field": named,
                                                      "value": tuple(handles) if listed else handles[0]}))
             restated = {**out, "predicate": predicate.model_copy(update={"where": tuple(where)})}
             return restated if found(restated) else out

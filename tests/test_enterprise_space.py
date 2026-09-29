@@ -24,7 +24,9 @@ def _profile(path: Path, **changes: object) -> ScenarioProfile:
         "name": "incident-sizing",
         "industry": "retail",
         "company_description": "Retail service operations.",
-        "connectors": ["servicenow", "confluence"],
+        # SharePoint as the destination: a Confluence page body is an
+        # `unserved` evidence place, which plans no write.
+        "connectors": ["servicenow", "sharepoint"],
         "workflows": ["incident_review"],
         "coverage": {"name": "bounded", "failures": ["none"], "max_candidates": 100_000},
         **changes,
