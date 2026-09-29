@@ -453,6 +453,15 @@ def _confluence_steps() -> list[Step]:
         ("confluence_create_page", {"confirm": True, "body": {"spaceId": "OPS", "status": "current", "title": "Escalation path",
                                                               "body": {"representation": "storage", "value": "Call the lead"}}}),
         ("confluence_update_page_title", {"id": 1002, "status": "current", "title": "Runbook two"}),
+        # The manifest narrows the body union to its storage alternative: a
+        # page PUT with a storage body is served, a wiki body is refused.
+        ("confluence_update_page", {"id": 1003, "body": {"id": "1003", "status": "current", "title": "Runbook 3",
+                                                         "body": {"representation": "storage", "value": "<p>Step three, revised</p>"},
+                                                         "version": {"number": 2}}}),
+        ("confluence_update_page", {"id": 1004, "body": {"id": "1004", "status": "current", "title": "Runbook 4",
+                                                         "body": {"representation": "wiki", "value": "h1. Step four"},
+                                                         "version": {"number": 2}}}),
+        ("confluence_get_page_by_id", {"id": 1003}),
         ("confluence_get_page_by_id", {"id": 9999}),
     ]
 

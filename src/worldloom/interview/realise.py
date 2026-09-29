@@ -109,12 +109,13 @@ def prove(realised: Realised) -> dict[str, dict[str, int]]:
     A case the reference agent cannot pass is a defect in the case, found
     before any agent is evaluated on it. Served on the connector tools: an
     interview delivers into whatever systems the company uses, and the
-    contract surface (the default) cannot yet carry every call its cases
-    make (a Confluence page body, a Slack message named as a record, a
-    SharePoint search by ``artifact_type``, SharePoint list items and
-    Outlook messages filtered by the interview's own fields, a Slack
-    search), and a level's tool budget (``tool_budget``) is counted in
-    connector tools.
+    contract surface (the default) proves 2 of the 12 cases and cannot yet
+    carry the rest (a SharePoint search by ``artifact_type``, which KQL has
+    no property for; a Slack message named as a record; a Slack search;
+    SharePoint list items, Outlook messages and Confluence pages filtered
+    by the interview's own fields), and a level's tool budget
+    (``tool_budget``) is counted in connector tools. A Confluence page body
+    is no longer among them: the manifest narrows it to storage.
     """
     from ..connectors.surface import serving_surface
     from ..evalrun import ReferenceAgent, cases_from_corpus, run_cases, service_for
