@@ -428,6 +428,10 @@ def test_external_mapped_creates_bind_each_actual_source_and_verify_each_created
     writer["for_each"] = {"node": "read-0", "limit": 100}
     writer["payload"].pop("name", None)
     writer["bindings"]["name"] = {"node": "read-0", "select": "item", "path": ["title"]}
+    # A file store's create restates the file's name in its fields (Graph's
+    # driveItem body carries `name`), so a mapped create names both.
+    writer["payload"].get("fields", {}).pop("name", None)
+    writer["bindings"]["fields.name"] = {"node": "read-0", "select": "item", "path": ["title"]}
     verifier = next(node for node in nodes if node["node_kind"] == "verify")
     verifier["for_each"] = {"node": "write", "limit": 100}
     verifier["bindings"]["id"] = {"node": "write", "select": "item", "path": ["id"]}

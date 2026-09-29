@@ -125,16 +125,29 @@ def _fid(records_by_id: Mapping[str, str], record_id: str | None) -> str | None:
     return records_by_id.get(record_id, record_id)
 
 
+#: The extension a file of each format is named with. A file store reads a
+#: new item's format from its name (Graph's driveItem create has no other
+#: place for it), so a reference create names its file as a person would:
+#: `report.pptx`, never a bare `report` the store cannot type.
+FILE_EXTENSIONS = {"docx": ".docx", "xlsx": ".xlsx", "pptx": ".pptx", "pdf": ".pdf", "csv": ".csv",
+                   "html": ".html", "markdown": ".md"}
+
+
 def create_payload(
     definition: ConnectorDefinition, entity: str, query_id: str, node_id: str,
 ) -> dict[str, Any]:
     """An explicit reference payload satisfying the declared create contract."""
-    name = f"{query_id[:12]}-{node_id}"
+    name = f"{query_id[:12]}-{node_id}{FILE_EXTENSIONS.get(entity, '')}"
     supplied_by_name = {"name", "title", "summary", "Name", "Subject", "short_description", "issuetype"}
     fields = {
         field: name for field in definition.entities[entity].required_on_create
         if field not in supplied_by_name and field not in {"parent", "parents"}
     }
+    if entity in FILE_EXTENSIONS:
+        # A file store's create body names the file (Graph's driveItem and
+        # Drive's file both carry `name` beside `description`), so the
+        # record's own fields hold the name the request gave it.
+        fields["name"] = name
     return {"name": name, "fields": fields, "parent": "worldloom-eval"}
 
 

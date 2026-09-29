@@ -141,6 +141,13 @@ class OperationMap:
     #: ``(location, {value: tool})``: an operation whose tool depends on the request,
     #: as ServiceNow's one Table API route serves every table.
     tool_by: tuple[str, Mapping[str, str]] | None = None
+    #: Wire fields a client restates from the record it addresses, which the
+    #: mapping never reads from the call: ``{location: (record path, step)}``.
+    #: A Confluence page ``PUT`` carries the page's id, status, title and next
+    #: version number, all read from the page as fetched; the call that
+    #: updates its body names none of them. ``step`` is added to a number
+    #: (the next version is the current one plus one).
+    restate: Mapping[str, tuple[str, int]] = field(default_factory=dict)
 
     @property
     def tools(self) -> tuple[str, ...]:
@@ -214,6 +221,28 @@ def _arg(name: str, raw: Any, where: str) -> Arg:
                fallbacks=tuple(sources[1:]))
 
 
+def _restate(raw: Any, where: str) -> dict[str, tuple[str, int]]:
+    """An entry's ``restate`` block: each wire location, read from ``record.<path>``, with an optional ``step``."""
+
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise MappingError(f"{where}: `restate` maps request locations to `record.<path>`")
+    out: dict[str, tuple[str, int]] = {}
+    for location in sorted(raw):
+        spec = raw[location]
+        if isinstance(spec, str):
+            spec = {"from": spec}
+        source = spec.get("from") if isinstance(spec, Mapping) else None
+        step = spec.get("step", 0) if isinstance(spec, Mapping) else 0
+        if (not isinstance(source, str) or not source.startswith("record.") or not isinstance(step, int)
+                or isinstance(step, bool) or str(location).split(".", 1)[0] not in _LOCATIONS):
+            raise MappingError(f"{where}: `restate` {location!r} reads `record.<path>` (`from`, and an optional "
+                               "integer `step`) into a request location")
+        out[str(location)] = (source[len("record."):], step)
+    return out
+
+
 def parse_mapping(document: Mapping[str, Any], *, origin: str = "mapping") -> AnvilMapping:
     """Validate a ``worldloom.anvil-mapping/v1`` document."""
 
@@ -269,6 +298,7 @@ def parse_mapping(document: Mapping[str, Any], *, origin: str = "mapping") -> An
         operations[operation_id] = OperationMap(
             operation_id, tool=tool, args={name: _arg(name, args[name], where) for name in sorted(args)},
             result=dict(result), cursor=cursor, route=route, vendor=vendor, tool_by=chosen_by,
+            restate=_restate(raw.get("restate"), where),
         )
     transitions = tuple(dict(item) for item in document.get("transitions") or ())
     for item in transitions:
@@ -629,13 +659,26 @@ def _cql(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> 
 
     if not isinstance(value, Mapping):
         return str(value)
-    clauses = []
+    # Written by the connector's own CQL compiler, so the query a filter
+    # becomes is the query the same filter compiles to anywhere else, and
+    # `invert` can read it back into the filters.
+    from ..connector_query import compile_native
+    from ..predicates import FieldPredicate, Predicate, PredicateOp
+
+    kind = value.get("type")
+    entity = next((name for name, item in definition.entities.items() if (item.query_name or name) == kind), None)
+    where = []
     for key, item in value.items():
-        if isinstance(item, list):
-            clauses.append(f"{key} IN (" + ", ".join(_cql_literal(entry) for entry in item) + ")")
+        if key == "type":
+            continue
+        if isinstance(item, list | tuple):
+            where.append(FieldPredicate(field=str(key), op=PredicateOp.IN, value=tuple(item)))
         else:
-            clauses.append(f"{key} = {_cql_literal(item)}")
-    return " AND ".join(clauses)
+            where.append(FieldPredicate(field=str(key), op=PredicateOp.EQ, value=item))
+    if entity is None and kind is not None:
+        return " AND ".join([f"type = {_cql_literal(kind)}", *(compile_native(definition, Predicate(where=(item,)))
+                                                              for item in where)])
+    return compile_native(definition, Predicate(where=tuple(where)), entity=entity)
 
 
 def _slack_in(definition: ConnectorDefinition, value: Any, mapping: AnvilMapping) -> Any:
@@ -1053,7 +1096,7 @@ def expressible(definition: ConnectorDefinition, tool: str, args: Mapping[str, A
     """
 
     from ..connector_emulator import _coerce_predicate
-    from ..connector_query import compile_native
+    from ..connector_query import compile_native, selected_columns
 
     arguments = {key: value for key, value in args.items() if value is not None}
     if "predicate" in arguments and "query" not in arguments:
@@ -1066,7 +1109,12 @@ def expressible(definition: ConnectorDefinition, tool: str, args: Mapping[str, A
         predicate = _coerce_predicate(arguments.pop("predicate"), entity=entity)
         if entity is None and predicate.entity is not None and predicate.entity in definition.entity_aliases:
             predicate = predicate.model_copy(update={"entity": None})
-        arguments["query"] = compile_native(definition, predicate, entity=entity)
+        # A language that names its own columns (SOQL's SELECT) carries the
+        # fields the call asks for in the query itself, not beside it.
+        columns = arguments.get("fields") if selected_columns(definition.query_language) else None
+        if columns:
+            arguments.pop("fields")
+        arguments["query"] = compile_native(definition, predicate, entity=entity, fields=columns)
     return arguments
 
 
@@ -1090,6 +1138,12 @@ def invert(transform: str | None, value: Any, mapping: AnvilMapping,
         return ",".join(str(item) for item in value) if isinstance(value, list | tuple) else value
     if transform == "entity":
         return {"name": value}
+    if transform == "drive_item_entity":
+        # Graph reads a new item's kind from its facet and its name's
+        # extension: a folder facet, or a file facet beside a name that
+        # carries the format (`report.pptx`). The forward check holds the name
+        # to the entity asked for.
+        return {"folder": {}} if value == "folder" else {"file": {}}
     if transform == "assignee":
         return {"accountId": (value or {}).get("assignee") if isinstance(value, Mapping) else value}
     if transform == "transition":
@@ -1102,6 +1156,26 @@ def invert(transform: str | None, value: Any, mapping: AnvilMapping,
         if not text.startswith("in:") or " " in text:
             raise ValueError(f"{value!r} is not a channel scope")
         return text[3:]
+    if transform == "cql":
+        # The filters a CQL query written by `_cql` states: its type and each
+        # field's value, or its set of values.
+        if definition is None:
+            raise ValueError("cannot invert the 'cql' transform without the connector definition")
+        from ..connector_query import parse_native
+        from ..predicates import PredicateOp
+
+        predicate = parse_native(definition, str(value))
+        filters: dict[str, Any] = {}
+        if predicate.entity is not None:
+            filters["type"] = definition.query_name_for(predicate.entity)
+        for clause in predicate.where:
+            if clause.op is PredicateOp.IN and isinstance(clause.value, tuple):
+                filters[clause.field] = list(clause.value)
+            elif clause.op is PredicateOp.EQ:
+                filters[clause.field] = clause.value
+            else:
+                raise ValueError(f"CQL {clause.op.value} on {clause.field!r} is not a list filter")
+        return filters
     if transform == "odata":
         parts = [item.partition("=") for item in str(value).split("&") if item]
         if not parts or any(not sep for _, sep, _ in parts):
@@ -1135,7 +1209,21 @@ def _place(params: dict[str, dict[str, Any]], holder: dict[str, Any], source: st
         cursor[keys[-1]] = {**cursor[keys[-1]], **value}
     else:
         cursor[keys[-1]] = value
+    # A numeric step is an array index (Drive's `parents.0`): the request a
+    # client sends carries `parents: [id]`, never `{"0": id}`.
+    body[keys[0]] = _indexed(body[keys[0]])
     holder["body"] = body
+
+
+def _indexed(value: Any) -> Any:
+    """*value* with every object keyed exactly ``0`` to ``n-1`` turned into the array it stands for."""
+
+    if not isinstance(value, dict):
+        return value
+    out = {key: _indexed(item) for key, item in value.items()}
+    if out and sorted(out) == sorted(str(index) for index in range(len(out))):
+        return [out[str(index)] for index in range(len(out))]
+    return out
 
 
 def placements(mapping: AnvilMapping, tool: str, args: Mapping[str, Any], *,

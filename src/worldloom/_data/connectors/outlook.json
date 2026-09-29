@@ -440,6 +440,10 @@
           "delete"
         ]
       }
+    },
+    "evidence": {
+      "field": "body",
+      "format": "html"
     }
   }
 }

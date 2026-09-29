@@ -40,6 +40,59 @@ def normalized_result(payload: Mapping[str, Any], fid: str) -> dict[str, Any]:
     }
 
 
+def identity_selector(
+    definition: ConnectorDefinition, tool: str, entity: str, selected: Sequence[str],
+    by_fid: Mapping[str, Mapping[str, Any]], records: Iterable[Mapping[str, Any]],
+) -> tuple[str, list[Any]]:
+    """What a search that must return exactly *selected* filters on: the records' ids, or their names.
+
+    A search picks its fixture records by id wherever the vendor's query
+    language has an id term (JQL, CQL, SOQL, an encoded query); a vendor
+    resolves the corpus's ids or the serving layer restates them on its own
+    handles. Drive's ``q`` has no id term at all, so a Drive search that
+    selected by id was refused by Drive itself: it selects by what ``q``
+    filters on, the file names, and only when those names pick out exactly
+    the selected files among the entity's records. Otherwise it keeps the
+    ids, and the contract proof names the call.
+    """
+    from .connectors.query.errors import language_config
+    from .connectors.query.schema import tool_language
+
+    language = tool_language(definition, tool)
+    try:
+        terms = {str(name).casefold() for name in language_config(language).get("fields", {})} if language else set()
+    except ValueError:
+        terms = set()
+    if not terms or "id" in terms or "id" in definition.query_fields or "name" not in terms:
+        return "id", list(selected)
+    names = [str(by_fid[fid].get("name") or by_fid[fid].get("title") or "") for fid in selected if fid in by_fid]
+    if len(names) != len(selected) or not all(names):
+        return "id", list(selected)
+    wanted = set(names)
+    matching = {str(record["fid"]) for record in records
+                if record.get("server") == definition.connector
+                and definition.entity_matches(entity, str(record.get("entity")))
+                and str(record.get("name") or record.get("title") or "") in wanted}
+    if matching != set(selected):
+        return "id", list(selected)
+    return "name", list(dict.fromkeys(names))
+
+
+def search_columns(definition: ConnectorDefinition, tool: str, required: Sequence[str] = ()) -> tuple[str, ...]:
+    """The columns a search in a language that names its own selects: the default ones and the fields the case needs.
+
+    Empty for every other language, whose answer is the whole record.
+    """
+    from .connector_query import selected_columns
+    from .connectors.query.schema import tool_language
+
+    language = tool_language(definition, tool)
+    default = selected_columns(language) if language else ()
+    if not default:
+        return ()
+    return tuple(dict.fromkeys([*default, *(definition.query_fields.get(field, field) for field in required)]))
+
+
 def compile_dag_row(
     query: PlannedEnterpriseQuery,
     fixture: QueryFixture,
@@ -156,16 +209,25 @@ def compile_dag_row(
                 node["expected_reads"] = selected[:1000]
             elif spec.kind == "search":
                 # Intersect exact fixture identities with authored field filters.
+                field, values = identity_selector(definition, tool, spec.entity, selected, by_fid, materialized)
                 predicate = payload.get("predicate") or {}
                 if "where" in predicate:
-                    predicate = {**predicate, "where": [*predicate["where"], {"field": "id", "op": "in", "value": selected}]}
+                    predicate = {**predicate, "where": [*predicate["where"], {"field": field, "op": "in", "value": values}]}
                 else:
-                    predicate = {**predicate, "id": ["in", selected]}
+                    predicate = {**predicate, field: ["in", values]}
                 payload.update(predicate=predicate, max_results=min(len(selected), 100))
                 payload.pop("id", None)
                 node["expected_reads"] = selected[:100]
             else:
                 node["expected_reads"] = selected[:1]
+            if spec.kind == "search" and "fields" not in payload:
+                # A vendor query that names its own columns (SOQL) returns
+                # those and nothing else: the gold search names the ones the
+                # case reads, and the snapshot below is taken with the same
+                # list, so native and contract serving return the same record.
+                columns = search_columns(definition, tool, requirement.required_fields)
+                if columns:
+                    payload["fields"] = list(columns)
             for fid in selected:
                 if fid not in by_fid:
                     raise RowError(query.id, f"{spec.id}: missing bound fixture {fid!r}")

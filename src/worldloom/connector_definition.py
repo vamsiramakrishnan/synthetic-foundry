@@ -262,6 +262,39 @@ CatalogContentVerb = Literal[
 ]
 
 
+class ConnectorEvidencePlacement(Model):
+    """Where a record write keeps the evidence it was written from, as the vendor keeps it.
+
+    A gold plan that writes a record carries the evidence records it rests on,
+    and it used to carry them as two invented fields (``evidence`` and
+    ``evidence_count``) no vendor API has. The emulator took them; a Graph
+    driveItem ``PATCH``, a Confluence page ``PUT`` and a Salesforce sObject
+    ``PATCH`` do not, so the same plan was unsolvable on the contract surface.
+    The place is data here, beside the connector's other product facts, so a
+    connector (or a pack's) declares its own and nothing needs code: the
+    planner binds the evidence document to ``fields.<field>``, the emulator
+    keeps it there, and the output grade reads it back from there.
+    """
+
+    field: str = Field(min_length=1)
+    """The write's field that carries the evidence (``fields.<field>``):
+    SharePoint's and Drive's ``description``, a Confluence page's ``body``,
+    ServiceNow's ``work_notes``."""
+    format: Literal["markdown", "html"] = "markdown"
+    """How the evidence document is written into the field: ``html`` for a
+    store that keeps markup (Confluence's storage format), else markdown."""
+    read_first: bool = False
+    """The vendor's write restates the record (a Confluence page ``PUT``
+    carries the page's title and next version), so a client reads the
+    record before writing it, and the plan does too."""
+    unserved: str | None = None
+    """Why the connector's shipped contract surface cannot carry a write to
+    this place, when it cannot. The place is still where the vendor keeps
+    evidence; the planner does not plan an evidence write to it, because a
+    case no agent could solve on the contract surface is not a case.
+    ``tests/test_evidence_placement.py`` holds this to the shipped surface."""
+
+
 class ConnectorCatalogEntity(Model):
     """One entity as the planner and the connector dataset name it.
 
@@ -291,6 +324,9 @@ class ConnectorCatalogEntity(Model):
     content_verbs: tuple[CatalogContentVerb, ...] = ()
     """What the dataset says may be done with the record's content; only
     meaningful beside ``record_verbs``."""
+    evidence: ConnectorEvidencePlacement | None = None
+    """Where a write of this entity keeps its evidence; ``None`` takes the
+    catalog's ``evidence``."""
 
 
 class ConnectorCatalog(Model):
@@ -318,6 +354,11 @@ class ConnectorCatalog(Model):
     """The planner's entities, in the order it lists them. ``None`` is every
     definition entity, in definition order (the system of record's catalogue
     of record kinds, and every pack that states no catalog)."""
+    evidence: ConnectorEvidencePlacement | None = None
+    """Where a record write keeps its evidence, for an entity that states none.
+    ``None`` everywhere is a connector that declares no place: its writes
+    keep the generic ``evidence`` and ``evidence_count`` fields, which only
+    the emulator's own tools take."""
 
 
 class ConnectorDefinition(Model):
@@ -449,6 +490,25 @@ class ConnectorDefinition(Model):
                 findings.append(f"{where}: content_verbs without record_verbs declares content for a record the "
                                 "dataset does not declare; state record_verbs, or drop content_verbs")
         return findings
+
+    def evidence_placement(self, entity: str) -> ConnectorEvidencePlacement | None:
+        """Where a write of *entity* keeps its evidence: the catalog entity's place, else the catalog's.
+
+        *entity* may be a concrete entity (``docx``) or the alias the catalog
+        lists it under (``file``); either finds the alias's place. ``None``
+        is a connector that declares none.
+        """
+
+        catalog = self.catalog
+        if catalog is None:
+            return None
+        entries = catalog.entities or {}
+        names = [entity, *(alias for alias, members in self.entity_aliases.items() if entity in members)]
+        for name in names:
+            entry = entries.get(name)
+            if entry is not None and entry.evidence is not None:
+                return entry.evidence
+        return catalog.evidence
 
     def catalog_entities(self) -> dict[str, ConnectorCatalogEntity]:
         """The catalog's entities, in planner order, each with its defaults filled from the catalog.
@@ -765,6 +825,7 @@ __all__ = [
     "ConnectorCatalogEntity",
     "ConnectorDefinition",
     "ConnectorEntityDefinition",
+    "ConnectorEvidencePlacement",
     "ConnectorFieldDefinition",
     "ConnectorFieldType",
     "ConnectorIdDefinition",

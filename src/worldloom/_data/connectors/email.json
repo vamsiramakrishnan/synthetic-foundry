@@ -313,6 +313,10 @@
           "extract"
         ]
       }
+    },
+    "evidence": {
+      "field": "body",
+      "format": "html"
     }
   }
 }

@@ -128,8 +128,12 @@ def test_map_fetches_each_returned_record_and_joins_actual_results(count):
     assert result.grade["fails"] == []
     assert len([span for span in result.spans if span.node == "fetch-0"]) == count
     write = next(span for span in result.spans if span.node == "write")
-    assert write.args["fields"]["evidence_count"] == count * 2
-    assert len(write.args["fields"]["evidence"]) == count * 2
+    # SharePoint keeps a write's evidence in the file's description
+    # (`catalog.evidence`): one document over every joined record.
+    document = write.args["fields"]["description"]
+    assert set(write.args["fields"]) == {"description", "name"}
+    assert f"{count * 2} evidence record(s)." in document
+    assert all(f"{connector}:{index}" in document for connector in ("jira", "servicenow") for index in range(count))
     incomplete = tuple(span for span in result.spans if not (span.node == "fetch-0" and span.reads == ("jira:0",)))
     assert any("per_item" in failure for failure in grade_trace(incomplete, row, post_state=result.post_state)["fails"])
 
@@ -144,7 +148,7 @@ def test_empty_map_performs_zero_fetches_and_keeps_join_defined():
     result = run_eval_row(row, records)
     assert result.grade["fails"] == []
     assert not any(span.node.startswith("fetch-") for span in result.spans)
-    assert next(span for span in result.spans if span.node == "write").args["fields"]["evidence_count"] == 0
+    assert "0 evidence record(s)." in next(span for span in result.spans if span.node == "write").args["fields"]["description"]
 
 
 def test_map_bound_is_effective_and_gradeable():
@@ -156,7 +160,7 @@ def test_map_bound_is_effective_and_gradeable():
     result = run_eval_row(row, records)
     assert result.grade["fails"] == []
     assert len([span for span in result.spans if span.node == "fetch-0"]) == 2
-    assert next(span for span in result.spans if span.node == "write").args["fields"]["evidence_count"] == 4
+    assert "4 evidence record(s)." in next(span for span in result.spans if span.node == "write").args["fields"]["description"]
 
 
 def test_readback_binds_to_actual_created_record_and_writes_are_verified():
@@ -167,7 +171,9 @@ def test_readback_binds_to_actual_created_record_and_writes_are_verified():
     marker = next(span for span in result.spans if span.node == "write-marker")
     assert write.writes == verify.reads == marker.writes
     damaged = deepcopy(result.post_state)
-    damaged[write.writes[0]]["verified"] = False
+    # The marker rewrote the evidence at its place with a verification line.
+    assert "Verified against the saved record." in marker.args["fields"]["description"]
+    damaged[write.writes[0]]["description"] = "tampered"
     assert any("field_mismatch" in failure for failure in grade_trace(result.spans, row, post_state=damaged)["fails"])
 
 

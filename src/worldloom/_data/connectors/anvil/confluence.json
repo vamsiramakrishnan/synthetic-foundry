@@ -11,7 +11,7 @@
       "tool": "search",
       "args": {
         "entity": {"value": "page"},
-        "query": {"object": {"type": {"value": "page"}, "title": "query.title"}, "transform": "cql"},
+        "query": {"object": {"type": {"value": "page"}, "id": "query.id", "title": "query.title"}, "transform": "cql"},
         "max_results": {"from": "query.limit", "transform": "int"}
       },
       "cursor": "query.cursor",
@@ -44,6 +44,13 @@
       "args": {
         "id": {"from": "path.id", "required": true},
         "fields": {"object": {"title": "body.title", "body": "body.body.value"}, "transform": "fields", "required": true}
+      },
+      "restate": {
+        "body.id": "record.id",
+        "body.status": "record.status",
+        "body.title": "record.title",
+        "body.body.representation": "record.body.storage.representation",
+        "body.version.number": {"from": "record.version.number", "step": 1}
       },
       "result": "record"
     },

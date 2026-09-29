@@ -200,7 +200,9 @@ def transform_results(node: EnterpriseDagNode, outputs: Mapping[str, list[Any]],
         sections = [str(section) for section in node.arguments.get("sections", ())]
         if not sections:
             raise ValueError(f"{node.id}: outline requires sections")
-        return [outline_document(values, sections, str(node.arguments.get("format") or "markdown"))]
+        note = node.arguments.get("note")
+        return [outline_document(values, sections, str(node.arguments.get("format") or "markdown"),
+                                 note=str(note) if note else None)]
     if node.transform == "unique":
         # With `fields`, two values are one when they agree on those fields
         # (the first is kept): a join of two views of the same records on
@@ -220,13 +222,15 @@ def transform_results(node: EnterpriseDagNode, outputs: Mapping[str, list[Any]],
     return values
 
 
-def outline_document(values: Sequence[Any], sections: Sequence[str], fmt: str) -> str:
+def outline_document(values: Sequence[Any], sections: Sequence[str], fmt: str, *, note: str | None = None) -> str:
     """A document skeleton: the named section headings, each over the evidence it rests on.
 
     Structure, not prose. The first section states how many records the
     document rests on and every later one lists them by id (and title, when
     the record carries one), so a message that must be a document with those
-    sections carries them and cites every record it was written from.
+    sections carries them and cites every record it was written from. A
+    *note* closes the document as its own paragraph (a verification marker's
+    line).
     """
 
     def entry(value: Any) -> str:
@@ -245,9 +249,9 @@ def outline_document(values: Sequence[Any], sections: Sequence[str], fmt: str) -
         from html import escape
         return "".join(f"<h2>{escape(heading)}</h2>" + (f"<p>{escape(lines[0])}</p>" if lines == [lead]
                                                           else "<ul>" + "".join(f"<li>{escape(line)}</li>" for line in lines) + "</ul>")
-                       for heading, lines in blocks)
+                       for heading, lines in blocks) + (f"<p>{escape(note)}</p>" if note else "")
     return "\n\n".join(f"## {heading}\n\n" + "\n".join(lines if lines == [lead] else (f"- {line}" for line in lines))
-                        for heading, lines in blocks)
+                        for heading, lines in blocks) + (f"\n\n{note}" if note else "")
 
 
 def dag_metrics(dag: EnterpriseDag) -> dict[str, int]:
