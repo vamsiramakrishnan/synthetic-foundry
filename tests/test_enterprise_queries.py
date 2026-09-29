@@ -282,7 +282,9 @@ def _small_profile() -> ScenarioProfile:
         "name": "small",
         "industry": "retail",
         "company_description": "Retail service operations.",
-        "connectors": ["servicenow", "confluence"],
+        # SharePoint, not Confluence, as the destination: a Confluence page
+        # body is an `unserved` evidence place, so it plans no write.
+        "connectors": ["servicenow", "sharepoint"],
         "workflows": ["incident_review"],
         "coverage": {
             "name": "small", "connector_counts": [1],

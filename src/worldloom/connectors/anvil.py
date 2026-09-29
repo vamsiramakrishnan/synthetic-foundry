@@ -1114,7 +1114,13 @@ def expressible(definition: ConnectorDefinition, tool: str, args: Mapping[str, A
         columns = arguments.get("fields") if selected_columns(definition.query_language) else None
         if columns:
             arguments.pop("fields")
-        arguments["query"] = compile_native(definition, predicate, entity=entity, fields=columns)
+        # A tool whose own language differs from its connector's (SharePoint's
+        # search takes KQL) is written in that language.
+        from .query.schema import tool_language
+
+        own = tool_language(definition, definition.canonical_tool(tool))
+        arguments["query"] = compile_native(definition, predicate, entity=entity, fields=columns,
+                                            language=own if own == "kql" else None)
     return arguments
 
 

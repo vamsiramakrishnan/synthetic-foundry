@@ -18,6 +18,10 @@ from typing import Any
 
 import pytest
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_evalrun import (
@@ -357,11 +361,15 @@ def test_broadening_the_search_drops_the_query_stage_not_the_evidence(searched: 
     assert "query.overfetch" in queries.findings and "query.missing_filter" not in queries.findings
 
 
-def test_writing_the_wrong_evidence_count_is_a_field_mismatch(searched: Subject) -> None:
+def test_writing_evidence_that_cites_no_record_is_a_field_mismatch(searched: Subject) -> None:
+    # The evidence is a document at the destination's declared place
+    # (`catalog.evidence`); one that cites none of the records read is wrong
+    # evidence, as a wrong evidence count was when evidence was two fields.
     calls = []
     for node, call in searched.calls:
         if node == "write":
-            fields = {**call.arguments["fields"], "evidence_count": 0}
+            fields = {key: ("## Evidence\n\nNothing found." if isinstance(value, str) and "evidence record" in value
+                            else value) for key, value in call.arguments["fields"].items()}
             call = ToolCall(tool=call.tool, arguments={**call.arguments, "fields": fields})
         calls.append((node, call))
     mutated = searched.replay(calls, name="miscounted")

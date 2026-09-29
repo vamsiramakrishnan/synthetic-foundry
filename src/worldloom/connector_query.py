@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 from .connector_definition import ConnectorDefinition
 from .predicates import FieldPredicate, Predicate, PredicateOp, RelativeTime, Scalar
@@ -150,20 +151,61 @@ def selected_columns(language: str, fields: Sequence[str] | None = None) -> tupl
     return tuple(dict.fromkeys(str(item) for item in fields)) if fields else default
 
 
+def _compile_kql(predicate: Predicate) -> str:
+    """KQL property restrictions: ``filename="A"``, a set as ``(filename="A" OR filename="B")``, joined by AND.
+
+    A field is written as the KQL property whose value it is (the language's
+    `fields` in ``_query.json``: a file's ``name`` is ``filename``); KQL has
+    no property for a record id, so a predicate on one is refused.
+    """
+    from .connectors.query.errors import language_config
+
+    properties = {str(name): tuple(keys) for name, keys in language_config("kql").get("fields", {}).items()}
+
+    def prop(field: str) -> str:
+        if field in properties:
+            return field
+        found = next((name for name, keys in properties.items() if keys and keys[0] == field), None)
+        if found is None:
+            raise ValueError(f"KQL has no property for {field!r}")
+        return found
+
+    def literal(value: Any) -> str:
+        return '"' + str(value).replace('"', '\\"') + '"'
+
+    clauses = []
+    for item in predicate.where:
+        name = prop(item.field)
+        if item.op is PredicateOp.EQ:
+            clauses.append(f"{name}={literal(item.value)}")
+        elif item.op is PredicateOp.IN and isinstance(item.value, tuple):
+            clauses.append("(" + " OR ".join(f"{name}={literal(part)}" for part in item.value) + ")")
+        elif item.op is PredicateOp.CONTAINS:
+            clauses.append(f"{name}:{literal(item.value)}")
+        else:
+            raise ValueError(f"KQL cannot restrict {item.field!r} by {item.op.value}")
+    return " AND ".join(clauses)
+
+
 def compile_native(
     definition: ConnectorDefinition,
     predicate: Predicate,
     *,
     entity: str | None = None,
     fields: Sequence[str] | None = None,
+    language: str | None = None,
 ) -> str:
     """Compile one shared predicate into the connector's native query subset.
 
     *fields* are the columns a language that names its own (SOQL's
     ``SELECT``) returns; without them it selects the language's default
-    columns (``selected_columns``).
+    columns (``selected_columns``). *language* is a tool's own language
+    where it differs from the connector's (SharePoint's search takes KQL,
+    its list takes OData).
     """
 
+    if language == "kql":
+        return _compile_kql(predicate)
     language = definition.query_language
     if language not in _SUPPORTED_LANGUAGES:
         raise ValueError(f"unsupported connector query language {language!r}")

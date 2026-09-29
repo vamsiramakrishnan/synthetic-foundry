@@ -350,7 +350,10 @@ def gold_query(case: EvalCase, node: NodeContract, definition: Any,
         except KeyError:
             concrete = None
     try:
-        compiled = compile_native(definition, predicate.model_copy(update={"entity": concrete}), entity=concrete)
+        # A tool whose language is not its connector's (SharePoint's KQL
+        # search) is written in its own, as the contract carrier writes it.
+        compiled = compile_native(definition, predicate.model_copy(update={"entity": concrete}), entity=concrete,
+                                  language=language if language == "kql" else None)
     except (ValueError, KeyError):
         # A language the historical compiler does not write (KQL tools, Slack):
         # the predicate is what the gold states, and the emulator runs it.

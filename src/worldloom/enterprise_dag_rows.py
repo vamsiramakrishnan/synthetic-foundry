@@ -50,10 +50,12 @@ def identity_selector(
     language has an id term (JQL, CQL, SOQL, an encoded query); a vendor
     resolves the corpus's ids or the serving layer restates them on its own
     handles. Drive's ``q`` has no id term at all, so a Drive search that
-    selected by id was refused by Drive itself: it selects by what ``q``
-    filters on, the file names, and only when those names pick out exactly
-    the selected files among the entity's records. Otherwise it keeps the
-    ids, and the contract proof names the call.
+    selected by id was refused by Drive itself, and SharePoint's KQL search
+    read an id as free text and found nothing: each selects by what its
+    language filters on, the file names (``name``, KQL's ``filename``), and
+    only when those names pick out exactly the selected files among the
+    entity's records. Otherwise it keeps the ids, and the contract proof
+    names the call.
     """
     from .connectors.query.errors import language_config
     from .connectors.query.schema import tool_language
@@ -63,7 +65,9 @@ def identity_selector(
         terms = {str(name).casefold() for name in language_config(language).get("fields", {})} if language else set()
     except ValueError:
         terms = set()
-    if not terms or "id" in terms or "id" in definition.query_fields or "name" not in terms:
+    names_a_file = any(keys and keys[0] == "name" for keys in (
+        language_config(language).get("fields", {}).values() if language and terms else ()))
+    if not terms or "id" in terms or "id" in definition.query_fields or not names_a_file:
         return "id", list(selected)
     names = [str(by_fid[fid].get("name") or by_fid[fid].get("title") or "") for fid in selected if fid in by_fid]
     if len(names) != len(selected) or not all(names):
@@ -71,7 +75,7 @@ def identity_selector(
     wanted = set(names)
     matching = {str(record["fid"]) for record in records
                 if record.get("server") == definition.connector
-                and definition.entity_matches(entity, str(record.get("entity")))
+                and (record.get("entity") == entity or definition.entity_matches(entity, str(record.get("entity"))))
                 and str(record.get("name") or record.get("title") or "") in wanted}
     if matching != set(selected):
         return "id", list(selected)

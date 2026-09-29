@@ -1134,11 +1134,11 @@ def _expected_fields(case: EvalCase, outcomes: Any, before: Mapping[str, Mapping
             records = _bound_source(case, expected.node, binding)
             if not records:
                 continue
-            source = next((node for node in case.plan.nodes if node.id == binding.get("node")), None)
+            origin = next((node for node in case.plan.nodes if node.id == binding.get("node")), None)
             if binding.get("select") == "count":
                 wanted.append((field, "count", len(records)))
             elif (binding.get("select") in {"all", None} and not binding.get("path")) or (
-                    source is not None and source.op == "outline"):
+                    origin is not None and origin.op == "outline"):
                 # The evidence set itself, or a document written over it (the
                 # evidence at a connector's declared place): either way every
                 # evidence record must be cited in the field the write left.

@@ -671,10 +671,11 @@ def _body_defaults(tool: ContractTool, arguments: dict[str, Any]) -> None:
         if name in body:
             continue
         fixed: Any = None
-        for part in parts:
-            prop = _props(part).get(name)
-            if not isinstance(prop, Mapping):
-                continue
+        found = [_props(part).get(name) for part in parts]
+        props = [prop for prop in found if isinstance(prop, Mapping)]
+        # A property may fix its value in its own allOf (Graph's message body).
+        props.extend(item for prop in list(props) for item in prop.get("allOf") or () if isinstance(item, Mapping))
+        for prop in props:
             if "const" in prop:
                 fixed = prop["const"]
             elif isinstance(prop.get("enum"), list) and len(prop["enum"]) == 1:
@@ -1164,7 +1165,14 @@ _SURFACE: ContextVar[Any] = ContextVar("worldloom_connector_surface", default=No
 
 @contextmanager
 def serving_surface(choice: str | ContractSurfaces | None) -> Iterator[None]:
-    """Services built inside this block present *choice*: ``native``, ``contract``, or given surfaces."""
+    """Services built inside this block present *choice*: ``native``, ``contract``, or given surfaces.
+
+    ``None`` (a command given no ``--surface``) keeps the surface already in
+    force: an enclosing block's, else the policy's.
+    """
+    if choice is None:
+        yield
+        return
     token = _SURFACE.set(choice)
     try:
         yield

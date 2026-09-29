@@ -242,3 +242,18 @@ def test_a_drive_search_selects_by_name_only_when_the_names_pick_out_the_records
     assert identity_selector(definition, "search", "file", ["f1"], by_fid, records) == ("id", ["f1"])
     jira = load_connector_definition("jira")
     assert identity_selector(jira, "search_issues", "issue", ["j1"], {}, [])[0] == "id"
+
+
+def test_a_sharepoint_search_selects_files_in_kql() -> None:
+    definition = load_connector_definition("sharepoint")
+    carried = shipped_surface("sharepoint").carry(
+        "search_files", {"predicate": {"where": [{"field": "name", "op": "in", "value": ["A", "B"]}]},
+                         "entity": "file", "max_results": 2}, definition)
+    assert carried.arguments["q"] == '(filename="A" OR filename="B")'
+
+
+def test_a_command_given_no_surface_keeps_the_one_in_force() -> None:
+    from worldloom.connectors.surface import serving_surface, surface_in_force
+
+    with serving_surface("native"), serving_surface(None):
+        assert surface_in_force() == "native"
