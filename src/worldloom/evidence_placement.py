@@ -34,7 +34,6 @@ still plans and runs on the native surface.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -56,12 +55,13 @@ def carries_evidence(operation: str) -> bool:
     return operation not in MESSAGE_OPERATIONS and operation not in CONTENTLESS_OPERATIONS
 
 
-@lru_cache(maxsize=256)
 def placement(connector: str, entity: str) -> ConnectorEvidencePlacement | None:
     """The declared place for a write of *connector*'s *entity*, or ``None`` when it declares none.
 
     A connector the installed definitions do not know has no place, as a
-    connector that declares none has not.
+    connector that declares none has not. Not cached: the definition in force
+    depends on the connector pack context (``packkit.use``), so a cached
+    answer could carry one pack's place into another's build.
     """
 
     from .connector_definition import load_connector_definition

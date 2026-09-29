@@ -43,7 +43,7 @@ def normalized_result(payload: Mapping[str, Any], fid: str) -> dict[str, Any]:
 def identity_selector(
     definition: ConnectorDefinition, tool: str, entity: str, selected: Sequence[str],
     by_fid: Mapping[str, Mapping[str, Any]], records: Iterable[Mapping[str, Any]],
-) -> tuple[str, list[Any]]:
+) -> tuple[str, list[Any]] | None:
     """What a search that must return exactly *selected* filters on: the records' ids, or their names.
 
     A search picks its fixture records by id wherever the vendor's query
@@ -54,8 +54,10 @@ def identity_selector(
     read an id as free text and found nothing: each selects by what its
     language filters on, the file names (``name``, KQL's ``filename``), and
     only when those names pick out exactly the selected files among the
-    entity's records. Otherwise it keeps the ids, and the contract proof
-    names the call.
+    entity's records. When they do not (a name missing, or shared with a
+    record the case did not select), no query in that language can pick out
+    exactly the selection, so there is no selector: ``None``, and the row is
+    refused rather than generated unsolvable.
     """
     from .connectors.query.errors import language_config
     from .connectors.query.schema import tool_language
@@ -71,14 +73,14 @@ def identity_selector(
         return "id", list(selected)
     names = [str(by_fid[fid].get("name") or by_fid[fid].get("title") or "") for fid in selected if fid in by_fid]
     if len(names) != len(selected) or not all(names):
-        return "id", list(selected)
+        return None
     wanted = set(names)
     matching = {str(record["fid"]) for record in records
                 if record.get("server") == definition.connector
                 and (record.get("entity") == entity or definition.entity_matches(entity, str(record.get("entity"))))
                 and str(record.get("name") or record.get("title") or "") in wanted}
     if matching != set(selected):
-        return "id", list(selected)
+        return None
     return "name", list(dict.fromkeys(names))
 
 
@@ -213,7 +215,11 @@ def compile_dag_row(
                 node["expected_reads"] = selected[:1000]
             elif spec.kind == "search":
                 # Intersect exact fixture identities with authored field filters.
-                field, values = identity_selector(definition, tool, spec.entity, selected, by_fid, materialized)
+                chosen = identity_selector(definition, tool, spec.entity, selected, by_fid, materialized)
+                if chosen is None:
+                    raise RowError(query.id, f"{spec.id}: {tool}'s query language has no id term, and the selected "
+                                             "records' names do not pick them out from the others")
+                field, values = chosen
                 predicate = payload.get("predicate") or {}
                 if "where" in predicate:
                     predicate = {**predicate, "where": [*predicate["where"], {"field": field, "op": "in", "value": values}]}

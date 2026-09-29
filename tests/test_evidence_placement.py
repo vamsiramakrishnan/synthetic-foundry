@@ -12,6 +12,8 @@ output grade to the declared place.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -255,8 +257,11 @@ def test_a_drive_search_selects_by_name_only_when_the_names_pick_out_the_records
                {"fid": "f3", "server": "drive", "entity": "docx", "name": "Plan"}]
     by_fid = {record["fid"]: record for record in records}
     assert identity_selector(definition, "search", "file", ["f2"], by_fid, records) == ("name", ["Memo"])
-    # Two files named `Plan`: the name would return both, so the search keeps the ids.
-    assert identity_selector(definition, "search", "file", ["f1"], by_fid, records) == ("id", ["f1"])
+    # Two files named `Plan`: the name would return both, and Drive's `q` has no id
+    # term, so no query picks out `f1` alone: there is no selector, and the row is refused.
+    assert identity_selector(definition, "search", "file", ["f1"], by_fid, records) is None
+    unnamed = {**by_fid, "f4": {"fid": "f4", "server": "drive", "entity": "docx", "name": ""}}
+    assert identity_selector(definition, "search", "file", ["f4"], unnamed, [*records, unnamed["f4"]]) is None
     jira = load_connector_definition("jira")
     assert identity_selector(jira, "search_issues", "issue", ["j1"], {}, [])[0] == "id"
 
@@ -274,3 +279,28 @@ def test_a_command_given_no_surface_keeps_the_one_in_force() -> None:
 
     with serving_surface("native"), serving_surface(None):
         assert surface_in_force() == "native"
+
+
+def test_the_place_follows_the_connector_pack_in_force(tmp_path: Path) -> None:
+    """A pack that redeclares a connector's place is read under that pack, and only there."""
+    from importlib.resources import files
+
+    from worldloom import packkit
+    from worldloom.evidence_placement import placement, plannable
+
+    body = json.loads(files("worldloom").joinpath("_data", "connectors", "salesforce.json").read_text(encoding="utf-8"))
+    body["catalog"]["evidence"] = {"field": "Description", "unserved": "this org locks Description"}
+    root = tmp_path / "packs"
+    path = root / "connector" / "salesforce.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"schema": "worldloom.pack/v1", "kind": "connector", "name": "salesforce", "body": body}))
+    packkit.refresh()
+    try:
+        assert plannable("salesforce", "account", "update")
+        with packkit.use(roots=[root]):
+            found = placement("salesforce", "account")
+            assert found is not None and found.unserved == "this org locks Description"
+            assert not plannable("salesforce", "account", "update")
+        assert plannable("salesforce", "account", "update")
+    finally:
+        packkit.refresh()
