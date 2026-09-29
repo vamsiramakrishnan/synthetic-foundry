@@ -810,6 +810,49 @@ def plan_call(mapping: AnvilMapping, entry: OperationMap, request: Mapping[str, 
     return PlannedCall(tool=tool, args=_taken(definition, tool, args), start_at=start_at)
 
 
+def unchanged_restatements(entry: OperationMap, args: Mapping[str, Any], definition: ConnectorDefinition,
+                           record: Mapping[str, Any] | None) -> dict[str, Any]:
+    """*args* without the fields a restated wire field carries unchanged from the addressed *record*.
+
+    A Confluence page ``PUT`` restates the page's title (``restate``), and
+    the mapping reads ``body.title`` as the update's ``title`` field, since a
+    ``PUT`` that changes it retitles the page. A client that asked for a new
+    body sends back the title the page already has, which changes nothing:
+    the call it makes is the body update, and the span, the grade and the
+    state diff say so. A restated field whose value differs from the
+    record's is a change, and is kept; a stepped one (the next version) is
+    never a field of the call.
+    """
+
+    if not entry.restate or record is None:
+        return dict(args)
+    from ..connector_payload import shape_payload
+
+    try:
+        payload = shape_payload(definition, record)
+    except (KeyError, TypeError, ValueError):
+        return dict(args)
+    out = dict(args)
+    for name, spec in entry.args.items():
+        value = out.get(name)
+        if not spec.parts or not isinstance(value, Mapping):
+            continue
+        kept = dict(value)
+        for field_name, location in spec.parts.items():
+            if location not in entry.restate or field_name not in kept:
+                continue
+            path, step = entry.restate[location]
+            if step:
+                continue
+            current: Any = payload
+            for key in path.split("."):
+                current = current.get(key) if isinstance(current, Mapping) else None
+            if current is not None and kept[field_name] == current:
+                del kept[field_name]
+        out[name] = kept
+    return out
+
+
 def _choose(entry: OperationMap, value: Any) -> str:
     """The tool ``tool_by`` names for *value*: its own key, else ``*`` for any value present, else the entry's tool."""
 
@@ -939,6 +982,11 @@ def answer(mapping: AnvilMapping, backend: Backend, request: Mapping[str, Any]) 
         chosen = _choose(entry, value)
         if chosen != planned.tool:
             planned = PlannedCall(tool=chosen, args=_taken(backend.definition, chosen, planned.args), start_at=planned.start_at)
+    if entry.restate and planned.args.get("id") is not None:
+        # A field the client restated from the record as it read it (a page
+        # PUT's title) is not a change the call asks for.
+        kept = unchanged_restatements(entry, planned.args, backend.definition, backend.record(planned.args["id"]))
+        planned = PlannedCall(tool=planned.tool, args=kept, start_at=planned.start_at)
     try:
         result = backend.call(planned.tool, planned.args)
         response = _shape(mapping, entry, backend, request, planned, result)
@@ -1501,5 +1549,6 @@ __all__ = [
     "request_argument_names",
     "run_request",
     "shipped_mappings",
+    "unchanged_restatements",
     "vendor_value",
 ]

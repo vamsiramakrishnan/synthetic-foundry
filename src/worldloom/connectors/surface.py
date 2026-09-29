@@ -73,6 +73,7 @@ from .anvil import (
     plan_call,
     read_air,
     run_request,
+    unchanged_restatements,
 )
 
 if TYPE_CHECKING:
@@ -479,10 +480,12 @@ class ContractSurface:
         # numeric id, a Jira key): when the plan's reference is not one the
         # contract admits, the call is carried again by the record's handle.
         for handle in _handles(definition, record):
-            if args.get("id") is not None and str(handle) != str(args["id"]):
+            if args.get("id") is None:
+                continue
+            if str(handle) != str(args["id"]):
                 attempts.append({**args, "id": handle})
-                if isinstance(handle, str) and handle.isdigit():
-                    attempts.append({**args, "id": int(handle)})  # a numeric handle, typed as the contract types it
+            if isinstance(handle, str) and handle.isdigit() and args["id"] != int(handle):
+                attempts.append({**args, "id": int(handle)})  # a numeric handle, typed as the contract types it
         for attempt in attempts:
             try:
                 return self._carry(tool, attempt, definition, record, reasons)
@@ -533,9 +536,10 @@ class ContractSurface:
                 continue
             chosen = planned.tool
             record_chosen = placed.entry.tool_by is not None and placed.entry.tool_by[0].startswith("record.")
+            asked = _taken(definition, tool, {key: value for key, value in wanted.items() if key not in placed.dropped})
             if (chosen != tool and not (record_chosen and tool in placed.entry.tools)) \
-                    or _canonical(_ids_as_text(planned.args)) != _canonical(_ids_as_text(_taken(
-                        definition, tool, {key: value for key, value in wanted.items() if key not in placed.dropped}))):
+                    or _canonical(_ids_as_text(unchanged_restatements(placed.entry, planned.args, definition, record))) \
+                    != _canonical(_ids_as_text(asked)):
                 reasons.append(f"{placed.entry.operation_id} carries it as {self.connector}.{chosen}"
                                f"({_canonical(planned.args)}), not the call asked for")
                 continue
@@ -659,12 +663,23 @@ def _body_defaults(tool: ContractTool, arguments: dict[str, Any]) -> None:
     ``x-ms-discriminator-value``): a client sends it, and it changes nothing
     about the call. Only a property the schema itself decides is filled; any
     other missing one stays missing and is refused by the schema check.
+
+    The same holds inside an object the body carries: Confluence's page
+    body, narrowed by the manifest to its storage alternative, requires
+    ``representation`` and admits only ``storage``, so a page write whose
+    plan carries only the value sends ``{"representation": "storage",
+    "value": ...}``, as the vendor documents it.
     """
 
     body = arguments.get("body")
     schema = tool.properties.get("body")
-    if not isinstance(body, dict) or not isinstance(schema, Mapping):
-        return
+    if isinstance(body, dict) and isinstance(schema, Mapping):
+        _fixed_required(body, schema, depth=0)
+
+
+def _fixed_required(body: dict[str, Any], schema: Mapping[str, Any], *, depth: int) -> None:
+    """Fill *body*'s required properties that *schema* fixes, then those of each object it already carries."""
+
     parts = [schema, *(part for part in schema.get("allOf") or () if isinstance(part, Mapping))]
     required = [str(name) for part in parts for name in part.get("required") or ()]
     for name in dict.fromkeys(required):
@@ -684,10 +699,20 @@ def _body_defaults(tool: ContractTool, arguments: dict[str, Any]) -> None:
                 fixed = prop["default"]
             if fixed is not None:
                 break
-        if fixed is None and name == "@odata.type":
+        if fixed is None and name == "@odata.type" and depth == 0:
             fixed = schema.get("x-ms-discriminator-value")
         if fixed is not None:
             body[name] = fixed
+    if depth >= 4:
+        return
+    for name, value in body.items():
+        if not isinstance(value, dict):
+            continue
+        for part in parts:
+            nested = _props(part).get(name)
+            if isinstance(nested, Mapping):
+                _fixed_required(value, nested, depth=depth + 1)
+                break
 
 
 @dataclass(frozen=True)
