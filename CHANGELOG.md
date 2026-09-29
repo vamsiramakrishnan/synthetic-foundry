@@ -78,6 +78,39 @@ first written up, before the waves above it landed.
   that keeps one alternative of a `oneOf`, and an Anvil manifest's `params`
   retypes an input only to a scalar. An interview's case sets still prove
   on the connector tools (1 of 12 on the contract surface).
+- **Confluence page writes are planned again (Generation).** Worldloom's
+  Confluence manifest narrows the write body of `createPage`, `updatePage`,
+  `createBlogPost`, `updateBlogPost`, `createFooterComment` and
+  `updateFooterComment` from `oneOf[<Resource>BodyWrite,
+  <Resource>NestedBodyWrite]` to its flat alternative (`PageBodyWrite`,
+  `BlogPostBodyWrite`, `CommentBodyWrite`), with `representation` limited
+  to `storage` and `representation` and `value` required, citing
+  Atlassian's v2 reference for the storage representation. **This needs
+  Anvil with manifest union narrowing (`params.<input>.one_of`, Anvil PR
+  #63)**; an older Anvil refuses the manifest. The shipped surfaces are
+  reprojected under that build (Confluence's six write tools take the
+  narrowed body; the other nine change only their AIR digest), the
+  placement drops `unserved`, and the planner plans Confluence page
+  evidence writes in storage format, reading the page first. The carrier
+  sends a nested body's required property its schema fixes
+  (`representation: storage`); a field a page `PUT` restates from the page
+  it read and sends back unchanged (its title) is not part of the call
+  (`connectors.anvil.unchanged_restatements`), on every dispatch path, and
+  `write_chain`'s marker on such a place names only the evidence field; a
+  pre-existing destination of a connector whose records are numbered is
+  named by a number from its record projection, since the contract types
+  the page path as an integer. The standard build's 100 cases now write 44
+  SharePoint files, 18 Confluence pages, 14 Drive files, 13 email messages
+  and 11 Salesforce accounts (were 67, none, 14, 13 and 6), and prove 100
+  of 100 on both surfaces; `--seed 4242` at `--limit 200` writes 45
+  Confluence pages among its 200 and proves 200 of 200 on both; the
+  standard world at `--limit 500` writes 109 and proves 500 of 500 on
+  both; corner
+  cases 30 of 30 on both; the reference agent scores 1.0 on every axis
+  and stage on both surfaces. An interview's case sets prove 2 of 12 on
+  the contract surface (from 1) and keep their native pin: the rest need
+  KQL's missing `artifact_type`, Slack's named message and search, and
+  list reads filtered by the interview's own fields.
 - **Searches select by what the vendor filters on (Generation).** A Drive
   search picks its files by name, as Drive's own disjunction
   (`(name = 'A' or name = 'B')`: `compile_native` wrote `name in (...)`,

@@ -164,6 +164,14 @@ def test_the_verification_marker_rewrites_the_evidence_at_its_place() -> None:
     assert by_id["document-verified"].arguments["note"] == "Verified against the saved record."
 
 
+def test_a_marker_on_a_restated_record_names_only_its_evidence() -> None:
+    """A page PUT sends back what it read; the marker's call names only the body it changes."""
+    shaped = apply_dag_shape(_query("confluence", "page", "create", "html", preexisting=False), "write_chain")
+    dag = EnterpriseDag(nodes=tuple(EnterpriseDagNode.model_validate(node) for node in shaped.expected_dag))
+    marker = {node.id: node for node in dag.nodes}["write-marker"]
+    assert marker.arguments == {"fields": {}} and set(marker.bindings) == {"id", "fields.body"}
+
+
 def test_an_outline_closes_with_its_note() -> None:
     values = [{"id": "A", "title": "First"}]
     assert outline_document(values, ["Evidence"], "markdown", note="Checked.").endswith("\n\nChecked.")
