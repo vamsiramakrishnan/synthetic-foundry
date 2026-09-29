@@ -275,6 +275,12 @@ def marker_nodes(mutation: MutationRequirement, result: str, sections: tuple[str
                             document_arguments(sections, found.format, note=VERIFIED_NOTE)))
         bindings[f"fields.{found.field}"] = ResultReference(node="document-verified")
         parents = ("verify-write", "document-verified")
+        if found.read_first:
+            # A write that restates the record (a Confluence page PUT sends
+            # back the title it read) names only what it changes: the marker
+            # does not inherit the create's fields, which the PUT would send
+            # back unchanged and the dispatch reads as no change at all.
+            arguments = {"fields": {}}
     else:
         arguments = {"fields": {"verified": True}}
     out.extend((

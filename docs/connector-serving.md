@@ -388,8 +388,9 @@ provenance, the Worldloom exposure profile Anvil compiles it under
 connector's tools model plus the neighbours an agent is likely to reach for
 by mistake), the manifest when the contract needs one (Jira and Confluence
 declare two auth alternatives, which blocks every operation until one is
-chosen), the vendor's operation count and the profile's, and Anvil's
-snapshot hash for the locked bytes.
+chosen; Confluence's also narrows its write bodies, below), the vendor's
+operation count and the profile's, and Anvil's snapshot hash for the
+locked bytes.
 
 ```sh
 worldloom contracts fetch                 # download every locked source, verify its sha256
@@ -568,7 +569,7 @@ so a new connector, or a pack's, declares its own and no code changes:
 | Connector | Place | Format | Notes |
 |---|---|---|---|
 | SharePoint, OneDrive, Drive | a file's `description` | markdown | a create names the file with its format's extension (`report.pptx`), as a Graph driveItem create reads the kind from the name |
-| Confluence | a page's `body` (storage format) | html | `read_first`: a page `PUT` restates the page's id, status, title and next version, so the plan reads the page first; `unserved` (below) |
+| Confluence | a page's `body` (storage format) | html | `read_first`: a page `PUT` restates the page's id, status, title and next version, so the plan reads the page first; the body is sent as `{"representation": "storage", "value": ...}` (below) |
 | Jira | an issue's `description` | markdown | |
 | ServiceNow | a record's `work_notes` | markdown | |
 | Salesforce | a record's `Description` | markdown | the authored contract declares it on the sObject body, citing the Object Reference for each object the cases write |
@@ -590,21 +591,49 @@ there. A connector that declares no place keeps the generic `evidence` and
 
 A place the shipped contract cannot carry says why (`unserved`), and the
 planner does not plan an evidence write to it: the case would be unsolvable
-by construction. One does today. Confluence's page body is typed as an
-exclusive union (`oneOf`) of two alternatives (`PageBodyWrite`, and
-`PageNestedBodyWrite` keyed by representation) that both admit every body
-object, so Anvil's MCP server (zod's exclusive union) refuses every page,
-blog post and footer comment write that carries a body. The real API takes
-a storage-format body (`{"representation": "storage", "value": ...}`), and
-pinning the write to that alternative is a reviewed overlay Anvil cannot
-yet express: a manifest's `params` retypes an input only to a scalar
-(`string`, `number`, `integer`, `boolean`), and nothing in a manifest or a
-profile selects one branch of a union or gives an input an object schema.
-The place returns when Anvil can narrow a union by manifest (a `params`
-entry that keeps one `oneOf` alternative, the narrowing direction only),
-and relaxing `oneOf` to `anyOf` globally is not the fix. `tests/test_evidence_placement.py`
-holds every declaration to the shipped surfaces, so the flag cannot
-outlive the gap.
+by construction. None does today. Confluence's page body was one: the v2
+contract types the body of every page, blog post and footer comment write
+as an exclusive union (`oneOf`) of a flat alternative (`PageBodyWrite`,
+`BlogPostBodyWrite`, `CommentBodyWrite`: `{representation, value}`) and one
+keyed by representation, both open objects, so Anvil's MCP server (zod's
+exclusive union) refused every write that carried a body. The real API
+reads a storage-format body, `{"representation": "storage", "value":
+"<p>...</p>"}` ([Atlassian's v2 page reference](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-post),
+[storage format](https://confluence.atlassian.com/doc/confluence-storage-format-790796544.html)).
+Worldloom's Confluence manifest (`_data/connectors/anvil/manifests/confluence.yaml`)
+now narrows the union for those six operations with Anvil's tighten-only
+`params.<input>.one_of` (Anvil PR #63; an older Anvil build refuses the
+key):
+
+```yaml
+createPage:
+  params:
+    body:
+      one_of: PageBodyWrite        # BlogPostBodyWrite, CommentBodyWrite for posts and comments
+      properties:
+        representation: { enum: [storage] }
+      required: [representation, value]
+```
+
+Each alternative declares `representation` and `value`, so the narrowing
+applies (Anvil records a review note per operation) rather than declining.
+The shipped surface's six write tools take that object, with
+`representation` fixed to `storage`; a `wiki` or `atlas_doc_format` body
+is refused by the schema, in process and through Anvil alike. The carrier
+fills a nested body's required property the schema fixes, as it does a
+top-level one's, so a plan that names only the page's HTML sends
+`{"representation": "storage", "value": ...}`. A page `PUT` restates the
+title it read; the mapping reads a `PUT`'s title as a retitle, so a
+restated field sent back unchanged is dropped from the call
+(`connectors.anvil.unchanged_restatements`) and the span, grade and state
+diff are the body update; `write_chain`'s marker on such a place names
+only the evidence field, not the fields of the create it follows. A
+pre-existing destination of a connector whose
+records are numbered (`id.pattern: numeric`) is named by a number from its
+record projection, because the contract types `GET /pages/{id}` as an
+integer. Relaxing `oneOf` to `anyOf` globally was never the fix.
+`tests/test_evidence_placement.py` holds every declaration to the shipped
+surfaces, so a flag cannot outlive a gap, or a gap its flag.
 
 Salesforce's place is carried. Salesforce ships no single OpenAPI document,
 so its sObject body is Worldloom's authored contract; it declared a fixed
@@ -653,17 +682,19 @@ proves 500 of 500 on both surfaces, and `--seed 4242 --incident` at
 of 30 on the contract surface (a Jira create restated its issue type in its
 fields). The telecom programme's 2,927 record requests prove on both (they
 search the system of record, which ships no contract). Confluence page
-writes are not planned while the page body is `unserved`; Salesforce
-writes are, so the standard build's 100 cases write 67 SharePoint files,
-14 Drive files, 13 email messages and 6 Salesforce accounts (before the
-Salesforce contract declared `Description`: 60, 21, 19 and none), and
-`--seed 4242` at `--limit 200` writes 12 Salesforce accounts, 6
-opportunities (to `Develop`) and 6 cases (escalated), each proved on both
-surfaces. Two generators are not yet
-contract-solvable: an interview's case sets (1 of 12 prove on the contract
-surface: they write Confluence page bodies and Slack messages (the
-gold `post_message` carries a record `name`, which `chat.postMessage` has
-no parameter for),
+and Salesforce writes are planned, so the standard build's 100 cases
+write 44 SharePoint files, 18 Confluence pages, 14 Drive files, 13 email
+messages and 11 Salesforce accounts (while the page body was `unserved`:
+67 SharePoint, no Confluence, 14 Drive, 13 email, 6 Salesforce), and
+`--seed 4242` at `--limit 200` writes 76 SharePoint files, 45 Confluence
+pages (15 creates, 24 upserts, 6 patches), 34 email messages, 21 Drive
+files, 12 Salesforce accounts, 6 opportunities (to `Develop`) and 6 cases
+(escalated), each proved on both surfaces with the reference at 1.0 on
+every axis and stage. Two generators are not yet
+contract-solvable: an interview's case sets (2 of 12 prove on the contract
+surface, 1 before Confluence page bodies were served: they write Slack
+messages (the gold `post_message` carries a record `name`, which
+`chat.postMessage` has no parameter for),
 search SharePoint by `artifact_type` (KQL has no such property), read
 SharePoint list items and Outlook messages filtered by the interview's
 custom fields (`interview_step`, `period`), search Confluence by them, and

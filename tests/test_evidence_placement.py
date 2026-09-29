@@ -107,9 +107,23 @@ def test_an_unserved_place_is_never_planned() -> None:
                 constants, operation)
     destinations = {(dict(lane.constants)["destination"], dict(lane.constants)["destination_entity"])
                     for lane in lanes if lane.operations}
-    assert ("confluence", "page") not in destinations
     assert {("sharepoint", "file"), ("drive", "file"), ("salesforce", "account"), ("salesforce", "case"),
-            ("salesforce", "opportunity")} <= destinations
+            ("salesforce", "opportunity"), ("confluence", "page")} <= destinations
+
+
+def test_confluence_page_evidence_is_planned_again_and_read_first() -> None:
+    """The manifest narrows the page body to its storage alternative, so the place is served."""
+    found = placement("confluence", "page")
+    assert found is not None and found.unserved is None and found.read_first and found.format == "html"
+    for operation in ("create", "update"):
+        assert plannable("confluence", "page", operation)
+    mutation = _query("confluence", "page", "update", "html", preexisting=True).generation.mutation
+    nodes, body = write_body(mutation, "collect", ())
+    assert nodes[0].arguments == {"sections": ("Evidence",), "format": "html"}
+    written = write_nodes(mutation, "collect", body, "write")
+    assert [node.id for node in written] == ["target-write", "write", "verify-write"]
+    write = next(node for node in written if node.kind == "write")
+    assert set(write.bindings) == {"fields.body"} and "target-write" in write.depends_on
 
 
 # -- the planner --------------------------------------------------------------------------
@@ -148,6 +162,14 @@ def test_the_verification_marker_rewrites_the_evidence_at_its_place() -> None:
     marker = by_id["write-marker"]
     assert not marker.arguments and set(marker.bindings) == {"id", "fields.description"}
     assert by_id["document-verified"].arguments["note"] == "Verified against the saved record."
+
+
+def test_a_marker_on_a_restated_record_names_only_its_evidence() -> None:
+    """A page PUT sends back what it read; the marker's call names only the body it changes."""
+    shaped = apply_dag_shape(_query("confluence", "page", "create", "html", preexisting=False), "write_chain")
+    dag = EnterpriseDag(nodes=tuple(EnterpriseDagNode.model_validate(node) for node in shaped.expected_dag))
+    marker = {node.id: node for node in dag.nodes}["write-marker"]
+    assert marker.arguments == {"fields": {}} and set(marker.bindings) == {"id", "fields.body"}
 
 
 def test_an_outline_closes_with_its_note() -> None:
@@ -196,6 +218,51 @@ def test_a_confluence_page_put_restates_the_page_it_read() -> None:
     assert body["id"] == "10000001" and body["status"] == "current" and body["title"] == "Runbook"
     assert body["version"] == {"number": 3}  # the page is at version 2; a PUT asks for the next
     assert body["body"] == {"value": "<p>x</p>", "representation": "storage"}
+
+
+def test_a_confluence_page_write_carries_a_storage_body_through_the_contract_surface() -> None:
+    """A page create and a page PUT send ``{"representation": "storage", "value": ...}``, as the vendor reads it.
+
+    The shipped surface carries the manifest's narrowing (Anvil's
+    ``params.body.one_of``): the body is the flat alternative, its
+    representation fixed to ``storage`` and required with the value. The
+    plan names only the value; the carrier sends the representation the
+    schema fixes, and a PUT restates the title it read without asking the
+    page to be retitled.
+    """
+    pytest.importorskip("jsonschema")
+    from worldloom.connectors.surface import _schema_errors
+
+    surface = shipped_surface("confluence")
+    definition = load_connector_definition("confluence")
+    for name in ("confluence_create_page", "confluence_update_page", "confluence_create_blog_post",
+                 "confluence_update_blog_post", "confluence_create_footer_comment", "confluence_update_footer_comment"):
+        schema = surface.tool(name).input_schema["properties"]["body"]["properties"]["body"]
+        assert "oneOf" not in schema, name
+        assert schema["required"] == ["representation", "value"], name
+        assert schema["properties"]["representation"]["const"] == "storage", name
+    created = surface.carry("create_page", {"entity": "page", "name": "Runbook",
+                                            "fields": {"space": "OPS", "title": "Runbook", "body": "<h2>Evidence</h2>"}},
+                            definition)
+    assert created.tool == "confluence_create_page"
+    assert created.arguments["body"]["body"] == {"value": "<h2>Evidence</h2>", "representation": "storage"}
+    record = {"fid": "p1", "ident": "10000001", "entity": "page", "title": "Runbook", "page_id": "10000001",
+              "updates": [1]}
+    updated = surface.carry("update_page", {"id": "p1", "fields": {"body": "<h2>Evidence</h2>"}}, definition,
+                            record=record)
+    assert updated.tool == "confluence_update_page" and updated.arguments["id"] == 10000001
+    assert updated.arguments["body"]["body"] == {"value": "<h2>Evidence</h2>", "representation": "storage"}
+    assert updated.arguments["body"]["title"] == "Runbook" and updated.arguments["body"]["version"] == {"number": 3}
+    wiki = {**created.arguments, "body": {**created.arguments["body"], "body": {"representation": "wiki", "value": "x"}}}
+    assert _schema_errors(surface.tool("confluence_create_page").input_schema, wiki)
+
+
+def test_a_numbered_vendors_destination_is_named_by_a_number() -> None:
+    from worldloom.enterprise_corpus import destination_handle
+
+    key = "149ef7ffb858d45ed92bc51f5e995cac"
+    assert destination_handle("confluence", "page", "page_id", key) == str(int(key[:10], 16) % 10**8)
+    assert destination_handle("sharepoint", "file", "item_id", key) == key
 
 
 def test_a_salesforce_update_carries_its_evidence_and_state_by_the_vendors_field_names() -> None:

@@ -224,17 +224,17 @@ def materialize_corpus(
             continue
         record_id = content_key("query-destination-record", *key, world.company.id)
         destinations[key] = record_id
+        stable_field = stable_fields.get((mutation.connector, mutation.entity), "stable_id")
+        handle = destination_handle(mutation.connector, mutation.entity, stable_field, record_id)
         records.append(
             ConnectorRecord(
                 id=record_id,
                 connector=mutation.connector,
                 entity=mutation.entity,
-                external_id=record_id,
+                external_id=handle,
                 title=f"Existing {mutation.entity.replace('_', ' ')} for {world.company.name}",
                 fields={
-                    stable_fields.get(
-                        (mutation.connector, mutation.entity), "stable_id"
-                    ): record_id,
+                    stable_field: handle,
                     "version": 1,
                     "etag": content_key("etag", record_id, "1"),
                     "manual_content": "Preserve this manually authored content.",
@@ -381,6 +381,44 @@ def score_trace(
     idempotency = 1.0 if len(write_keys) == len(set(write_keys)) else 0.0
     total = 0.25 * dag_order + 0.25 * required_calls + 0.15 * write_verification + 0.10 * provenance + 0.10 * idempotency + 0.15 * failure_handling
     return ScoreReport(query_id=query.id, total=round(total, 4), dag_order=round(dag_order, 4), required_calls=round(required_calls, 4), write_verification=write_verification, provenance=round(provenance, 4), idempotency=idempotency, failure_handling=failure_handling, findings=tuple(findings))
+
+
+def destination_handle(connector: str, entity: str, stable_field: str, record_id: str) -> str:
+    """The vendor's handle for a pre-existing destination record minted as *record_id*.
+
+    A vendor that numbers its records (a connector whose ``id.pattern`` is
+    ``numeric``: a Confluence page) names the destination by a number, as its
+    contract types the path: a page ``GET /pages/{id}`` takes an integer, so
+    a destination named by a content key could be read and written in
+    process and never on the contract surface. The number is the connector's
+    own ``record_projection`` of that field over the key when it declares
+    one, else the key's leading hex digits modulo 10^8. Every other
+    connector keeps the key, which its handles admit.
+    """
+
+    from .connector_definition import load_connector_definition
+
+    try:
+        definition = load_connector_definition(connector)
+    except (KeyError, ValueError):
+        return record_id
+    if definition.id.pattern != "numeric":
+        return record_id
+    projection = definition.record_projection
+    template = None
+    if projection is not None:
+        template = {**projection.fields, **projection.entities.get(entity, {})}.get(stable_field)
+    if isinstance(template, str):
+        from .connector_projection import ConnectorRecordProjection
+
+        try:
+            rendered = ConnectorRecordProjection(fields={stable_field: template}).project(entity, {"key": record_id})
+        except (KeyError, ValueError):
+            rendered = {}
+        value = str(rendered.get(stable_field) or "")
+        if value.isdigit():
+            return value
+    return str(int(record_id[:10], 16) % 10**8)
 
 
 def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:

@@ -5,6 +5,22 @@
 # operation blocked until the service chooses one; `basic` is the one an API
 # token uses. Creates append a new page, post or comment on every call and
 # carry no dedupe key, so a retry after a failure could duplicate them.
+#
+# Every body write types `body` as an exclusive union (oneOf) of a flat
+# `{representation, value}` object and one keyed by representation, and both
+# alternatives are open objects, so a strict oneOf refuses every body,
+# including the one the service reads. Atlassian's v2 reference documents a
+# page, blog post or comment body as `{"representation": "storage", "value":
+# "<p>...</p>"}` in the storage format (Confluence's XHTML-based markup):
+#   https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-post
+#   https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/#api-blogposts-post
+#   https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-footer-comments-post
+#   https://confluence.atlassian.com/doc/confluence-storage-format-790796544.html
+# Each write's `params.body` narrows the union to its flat alternative (named
+# per resource in the spec: PageBodyWrite, BlogPostBodyWrite,
+# CommentBodyWrite; each declares `representation` and `value`), limits the
+# representation to `storage` and requires both properties. This needs Anvil
+# with manifest union narrowing (Anvil PR #63); the narrowing only tightens.
 service:
   name: confluence
   display_name: Confluence Cloud REST API v2
@@ -31,6 +47,12 @@ operations:
       reason: Creates a new page; retrying after a failure may create a duplicate.
     retries:
       enabled: false
+    params:
+      body:
+        one_of: PageBodyWrite
+        properties:
+          representation: { enum: [storage] }
+        required: [representation, value]
 
   createBlogPost:
     side_effect: mutation
@@ -43,6 +65,12 @@ operations:
       reason: Creates a new blog post; retrying after a failure may create a duplicate.
     retries:
       enabled: false
+    params:
+      body:
+        one_of: BlogPostBodyWrite
+        properties:
+          representation: { enum: [storage] }
+        required: [representation, value]
 
   createFooterComment:
     side_effect: mutation
@@ -55,3 +83,33 @@ operations:
       reason: Adds a comment; retrying after a failure may post it twice.
     retries:
       enabled: false
+    params:
+      body:
+        one_of: CommentBodyWrite
+        properties:
+          representation: { enum: [storage] }
+        required: [representation, value]
+
+  updatePage:
+    params:
+      body:
+        one_of: PageBodyWrite
+        properties:
+          representation: { enum: [storage] }
+        required: [representation, value]
+
+  updateBlogPost:
+    params:
+      body:
+        one_of: BlogPostBodyWrite
+        properties:
+          representation: { enum: [storage] }
+        required: [representation, value]
+
+  updateFooterComment:
+    params:
+      body:
+        one_of: CommentBodyWrite
+        properties:
+          representation: { enum: [storage] }
+        required: [representation, value]
