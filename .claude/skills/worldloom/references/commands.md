@@ -433,7 +433,7 @@ worldloom enterprise-evals serve <CORPUS_PATH>
 | `--max-runs` | Runs open at once (default: policy `connectors.serving.max_runs`). |
 | `--port` |  |
 | `--query-id` | Serve only these query IDs; repeat to select more. |
-| `--surface` | The tools served: native (each connector definition's own, the default: policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP). |
+| `--surface` | The tools served: contract (each locked contract's operations exactly as Anvil projects them for MCP; a connector with no locked contract keeps its own; the default: policy `connectors.surface`) or native (each connector definition's own). |
 | `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
 | `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
 | `--worker-id` | Prefix every run id with this worker's name (w3 mints w3-run-1), so ids from several server processes never collide. Each process keeps its own runs: route every call for a run id to the process that began it. |
@@ -721,7 +721,7 @@ worldloom evalrun improve <CORPUS>
 | `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
 | `--source-root` | CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it. |
-| `--surface` | The tools the agent is shown: native (each connector definition's own tools; the default, policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping). |
+| `--surface` | The tools the agent is shown: contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping; a connector with no locked contract keeps its own tools; the default, policy `connectors.surface`) or native (each connector definition's own tools). |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
 | `--transfer-agent` | A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why. |
 | `--value` | Also require the delta weighted by each case's value at stake to clear every gate. |
@@ -813,7 +813,7 @@ worldloom evalrun prove <CORPUS>
 | `--json` | Emit the proof report as JSON. |
 | `--limit` | Prove only the first N cases. |
 | `--record` | Write the proof record (proof.json, with its pins) into the case set directory, whatever the verdict. |
-| `--surface` | The tools the agent is shown: native (each connector definition's own tools; the default, policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping). |
+| `--surface` | The tools the agent is shown: contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping; a connector with no locked contract keeps its own tools; the default, policy `connectors.surface`) or native (each connector definition's own tools). |
 
 ### `worldloom evalrun requests`
 
@@ -861,7 +861,7 @@ worldloom evalrun run <CORPUS>
 | `--resume` | Keep the ledger already in --out when its run.json names this agent, principal and case set (and shard); grade only the cases it lacks. |
 | `--shard` | Run only shard i of n (1-based, e.g. 2/4), a partition by a stable hash of case id; `evalrun merge` joins the shard directories. |
 | `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
-| `--surface` | The tools the agent is shown: native (each connector definition's own tools; the default, policy `connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping). |
+| `--surface` | The tools the agent is shown: contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping; a connector with no locked contract keeps its own tools; the default, policy `connectors.surface`) or native (each connector definition's own tools). |
 | `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
 | `--timeout` | Seconds the --exec child may run per turn before it is killed. |
 

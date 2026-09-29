@@ -51,6 +51,10 @@ from worldloom.evals.dataset_contract import DatasetPlan, DatasetSource, Dataset
 from worldloom.synthesis import IncidentRule, Simulator, retail, with_parameters
 from worldloom.synthesis.connectors import operational_profile
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 runner = CliRunner()
 
 KEY = re.compile(r"^[a-z_]+(\.[a-z_]+)?(:[a-z_]+)?$")

@@ -23,6 +23,10 @@ from worldloom.connectors import (
 HEADERS = {"Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25"}
 TOKENS = {"alice": "alice-private-evaluation-secret", "bob": "bob-private-evaluation-secret"}
 
+# These tests exercise the connector definitions' own tools
+# (`servicenow.get_record`) over HTTP and MCP; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 
 def records() -> list[dict[str, Any]]:
     return [{"fid": f"f{i}", "server": "servicenow", "entity": "incident",

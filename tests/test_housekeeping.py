@@ -29,6 +29,10 @@ from worldloom.evalrun import (
 )
 from worldloom.retail import RetailWorld
 
+# Housekeeping's moves and per-item writes are graded on the connector tools: the
+# contract surface does not yet carry them (a named gap), and it is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 PAIRS = (("drive", "drive"), ("drive", "sharepoint"), ("drive", "onedrive"),
          ("inbox", "email"), ("inbox", "outlook"), ("chats", "slack"), ("chats", "teams"))
 

@@ -22,9 +22,10 @@ app = typer.Typer(
 
 AGENTS = ("reference", "lazy", "scripted")
 
-_SURFACE_HELP = ("The tools the agent is shown: native (each connector definition's own tools; the default, policy "
-                 "`connectors.surface`) or contract (each locked contract's operations exactly as Anvil projects them "
-                 "for MCP, dispatched in process through the connector's Anvil mapping).")
+_SURFACE_HELP = ("The tools the agent is shown: contract (each locked contract's operations exactly as Anvil projects "
+                 "them for MCP, dispatched in process through the connector's Anvil mapping; a connector with no "
+                 "locked contract keeps its own tools; the default, policy `connectors.surface`) or native (each "
+                 "connector definition's own tools).")
 
 
 def _with_surface(*, bundles: bool) -> Any:

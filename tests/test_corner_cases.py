@@ -43,6 +43,10 @@ from worldloom.evalrun.proof import prove_cases
 from worldloom.evalrun.runner import case_set_digest
 from worldloom.scenarios import MonthEndClose
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 runner = CliRunner()
 
 SEED = 8128

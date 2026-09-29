@@ -41,6 +41,10 @@ from worldloom.evalrun import (
 from worldloom.evalrun.lineage import consumed_values, distinctive, produced_values
 from worldloom.evalrun.program import ProgramAgent, client_source, declared_from_program
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 runner = CliRunner()
 
 

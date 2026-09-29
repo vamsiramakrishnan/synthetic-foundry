@@ -43,6 +43,10 @@ from worldloom.evalrun.export import (
 )
 from worldloom.evalrun.runner import RunReport
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 runner = CliRunner()
 
 

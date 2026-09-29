@@ -51,6 +51,10 @@ from worldloom.evalrun.interface import (
 from worldloom.evalrun.ownership import SurfaceFacts, attribute_case, ownership
 from worldloom.packkit import diffs
 
+# These tests script agents in the connector definitions' own tool names
+# (`jira.get_issue`), so they serve those tools; the contract surface is the default.
+pytestmark = pytest.mark.usefixtures("native_surface")
+
 FIXTURES = Path(__file__).parent / "fixtures" / "anvil"
 TRANSITIONS = {"todo": "11", "open": "21", "review": "31", "done": "41", "blocked": "51"}
 SEARCH_OP = "  searchAndReconsileIssuesUsingJqlPost: { state: approved }\n"
