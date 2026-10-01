@@ -124,6 +124,7 @@ DOCUMENTS = (
     "docs/industry-programme.md",
     "docs/architecture.md",
     "docs/enterprise-corpus.md",
+    "docs/enterprise-benchmark-improvement.md",
     "docs/sdk.md",
     "docs/skills.md",
     "docs/extension-seams.md",

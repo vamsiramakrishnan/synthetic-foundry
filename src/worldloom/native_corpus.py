@@ -10,11 +10,11 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from io import BytesIO
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
-from .models import Model
+from .models import Model, Table
 from .narrative import references
 from .native_artifacts import inspect_artifact
 from .presentation import of as presentation_of
@@ -31,6 +31,13 @@ class NativeContent(Model):
     placement: Literal["body", "notes"] = "body"
 
 
+class NativeContentExclusion(Model):
+    source_artifact_id: str
+    section_index: int
+    code: Literal["private_native_section", "unwritten_native_section", "duplicate_grounded_content", "invalid_native_dependency", "invalid_native_evidence"]
+    reason: str
+
+
 class NativeCorpusPlan(Model):
     artifact_id: str = Field(min_length=1)
     format: Literal["docx", "pptx", "xlsx"]
@@ -38,6 +45,17 @@ class NativeCorpusPlan(Model):
     minimum_units: int = Field(default=1, ge=1, le=10000)
     minimum_distinct_facts: int = Field(default=1, ge=1)
     contents: tuple[NativeContent, ...]
+    surface: Literal["legacy", "business"] = "legacy"
+    excluded_contents: tuple[NativeContentExclusion, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _legacy_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.surface == "legacy":
+            data.pop("surface", None)
+        if not self.excluded_contents:
+            data.pop("excluded_contents", None)
+        return data
 
 
 class NativeContentProvenance(Model):
@@ -48,6 +66,22 @@ class NativeContentProvenance(Model):
     text_sha256: str
     value: float | str | None = None
     unit: str | None = None
+    kind: Literal["prose", "value", "formula"] = "prose"
+    table_key: str | None = None
+    row_key: str | None = None
+    column_key: str | None = None
+    dependency_locators: tuple[str, ...] = ()
+    metadata_locators: dict[str, str] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _legacy_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.kind == "prose":
+            data.pop("kind", None)
+        for key in ("table_key", "row_key", "column_key", "dependency_locators", "metadata_locators"):
+            if getattr(self, key) in (None, (), {}):
+                data.pop(key, None)
+        return data
 
 
 class NativeCorpusManifest(Model):
@@ -61,6 +95,20 @@ class NativeCorpusManifest(Model):
     explicit_page_floor: int = 0
     evidence: tuple[NativeContentProvenance, ...]
     ballast_is_evidence: bool = False
+    native_metrics: dict[str, int] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _legacy_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if not self.native_metrics:
+            data.pop("native_metrics", None)
+        return data
+
+
+class NativeCorpusCoverage(Model):
+    content_units: int
+    fact_ids: tuple[str, ...]
+    source_artifact_count: int
 
 
 @dataclass(frozen=True)
@@ -75,9 +123,13 @@ class _Content:
     heading: str
     body: str
     fact_ids: tuple[str, ...]
+    table: Table | None = None
 
 
 def _contents(world: World, plan: NativeCorpusPlan) -> tuple[_Content, ...]:
+    if plan.surface == "business":
+        from .native_business import prepare_business_content
+        return prepare_business_content(world, plan)
     if len(plan.contents) < plan.minimum_units:
         raise ValueError(f"insufficient grounded content: need {plan.minimum_units}, have {len(plan.contents)}")
     if len(plan.contents) > 10000:
@@ -130,6 +182,7 @@ def plan_native_corpus(
     minimum_units: int,
     minimum_distinct_facts: int = 1,
     source_artifact_ids: tuple[str, ...] | None = None,
+    surface: Literal["legacy", "business"] = "legacy",
 ) -> NativeCorpusPlan:
     """Select authored sections in stable source order, refusing missing scope.
 
@@ -140,20 +193,28 @@ def plan_native_corpus(
     existing = {ir.id for ir in world.artifact_irs}
     if requested - existing:
         raise ValueError(f"unknown source artifacts: {sorted(requested - existing)}")
-    contents = tuple(
-        NativeContent(source_artifact_id=ir.id, section_index=index)
-        for ir in sorted(world.artifact_irs, key=lambda item: item.id)
-        if source_artifact_ids is None or ir.id in requested
-        for index, section in enumerate(ir.sections)
-        if section.body and references.referenced(section.body)
-    )
-    plan = NativeCorpusPlan(artifact_id=artifact_id, format=format, title=title, minimum_units=minimum_units, minimum_distinct_facts=minimum_distinct_facts, contents=contents)
+    excluded: tuple[NativeContentExclusion, ...] = ()
+    if surface == "business":
+        from .native_business import plan_business_content
+        contents, excluded = plan_business_content(world, source_artifact_ids=source_artifact_ids)
+    else:
+        contents = tuple(
+            NativeContent(source_artifact_id=ir.id, section_index=index)
+            for ir in sorted(world.artifact_irs, key=lambda item: item.id)
+            if source_artifact_ids is None or ir.id in requested
+            for index, section in enumerate(ir.sections)
+            if section.body and references.referenced(section.body)
+        )
+    plan = NativeCorpusPlan(artifact_id=artifact_id, format=format, title=title, minimum_units=minimum_units, minimum_distinct_facts=minimum_distinct_facts, contents=contents, surface=surface, excluded_contents=excluded)
     _contents(world, plan)
     return plan
 
 
 def render_native_corpus(world: World, plan: NativeCorpusPlan) -> NativeCorpusResult:
     """Render native bytes and hidden provenance from the same canonical world."""
+    if plan.surface == "business":
+        from .native_business import render_business_corpus
+        return render_business_corpus(world, plan)
     contents = _contents(world, plan)
     stream = BytesIO()
     locators: list[str] = []
@@ -286,4 +347,12 @@ def render_native_corpus(world: World, plan: NativeCorpusPlan) -> NativeCorpusRe
     ))
 
 
-__all__ = ["NativeContent", "NativeCorpusPlan", "NativeContentProvenance", "NativeCorpusManifest", "NativeCorpusResult", "plan_native_corpus", "render_native_corpus"]
+def native_corpus_coverage(world: World, plan: NativeCorpusPlan) -> NativeCorpusCoverage:
+    """Validate selected native evidence without allocating an Office package."""
+    contents = _contents(world, plan)
+    return NativeCorpusCoverage(content_units=len(contents),
+        fact_ids=tuple(sorted({fid for content in contents for fid in content.fact_ids})),
+        source_artifact_count=len({content.source.source_artifact_id for content in contents}))
+
+
+__all__ = ["NativeContent", "NativeContentExclusion", "NativeCorpusPlan", "NativeContentProvenance", "NativeCorpusManifest", "NativeCorpusCoverage", "NativeCorpusResult", "plan_native_corpus", "render_native_corpus", "native_corpus_coverage"]

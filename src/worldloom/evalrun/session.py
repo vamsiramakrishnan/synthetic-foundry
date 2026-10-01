@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from .curriculum import Curriculum, Escalation
     from .improve import ImproveReport
     from .proof import ProofReport
+    from .qualification import QualificationPolicy
     from .rater import Rater
 
 #: A run named by its label in the session, by the directory ``write_run``
@@ -201,11 +202,25 @@ class ImproveLoop:
     #: variant's bundles project; ``evalrun.interface.ContractServing``).
     interface_serving: str = "anvil"
     transfer: AgentUnderTest | None = None
+    qualification: QualificationPolicy | None = None
     _records: tuple[Any, ...] = ()
     #: The held-out session's records, when the holdout is another corpus: each
     #: corpus is served over its own, since two worlds reuse external keys.
     _holdout_records: tuple[Any, ...] | None = None
     _services: dict[str, ConnectorEvaluationService] = field(default_factory=dict, repr=False)
+
+    def records_for(self, cases: Sequence[EvalCase]) -> tuple[Any, ...]:
+        """Route any sealed held-out tranche to its own source records."""
+        if self._holdout_records is not None and self.holdout is not None:
+            from .qualification import suite_digest, with_record_provenance
+
+            held = self.holdout
+            if self.qualification is not None:
+                held = with_record_provenance(held, self._holdout_records)
+            protected = {suite_digest((case,)) for case in held}
+            if cases and all(suite_digest((case,)) in protected for case in cases):
+                return self._holdout_records
+        return self._records
 
     def run_cases(self, cases: Sequence[EvalCase], agent: AgentUnderTest) -> RunReport:
         """One agent over *cases*: the ``run`` callable ``improve()`` is given.
@@ -215,14 +230,12 @@ class ImproveLoop:
         grade can see. Concurrency reaches both the service's limits and
         ``run_cases``.
         """
-        from .runner import case_set_digest
+        from .qualification import suite_digest
 
-        key = case_set_digest(cases)
+        key = suite_digest(cases)
         service = self._services.get(key)
         if service is None:
-            held = (self._holdout_records is not None and self.holdout is not None
-                    and key == case_set_digest(self.holdout))
-            records = self._holdout_records if held and self._holdout_records is not None else self._records
+            records = self.records_for(cases)
             service = service_for(cases, records, concurrency=self.concurrency,
                                   definitions=self.session._definitions or None)
             self._services[key] = service
@@ -236,18 +249,16 @@ class ImproveLoop:
         provider does, so the replay of each served call answers as it did.
         """
         from .interface import ContractServing
-        from .runner import case_set_digest
+        from .qualification import suite_digest
 
         # On the contract surface each variant is its own set of tools, so
         # its service is too; through Anvil the service only replays.
         in_process = isinstance(serving, ContractServing)
         key = ("contract\0" + json.dumps(serving.identity(), sort_keys=True) if in_process else "anvil") \
-            + "\0" + case_set_digest(cases)
+            + "\0" + suite_digest(cases)
         service = self._services.get(key)
         if service is None:
-            held = (self._holdout_records is not None and self.holdout is not None
-                    and case_set_digest(cases) == case_set_digest(self.holdout))
-            records = self._holdout_records if held and self._holdout_records is not None else self._records
+            records = self.records_for(cases)
             service = service_for(cases, records, concurrency=self.concurrency,
                                   definitions=self.session._definitions or None, query_engine="native",
                                   **({"surface": serving.surfaces} if in_process else {}))
@@ -287,8 +298,17 @@ class ImproveLoop:
                 holdout_values = value_table(self.holdout, self._holdout_records)
             else:
                 values = value_table((*self.session.cases, *(self.holdout or ())), self._records)
-        return improve(start, self.session.cases, run=self.run_cases, agent_for=self.agent, exchange=self.exchange,
-                       out=self.out, rater=self.rater, holdout=self.holdout, holdout_share=self.holdout_share,
+        cases = self.session.cases
+        holdout = self.holdout
+        if self.qualification is not None:
+            from .qualification import with_record_provenance
+
+            cases = with_record_provenance(cases, self._records)
+            if holdout is not None:
+                records = self._holdout_records if self._holdout_records is not None else self._records
+                holdout = with_record_provenance(holdout, records)
+        return improve(start, cases, run=self.run_cases, agent_for=self.agent, exchange=self.exchange,
+                       out=self.out, rater=self.rater, holdout=holdout, holdout_share=self.holdout_share,
                        rounds=rounds, pack_roots=self.pack_roots, authoring_rounds=self.authoring_rounds,
                        min_train_delta=self.min_train_delta, min_holdout_delta=self.min_holdout_delta,
                        max_axis_regression=self.max_axis_regression, ablate=self.ablate, values=values,
@@ -296,7 +316,7 @@ class ImproveLoop:
                        reference_run=self.reference_run, candidates=self.candidates,
                        screen_cases=self.screen_cases, finalists=self.finalists, parents=self.parents,
                        round_budget=self.round_budget, levers=self.levers, interface=self.interface(),
-                       transfer=self.transfer)
+                       transfer=self.transfer, qualification=self.qualification)
 
     def champion(self, report: ImproveReport) -> ResolvedPack:
         """The pack *report* ended with, resolved and pinned by digest from where the loop stored it."""
@@ -476,6 +496,7 @@ class EvalSession:
         source_roots: Mapping[str, str | Path] | None = None,
         transfer_agent: AgentUnderTest | None = None,
         interface_serving: str = "anvil",
+        qualification: QualificationPolicy | None = None,
     ) -> ImproveLoop:
         """The improvement loop over this session's cases; ``.run(champion)`` starts it.
 
@@ -547,7 +568,8 @@ class EvalSession:
                            candidates=candidates, screen_cases=screen_cases, finalists=finalists,
                            parents=parents, round_budget=round_budget, levers=parse_levers(levers),
                            contracts=contracts, anvil_cmd=anvil_cmd, source_roots=source_roots,
-                           transfer=transfer_agent, interface_serving=interface_serving, _records=records,
+                           transfer=transfer_agent, interface_serving=interface_serving,
+                           qualification=qualification, _records=records,
                            _holdout_records=held_records)
 
     def campaign(

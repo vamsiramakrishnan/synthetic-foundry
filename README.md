@@ -148,6 +148,21 @@ processes. Named employees form a bounded operating graph; aggregate workforce
 scale remains aggregate. Choose business breadth, time depth, and artifact
 density independently.
 
+For physical enterprise scale, `worldloom corpus-scale` materialises bounded
+CSV shards, typed workbooks and large native files for that same company.
+Transaction totals can reconcile exactly to canonical company facts. The
+manifest measures delivered rows, relations and evidence; verification
+reconstructs them from the recipe. [Enterprise benchmark workflow](docs/enterprise-benchmark-improvement.md).
+
+`worldloom native-evals` builds discovery tasks over business DOCX, PPTX and
+XLSX files and checks reference solvability against their bytes. The SDK feeds
+independently graded file outcomes into the policy improvement loop.
+
+For harness improvement, audit shared evidence with `worldloom evalrun audit-split`
+and give `evalrun improve` a `--qualification-policy` to consume fresh evidence
+tranches for promotion. Repeated file formats and differently named cases do
+not count as independent observations. [Self-improvement](docs/self-improvement.md).
+
 ## What makes the files belong to one company
 
 The world owns facts before a renderer or writer sees them. Artifact plans

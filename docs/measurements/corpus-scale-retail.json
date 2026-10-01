@@ -1,0 +1,1009 @@
+{
+  "construction_seconds": 44.206,
+  "limitations": [
+    "Reference prose; no empirical editorial realism measurement.",
+    "DOCX explicit page boundaries are a construction floor; physical pagination is unmeasured.",
+    "Operational transaction mechanisms have a declared company scope; they are not a reconciliation to macro financial facts.",
+    "Repeated formats do not add independent evidence.",
+    "No target harness improvement is measured by this construction pilot."
+  ],
+  "live_target_trials": 0,
+  "manifest_summary": {
+    "company_id": "CO-0001",
+    "distinct_native_facts": 1004,
+    "files": [
+      {
+        "file_size_bytes": 421843,
+        "kind": "native",
+        "path": "native/a358468a7a174c29b890e8a16925dfa5.pptx",
+        "sha256": "9370e5f795ebe61c60f7195a5b2f13ec9614cba76b46f1298cd73774ab79316f"
+      },
+      {
+        "file_size_bytes": 73800,
+        "kind": "native",
+        "path": "native/b5bd4def7eeab5e2c7b4a0e0d94853ce.docx",
+        "sha256": "018f184fbf33388e82c01efb21c07d10229eb6e5bfe0f6c8d06238a8e2afb8e2"
+      },
+      {
+        "file_size_bytes": 40763,
+        "kind": "native",
+        "path": "native/d94ea1c89b2225f4cb5f6608d9f7e29c.xlsx",
+        "sha256": "90538e5ebaf6e18e4d3fc52cb798b9665d608f8ee080e2bda6ba1938a0038031"
+      },
+      {
+        "file_size_bytes": 369,
+        "kind": "source",
+        "path": "source/manifest.json",
+        "sha256": "58d9290df3b135c44bb3ee890e2103bf8c4203ce64ab0fad81d327417660706f"
+      },
+      {
+        "file_size_bytes": 11252,
+        "kind": "source",
+        "path": "source/recipe.json",
+        "sha256": "6cd41a082df2dfe317a4556e0caae91113bd67bbcef049012e78accc7b15dedf"
+      },
+      {
+        "file_size_bytes": 80704343,
+        "kind": "source",
+        "path": "source/records.jsonl",
+        "sha256": "c754d986971a8acd99ede4765fa23c1d75de7f0c407baa9923f38762e6e0455a"
+      },
+      {
+        "file_size_bytes": 5192190,
+        "kind": "csv",
+        "path": "tables/inventory-00000.csv",
+        "sha256": "04a0b96af80288725db8a7a959c44057fef87ae073b95152360661168af8e2dd"
+      },
+      {
+        "file_size_bytes": 2768112,
+        "kind": "xlsx",
+        "path": "tables/inventory-00000.xlsx",
+        "sha256": "eb38ed5d6875bce6b7db8dc8870fa0371a1ec2c19d890bb53f2f80deb23ebd3d"
+      },
+      {
+        "file_size_bytes": 5194207,
+        "kind": "csv",
+        "path": "tables/inventory-00001.csv",
+        "sha256": "0fb585a2b35598cae06d125a9b801c042ff04af5a6c82cb1d37d67831b5c43c3"
+      },
+      {
+        "file_size_bytes": 2770164,
+        "kind": "xlsx",
+        "path": "tables/inventory-00001.xlsx",
+        "sha256": "3a35f527b3eaa008c9b26cb62841858adaa75688c248acaf7dbd94e2d6b94bd9"
+      },
+      {
+        "file_size_bytes": 5184054,
+        "kind": "csv",
+        "path": "tables/inventory-00002.csv",
+        "sha256": "4630d7de934162e897d4d8a7c2422babc5052ba8e77d188e0a0eb7e91f68c1d1"
+      },
+      {
+        "file_size_bytes": 2764095,
+        "kind": "xlsx",
+        "path": "tables/inventory-00002.xlsx",
+        "sha256": "bcd4d37a98bc9121f75bcdbdd74f5122084a58e155ec062f5f33bfbf6ed0738c"
+      },
+      {
+        "file_size_bytes": 5198757,
+        "kind": "csv",
+        "path": "tables/inventory-00003.csv",
+        "sha256": "be785ba5f4c7eb9903b7c5d7d5d9757db9757243b01cb83ea8c0688e9d39ebde"
+      },
+      {
+        "file_size_bytes": 2774273,
+        "kind": "xlsx",
+        "path": "tables/inventory-00003.xlsx",
+        "sha256": "496525581f8d788db93139c64bb504e03500c9a189c1761be97a8a846dc197b4"
+      },
+      {
+        "file_size_bytes": 4841,
+        "kind": "csv",
+        "path": "tables/product-00000.csv",
+        "sha256": "579dab152e9a9f6eed74e66386e059110e771182995567c1406c8a8c139e7aac"
+      },
+      {
+        "file_size_bytes": 8851,
+        "kind": "xlsx",
+        "path": "tables/product-00000.xlsx",
+        "sha256": "b7360fcfe3d11852e93ec85177b102ffc8056b42de649a9c0d8896d6095a80c7"
+      },
+      {
+        "file_size_bytes": 1845,
+        "kind": "csv",
+        "path": "tables/store-00000.csv",
+        "sha256": "e0290e70f3e78add397fdd863ca2c269297cb87d058f7afb73ad7800bf273101"
+      },
+      {
+        "file_size_bytes": 6418,
+        "kind": "xlsx",
+        "path": "tables/store-00000.xlsx",
+        "sha256": "cc1a797ed703171516a4e817a3b927dbdb1ce40661eec578641aa08e5cf60ee6"
+      }
+    ],
+    "foreign_key_links": 200000,
+    "native": [
+      {
+        "artifact_id": "ART-SCALE-BOOK",
+        "ballast_is_evidence": false,
+        "content_units": 203,
+        "distinct_fact_count": 1004,
+        "explicit_page_floor": 0,
+        "file_size_bytes": 40763,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 40763,
+          "formula_cells": 172,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 361,
+          "rows_per_sheet": 4,
+          "sheets": 8
+        },
+        "sha256": "90538e5ebaf6e18e4d3fc52cb798b9665d608f8ee080e2bda6ba1938a0038031",
+        "source_artifact_count": 98
+      },
+      {
+        "artifact_id": "ART-SCALE-DECK",
+        "ballast_is_evidence": false,
+        "content_units": 103,
+        "distinct_fact_count": 728,
+        "explicit_page_floor": 0,
+        "file_size_bytes": 421843,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 421843,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 237,
+          "speaker_notes": 100,
+          "tables": 134
+        },
+        "sha256": "9370e5f795ebe61c60f7195a5b2f13ec9614cba76b46f1298cd73774ab79316f",
+        "source_artifact_count": 46
+      },
+      {
+        "artifact_id": "ART-SCALE-DOC",
+        "ballast_is_evidence": false,
+        "content_units": 203,
+        "distinct_fact_count": 1004,
+        "explicit_page_floor": 203,
+        "file_size_bytes": 73800,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 203,
+          "file_size_bytes": 73800,
+          "image_bytes": 0,
+          "paragraphs": 605,
+          "tables": 203
+        },
+        "sha256": "018f184fbf33388e82c01efb21c07d10229eb6e5bfe0f6c8d06238a8e2afb8e2",
+        "source_artifact_count": 98
+      }
+    ],
+    "native_content_units": 509,
+    "physical_native_pages": null,
+    "plan_digest": "8b3c23299f98a2c278ca7538aeba2e9fc0a9439dc1c3943c28db5209d99b55f8",
+    "reconciliations": [],
+    "relational_rows": 100070,
+    "schema_version": "worldloom.corpus.scale.manifest/v1",
+    "source": {
+      "recipe_digest": "6cd41a082df2dfe317a4556e0caae91113bd67bbcef049012e78accc7b15dedf",
+      "records_sha256": "c754d986971a8acd99ede4765fa23c1d75de7f0c407baa9923f38762e6e0455a",
+      "rows": 100070,
+      "schema_version": "worldloom.synthesis.export/v1",
+      "shard_count": 1,
+      "shard_index": 0,
+      "tables": [
+        {
+          "rows": 100000,
+          "table": "inventory"
+        },
+        {
+          "rows": 50,
+          "table": "product"
+        },
+        {
+          "rows": 20,
+          "table": "store"
+        }
+      ]
+    },
+    "tables": [
+      {
+        "columns": [
+          {
+            "distinct_exact": true,
+            "distinct_observed": 43,
+            "kind": "int",
+            "maximum": 53,
+            "minimum": 11,
+            "name": "available",
+            "nonzero_count": 100000,
+            "total": 4416115,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 52,
+            "kind": "int",
+            "maximum": 51,
+            "minimum": 0,
+            "name": "closing",
+            "nonzero_count": 99923,
+            "total": 3372098,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": false,
+            "distinct_observed": 512,
+            "kind": "int",
+            "maximum": 47784,
+            "minimum": 236,
+            "name": "cost",
+            "nonzero_count": 100000,
+            "total": 938458498,
+            "unit": "minor_currency"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 35,
+            "kind": "int",
+            "maximum": 36,
+            "minimum": 2,
+            "name": "demand",
+            "nonzero_count": 100000,
+            "total": 1044219,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 12,
+            "kind": "int",
+            "maximum": 12,
+            "minimum": 0,
+            "name": "lost",
+            "nonzero_count": 54,
+            "total": 202,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": false,
+            "distinct_observed": 512,
+            "kind": "int",
+            "maximum": 25740,
+            "minimum": 130,
+            "name": "margin",
+            "nonzero_count": 100000,
+            "total": 506013995,
+            "unit": "minor_currency"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 40,
+            "kind": "int",
+            "maximum": 120,
+            "minimum": 80,
+            "name": "market",
+            "nonzero_count": 100000,
+            "total": 10081000,
+            "unit": "index"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 51,
+            "kind": "int",
+            "maximum": 125,
+            "minimum": 75,
+            "name": "noise",
+            "nonzero_count": 100000,
+            "total": 9995907,
+            "unit": "index"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 52,
+            "kind": "int",
+            "maximum": 51,
+            "minimum": 0,
+            "name": "opening",
+            "nonzero_count": 99923,
+            "total": 3369119,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 43,
+            "kind": "int",
+            "maximum": 44,
+            "minimum": 2,
+            "name": "order",
+            "nonzero_count": 100000,
+            "total": 1069017,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 44,
+            "kind": "int",
+            "maximum": 44,
+            "minimum": 0,
+            "name": "pipeline",
+            "nonzero_count": 99000,
+            "total": 1058885,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 2,
+            "kind": "int",
+            "maximum": 25,
+            "minimum": 0,
+            "name": "promotion",
+            "nonzero_count": 14000,
+            "total": 350000,
+            "unit": "percent"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 44,
+            "kind": "int",
+            "maximum": 44,
+            "minimum": 0,
+            "name": "receipts",
+            "nonzero_count": 98000,
+            "total": 1046996,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": false,
+            "distinct_observed": 512,
+            "kind": "int",
+            "maximum": 73524,
+            "minimum": 366,
+            "name": "revenue",
+            "nonzero_count": 100000,
+            "total": 1444472493,
+            "unit": "minor_currency"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 32,
+            "kind": "int",
+            "maximum": 33,
+            "minimum": 2,
+            "name": "sold",
+            "nonzero_count": 100000,
+            "total": 1044017,
+            "unit": "units"
+          }
+        ],
+        "csv_shards": [
+          "tables/inventory-00000.csv",
+          "tables/inventory-00001.csv",
+          "tables/inventory-00002.csv",
+          "tables/inventory-00003.csv"
+        ],
+        "entities": 1000,
+        "foreign_key_links": 200000,
+        "foreign_keys": {
+          "fk_product": "product.entity_id",
+          "fk_store": "store.entity_id"
+        },
+        "name": "inventory",
+        "rows": 100000,
+        "spreadsheet_shards": [
+          "tables/inventory-00000.xlsx",
+          "tables/inventory-00001.xlsx",
+          "tables/inventory-00002.xlsx",
+          "tables/inventory-00003.xlsx"
+        ]
+      },
+      {
+        "columns": [
+          {
+            "distinct_exact": true,
+            "distinct_observed": 11,
+            "kind": "int",
+            "maximum": 16,
+            "minimum": 5,
+            "name": "base_demand",
+            "nonzero_count": 50,
+            "total": 521,
+            "unit": "units"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 49,
+            "kind": "int",
+            "maximum": 1582,
+            "minimum": 118,
+            "name": "cost",
+            "nonzero_count": 50,
+            "total": 44289,
+            "unit": "minor_currency"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 49,
+            "kind": "int",
+            "maximum": 2434,
+            "minimum": 183,
+            "name": "price",
+            "nonzero_count": 50,
+            "total": 68170,
+            "unit": "minor_currency"
+          }
+        ],
+        "csv_shards": [
+          "tables/product-00000.csv"
+        ],
+        "entities": 50,
+        "foreign_key_links": 0,
+        "foreign_keys": {},
+        "name": "product",
+        "rows": 50,
+        "spreadsheet_shards": [
+          "tables/product-00000.xlsx"
+        ]
+      },
+      {
+        "columns": [
+          {
+            "distinct_exact": true,
+            "distinct_observed": 18,
+            "kind": "int",
+            "maximum": 122,
+            "minimum": 76,
+            "name": "demand_scale",
+            "nonzero_count": 20,
+            "total": 2013,
+            "unit": "percent"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 4,
+            "kind": "int",
+            "maximum": 3,
+            "minimum": 0,
+            "name": "region",
+            "nonzero_count": 15,
+            "total": 30,
+            "unit": null
+          }
+        ],
+        "csv_shards": [
+          "tables/store-00000.csv"
+        ],
+        "entities": 20,
+        "foreign_key_links": 0,
+        "foreign_keys": {},
+        "name": "store",
+        "rows": 20,
+        "spreadsheet_shards": [
+          "tables/store-00000.xlsx"
+        ]
+      }
+    ],
+    "target_files": [
+      "native/a358468a7a174c29b890e8a16925dfa5.pptx",
+      "native/b5bd4def7eeab5e2c7b4a0e0d94853ce.docx",
+      "native/d94ea1c89b2225f4cb5f6608d9f7e29c.xlsx",
+      "tables/inventory-00000.csv",
+      "tables/inventory-00000.xlsx",
+      "tables/inventory-00001.csv",
+      "tables/inventory-00001.xlsx",
+      "tables/inventory-00002.csv",
+      "tables/inventory-00002.xlsx",
+      "tables/inventory-00003.csv",
+      "tables/inventory-00003.xlsx",
+      "tables/product-00000.csv",
+      "tables/product-00000.xlsx",
+      "tables/store-00000.csv",
+      "tables/store-00000.xlsx"
+    ]
+  },
+  "method": "reference-construction-and-source-reconstruction",
+  "narration_provider": "worldloom.narrative.DeterministicProvider (reference prose)",
+  "native_evidence_in_private_manifest": true,
+  "python": "3.12.14",
+  "schema": "worldloom.corpus-scale-measurement/v1",
+  "source_recipe": {
+    "annual_revenue": null,
+    "archetype": "pack:northstar-retail",
+    "artifact_realism": "enterprise/v2",
+    "employees": null,
+    "locale": "australia",
+    "pack": {
+      "annual_revenue": 7800000,
+      "artifact_types": [],
+      "base": "retail",
+      "company_name": "Northstar Retail",
+      "currency": "AUD",
+      "currency_unit": "thousands",
+      "description": "Mid-size omnichannel retailer",
+      "employees": 80000,
+      "episode_text": {},
+      "episodes": [],
+      "evaluation_text": {},
+      "fiscal_year_start_month": 7,
+      "headquarters": "Sydney, Australia",
+      "industry": "Omnichannel retail",
+      "lobs": [],
+      "lore": [],
+      "name": "northstar-retail",
+      "name_pools": {
+        "family": [
+          "Achterberg",
+          "Faulkner-Reyes",
+          "Venkataraghavan",
+          "Oyelaran",
+          "Draeger",
+          "Bergqvist",
+          "Nwachukwu-Hall",
+          "Lindqvist",
+          "Abenov",
+          "Vandermolen",
+          "Mbatha",
+          "Demirsoy",
+          "Okonkwo",
+          "Sandoval-Klein",
+          "Ferreira-Osei",
+          "Costa-Braithwaite",
+          "Aasland",
+          "Eze-Whitfield",
+          "Ramaswamy",
+          "Trbojevic",
+          "Kaczmarek",
+          "Olubunmi",
+          "Haverkamp",
+          "Szczepanski",
+          "Mwangi-Turner",
+          "Delacroix",
+          "Bhattacharya",
+          "Nakamura-Wells",
+          "Petrosyan",
+          "Ojukwu",
+          "Lindegaard",
+          "Rasmussen",
+          "Adeyemi",
+          "Kowalczyk",
+          "Fitzmaurice",
+          "Sarkisian",
+          "Vukovi\u0107",
+          "Anand-Pereira",
+          "Halvorsen",
+          "Ntuli"
+        ],
+        "given": [
+          "Rosalind",
+          "Desmond",
+          "Priya",
+          "Marguerite",
+          "Callum",
+          "Sunniva",
+          "Adaeze",
+          "Tobias",
+          "Yerlan",
+          "Ilse",
+          "Ezekiel",
+          "Havva",
+          "Rafferty",
+          "Beatriz",
+          "Nikolai",
+          "Wilhelmina",
+          "Grethe",
+          "Chidubem",
+          "Solveig",
+          "Anselm",
+          "Mireille",
+          "Tarquin",
+          "Oleksandra",
+          "Bartholomew",
+          "Naledi",
+          "Fionnuala",
+          "Kwabena",
+          "Isaura",
+          "Dmitri",
+          "Yolanda",
+          "Emeka",
+          "Signe",
+          "Rustam",
+          "Perpetua",
+          "Lachlan",
+          "Zerlina",
+          "Osman",
+          "Brigid",
+          "Takoda",
+          "Annelies"
+        ]
+      },
+      "regions": [
+        "NSW",
+        "VIC",
+        "QLD",
+        "WA",
+        "SA",
+        "TAS",
+        "ACT",
+        "NT"
+      ],
+      "seasonality": "flat",
+      "sheets": [],
+      "system_brands": {},
+      "units": [
+        {
+          "categories": [
+            {
+              "margin": 0.238,
+              "name": "Fresh",
+              "share": 0.34
+            },
+            {
+              "margin": 0.261,
+              "name": "Packaged Grocery",
+              "share": 0.41
+            },
+            {
+              "margin": 0.244,
+              "name": "Drinks",
+              "share": 0.25
+            }
+          ],
+          "key": "food",
+          "kind": "supermarkets",
+          "name": "Food",
+          "share": 0.64,
+          "site_formats": [
+            {
+              "count": 120,
+              "name": "Supermarket",
+              "revenue_weight": 1.0
+            }
+          ]
+        },
+        {
+          "categories": [
+            {
+              "margin": 0.318,
+              "name": "Apparel",
+              "share": 0.44
+            },
+            {
+              "margin": 0.294,
+              "name": "Home and Living",
+              "share": 0.36
+            },
+            {
+              "margin": 0.201,
+              "name": "Seasonal",
+              "share": 0.2
+            }
+          ],
+          "key": "gm",
+          "kind": "general_merchandise",
+          "name": "General Merchandise",
+          "share": 0.21,
+          "site_formats": [
+            {
+              "count": 40,
+              "name": "Department Store",
+              "revenue_weight": 1.0
+            }
+          ]
+        },
+        {
+          "categories": [
+            {
+              "margin": 0.187,
+              "name": "Online Grocery",
+              "share": 0.71
+            },
+            {
+              "margin": 0.412,
+              "name": "Marketplace",
+              "share": 0.29
+            }
+          ],
+          "key": "digital",
+          "kind": "online",
+          "name": "Digital",
+          "share": 0.15,
+          "site_formats": []
+        }
+      ],
+      "voices": {}
+    },
+    "process_structure": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "countries": [],
+          "name": "Food"
+        },
+        {
+          "archetype": "product_line",
+          "countries": [],
+          "name": "General Merchandise"
+        },
+        {
+          "archetype": "channel",
+          "countries": [],
+          "name": "Digital"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "countries": [],
+          "name": "Supply Chain"
+        },
+        {
+          "archetype": "group_function",
+          "countries": [],
+          "name": "Group Finance"
+        }
+      ],
+      "countries": [
+        "AU"
+      ],
+      "industry": "retail",
+      "landscape": {},
+      "name": "Northstar Retail",
+      "operating_model": "centralised"
+    },
+    "seasonality": {
+      "about": "No trading season at all. The right answer for a bank, an insurer, or any business whose revenue is a book rather than a till \u2014 and the reason this profile exists: a premium that peaks at Christmas is not a subtle error, it is a different industry.",
+      "index": {
+        "1": 1.0,
+        "10": 1.0,
+        "11": 1.0,
+        "12": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "5": 1.0,
+        "6": 1.0,
+        "7": 1.0,
+        "8": 1.0,
+        "9": 1.0
+      }
+    },
+    "seed": 8128,
+    "steps": [
+      {
+        "formed_at": "2024-08-18T00:43:52.547576+00:00",
+        "leader_roles": {
+          "Group Finance": "ceo",
+          "Supply Chain": "ceo"
+        },
+        "scenario": "MaterializeProcessOwners",
+        "structure": {
+          "bus": [
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "Food"
+            },
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "General Merchandise"
+            },
+            {
+              "archetype": "channel",
+              "countries": [],
+              "name": "Digital"
+            },
+            {
+              "archetype": "shared_service_centre",
+              "countries": [],
+              "name": "Supply Chain"
+            },
+            {
+              "archetype": "group_function",
+              "countries": [],
+              "name": "Group Finance"
+            }
+          ],
+          "countries": [
+            "AU"
+          ],
+          "industry": "retail",
+          "landscape": {},
+          "name": "Northstar Retail",
+          "operating_model": "centralised"
+        }
+      },
+      {
+        "scenario": "ApplyProcessStructure",
+        "structure": {
+          "bus": [
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "Food"
+            },
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "General Merchandise"
+            },
+            {
+              "archetype": "channel",
+              "countries": [],
+              "name": "Digital"
+            },
+            {
+              "archetype": "shared_service_centre",
+              "countries": [],
+              "name": "Supply Chain"
+            },
+            {
+              "archetype": "group_function",
+              "countries": [],
+              "name": "Group Finance"
+            }
+          ],
+          "countries": [
+            "AU"
+          ],
+          "industry": "retail",
+          "landscape": {},
+          "name": "Northstar Retail",
+          "operating_model": "centralised"
+        }
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-01",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-02",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-03",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-04",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-05",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-06",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-07",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-08",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-09",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-10",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-11",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-12",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-01",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-02",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-03",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-04",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-05",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-06",
+        "scenario": "MonthEndClose"
+      }
+    ]
+  },
+  "source_reconstruction_seconds": 45.566,
+  "verified": true,
+  "workload": {
+    "checked_table_sections": [
+      "ART-0002:3",
+      "ART-0002:4",
+      "ART-0002:5"
+    ],
+    "ledger_fact": null,
+    "ledger_rows": null,
+    "maximum_csv_rows": 25000,
+    "products": 50,
+    "program": "retail",
+    "seed": 8128,
+    "source_artifacts": 162,
+    "source_events": 98,
+    "source_facts": 11624,
+    "stores": 20,
+    "ticks": 100,
+    "typed_spreadsheets": true,
+    "units": 200
+  }
+}

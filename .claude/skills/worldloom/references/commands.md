@@ -278,6 +278,59 @@ worldloom contracts trim <CONNECTOR>
 | `--source` | The full source (default: the fetched, locked bytes). A large YAML source reads faster converted to JSON. |
 | `-o`, `--out` | Where to write the gzipped trim. |
 
+### `worldloom corpus-scale`
+
+Materialise and verify large enterprise corpus files.
+
+### `worldloom corpus-scale assess`
+
+Report construction shortfalls before spending on materialisation.
+
+```
+worldloom corpus-scale assess <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--fact` | Canonical numeric fact to allocate into an exactly reconciling transaction ledger. |
+| `--limits` | Explicit synthesis resource budgets JSON. |
+| `--profile` | development, enterprise, stress, or a profile JSON path. |
+| `--program` | Versioned operational synthesis Program JSON. |
+| `--reconciliation` | FactReconciliation JSON for --program; repeat for each exact total. |
+| `--rows` | Explicit transaction population for --fact. |
+
+### `worldloom corpus-scale build`
+
+Write bounded relational shards and grounded native files atomically.
+
+```
+worldloom corpus-scale build <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--fact` | Canonical numeric fact to allocate into an exactly reconciling transaction ledger. |
+| `--limits` | Explicit synthesis resource budgets JSON. |
+| `--maximum-files` | Maximum files in the committed corpus. |
+| `--native-plan` | NativeCorpusPlan JSON; repeat to select file topology. |
+| `--out`, `-o` | New destination; source corpus is unchanged. |
+| `--profile` | development, enterprise, stress, or a profile JSON path. |
+| `--program` | Versioned operational synthesis Program JSON. |
+| `--reconciliation` | FactReconciliation JSON for --program; repeat for each exact total. |
+| `--resume` | Reuse a completed destination only after source reconstruction and verification. |
+| `--rows` | Explicit transaction population for --fact. |
+| `--shard-bytes` | Maximum bytes per CSV shard. |
+| `--shard-rows` | Maximum physical data rows per CSV shard. |
+| `--xlsx` | Also write typed workbooks from each relational shard. |
+
+### `worldloom corpus-scale verify`
+
+Reconstruct declared projections; reject changed files or source bindings.
+
+```
+worldloom corpus-scale verify <CORPUS_PATH> <DIRECTORY>
+```
+
 ### `worldloom demo`
 
 Build a bundled demo corpus, validate it, and export it.
@@ -487,6 +540,21 @@ worldloom evalrun agreement <CORPUS> <RESULTS>
 | `--rater-timeout` | Seconds an exec: rater child may run per answer. |
 | `--shell` | Run the exec: rater through the shell (the opt-in for pipelines). |
 | `--studio-instruction` | The auto-rater instruction the Studio run was configured with; recorded, not used. |
+
+### `worldloom evalrun audit-split`
+
+Reject shared evidence and lineage across the proposed train/holdout boundary.
+
+```
+worldloom evalrun audit-split <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--holdout-corpus` | Held-out corpus or case set. |
+| `--holdout-origin` | Stable origin of the held-out source; independent worlds have distinct origins. |
+| `--source-origin` | Stable source-world origin shared by its snapshots and counterfactuals. |
+| `--unit-dimension` | Declared correlated-unit dimension, such as episode_id. |
 
 ### `worldloom evalrun autopsy`
 
@@ -700,6 +768,7 @@ worldloom evalrun improve <CORPUS>
 | `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
+| `--holdout-origin` | Stable held-out-world origin; distinct independent worlds use different origins. |
 | `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
 | `--json` | Emit improve.json on stdout. |
 | `--levers` | What a round may change: agent (the policy pack; the default), interface (an Anvil manifest overlay per served connector), or agent,interface (the first candidate goes to the lever that owns more failing findings; --candidates mixes both). interface needs --contract. |
@@ -712,6 +781,7 @@ worldloom evalrun improve <CORPUS>
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
 | `--proposer-pack` | The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest. |
+| `--qualification-policy` | QualificationPolicy JSON: predeclared fresh evidence tranches, repeat support, and family-wise confidence budget. Requires enough independent held-out evidence. |
 | `--rater` | grounded or exec:<command>; pinned for the whole loop. |
 | `--rater-timeout` |  |
 | `--reference-run` | A run directory of the reference agent over the training cases only, whose accepted calls a traces brief shows beside the failing ones. Refused when it holds a held-out case. |
@@ -720,6 +790,7 @@ worldloom evalrun improve <CORPUS>
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--source-origin` | Stable training-world origin; keep it unchanged across snapshots and counterfactual variants. |
 | `--source-root` | CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it. |
 | `--surface` | The tools the agent is shown: contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping; a connector with no locked contract keeps its own tools; the default, policy `connectors.surface`) or native (each connector definition's own tools). |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
@@ -1394,6 +1465,48 @@ worldloom narrate requests <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom native-evals`
+
+Build discovery tasks over native files and independently grade replies.
+
+### `worldloom native-evals build`
+
+Compile and reference-qualify tasks; export public prompts and byte-bound inputs.
+
+```
+worldloom native-evals build <CORPUS_PATH> <SCALE_DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | New exchange directory; oracle.json stays evaluator-private. |
+| `--plan` | NativeWorkloadPlan JSON: business objective, formats, operations and task budget. |
+
+### `worldloom native-evals grade`
+
+Require exact task coverage and inspect answers, citations, output types and preservation.
+
+```
+worldloom native-evals grade <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write grades JSON. |
+| `--replies` | NativeWorkloadReplies JSON, including actual native output bytes as base64. |
+
+### `worldloom native-evals qualify`
+
+Construct reference replies and recheck satisfiability against actual input bytes.
+
+```
+worldloom native-evals qualify <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write independent qualification grades JSON. |
 
 ### `worldloom pack`
 

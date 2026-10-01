@@ -101,12 +101,16 @@ industry_app = typer.Typer(
 app.add_typer(industry_app, name="industry")
 
 from .connector_serving_cli import serve_command
+from .corpus_scale_cli import scale_app
 from .dataset_cli import dataset_app
 from .enterprise_qualification_cli import qualify_command
+from .native_evals_cli import native_evals_app
 from .quality_cli import calibration_app, readers_app
 
 enterprise_evals_app.command("serve")(serve_command)
 enterprise_evals_app.command("qualify")(qualify_command)
+app.add_typer(scale_app, name="corpus-scale")
+app.add_typer(native_evals_app, name="native-evals")
 narrate_app.add_typer(readers_app, name="readers")
 evals_app.add_typer(calibration_app, name="calibration")
 evals_app.add_typer(dataset_app, name="dataset")
@@ -755,6 +759,9 @@ _REFUSALS: dict[str, str] = {
     "reader_plan_rejected": "reader targets cannot be checked against the current corpus",
     "reader_check_rejected": "persisted independent reader review failed evidence admission",
     "calibration_rejected": "observed trial or snapshot violates the calibration contract",
+    "corpus_scale_rejected": "the source, scale plan, or physical files violate the corpus scale contract",
+    "qualification_rejected": "the proposed experiment cannot establish independent held-out promotion evidence",
+    "native_evals_rejected": "native discovery tasks, inputs, or replies violate the evaluation contract",
     "fleet_error": "the fleet directory cannot be qualified or curated",
     "grader_drift": "the grader an improvement loop pinned changed mid-loop; data.changed names what moved",
     "history_too_short": "the corpus's history is too short for this decomposition",
