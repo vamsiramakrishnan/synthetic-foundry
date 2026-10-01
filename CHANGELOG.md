@@ -7,6 +7,50 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### Physical enterprise corpora and independent promotion evidence
+
+**Generation**
+
+- Eval-first reference proofs no longer manufacture oracle facts in read
+  outputs. Bound capability assertions now scope evidence to the source's
+  connector and entity; unsupported connectorless execution requires an
+  explicit executor. Verification checks observed readback of dependent writes.
+  Searches follow every connector page for each selector, so required evidence
+  beyond the first page can qualify. Older cases that relied on fabricated
+  evidence no longer qualify.
+- Opt-in corpus scale plans materialise bounded relational shards, typed XLSX
+  and grounded large native files. Declared integer table totals can reconcile
+  exactly to canonical company facts. Source replay checks physical projections,
+  native bytes and measured counts, including locale and presentation bindings.
+- New scale plans opt into business native files with real source tables,
+  typed measures, formula dependencies and business labels. Canonical IDs stay
+  private. Explicit business native plans refuse hidden source prose and
+  tables, including presenter notes, as automatic selection already does.
+  Existing native plans retain their legacy serialization and bytes.
+
+**Evaluation**
+
+- Optional qualification policies reserve fresh, disjoint evidence-component
+  tranches before target execution. Repeated paired comparisons use independent
+  units and a finite confidence budget. Interrupted qualification resumes only
+  under the same sealed policy, candidate, source and grader pins.
+- `corpus-scale assess|build|verify` and `evalrun audit-split` expose the shared
+  SDK checks from the CLI. `evalrun improve --qualification-policy` applies
+  them to the existing policy and skill improvement loop.
+- `native-evals build|qualify|grade` exposes reference-qualified discovery tasks
+  over actual DOCX, PPTX and XLSX bytes. Prompts hide source locators; coverage
+  reports ambiguity and missing operations. Cross-file analysis, grounded
+  updates and creates reuse the independent native byte grader. Studio accepts
+  the same planner through an opt-in discovery request.
+- A native evaluation bridge feeds independently graded byte outcomes into
+  the existing policy improvement runner, with canonical source lineage,
+  native grader/parser pins and fresh repeat execution IDs. Plan and trajectory
+  stay unobserved. Optional runner hooks supply experiment context and domain
+  grader identity while preserving existing connector runners.
+- A reproducible construction pilot records workload, physical row and relation
+  counts, file metrics and independent source reconstruction. It does not claim
+  a live target harness improved.
+
 The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.

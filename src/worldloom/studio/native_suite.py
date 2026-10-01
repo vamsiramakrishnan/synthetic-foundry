@@ -5,12 +5,14 @@ more tasks creates another sample. Every proposed contract is reference-graded.
 """
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from .. import packkit
 from ..narrative import references
 from ..native_artifacts import inspect_artifact
 from ..native_corpus import NativeContent, NativeCorpusPlan, render_native_corpus
+from ..native_query_planning import NativeWorkloadPlan, plan_native_workload
 from ..native_reference import qualify_native_task
 from ..native_tasks import (
     NativeAssertion,
@@ -49,10 +51,14 @@ def propose(world: World, spec: ProjectSpec, request: NativeSuiteRequest) -> dic
             continue
         for index, section in enumerate(ir.sections):
             ids = set(references.referenced(section.body or ""))
-            if not section.body or not ids:
+            if request.query_style == "discovery" and section.table is not None:
+                ids.update(cell.fact_id for row in section.table.rows for cell in row.cells.values() if cell.fact_id)
+            if not ids or (not section.body and request.query_style == "located"):
                 continue
-            text = references.substitute(section.body, facts, locale=corpus_locale(world), presentation=presentation_of(world))
+            text = references.substitute(section.body or "", facts, locale=corpus_locale(world), presentation=presentation_of(world))
             key = " ".join(text.split()).casefold()
+            if request.query_style == "discovery" and section.table is not None:
+                key += section.table.model_dump_json()
             if key in seen:
                 continue
             seen.add(key)
@@ -79,17 +85,48 @@ def propose(world: World, spec: ProjectSpec, request: NativeSuiteRequest) -> dic
     # Whole connected groups can be packed together, never split across cases.
     # Excess sections from one group are not recycled into another case.
     batches: list[tuple[NativeContent, ...]] = []
+    source_parts: list[tuple[tuple[NativeContent, ...], ...]] = []
     pending: list[NativeContent] = []
+    parts: list[tuple[NativeContent, ...]] = []
+    parts_per_case = 2 if request.query_style == "discovery" and request.discovery_scope != "artifact" else 1
     for _, group in sorted(groups.items()):
         pending.extend(group)
         if len(pending) >= request.minimum_units:
-            batches.append(tuple(pending[:request.minimum_units]))
+            parts.append(tuple(pending[:request.minimum_units]))
             pending = []
+            if len(parts) == parts_per_case:
+                source_parts.append(tuple(parts))
+                batches.append(tuple(content for part in parts for content in part))
+                parts = []
     plans: list[NativeCorpusPlan] = []
     tasks: list[NativeTask] = []
     missing: list[dict[str, str]] = []
-    for contents in batches[:request.max_cases]:
+    capability_coverage: Counter[str] = Counter()
+    for batch_index, contents in enumerate(batches[:request.max_cases]):
         key = digest([request.use_case_id, [c.model_dump(mode="json") for c in contents]])[:20]
+        if request.query_style == "discovery":
+            corpus = {}
+            for format in request.formats:
+                for part_index, part in enumerate(source_parts[batch_index], 1):
+                    artifact_id = f"ART-SUITE-{key}-{format}-part{part_index}"
+                    plan = NativeCorpusPlan(artifact_id=artifact_id, format=format, title=case.title,
+                        surface="business", minimum_units=request.minimum_units, contents=tuple(c.model_copy(update={"placement": "notes"})
+                            if format == "pptx" else c for c in part))
+                    try:
+                        corpus[artifact_id] = render_native_corpus(world, plan)
+                    except ValueError as error:
+                        missing.append({"case": key, "operation": "discovery",
+                            "reason": "native_source_graph_unavailable: " + str(error)})
+                        continue
+                    plans.append(plan)
+            workload = plan_native_workload(world, corpus, NativeWorkloadPlan(use_case_id=case.id,
+                objective=case.objective or case.title, formats=request.formats, operations=request.operations,
+                max_tasks=request.max_tasks_per_case, discovery_scope=request.discovery_scope))
+            tasks.extend(workload.tasks)
+            capability_coverage.update(workload.capability_coverage)
+            missing.extend({"case": key, "operation": finding.operation or "discovery",
+                "reason": finding.code + ": " + finding.detail} for finding in workload.findings)
+            continue
         for format in request.formats:
             artifact_id = "ART-SUITE-" + key + "-" + format
             plan = NativeCorpusPlan(artifact_id=artifact_id, format=format, title=case.title,
@@ -169,13 +206,18 @@ def propose(world: World, spec: ProjectSpec, request: NativeSuiteRequest) -> dic
         "native_tasks": [t.model_dump(mode="json") for t in (*retained_tasks, *tasks)]})
     if not tasks:
         proposal = spec
-    summary = {"source_sections": len(rows), "source_components": len(groups), "available_cases": len(batches),
+    summary: dict[str, Any] = {"source_sections": len(rows), "source_components": len(groups), "available_cases": len(batches),
         "requested_cases": request.max_cases, "prepared_cases": min(len(batches), request.max_cases),
         "case_shortfall": max(0, request.max_cases - len(batches)), "artifacts": len(plans), "tasks": len(tasks),
         "minimum_units": request.minimum_units, "reference_qualified": len(tasks), "unsupported": missing,
         "limitations": ["Explicit-location capability contracts; semantic fit to the business objective requires review.",
                         "Task count is not independent support. Calibration seals the complete project's evidence graph.",
                         "No target observations or calibrated difficulty are implied by reference qualification."]}
+    if request.query_style == "discovery":
+        summary["query_style"] = request.query_style
+        summary["discovery_scope"] = request.discovery_scope
+        summary["capability_coverage"] = dict(sorted(capability_coverage.items()))
+        summary["limitations"][0] = "Business selectors require evidence discovery; semantic fit to the business objective requires review."
     return {"spec": proposal.model_dump(mode="json"), "summary": summary}
 
 

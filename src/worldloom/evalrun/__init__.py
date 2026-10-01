@@ -266,6 +266,18 @@ if TYPE_CHECKING:
     from .proof import (
         prove_cases as prove_cases,
     )
+    from .qualification import (
+        QualificationPolicy as QualificationPolicy,
+    )
+    from .qualification import (
+        SplitAudit as SplitAudit,
+    )
+    from .qualification import (
+        audit_splits as audit_splits,
+    )
+    from .qualification import (
+        with_record_provenance as with_record_provenance,
+    )
     from .rater import (
         RATING_SCHEMA as RATING_SCHEMA,
     )
@@ -433,6 +445,10 @@ _EXPORTS: dict[str, str] = {
     'ImproveLoop': '.session',
     'Gate': '.improve',
     'ImproveReport': '.improve',
+    'QualificationPolicy': '.qualification',
+    'SplitAudit': '.qualification',
+    'audit_splits': '.qualification',
+    'with_record_provenance': '.qualification',
     'RoundReceipt': '.improve',
     'ExecAgent': '.harness',
     'ExecPlanner': '.plans',
@@ -675,6 +691,10 @@ __all__ = [
     "Gate",
     "ImproveReport",
     "RoundReceipt",
+    "QualificationPolicy",
+    "SplitAudit",
+    "audit_splits",
+    "with_record_provenance",
     "seam_contract",
     # Execution.
     "RUN_SCHEMA",

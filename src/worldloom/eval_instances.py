@@ -9,12 +9,15 @@ appear only at this stage.
 from __future__ import annotations
 
 import hashlib
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .connector_data import builtin_projections
 from .eval_candidates import GeneratedCandidate
 from .eval_design import EvalSpec, EvalStepSpec, RequirementKind
 from .models import Model
+
+if TYPE_CHECKING:
+    from .world import World
 
 
 class EvalAssertion(Model):
@@ -72,6 +75,7 @@ def _assertions(
     spec: EvalSpec,
     evidence: dict[str, tuple[str, ...]],
     fact_ids: tuple[str, ...],
+    step_evidence: dict[str, tuple[str, ...]],
 ) -> tuple[EvalAssertion, ...]:
     assertions: list[EvalAssertion] = [EvalAssertion(type="dag_acyclic")]
     for step in spec.steps:
@@ -84,7 +88,11 @@ def _assertions(
                 capability=step.capability,
                 connector=step.connector,
                 operation=step.operation,
-                evidence_ids=fact_ids if step.effect in {"read", "verify"} else (),
+                # World requirements describe corpus conditions. A source
+                # operation must retrieve its own bound records and their
+                # provenance, not every fact another source contributed to
+                # the instance's global oracle.
+                evidence_ids=step_evidence.get(step.id, ()),
             )
         )
         if step.effect == "write":
@@ -102,6 +110,57 @@ def _assertions(
     if fact_ids:
         assertions.append(EvalAssertion(type="evidence_grounded", evidence_ids=fact_ids))
     return tuple(assertions)
+
+
+def _step_evidence(
+    spec: EvalSpec,
+    world: World,
+    evidence: dict[str, tuple[str, ...]],
+) -> dict[str, tuple[str, ...]]:
+    """Bind source requirements to the connector and entity that reads them.
+
+    Search steps promise the required result set. A single-record read promises
+    one required record; its reference executor uses that binding to choose the
+    gold call, then proves the evidence actually came back. Verification after
+    a write is checked against observed effects rather than the initial source
+    requirement. Other requirements remain static world conditions.
+    """
+    from .connector_definition import is_reference_connector, load_connector_definition
+    from .eval_candidates import _connector_records
+
+    scoped: dict[str, tuple[str, ...]] = {}
+    for step in spec.steps:
+        if step.connector is None or step.effect != "read":
+            continue
+        if not is_reference_connector(step.connector):
+            continue
+        definition = load_connector_definition(step.connector)
+        records = _connector_records(world, step.connector)
+        members = set(definition.entity_members(step.entity)) if step.entity else None
+        required = {
+            identifier for requirement in spec.requirements
+            if requirement.kind == RequirementKind.CONNECTOR
+            and requirement.selector.get("connector") == step.connector
+            and (members is None or not isinstance(requirement.selector.get("entity"), str)
+                 or bool(members & set(definition.entity_members(str(requirement.selector["entity"])))))
+            for identifier in evidence[requirement.id]
+        }
+        if (step.operation or step.capability).lower() in {"get", "read", "download", "extract"}:
+            required = set(sorted(required)[:1])
+        selected = sorted(
+            (record for record in records if record.id in required
+             and (members is None or record.entity in members)),
+            key=lambda record: record.id,
+        )
+        if required:
+            # Keep mandatory record IDs even if a caller hands binding a stale
+            # validation snapshot: absence cannot turn a required read into an
+            # evidence-free capability assertion.
+            scoped[step.id] = tuple(sorted(required | {
+                identifier for record in selected
+                for identifier in (record.id, *record.fact_ids, *record.event_ids, *record.source_artifact_ids)
+            }))
+    return scoped
 
 
 def bind_eval_instance(spec: EvalSpec, candidate: GeneratedCandidate) -> EvalInstance:
@@ -200,7 +259,7 @@ def bind_eval_instance(spec: EvalSpec, candidate: GeneratedCandidate) -> EvalIns
         request=spec.request_template,
         difficulty=spec.difficulty,
         steps=spec.steps,
-        assertions=_assertions(spec, evidence, oracle.fact_ids),
+        assertions=_assertions(spec, evidence, oracle.fact_ids, _step_evidence(spec, candidate.world, evidence)),
         oracle=oracle,
     )
 

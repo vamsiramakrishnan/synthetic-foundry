@@ -93,6 +93,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -111,9 +112,16 @@ from ..packkit.resolve import ResolvedPack
 from .agents import AgentUnderTest, fingerprint
 from .autopsy import autopsy
 from .contract import EvalCase
-from .grader import check_frozen, grader_identity
+from .grader import GraderDrift, check_frozen, grader_identity
 from .harness import skills_cache_in
 from .noise import Interval, PairedComparison, confidence_level, paired, resample_count
+from .qualification import (
+    QualificationExhausted,
+    QualificationPolicy,
+    QualificationTrial,
+    QualificationVault,
+    isolated_splits,
+)
 from .results import Comparison, compare, delta_band, read_run, write_run
 from .runner import RunReport, case_set_digest
 from .search import (
@@ -213,6 +221,8 @@ class Gate(Model):
     #: Each axis's paired interval, and the value-weighted one when values were given.
     axis_intervals: dict[str, Interval | None] = Field(default_factory=dict)
     value_interval: Interval | None = None
+    #: Independent evidence units, when a sealed qualification experiment was used.
+    independent_units: int | None = None
 
     @model_serializer(mode="wrap")
     def _single_run_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -220,6 +230,8 @@ class Gate(Model):
         if self.repeats == 1:
             for name in _REPEAT_FIELDS:
                 data.pop(name, None)
+        if self.independent_units is None:
+            data.pop("independent_units", None)
         return data
 
 
@@ -421,6 +433,8 @@ class RoundReceipt(Model):
     interface: dict[str, Any] | None = None
     #: The transfer gate: a second agent on the held-out cases under both interfaces.
     transfer: Gate | None = None
+    #: The one-use held-out experiment reserved before either side ran.
+    qualification: dict[str, Any] | None = None
 
     @model_serializer(mode="wrap")
     def _narrow_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -432,7 +446,7 @@ class RoundReceipt(Model):
 
 
 #: Receipt fields only wide search, or the interface lever, fills, and so only their receipts carry.
-_WIDE_FIELDS: tuple[str, ...] = ("parent", "screening", "spent", "lever", "interface", "transfer")
+_WIDE_FIELDS: tuple[str, ...] = ("parent", "screening", "spent", "lever", "interface", "transfer", "qualification")
 
 
 class ImproveReport(Model):
@@ -460,13 +474,14 @@ class ImproveReport(Model):
     #: it started from and ended with (digests); absent otherwise.
     levers: tuple[str, ...] | None = None
     interface: dict[str, Any] | None = None
+    qualification: dict[str, Any] | None = None
 
     @model_serializer(mode="wrap")
     def _single_run_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.repeats == 1:
             data.pop("repeats", None)
-        for name in ("search", "spent", "levers", "interface"):
+        for name in ("search", "spent", "levers", "interface", "qualification"):
             if data.get(name, False) is None:
                 data.pop(name)
         return data
@@ -616,6 +631,10 @@ class Improver:
     #: The second agent the transfer gate runs on the held-out cases under
     #: both interfaces; without one the gate is skipped with a recorded reason.
     transfer: AgentUnderTest | None = None
+    #: Fresh evidence-disjoint promotion tranches, independent-unit inference,
+    #: and a sealed probe budget. Disabled preserves the legacy wire format.
+    qualification: QualificationPolicy | None = None
+    _qualification: QualificationVault | None = field(default=None, repr=False)
     _variant: Any = None
     _variants: dict[str, Any] = field(default_factory=dict)
     _runs: dict[tuple[str, str, str], RunReport] = field(default_factory=dict)
@@ -628,8 +647,40 @@ class Improver:
         """Whether any wide-search setting is off its default: then receipts carry parent, screening and spend."""
         return self.candidates > 1 or self.parents != "champion" or self.round_budget is not None
 
+    def _grading_identity(self) -> dict[str, Any]:
+        """The core grader, plus a runner's independently measured domain."""
+        base = grader_identity(self.rater)
+        identify = getattr(self.run, "grading_identity", None)
+        if not callable(identify):
+            return base
+        identity = dict(identify(self.rater))
+        if any(identity.get(key) != value for key, value in base.items() if key != "digest"):
+            raise ValueError("runner grading_identity must preserve the core grader identity")
+        if not isinstance(identity.get("digest"), str) or not identity["digest"]:
+            raise ValueError("runner grading_identity must include its combined digest")
+        return dict(json.loads(json.dumps(identity, sort_keys=True)))
+
+    def _validate_cases(self, cases: Sequence[EvalCase]) -> None:
+        """A domain's provenance preflight runs before sealing or cache reuse."""
+        validate = getattr(self.run, "validate_cases", None)
+        if callable(validate):
+            validate(cases)
+
+    def _check_grader(self, pinned: Mapping[str, Any]) -> None:
+        if not callable(getattr(self.run, "grading_identity", None)):
+            check_frozen(pinned, self.rater)
+            return
+        current = self._grading_identity()
+        expected = str(pinned.get("digest", ""))
+        if current != dict(pinned):
+            changed = tuple(sorted(key for key in set(current) | set(pinned)
+                                   if key != "digest" and current.get(key) != pinned.get(key)))
+            raise GraderDrift("the runner's grader differs from the sealed experiment",
+                              pinned=expected, current=current["digest"], changed=changed)
+
     def _pinned_runs(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str,
-                     grader: dict[str, Any], *, variant: Any = None) -> tuple[RunReport, ...]:
+                     grader: dict[str, Any], *, variant: Any = None,
+                     expected: Mapping[str, Any] | None = None) -> tuple[RunReport, ...]:
         """*pack* over *cases*, ``repeats`` times: each an ordinary pinned run in ``<label>/rep-<i>``.
 
         At one repeat it is the single run in ``<label>`` itself, where a
@@ -639,8 +690,8 @@ class Improver:
         if self.repeats < 1:
             raise ValueError(f"repeats must be at least 1, not {self.repeats}")
         if self.repeats == 1:
-            return (self._pinned_run(pack, cases, label, grader, variant=variant),)
-        return tuple(self._pinned_run(pack, cases, label, grader, repeat=index, variant=variant)
+            return (self._pinned_run(pack, cases, label, grader, variant=variant, expected=expected),)
+        return tuple(self._pinned_run(pack, cases, label, grader, repeat=index, variant=variant, expected=expected)
                      for index in range(1, self.repeats + 1))
 
     def _gate(self, champion: Sequence[RunReport], candidate: Sequence[RunReport], *, name: str, min_delta: float,
@@ -662,7 +713,8 @@ class Improver:
 
     def _pinned_run(self, pack: ResolvedPack, cases: Sequence[EvalCase], label: str, grader: dict[str, Any],
                     repeat: int | None = None, *, variant: Any = None, agent: AgentUnderTest | None = None,
-                    slug: str | None = None) -> RunReport:
+                    slug: str | None = None, expected: Mapping[str, Any] | None = None) -> RunReport:
+        self._validate_cases(cases)
         # The agent is built first, so a run is reused only when this agent
         # made it: one pack run by two different agents (another command,
         # another harness) is two runs. It is built here so a skill tree it
@@ -672,11 +724,17 @@ class Improver:
             with skills_cache_in(self.out / "skills-cache"):
                 agent = self.agent_for(pack)
         identity = fingerprint(agent)
+        self._check_grader(grader)
+        if expected is not None and (json.loads(json.dumps(identity, sort_keys=True)) != expected.get("harness")
+                                     or pack.digest != expected.get("digest")):
+            raise ValueError("target harness or policy changed after the qualification reservation")
         served = None
         if self.interface is not None:
             # Served through Anvil under an interface: the interface is part
             # of what ran, so it is part of the run's identity and directory.
             served = variant if variant is not None else self._variant
+            if expected is not None and self.interface.identity(served) != expected.get("serving"):
+                raise ValueError("served interface changed after the qualification reservation")
             identity = {**identity, "serving": self.interface.identity(served)}
             if slug is None and served.digest != self.interface.base.digest:
                 slug = f"{_slug(pack)}+if-{served.digest[:12]}"
@@ -705,19 +763,113 @@ class Improver:
                     and stored.agent_identity == identity):
                 self._runs[key] = stored
                 return stored
-        check_frozen(grader, self.rater)
-        report = self.run(cases, agent) if served is None else self.interface.run(cases, agent, served)
+        execute = getattr(self.run, "run_experiment", None)
+        if served is not None:
+            report = self.interface.run(cases, agent, served)
+        elif callable(execute):
+            # A native or remote runner needs the repeat's identity to
+            # checkpoint that execution without replaying a prior repeat.
+            report = execute(cases, agent, directory=directory, label=label, repeat=repeat, grader=grader)
+        else:
+            report = self.run(cases, agent)
         self._spent += len(cases)
-        check_frozen(grader, self.rater)
+        self._check_grader(grader)
         update: dict[str, Any] = {"grader": grader, "agent_pack": report.agent_pack or _identity(pack),
                                   "agent_identity": identity}
-        if label == "holdout":
+        if label == "holdout" or label.startswith("holdout/"):
             # Marked on the run itself, so an export refuses it wherever it goes.
             update["split"] = "holdout"
         report = report.model_copy(update=update)
         write_run(directory, report)
         self._runs[key] = report
         return report
+
+    def _qualification_identity(self, pack: ResolvedPack, *, variant: Any = None) -> dict[str, Any]:
+        with skills_cache_in(self.out / "skills-cache"):
+            agent = self.agent_for(pack)
+        identity = {**_identity(pack), "harness": fingerprint(agent)}
+        if self.interface is not None:
+            identity["serving"] = self.interface.identity(variant if variant is not None else self._variant)
+            if self.transfer is not None:
+                identity["transfer_harness"] = fingerprint(self.transfer)
+        return identity
+
+    def _qualified_gate(self, champion: Sequence[RunReport], candidate: Sequence[RunReport], *,
+                        trial: QualificationTrial, name: str, min_delta: float, max_fall: float,
+                        values: Mapping[str, Any] | None = None) -> Gate:
+        assert self.qualification is not None
+        reasons: list[str] = []
+        expected = {case.id for case in trial.cases}
+        reference_axes: dict[str, set[str]] = {}
+        reference_queries = {case.id: case.query for case in trial.cases}
+        for side, runs in (("champion", champion), ("candidate", candidate)):
+            for index, report in enumerate(runs, start=1):
+                result_ids = [row.case_id for row in report.results]
+                if (len(result_ids) != len(expected) or set(result_ids) != expected
+                        or report.case_set != case_set_digest(trial.cases)):
+                    reasons.append(f"{side} repeat {index} did not run the complete reserved cohort")
+                if any(not row.graded for row in report.results):
+                    reasons.append(f"{side} repeat {index} has ungraded cases in the reserved cohort")
+                for row in report.results:
+                    if row.query != reference_queries.get(row.case_id):
+                        reasons.append(f"{side} repeat {index} changed the request for {row.case_id}")
+                    if row.graded and row.score is not None:
+                        observed = set(row.score.observed)
+                        if row.case_id not in reference_axes:
+                            reference_axes[row.case_id] = observed
+                        elif observed != reference_axes[row.case_id]:
+                            reasons.append(f"{side} repeat {index} changed observed axes for {row.case_id}")
+                        measured = [row.score.score, *(float(getattr(row.score, axis).score) for axis in observed)]
+                        if any(not math.isfinite(value) or not 0 <= value <= 1 for value in measured):
+                            reasons.append(f"{side} repeat {index} has an invalid score for {row.case_id}")
+        if reasons:
+            return Gate(name=name, passed=False, reasons=tuple(reasons), repeats=self.repeats,
+                        method="cluster_bootstrap", confidence=self.qualification.probe_confidence,
+                        independent_units=0)
+        comparison = paired(champion, candidate, values=values, units=trial.units,
+                            confidence=self.qualification.probe_confidence,
+                            resamples=resample_count(self.resamples))
+        gate = judge_paired(comparison, name=name, min_delta=min_delta, strict=name == "holdout",
+                            max_axis_regression=max_fall, min_ci=min_delta)
+        reasons = list(gate.reasons)
+        units = comparison.independent_units or 0
+        if units < self.qualification.min_units:
+            reasons.append(f"only {units} independently graded units; need {self.qualification.min_units}")
+        # Establish non-inferiority, rather than merely failing to detect a
+        # statistically significant regression. Wide uncertainty is not a pass.
+        for axis, estimate in comparison.axes.items():
+            if estimate is None:
+                if any(axis in axes for axes in reference_axes.values()):
+                    reasons.append(f"the {axis} axis has no paired evidence")
+                continue
+            if estimate.cases < self.qualification.min_units:
+                reasons.append(f"the {axis} axis has {estimate.cases} independent units; "
+                               f"need {self.qualification.min_units}")
+            if estimate.ci_low is None or estimate.ci_low < -max_fall:
+                reasons.append(f"the {axis} axis does not establish non-inferiority at {-max_fall}")
+        return gate.model_copy(update={"passed": not reasons, "reasons": tuple(reasons),
+                                       "independent_units": units})
+
+    def _holdout_experiment(self, number: int, champion: ResolvedPack, candidate: ResolvedPack,
+                            holdout: Sequence[EvalCase], grader: dict[str, Any], *, min_held: float,
+                            max_fall: float, variant: Any = None) -> tuple[Gate, QualificationTrial | None]:
+        trial = None
+        label = "holdout"
+        if self._qualification is not None:
+            trial = self._qualification.reserve(number, champion=self._qualification_identity(champion),
+                                                candidate=self._qualification_identity(candidate, variant=variant),
+                                                grader=grader)
+            holdout, label = trial.cases, trial.label
+        before = self._pinned_runs(champion, holdout, label, grader,
+                                   expected=None if trial is None else trial.reservation["champion"])
+        after = self._pinned_runs(candidate, holdout, label, grader, variant=variant,
+                                  expected=None if trial is None else trial.reservation["candidate"])
+        values = self.holdout_values if self.holdout_values is not None else self.values
+        if trial is None:
+            return self._gate(before, after, name="holdout", min_delta=min_held, strict=True,
+                              max_fall=max_fall, values=values), None
+        return self._qualified_gate(before, after, trial=trial, name="holdout", min_delta=min_held,
+                                    max_fall=max_fall, values=values), trial
 
     def _earlier(self) -> tuple[int, frozenset[str]]:
         """The last round number receipted in this output directory, and every pack ref a receipt names.
@@ -844,6 +996,8 @@ class Improver:
             raise ValueError("no training cases: the loop has nothing to learn from")
         if not holdout:
             raise ValueError("no held-out cases: a candidate could only be judged where it was tuned")
+        self._validate_cases(train)
+        self._validate_cases(holdout)
         if self.repeats < 1:
             raise ValueError(f"repeats must be at least 1, not {self.repeats}")
         self._check_search()
@@ -872,7 +1026,19 @@ class Improver:
         min_train = band if min_train_delta is None else min_train_delta
         min_held = float(packkit.policy("evalrun.improve.min_holdout_delta")) if min_holdout_delta is None else min_holdout_delta
         max_fall = band if max_axis_regression is None else max_axis_regression
-        grader = grader_identity(self.rater)
+        grader = self._grading_identity()
+        if self.qualification is not None:
+            if (any(not math.isfinite(value) for value in (min_train, min_held, max_fall))
+                    or max_fall < 0):
+                raise ValueError("qualification requires finite deltas and a nonnegative axis regression limit")
+            if self.repeats < self.qualification.min_repeats:
+                raise ValueError(f"qualification needs at least {self.qualification.min_repeats} repeats per side")
+            if any((self.out / "rounds").glob("*.json")) and not (self.out / "qualification" / "seal.json").exists():
+                raise ValueError("earlier rounds already probed an unqualified holdout; use a new output directory")
+            self._qualification = QualificationVault.open(self.out / "qualification", train, holdout,
+                                                          policy=self.qualification, grader=grader)
+        elif (self.out / "qualification" / "seal.json").exists():
+            raise ValueError("this output directory holds a sealed qualification experiment; keep its policy")
         stem = round_stem(champion.name)
         initial = champion
         if self.interface is not None and self._variant is None:
@@ -885,8 +1051,12 @@ class Improver:
         for number in range(last + 1, last + rounds + 1):
             protected |= {f"{champion.kind}:{champion.name}"}
             before = self._spent
-            receipt = self._round(number, champion, train, holdout, grader, stem, protected,
-                                  min_train=min_train, min_held=min_held, max_fall=max_fall)
+            try:
+                receipt = self._round(number, champion, train, holdout, grader, stem, protected,
+                                      min_train=min_train, min_held=min_held, max_fall=max_fall)
+            except QualificationExhausted as error:
+                receipt = RoundReceipt(round=number, grader=grader["digest"], champion=_identity(champion),
+                                       decision="qualification_exhausted", reasons=(str(error),))
             if self.wide:
                 receipt = receipt.model_copy(update={"spent": self._spent - before})
             if receipt.candidate is not None:
@@ -903,7 +1073,7 @@ class Improver:
             elif receipt.decision == "promoted":
                 assert receipt.candidate is not None
                 champion = self._candidates[receipt.candidate["digest"]]
-            elif receipt.decision in {"no_failures", "questions", "proposer_error"}:
+            elif receipt.decision in {"no_failures", "questions", "proposer_error", "qualification_exhausted"}:
                 # Nothing left to learn from this set, the operator has to
                 # answer before a harness can go on, or the harness is not
                 # answering at all: another round would repeat this one.
@@ -917,7 +1087,8 @@ class Improver:
                                spent=sum(item.spent or 0 for item in receipts) if self.wide else None,
                                levers=self.levers if self.interface is not None else None,
                                interface=self._interface_summary(initial_variant) if self.interface is not None
-                               else None)
+                               else None,
+                               qualification=self._qualification.summary() if self._qualification is not None else None)
         _write(self.out / "improve.json", report.model_dump(mode="json", by_alias=True))
         return report
 
@@ -937,7 +1108,9 @@ class Improver:
         # is shown one run, as it always was, and the repeats only sharpen the
         # judging.
         if self.interface is None:
-            found = autopsy(parent_train[0], cases=train)
+            found = autopsy(parent_train[0], cases=train, attribute=self.qualification is not None,
+                            peers=parent_train[1:] if self.qualification is not None else (),
+                            reference=self.reference_run if self.qualification is not None else None)
         else:
             # Served under an interface, every finding gets an owner: the
             # served surface's facts, the other repeats and the reference
@@ -1048,14 +1221,12 @@ class Improver:
                     self._archive_add(archive, candidate, candidate_train, train, number, parent)
         # Only now, with a candidate through the training gate, are the
         # held-out cases run: screening and the archive never touch them.
-        champion_held = self._pinned_runs(champion, holdout, "holdout", grader)
-        candidate_held = self._pinned_runs(candidate, holdout, "holdout", grader)
-        held_gate = self._gate(champion_held, candidate_held, name="holdout", min_delta=min_held, strict=True,
-                               max_fall=max_fall,
-                               values=self.holdout_values if self.holdout_values is not None else self.values)
+        held_gate, trial = self._holdout_experiment(number, champion, candidate, holdout, grader,
+                                                    min_held=min_held, max_fall=max_fall)
         return RoundReceipt(**common, **extra, **changed, decision="promoted" if held_gate.passed else "rejected",
                             authoring=rounds, candidate=_identity(candidate), train=train_gate, holdout=held_gate,
-                            reasons=held_gate.reasons, ablation=ablation)
+                            reasons=held_gate.reasons, ablation=ablation,
+                            qualification=trial.reservation if trial is not None else None)
 
     # -- wide search ------------------------------------------------------------
 
@@ -1450,14 +1621,15 @@ class Improver:
     def _pullable(self, found: Any) -> tuple[str, ...]:
         """The levers this round may pull, in the order its candidates take them.
 
-        Without an interface lever it is the agent, always. With one lever
-        allowed, it is pulled only when it owns a failing finding. With both,
+        An unqualified agent-only loop keeps its original attribution rules.
+        Qualification and interface loops pull only levers that own a failing
+        finding. With both,
         the first candidate goes to the lever that owns more of them (the
         agent on a tie) and the rest alternate, so wide search tries both;
         when neither owns one (every finding is the world's or the grader's)
         nothing is pulled.
         """
-        if self.interface is None or found.ownership is None:
+        if found.ownership is None:
             return tuple(self.levers)
         owned = {share.owner: share.findings for share in found.ownership.owners}
         if not any(owned.get(lever, 0) for lever in self.levers):
@@ -1584,18 +1756,18 @@ class Improver:
                 reduced = diffs.render(self._variant.tree, variant.tree)
                 changed = {"diff": reduced, "diff_hunks": len(diffs.hunks(reduced))}
         # Only now are the held-out cases run, as for an agent candidate.
-        champion_held = self._pinned_runs(champion, holdout, "holdout", grader)
-        candidate_held = self._pinned_runs(champion, holdout, "holdout", grader, variant=variant)
-        held_gate = self._gate(champion_held, candidate_held, name="holdout", min_delta=min_held, strict=True,
-                               max_fall=max_fall,
-                               values=self.holdout_values if self.holdout_values is not None else self.values)
+        held_gate, trial = self._holdout_experiment(number, champion, champion, holdout, grader,
+                                                    min_held=min_held, max_fall=max_fall, variant=variant)
+        if trial is not None:
+            holdout = trial.cases
         record = self._interface_record(variant)
         reasons = list(held_gate.reasons)
         transfer: Gate | None = None
         if not held_gate.passed:
             record["transfer"] = {"skipped": "the holdout gate failed, so the transfer agent was never run"}
         else:
-            transfer, skipped = self._transfer_gate(champion, variant, holdout, grader, max_fall=max_fall)
+            transfer, skipped = self._transfer_gate(champion, variant, holdout, grader, max_fall=max_fall,
+                                                     trial=trial)
             if transfer is None:
                 record["transfer"] = {"skipped": skipped}
             else:
@@ -1607,10 +1779,11 @@ class Improver:
         return RoundReceipt(**common, **changed, lever="interface", decision="promoted" if promoted else "rejected",
                             authoring=rounds, candidate=self._interface_identity(variant), train=train_gate,
                             holdout=held_gate, transfer=transfer, interface=record, reasons=tuple(reasons),
-                            ablation=ablation)
+                            ablation=ablation, qualification=trial.reservation if trial is not None else None)
 
     def _transfer_gate(self, champion: ResolvedPack, variant: Any, holdout: Sequence[EvalCase],
-                       grader: dict[str, Any], *, max_fall: float) -> tuple[Gate | None, str]:
+                       grader: dict[str, Any], *, max_fall: float,
+                       trial: QualificationTrial | None = None) -> tuple[Gate | None, str]:
         """The second agent on the held-out cases under the champion interface and under *variant*.
 
         An interface change is for every agent a company serves, not the one
@@ -1619,6 +1792,8 @@ class Improver:
         """
         if self.transfer is None:
             return None, "no transfer agent was given (--transfer-agent); the gate was skipped"
+        if trial is not None and fingerprint(self.transfer) != trial.reservation["champion"].get("transfer_harness"):
+            raise ValueError("transfer harness changed after the qualification reservation")
         ident = hashlib.sha256(json.dumps(fingerprint(self.transfer), sort_keys=True,
                                           default=str).encode()).hexdigest()[:12]
 
@@ -1626,10 +1801,14 @@ class Improver:
             slug = f"transfer@{ident}" + ("" if served.digest == self.interface.base.digest
                                           else f"+if-{served.digest[:12]}")
             repeats: list[int | None] = [None] if self.repeats == 1 else list(range(1, self.repeats + 1))
-            return tuple(self._pinned_run(champion, holdout, "holdout", grader, repeat=repeat, variant=served,
+            label = "holdout" if trial is None else trial.label
+            return tuple(self._pinned_run(champion, holdout, label, grader, repeat=repeat, variant=served,
                                           agent=self.transfer, slug=slug) for repeat in repeats)
 
         before, after = runs(self._variant), runs(variant)
+        if trial is not None:
+            return self._qualified_gate(before, after, trial=trial, name="transfer", min_delta=-max_fall,
+                                        max_fall=max_fall), ""
         if self.repeats == 1:
             return judge(compare(before[0], after[0]), name="transfer", min_delta=-max_fall, strict=False,
                          max_axis_regression=max_fall), ""
@@ -1745,7 +1924,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             reference_run: RunReport | None = None, candidates: int | None = None, screen_cases: int | None = None,
             finalists: int | None = None, parents: str | None = None,
             round_budget: int | None = None, levers: Sequence[str] | str | None = None, interface: Any = None,
-            transfer: AgentUnderTest | None = None) -> ImproveReport:
+            transfer: AgentUnderTest | None = None,
+            qualification: QualificationPolicy | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
@@ -1777,6 +1957,21 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     ``evalrun.interface.InterfaceLever`` over the served contract bundles;
     *transfer* is the second agent an interface candidate must not regress
     on the held-out cases (the gate is skipped, and says so, without one).
+
+    *qualification* seals a bounded pool of fresh promotion tranches before
+    proposing. Evidence components remain intact; each reaching candidate
+    reserves one tranche before execution. Confidence is nominally allocated
+    over the probe budget and intervals resample components and whole repeat
+    batches. Cases need served-snapshot provenance from
+    ``with_record_provenance`` and sufficient independently grounded units.
+
+    A domain runner may implement ``run_experiment(cases, agent, *, directory,
+    label, repeat, grader)`` to distinguish checkpointed repeats, and
+    ``grading_identity(rater)`` to extend the core grader's identity with
+    its own measured domain. The full identity is frozen around execution
+    and when resuming; ordinary two-argument runners keep their contract.
+    Optional ``validate_cases(cases)`` verifies domain provenance before
+    sealing and before any execution or cached-run reuse.
     """
     from .evidence import admit_reference, brief_mode
     from .interface import parse_levers
@@ -1784,7 +1979,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     dropped = 0
     if holdout is None:
         share = float(packkit.policy("evalrun.improve.holdout_share")) if holdout_share is None else holdout_share
-        train, held = split_cases(cases, holdout_share=share)
+        train, held = (split_cases(cases, holdout_share=share) if qualification is None else
+                       isolated_splits(cases, holdout_share=share, unit_dimension=qualification.unit_dimension))
     else:
         # A case the training corpus itself declares held out stays sealed
         # even when the holdout comes from elsewhere: it is dropped, counted.
@@ -1817,7 +2013,8 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
                         parents=str(packkit.policy("evalrun.improve.parents")) if parents is None else parents,
                         round_budget=_optional_int(packkit.policy("evalrun.improve.round_budget"))
                         if round_budget is None else int(round_budget),
-                        levers=parse_levers(levers), interface=interface, transfer=transfer)
+                        levers=parse_levers(levers), interface=interface, transfer=transfer,
+                        qualification=qualification)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,

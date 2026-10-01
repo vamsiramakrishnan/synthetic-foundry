@@ -7,6 +7,17 @@ tags: [contributing, docs-gate, determinism-sweep, retrievers, layout]
 
 # Where things are
 
+For large benchmark construction, read [Enterprise benchmark improvement](../enterprise-benchmark-improvement.md).
+`worldloom corpus-scale assess` checks source and population floors;
+`worldloom corpus-scale build` materialises bounded files;
+`worldloom corpus-scale verify` reconstructs their source projections.
+`worldloom native-evals build` emits business discovery tasks and public inputs;
+`worldloom native-evals qualify` checks actual-byte solvability;
+`worldloom native-evals grade` independently grades target replies and files.
+`worldloom evalrun audit-split` checks transitive evidence overlap before
+`worldloom evalrun improve --qualification-policy qualification.json` spends a
+predeclared budget of fresh promotion cohorts.
+
 | Path | What |
 | --- | --- |
 | `src/worldloom/models.py` | The thin waist. Every subsystem speaks these types |
