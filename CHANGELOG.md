@@ -15,14 +15,18 @@ reproducibility even when no API moved.
   outputs. Bound capability assertions now scope evidence to the source's
   connector and entity; unsupported connectorless execution requires an
   explicit executor. Verification checks observed readback of dependent writes.
-  Older cases that relied on fabricated evidence no longer qualify.
+  Searches follow every connector page for each selector, so required evidence
+  beyond the first page can qualify. Older cases that relied on fabricated
+  evidence no longer qualify.
 - Opt-in corpus scale plans materialise bounded relational shards, typed XLSX
   and grounded large native files. Declared integer table totals can reconcile
   exactly to canonical company facts. Source replay checks physical projections,
   native bytes and measured counts, including locale and presentation bindings.
 - New scale plans opt into business native files with real source tables,
   typed measures, formula dependencies and business labels. Canonical IDs stay
-  private. Existing native plans retain their legacy serialization and bytes.
+  private. Explicit business native plans refuse hidden source prose and
+  tables, including presenter notes, as automatic selection already does.
+  Existing native plans retain their legacy serialization and bytes.
 
 **Evaluation**
 

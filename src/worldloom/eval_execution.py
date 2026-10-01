@@ -146,8 +146,17 @@ def emulator_executor(
             for predicate in predicates or [Predicate(entity=entity)]:
                 target_entity = predicate.entity or entity
                 tool = definition.tool_for(target_entity, "search")
-                emulator.call(tool, _node=step.id, entity=target_entity, predicate=predicate, max_results=50)
-                hits.extend(emulator.trace[-1].reads)
+                start_at = 0
+                while True:
+                    page = emulator.call(tool, _node=step.id, entity=target_entity, predicate=predicate,
+                                         max_results=50, start_at=start_at)
+                    hits.extend(emulator.trace[-1].reads)
+                    if page["is_last"]:
+                        break
+                    # A connector can clamp the requested page size. Its
+                    # returned offsets, rather than our request, identify the
+                    # next page; every required record must actually be read.
+                    start_at = page["start_at"] + page["max_results"]
             if not hits:
                 raise ValueError(f"{step.id}: search on {step.connector}/{entity} found nothing")
             reads = [fid for fid in hits if fid in emulator.records]

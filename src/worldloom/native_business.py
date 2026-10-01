@@ -295,6 +295,10 @@ def prepare_business_content(world: World, plan: NativeCorpusPlan) -> tuple[_Con
         if ir is None or source.section_index >= len(ir.sections):
             raise ValueError(f"unknown authored section: {source.source_artifact_id}:{source.section_index}")
         section = ir.sections[source.section_index]
+        if section.hidden:
+            # Explicit selection must preserve the same privacy boundary as
+            # auto-selection, including tables and presenter notes.
+            raise ValueError(f"private authored section: {source.source_artifact_id}:{source.section_index}")
         if source.placement == "notes" and plan.format != "pptx":
             raise ValueError("speaker notes require pptx")
         body = section.body or ""

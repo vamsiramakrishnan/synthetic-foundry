@@ -234,6 +234,43 @@ def test_business_auto_planner_audits_private_and_invalid_sections_without_repai
     assert plan == _plan(world, "xlsx")
 
 
+@pytest.mark.parametrize("format", ["docx", "pptx", "xlsx"])
+@pytest.mark.parametrize("content_kind", ["prose", "table"])
+def test_explicit_business_plans_refuse_hidden_source_sections(
+    format: Literal["docx", "pptx", "xlsx"], content_kind: str,
+) -> None:
+    world = _world(prose=False)
+    source = world._artifact_irs[0]
+    if content_kind == "prose":
+        source = source.model_copy(update={"sections": [
+            ArtifactSection(heading="North division", body="Actual revenue: {{fact:FACT-0000}}. Budget: {{fact:FACT-0001}}."),
+            ArtifactSection(heading="South division", body="Actual revenue: {{fact:FACT-0002}}. Budget: {{fact:FACT-0003}}."),
+        ]})
+        world = replace(world, _artifact_irs=(source,))
+    plan = _explicit_plan(world, format)
+    assert render_native_corpus(world, plan).manifest.distinct_fact_count == 4
+    hidden = source.sections[0].model_copy(update={"hidden": True})
+    private_world = replace(world, _artifact_irs=(source.model_copy(update={
+        "sections": [hidden, *source.sections[1:]],
+    }),))
+    for accept in (native_corpus_coverage, render_native_corpus):
+        with pytest.raises(ValueError, match="private authored section: ART-SOURCE:0"):
+            accept(private_world, plan)
+
+
+def test_explicit_business_notes_cannot_expose_hidden_source_prose() -> None:
+    world = _world()
+    source = world._artifact_irs[0]
+    hidden = ArtifactSection(heading="Private forecast", body="Revenue: {{fact:FACT-0000}}.", hidden=True)
+    world = replace(world, _artifact_irs=(source.model_copy(update={"sections": [*source.sections, hidden]}),))
+    plan = _explicit_plan(world, "pptx").model_copy(update={"contents": (
+        NativeContent(source_artifact_id="ART-SOURCE", section_index=0),
+        NativeContent(source_artifact_id="ART-SOURCE", section_index=2, placement="notes"),
+    )})
+    with pytest.raises(ValueError, match="private authored section: ART-SOURCE:2"):
+        render_native_corpus(world, plan)
+
+
 def test_business_auto_planner_selects_a_complete_dependency_closure_in_source_order() -> None:
     world = _world(prose=False)
     source = world._artifact_irs[0]

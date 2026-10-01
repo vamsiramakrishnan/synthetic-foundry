@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from worldloom.connector_definition import load_connector_definition
+from worldloom.connector_emulator import ConnectorEmulator
+from worldloom.eval_candidates import _connector_records
 from worldloom.eval_design import (
     EvalSpec,
     EvalStepSpec,
@@ -62,6 +65,64 @@ def test_cross_connector_steps_prove_only_their_own_source_evidence() -> None:
     assert scoped["messages"].isdisjoint(observed["incidents"])
     assert instance.oracle.fact_ids, "the static workbook contributes canonical facts"
     assert set(instance.oracle.fact_ids).isdisjoint(observed["incidents"] | observed["messages"])
+
+
+@pytest.mark.parametrize("page_size", [7, 50])
+def test_search_proof_reads_every_page_of_each_witness_selector(
+    monkeypatch: pytest.MonkeyPatch, page_size: int,
+) -> None:
+    spec = EvalSpec(
+        id="paginated-source-proof", capability="incident_inventory", persona="operations manager",
+        request_template="Find all new critical incidents for the critical desk and high-priority incidents for the high desk.",
+        steps=(EvalStepSpec(id="incidents", capability="search", connector="servicenow",
+                            entity="incident", operation="search"),),
+        requirements=tuple(WorldRequirement(
+            id=label, kind=RequirementKind.CONNECTOR, minimum=count,
+            selector={"connector": "servicenow", "entity": "incident", "priority": priority,
+                      "state": "New", "assignment_group": label + " desk"},
+        ) for label, priority, count in (("critical", "1 - Critical", 101), ("high", "2 - High", 57))),
+        candidate_count=1,
+    )
+    run = EvalCampaign(spec).construct(
+        lambda plan: RetailWorld(seed=plan.seed).build().run(MonthEndClose(period="2026-03")),
+    )
+    world, instance = run.accepted[0].world, run.instances[0]
+    definition = load_connector_definition("servicenow")
+    tool = definition.tool_for("incident", "search")
+    definition = definition.model_copy(update={"tools": {
+        **definition.tools, tool: definition.tools[tool].model_copy(update={"page_size": page_size}),
+    }})
+    pages: dict[str, list[tuple[int, int, int, bool, tuple[str, ...]]]] = {}
+    original_call = ConnectorEmulator.call
+
+    def observe_call(emulator, tool_name, **args):  # type: ignore[no-untyped-def]
+        result = original_call(emulator, tool_name, **args)
+        if args.get("_node") == "incidents":
+            selector = args["predicate"].model_dump_json()
+            pages.setdefault(selector, []).append((result["start_at"], result["max_results"],
+                result["total"], result["is_last"], tuple(emulator.trace[-1].reads)))
+        return result
+
+    monkeypatch.setattr(ConnectorEmulator, "call", observe_call)
+    proof = execute_reference(instance, world, emulator_executor({"servicenow": definition}))
+    assert proof.status == ProofStatus.PROVEN_EXECUTABLE, proof.failure
+    assert len(pages) == 2, "each independently scoped selector must start its own pagination"
+    for selector_pages in pages.values():
+        assert len(selector_pages) > 1
+        assert [page[0] for page in selector_pages] == list(range(0, selector_pages[0][2], page_size))
+        assert all(page[1] == page_size for page in selector_pages)
+        assert all(not page[3] for page in selector_pages[:-1]) and selector_pages[-1][3]
+        assert sum(len(page[4]) for page in selector_pages) == selector_pages[0][2]
+    actual_reads = {fid for selector_pages in pages.values() for page in selector_pages for fid in page[4]}
+    records = _connector_records(world, "servicenow")
+    required = {record.id for record in records if record.fields.get("witness_role") == "witness"}
+    near_misses = {record.id for record in records if record.fields.get("witness_role") == "near_miss"}
+    assert len(required) == 158
+    assert required <= actual_reads
+    assert actual_reads.isdisjoint(near_misses)
+    provenance = {identifier for record in records if record.id in actual_reads
+                  for identifier in (*record.fact_ids, *record.event_ids, *record.source_artifact_ids)}
+    assert set(proof.steps[0].output_ids) == actual_reads | provenance
 
 
 def test_oracle_mutation_cannot_supply_missing_read_evidence() -> None:
