@@ -123,6 +123,7 @@ def test_partition_package_builds_and_exact_resume_revalidates_support(world: Wo
     assert report.training_tasks and report.heldout_tasks
     training = NativeBenchmark.load(Path(report.training_directory))
     heldout = NativeBenchmark.load(Path(report.heldout_directory))
+    assert training.split_role == "training" and heldout.split_role == "heldout"
     assert training.qualify().passed and heldout.qualify().passed
     before = {str(path.relative_to(directory)): path.read_bytes() for path in directory.rglob("*") if path.is_file()}
     assert report == partition_benchmarks(world, workload(), training_families=1, heldout_families=2,
@@ -131,6 +132,25 @@ def test_partition_package_builds_and_exact_resume_revalidates_support(world: Wo
     with pytest.raises(ValueError, match="resume configuration changed"):
         partition_benchmarks(world, workload().model_copy(update={"objective": "Different objective."}),
             training_families=1, heldout_families=2, directory=directory, resume=True)
+
+
+def test_process_stratification_allocates_whole_independent_families(world: World, tmp_path: Path) -> None:
+    processes = ("supplier_reconciliation", "customer_settlement", "inventory_replenishment")
+    facts = tuple(world.facts[index % 3].model_copy(update={"id": f"CASE-FACT-{index}"}) for index in range(6))
+    artifacts = tuple(ArtifactIR(id=f"CASE-ART-{index}", intent_id=f"CASE-INTENT-{index}",
+        title=f"Independent case {chr(65 + index)}", metadata={"native_scenario_process": processes[index % 3]},
+        sections=[ArtifactSection(heading=f"Case {chr(65 + index)}", body=f"Case {chr(65 + index)}: {{{{fact:{fact.id}}}}}.")])
+        for index, fact in enumerate(facts))
+    cases = replace(world, _facts=facts, _artifact_irs=artifacts)
+    report = partition_benchmarks(cases, workload(), training_families=3, heldout_families=3,
+        directory=tmp_path / "processes")
+    source = {artifact.id: artifact for artifact in artifacts}
+    for families in (report.plan.families[:3], report.plan.families[3:]):
+        assert {source[family.contents[0].source_artifact_id].metadata["native_scenario_process"]
+                for family in families} == set(processes)
+        assert all(len(family.component_ids) == 1 for family in families)
+    assert report.split_audit.isolated
+    assert report.split_audit.training_units == report.split_audit.heldout_units == 3
 
 
 def test_insufficient_source_and_task_caps_never_publish_false_support(world: World, tmp_path: Path) -> None:
@@ -155,9 +175,9 @@ def test_rewritten_receipt_cannot_swap_valid_source_family_allocations(world: Wo
     rendered = report.plan.render(world)
     moved_ids = {native.artifact_id for native in report.plan.families[-1].plans}
     replacement_train = NativeBenchmark.from_rendered(world, {key: value for key, value in rendered.items()
-        if key in moved_ids}, workload())
+        if key in moved_ids}, workload(), split_role="training")
     replacement_held = NativeBenchmark.from_rendered(world, {key: value for key, value in rendered.items()
-        if key not in moved_ids}, workload())
+        if key not in moved_ids}, workload(), split_role="heldout")
     audit = _support(replacement_train, replacement_held, training_families=1, heldout_families=2)
     saved = json.loads((directory / "partition.json").read_text())
     shutil.rmtree(directory / "training")
@@ -295,3 +315,20 @@ def test_task_budget_preserves_small_sources_beside_a_large_native_document(worl
     # One-slot budgets remain well-defined at the same bounded sampler seam.
     assert _sample(("first", "second"), 1) == ["first"]
     assert _sample_sources(("first", "second"), 1, key=lambda item: (item, "docx")) == ["first"]
+
+
+def test_partition_pins_explicit_source_scope_and_retains_world_context(world: World, tmp_path: Path) -> None:
+    directory = tmp_path / "scoped"
+    report = partition_benchmarks(world, workload(), training_families=1, heldout_families=1,
+        source_artifact_ids=("ART-B", "ART-A"), directory=directory)
+    assert {content.source_artifact_id for family in report.plan.families for content in family.contents} == {"ART-A", "ART-B"}
+    for path in (report.training_directory, report.heldout_directory):
+        package = NativeBenchmark.load(Path(path))
+        assert {artifact.id for artifact in package.world.artifact_irs} == {"ART-A", "ART-B", "ART-C"}
+        assert all(evidence.source_artifact_id in {"ART-A", "ART-B"}
+            for result in package.rendered.values() for evidence in result.manifest.evidence)
+    assert report == partition_benchmarks(world, workload(), training_families=1, heldout_families=1,
+        source_artifact_ids=("ART-A", "ART-B"), directory=directory, resume=True)
+    with pytest.raises(ValueError, match="resume configuration changed"):
+        partition_benchmarks(world, workload(), training_families=1, heldout_families=1,
+            source_artifact_ids=("ART-A", "ART-C"), directory=directory, resume=True)

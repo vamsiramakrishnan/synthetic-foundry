@@ -10,7 +10,7 @@ from worldloom.benchmarks.coverage import (
     NativeAssessmentSource,
     assess_native_benchmark,
 )
-from worldloom.evalrun.qualification import QualificationPolicy
+from worldloom.evalrun.qualification import QualificationPolicy, qualification_tranches
 from worldloom.models import (
     ArtifactIR,
     ArtifactSection,
@@ -25,6 +25,11 @@ from worldloom.native_corpus import (
     render_native_corpus,
 )
 from worldloom.native_query_planning import NativeWorkloadPlan, plan_native_workload
+from worldloom.native_requirements import (
+    BenchmarkRequirements,
+    CoverageDimension,
+    CoverageRequirement,
+)
 from worldloom.world import World
 
 
@@ -127,6 +132,24 @@ def test_separate_heldout_package_is_revalidated_and_audited(sources: tuple) -> 
     assert bad.heldout_reference_qualified is None
 
 
+@pytest.mark.parametrize("training_role,heldout_role,ready", [
+    ("heldout", "heldout", False), ("training", "training", False), ("heldout", "training", False),
+    ("training", "heldout", True), ("unspecified", "unspecified", True),
+])
+def test_sdk_assessment_preserves_sealed_split_roles(sources: tuple, training_role: str, heldout_role: str, ready: bool) -> None:
+    from worldloom.benchmarks.core import NativeBenchmark
+
+    world, rendered, workload = sources
+    training = NativeBenchmark.from_rendered(world, {"native-0": rendered["native-0"]}, workload.plan,
+        split_role=training_role)
+    heldout = NativeBenchmark.from_rendered(world, {key: value for key, value in rendered.items() if key != "native-0"},
+        workload.plan, split_role=heldout_role)
+    report = training.assess(heldout=heldout, qualification_policy=QualificationPolicy(trials=2, min_units=2), repeats=2)
+    assert report.execution_ready and report.coverage_complete
+    assert report.promotion_ready is ready
+    assert ("benchmark_split_role_conflict" in codes(report)) is not ready
+
+
 def test_invalid_bytes_never_claim_qualified_or_independent_units(sources: tuple) -> None:
     world, rendered, workload = sources
     tampered = {**rendered, "native-0": replace(rendered["native-0"], payload=rendered["native-0"].payload + b"changed")}
@@ -176,3 +199,87 @@ def test_insufficient_heldout_pool_and_origin_renaming_cannot_pass(sources: tupl
     renamed = assess_native_benchmark(world, rendered, train, namespace="northstar", qualification_policy=policy,
         repeats=2, heldout=NativeAssessmentSource(world, rendered, workload, "renamed-same-world"))
     assert not renamed.promotion_ready and "heldout_origin_mismatch" in codes(renamed)
+
+
+def test_operation_format_cells_are_descriptive_until_explicitly_required(sources: tuple) -> None:
+    world, rendered, workload = sources
+    descriptive = assess_native_benchmark(world, rendered, workload, namespace="northstar")
+    assert descriptive.coverage_complete
+    assert all(not cell.requested for cell in descriptive.capabilities)
+    demand = BenchmarkRequirements(cells=(CoverageRequirement(name="presentation-analysis",
+        operation="analyze", format="pptx", min_independent_units=2),))
+    explicit = assess_native_benchmark(world, rendered, workload, namespace="northstar", requirements=demand)
+    assert not explicit.coverage_complete and not explicit.promotion_ready
+    cell = next(cell for cell in explicit.required_coverage if cell.name == "presentation-analysis")
+    assert cell.tasks == cell.independent_units == 0 and cell.required_units == 2
+    assert "required_cell_units_insufficient" in codes(explicit)
+
+
+def test_required_cells_measure_canonical_process_metadata(sources: tuple) -> None:
+    world, rendered, workload = sources
+    world = replace(world, _artifact_irs=(world.artifact_irs[0].model_copy(update={"metadata": {
+        "native_scenario_process": "supplier_reconciliation", "native_scenario_template": "review"}}),))
+    demand = BenchmarkRequirements(cells=(CoverageRequirement(name="supplier-read", operation="read",
+        dimensions=(CoverageDimension(name="scenario_process", value="supplier_reconciliation"),),
+        min_independent_units=5),))
+    report = assess_native_benchmark(world, rendered, workload, namespace="northstar", requirements=demand)
+    cell = next(cell for cell in report.required_coverage if cell.name == "supplier-read")
+    assert cell.satisfied and cell.independent_units == 5
+    missing = assess_native_benchmark(world, rendered, workload, namespace="northstar", requirements=
+        BenchmarkRequirements(cells=(demand.cells[0].model_copy(update={"min_independent_units": 6}),)))
+    assert not missing.coverage_complete
+    assert "supplier-read: requires 6 independent units; found 5" in next(
+        finding.detail for finding in missing.findings if finding.code == "required_cell_units_insufficient")
+
+
+def test_each_actual_fresh_tranche_must_support_required_cells(sources: tuple) -> None:
+    from worldloom.native_eval_bridge import native_task_cases
+
+    world, rendered, workload = sources
+    training = workload.model_copy(update={"tasks": tuple(task for task in workload.tasks
+        if task.inputs[0].artifact_id == "native-0")})
+    heldout = workload.model_copy(update={"tasks": tuple(task for task in workload.tasks if task not in training.tasks)})
+    policy = QualificationPolicy(trials=2, min_units=2)
+    cases = native_task_cases(heldout.tasks, rendered, namespace="northstar", world=world)
+    first_tranche = set(qualification_tranches(cases, policy=policy)[0])
+    # Two units meet this requested cell in the aggregate. They are deliberately
+    # concentrated in one real fresh cohort; the other cohort must fail closed.
+    heldout = heldout.model_copy(update={"tasks": tuple(task.model_copy(update={
+        "use_case_id": "specialized" if task.id in first_tranche else "ordinary"}) for task in heldout.tasks)})
+    demand = BenchmarkRequirements(cells=(CoverageRequirement(name="specialized-review",
+        dimensions=(CoverageDimension(name="use_case_id", value="specialized"),)),))
+    report = assess_native_benchmark(world, rendered, training, namespace="northstar", qualification_policy=policy,
+        repeats=2, heldout=NativeAssessmentSource(world, rendered, heldout, "northstar"), requirements=demand)
+    assert report.split_audit.isolated and report.split_audit.heldout_units == 4
+    assert not report.promotion_ready
+    assert "heldout_tranche_cell_units_insufficient" in codes(report)
+    assert [next(cell.independent_units for cell in tranche if cell.name == "specialized-review")
+        for tranche in report.tranche_required_coverage] == [2, 0]
+
+
+def test_plan_requirements_cannot_be_weakened_by_assessment_argument(sources: tuple) -> None:
+    world, rendered, workload = sources
+    demand = BenchmarkRequirements(cells=(CoverageRequirement(name="read-family-budget", operation="read",
+        min_independent_units=6),))
+    workload = workload.model_copy(update={"plan": workload.plan.model_copy(update={"requirements": demand})})
+    report = assess_native_benchmark(world, rendered, workload, namespace="northstar",
+        requirements=BenchmarkRequirements())
+    assert not report.coverage_complete and "required_cell_units_insufficient" in codes(report)
+
+
+def test_forged_process_tags_cannot_purchase_required_support(sources: tuple) -> None:
+    from worldloom.native_eval_bridge import native_runner, native_task_cases
+
+    world, rendered, workload = sources
+    cases = native_task_cases(workload.tasks, rendered, namespace="northstar", world=world)
+    case = cases[0]
+    forged = case.model_copy(update={"dimensions": {**case.dimensions, "scenario_process": "supplier_reconciliation"},
+        "row": {**case.row, "native_lineage": [{**source, "coverage_dimensions": {
+            "scenario_process": "supplier_reconciliation"}} for source in case.row["native_lineage"]]}})
+
+    def never(*args):
+        raise AssertionError("forged metadata must be refused before executing a target")
+
+    runner = native_runner(rendered, never, namespace="northstar", world=world, submit_identity={"kind": "never"})
+    with pytest.raises(ValueError, match="evidence lineage differs from actual source manifests"):
+        runner.validate_cases((forged,))

@@ -392,3 +392,188 @@ def test_studio_discovery_reports_unrenderable_source_graph_without_false_tasks(
     assert not result["summary"]["tasks"]
     assert result["spec"] == spec.model_dump(mode="json")
     assert any("native_source_graph_unavailable" in finding["reason"] for finding in result["summary"]["unsupported"])
+
+
+def test_arithmetic_keeps_within_source_values_in_every_actual_native_format() -> None:
+    world, rendered = _world("business")
+    workload = plan_native_workload(world, rendered, _plan(operations=("analyze",), discovery_scope="artifact"))
+    assert {(task.inputs[0].format, task.assertions[0].calculation.operation) for task in workload.tasks} == {
+        (format, operation) for format in ("docx", "pptx", "xlsx") for operation in ("difference", "ratio")}
+    assert {task.inputs[0].artifact_id for task in workload.tasks} == set(rendered)
+    assert all(len(task.inputs) == 1 for task in workload.tasks)
+    payloads = {identifier: result.payload for identifier, result in rendered.items()}
+    for task in workload.tasks:
+        assert qualify_native_task(task, payloads).passed
+        assert all(ref.locator not in task.prompt for ref in task.assertions[0].calculation.operands)
+
+
+@pytest.mark.parametrize("format", ["docx", "pptx"])
+@pytest.mark.parametrize("duplicate_record", [False, True])
+def test_record_column_scope_separates_table_copies_but_rejects_duplicate_records(format: str, duplicate_record: bool) -> None:
+    world, _ = _table_world(format)
+    actual = world.facts[0]
+    ir = world.artifact_irs[0]
+    sections = [*ir.sections, ArtifactSection(heading="Actual register", body="Actual revenue: {{fact:" + actual.id + "}}",
+        fact_ids=[actual.id])]
+    if duplicate_record:
+        sections.append(ArtifactSection(heading="Repeated actual", body="Reviewed actual revenue: {{fact:" + actual.id + "}}",
+            fact_ids=[actual.id]))
+    world = replace(world, _artifact_irs=(ir.model_copy(update={"sections": sections}),))
+    plan = NativeCorpusPlan(artifact_id="mixed-evidence", format=format, title="Revenue", surface="business",
+        contents=tuple(NativeContent(source_artifact_id=ir.id, section_index=index) for index in range(len(sections))))
+    result = render_native_corpus(world, plan)
+    workload = plan_native_workload(world, {plan.artifact_id: result}, _plan(formats=(format,), operations=("read",)))
+    ambiguous = [finding for finding in workload.findings if finding.code == "ambiguous_numeric_selector"]
+    assert len(ambiguous) == (2 if duplicate_record else 0)
+    records = [task for task in workload.tasks if "source-record table" in task.prompt]
+    assert len(records) == (0 if duplicate_record else 1)
+    assert all(qualify_native_task(task, {plan.artifact_id: result.payload}).passed for task in workload.tasks)
+
+
+@pytest.mark.parametrize("format", ["docx", "pptx", "xlsx"])
+def test_authored_sum_reconciliation_uses_native_constituents_not_inferred_populations(format: str) -> None:
+    world, _ = _world("business")
+    actual, west, budget, west_budget = world.facts
+    table = Table(key="totals", title="Store revenue totals", columns=[Column(key="actual", label="Actual"),
+        Column(key="budget", label="Budget")], rows=[
+            Row(key="east", label="East", cells={"actual": Cell(value=125, fact_id=actual.id), "budget": Cell(value=100, fact_id=budget.id)}),
+            Row(key="west", label="West", cells={"actual": Cell(value=70, fact_id=west.id), "budget": Cell(value=60, fact_id=west_budget.id)}),
+            Row(key="total", label="Total", cells={"actual": Cell(value=195, formula=FormulaKind.SUM, operands=["east", "west"]),
+                "budget": Cell(value=160, formula=FormulaKind.SUM, operands=["east", "west"])})])
+    ir = world.artifact_irs[0].model_copy(update={"sections": [ArtifactSection(heading="Revenue", table=table)]})
+    world = replace(world, _artifact_irs=(ir,))
+    plan = NativeCorpusPlan(artifact_id="store-totals", format=format, title="Revenue totals", surface="business",
+        contents=(NativeContent(source_artifact_id=ir.id, section_index=0),))
+    result = render_native_corpus(world, plan)
+    workload = plan_native_workload(world, {plan.artifact_id: result}, _plan(formats=(format,), operations=("analyze",)))
+    sums = [task for task in workload.tasks if task.assertions[0].calculation.operation == "sum"]
+    assert len(sums) == workload.capability_coverage["authored_sum_reconciliation"] == 2
+    payloads = {plan.artifact_id: result.payload}
+    assert {reference_submission(task, payloads).answers[0].value for task in sums} == {"195", "160"}
+    for task in sums:
+        assert qualify_native_task(task, payloads).passed
+        assert len(task.assertions[0].calculation.operands) == 2
+        assert all(ref.locator not in task.prompt for ref in task.assertions[0].calculation.operands)
+    scalar_world, scalar_rendered = _world("business")
+    scalar = plan_native_workload(scalar_world, scalar_rendered, _plan(operations=("analyze",)))
+    assert all(task.assertions[0].calculation.operation != "sum" for task in scalar.tasks)
+
+
+def test_explicit_calculation_format_cells_spend_fixed_budget_and_report_source_deficits() -> None:
+    from worldloom.native_requirements import BenchmarkRequirements, CoverageRequirement
+
+    world, rendered = _world("business")
+    requirements = BenchmarkRequirements(cells=tuple(CoverageRequirement(name=format + "-ratios", operation="analyze",
+        format=format, calculation="ratio", scope="artifact", min_independent_units=2) for format in ("docx", "pptx", "xlsx")))
+    plan = _plan(max_tasks=6, operations=("read", "analyze"), requirements=requirements)
+    workload = plan_native_workload(world, rendered, plan)
+    assert len(workload.tasks) == 6
+    assert all(task.operation == "analyze" and task.assertions[0].calculation.operation == "ratio" for task in workload.tasks)
+    assert {format: sum(task.inputs[0].format == format for task in workload.tasks) for format in ("docx", "pptx", "xlsx")} == {
+        "docx": 2, "pptx": 2, "xlsx": 2}
+    assert not any(finding.code == "requirement_coverage_deficit" for finding in workload.findings)
+    short = plan_native_workload(world, rendered, plan.model_copy(update={"max_tasks": 2}))
+    assert len(short.tasks) == 2
+    assert len([finding for finding in short.findings if finding.code == "requirement_coverage_deficit"]) == 3
+
+
+def test_derived_and_superseded_source_lineage_cannot_purchase_independent_arithmetic() -> None:
+    world, rendered = _world("business")
+    facts = list(world.facts)
+    facts[2] = facts[2].model_copy(update={"derived_from": [facts[0].id]})
+    world = replace(world, _facts=tuple(facts))
+    workload = plan_native_workload(world, rendered, _plan(operations=("analyze",), discovery_scope="cross_artifact"))
+    assert not workload.tasks
+    assert any(finding.code == "independent_cross_artifact_evidence_missing" for finding in workload.findings)
+
+
+def test_creation_format_requirement_selects_deliverable_format() -> None:
+    from worldloom.native_requirements import BenchmarkRequirements, CoverageRequirement
+
+    world, rendered = _world("business")
+    rendered = {key: value for key, value in rendered.items() if key.endswith("docx")}
+    requirements = BenchmarkRequirements(cells=(CoverageRequirement(name="deck", operation="create", format="pptx"),))
+    workload = plan_native_workload(world, rendered, _plan(max_tasks=1, operations=("create",),
+        formats=("docx", "pptx"), requirements=requirements))
+    assert len(workload.tasks) == 1
+    task = workload.tasks[0]
+    assert {item.format for item in task.inputs} == {"docx"}
+    assert task.output.format == "pptx"
+    assert not any(finding.code == "requirement_coverage_deficit" for finding in workload.findings)
+
+
+def test_period_and_budget_families_survive_format_copies_with_visible_periods() -> None:
+    world, _ = _world("business")
+    actual, _, budget, _ = world.facts
+    later = actual.model_copy(update={"id": "FACT-LATER", "period": "2026-02", "value": Quantity(amount=130, unit="AUD")})
+    facts = (actual, later, budget)
+    ir = world.artifact_irs[0].model_copy(update={"sections": [ArtifactSection(heading=f"Revenue {index}",
+        body="Revenue: {{fact:" + fact.id + "}}", fact_ids=[fact.id]) for index, fact in enumerate(facts)]})
+    world = replace(world, _facts=facts, _artifact_irs=(ir,))
+    plans = [NativeCorpusPlan(artifact_id=format + "-periods", format=format, title="Revenue periods", surface="business",
+        contents=tuple(NativeContent(source_artifact_id=ir.id, section_index=index) for index in range(3)))
+        for format in ("docx", "pptx", "xlsx")]
+    rendered = {plan.artifact_id: render_native_corpus(world, plan) for plan in plans}
+    workload = plan_native_workload(world, rendered, _plan(operations=("analyze",), discovery_scope="artifact"))
+    for capability in ("actual_budget_variance", "actual_budget_ratio", "period_change", "period_ratio"):
+        assert workload.capability_coverage[capability] == 3
+    assert all(qualify_native_task(task, {key: result.payload for key, result in rendered.items()}).passed for task in workload.tasks)
+
+
+@pytest.mark.parametrize("mismatch", ["period", "ancestor", "rounding"])
+def test_authored_sum_does_not_overstate_incompatible_or_rounded_reconciliation(mismatch: str) -> None:
+    world, _ = _world("business")
+    first = world.facts[0].model_copy(update={"value": Quantity(amount=2.4, unit="AUD")})
+    second = world.facts[1].model_copy(update={"value": Quantity(amount=1.4, unit="AUD")})
+    if mismatch == "period":
+        second = second.model_copy(update={"period": "2026-02"})
+    if mismatch == "ancestor":
+        second = second.model_copy(update={"derived_from": [first.id]})
+    table = Table(key="total", title="Revenue", columns=[Column(key="value", label="Value")], rows=[
+        Row(key="first", label="East", cells={"value": Cell(value=2.4, fact_id=first.id)}),
+        Row(key="second", label="West", cells={"value": Cell(value=1.4, fact_id=second.id)}),
+        Row(key="total", label="Total", cells={"value": Cell(value=4 if mismatch == "rounding" else 3.8,
+            formula=FormulaKind.SUM, operands=["first", "second"], formula_decimal_places=0 if mismatch == "rounding" else None)})])
+    ir = world.artifact_irs[0].model_copy(update={"sections": [ArtifactSection(heading="Revenue", table=table)]})
+    world = replace(world, _facts=(first, second), _artifact_irs=(ir,))
+    plan = NativeCorpusPlan(artifact_id="total", format="xlsx", title="Revenue", surface="business",
+        contents=(NativeContent(source_artifact_id=ir.id, section_index=0),))
+    workload = plan_native_workload(world, {"total": render_native_corpus(world, plan)},
+        _plan(formats=("xlsx",), operations=("analyze",)))
+    assert "authored_sum_reconciliation" not in workload.capability_coverage
+
+
+def test_numeric_pair_probes_are_linear_and_result_budget_is_hard(monkeypatch: pytest.MonkeyPatch) -> None:
+    from decimal import Decimal
+
+    import worldloom.native_query_planning as planning
+    from worldloom.native_tasks import NativeInput
+
+    world, _ = _world()
+    template = world.facts[0]
+    facts = tuple(template.model_copy(update={"id": f"FACT-{role}-{index}", "subject": f"store:{index}",
+        "kind": "financial.revenue." + role}) for role in ("actual", "budget") for index in range(1000))
+    numeric = []
+    for role in ("actual", "budget"):
+        members = [fact for fact in facts if fact.kind.endswith(role)]
+        for format in ("docx", "pptx", "xlsx"):
+            identifier = role + "-" + format
+            source = planning._Source(NativeInput(artifact_id=identifier, format=format, path=identifier + "." + format),
+                {}, frozenset(fact.id for fact in members))
+            numeric.extend(planning._Numeric(source, NativeCitation(artifact_id=identifier, locator="value:" + fact.id),
+                fact, Decimal(125), fact.subject, fact.kind, fact.subject) for fact in members)
+    original = planning._compatible_pair
+    probes = 0
+
+    def counted(*args, **kwargs):
+        nonlocal probes
+        probes += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(planning, "_compatible_pair", counted)
+    pairs = planning._pairs(numeric, budget=30)
+    assert len(pairs) == 30
+    assert probes < len(numeric) * 12
+    assert {pair.first.source.input.format for pair in pairs} == {"docx", "pptx", "xlsx"}
+    assert any(not pair.cross_artifact for pair in pairs)
+    assert pairs == planning._pairs(list(reversed(numeric)), budget=30)

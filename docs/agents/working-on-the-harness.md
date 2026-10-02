@@ -10,11 +10,20 @@ tags: [contributing, docs-gate, determinism-sweep, retrievers, layout]
 For large benchmark construction, read [Enterprise benchmark improvement](../enterprise-benchmark-improvement.md).
 For the public SDK, target protocol, resumable runs and native policy improvement,
 read [Native benchmark workflow](../native-benchmark-workflow.md).
-`worldloom native-evals inspect` audits coverage and independent support;
+`worldloom native-evals scenarios` generates bounded business episodes and partitions their evidence;
+`worldloom native-evals inspect` audits declared coverage cells and independent support;
 `worldloom native-evals partition` constructs disjoint source families before rendering;
 `worldloom native-evals protocol` describes the public target exchange;
 `worldloom native-evals run` executes and resumes actual target trials;
-`worldloom native-evals improve` connects native outcomes to sealed policy improvement.
+`worldloom native-evals improve` connects native outcomes to sealed policy improvement;
+`worldloom native-evals workflow-qualify` proves an authored native DAG against actual reference bytes;
+`worldloom native-evals workflow-run` executes its steps with graded update-file lineage;
+`worldloom native-evals diagnose` regrades training receipts into a versioned curriculum;
+`worldloom native-evals evolve` builds a fresh training package from that verified proposal.
+Native workflow receipts observe scheduled calls and returned bytes, not the
+target's internal tool trajectory. Conditional and iterated connector workflows
+remain in the connector DAG engine. Native package v2 requires canonical source
+lineage; rebuild retired root-level exchanges and v1 packages from their sources.
 `worldloom corpus-scale assess` checks source and population floors;
 `worldloom corpus-scale build` materialises bounded files;
 `worldloom corpus-scale verify` reconstructs their source projections.

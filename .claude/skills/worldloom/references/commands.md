@@ -1480,10 +1480,42 @@ worldloom native-evals build <CORPUS_PATH> <SCALE_DIRECTORY>
 
 | Option | Purpose |
 | --- | --- |
-| `--layout` | split separates public inputs from private source/oracle; legacy preserves the existing exchange layout. |
 | `--out`, `-o` | Benchmark package destination. |
 | `--plan` | NativeWorkloadPlan JSON: objective, formats, operations and task budget. |
 | `--resume` | Verify and reuse an identical completed package; refuse drift. |
+| `--split-role` | Persisted allocation role; curriculum feedback requires training. |
+
+### `worldloom native-evals diagnose`
+
+Regrade training receipts and propose SOURCE, QUERY and EVAL demands.
+
+```
+worldloom native-evals diagnose <TRAINING> <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--ablation` | Predeclare which training signal contributes demands. |
+| `--out`, `-o` | Write the content-addressed next-curriculum proposal. |
+| `--parent-digest` | Previous curriculum receipt digest. |
+| `--qualification-policy` | Fresh-tranche and repeat budget for the next study. |
+| `--requirements` | Additional measured capability demands. |
+| `--source-origin` | Stable company origin used throughout the experiment. |
+| `--version` | Curriculum version; later versions require a parent receipt digest. |
+
+### `worldloom native-evals evolve`
+
+Materialize verified curriculum demands into new canonical sources and tasks.
+
+```
+worldloom native-evals evolve <TRAINING> <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--curriculum` | NativeCurriculum receipt; independently rederived before building. |
+| `--out`, `-o` | Fresh training benchmark package; qualification needs a new study. |
+| `--resume` | Rebuild and verify an identical evolved package. |
 
 ### `worldloom native-evals grade`
 
@@ -1515,6 +1547,7 @@ worldloom native-evals improve <TRAINING> <HELDOUT>
 | `--proposer-command` | Policy proposer using the existing pack-author JSON exchange. |
 | `--qualification-policy` | Predeclared finite promotion budget and evidence requirements. |
 | `--repeats` |  |
+| `--requirements` | Required capability cells enforced in both splits and every fresh tranche. |
 | `--rounds` |  |
 | `--source-origin` | Stable company origin shared by training and held-out source snapshots. |
 | `--timeout` |  |
@@ -1533,6 +1566,7 @@ worldloom native-evals inspect <DIRECTORY>
 | `--out`, `-o` | Write readiness and coverage JSON. |
 | `--qualification-policy` | Declared fresh-tranche and repeat requirements. |
 | `--repeats` | Planned observations per task and policy. |
+| `--requirements` | Additional required capability cells and independent-unit floors. |
 | `--source-origin` | Stable world origin shared across snapshots and format replicas. |
 
 ### `worldloom native-evals partition`
@@ -1588,6 +1622,54 @@ worldloom native-evals run <DIRECTORY>
 | `--repeats` |  |
 | `--resume` | Reuse completed receipts only under identical inputs and harness identity. |
 | `--timeout` | Maximum seconds per task invocation. |
+
+### `worldloom native-evals scenarios`
+
+Generate native business evidence and partition only its newly authored cases.
+
+```
+worldloom native-evals scenarios <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--demand` | NativeScenarioDemand JSON defining new business cases. |
+| `--holdout-families` |  |
+| `--out`, `-o` | Destination containing training/, heldout/ and partition.json. |
+| `--plan` | NativeWorkloadPlan JSON for both source-isolated workloads. |
+| `--resume` | Verify and reuse the identical scenario and partition build. |
+| `--train-families` |  |
+
+### `worldloom native-evals workflow-qualify`
+
+Check every authored workflow step and actual bound reference file.
+
+```
+worldloom native-evals workflow-qualify <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write independently graded reference workflow results. |
+| `--plan` | NativeWorkflowPlan JSON with ordered dependencies and input bindings. |
+
+### `worldloom native-evals workflow-run`
+
+Execute a bounded authored DAG, blocking descendants of failed steps.
+
+```
+worldloom native-evals workflow-run <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--command` | Trusted native target command; no shell expansion. |
+| `--identity-file` | Pin imported modules/configuration; repeat as needed. |
+| `--max-output-bytes` |  |
+| `--out`, `-o` | Workflow run directory with step receipts and byte lineage. |
+| `--plan` | NativeWorkflowPlan JSON sealed to this benchmark. |
+| `--resume` | Regrade and reuse the identical completed step prefix. |
+| `--timeout` | Maximum seconds per step invocation. |
 
 ### `worldloom pack`
 

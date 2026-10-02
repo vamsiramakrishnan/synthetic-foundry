@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any, cast
 from ..evalrun.agents import AgentResponse, AgentTask, ToolSurface
 from ..evalrun.improve import AgentFor, ImproveReport, improve
 from ..evalrun.policy import AgentPolicy, agent_name, pack_record, require
-from ..evalrun.qualification import QualificationPolicy
+from ..evalrun.qualification import (
+    QualificationPolicy,
+    audit_splits,
+    evidence_components,
+    qualification_tranches,
+)
 from ..native_eval_bridge import (
     NativeGrader,
     native_runner,
@@ -21,6 +26,14 @@ from ..native_eval_bridge import (
     native_task_cases,
 )
 from ..packkit.authoring import Exchange
+from ..providers import digest
+from .requirements import (
+    BenchmarkRequirements,
+    measure_requirements,
+    requirement_deficits,
+    resolve_requirements,
+    task_formats,
+)
 
 if TYPE_CHECKING:
     from ..native_corpus import NativeCorpusResult
@@ -64,8 +77,6 @@ def _sources(training: NativeBenchmark, heldout: NativeBenchmark) -> tuple[
     worlds: dict[str, World] = {}
     source_digests: dict[str, str] = {}
     for benchmark in (training, heldout):
-        if benchmark.world is None or benchmark.rendered is None:
-            raise ValueError("benchmark improvement requires verified canonical source provenance; rebuild the legacy bundle")
         benchmark.validate()
         source_digest = native_source_digest(benchmark.world)
         selected = {item.artifact_id for task in benchmark.workload.tasks for item in task.inputs}
@@ -79,8 +90,6 @@ def _sources(training: NativeBenchmark, heldout: NativeBenchmark) -> tuple[
             merged[artifact_id] = result
             worlds[artifact_id] = benchmark.world
             source_digests[artifact_id] = source_digest
-    if training.world is None or heldout.world is None:
-        raise AssertionError("source provenance was checked above")
     if training.world.company.id != heldout.world.company.id:
         raise ValueError("benchmark improvement requires one company origin under a shared source namespace")
     return merged, worlds
@@ -90,8 +99,7 @@ def _require_coverage(benchmark: NativeBenchmark, split: str) -> None:
     """Qualify the declared work, never silently narrow it to surviving tasks."""
     workload = benchmark.workload
     operations = {task.operation for task in workload.tasks}
-    formats = {item.format for task in workload.tasks for item in task.inputs} | {
-        task.output.format for task in workload.tasks if task.output is not None}
+    formats = {format for task in workload.tasks for format in task_formats(task)}
     for dimension, requested, delivered in (("operations", workload.plan.operations, operations),
             ("formats", workload.plan.formats, formats)):
         missing = sorted(set(requested) - delivered)
@@ -109,6 +117,7 @@ def improve_benchmark(
     proposer: Exchange,
     out: Path,
     qualification_policy: QualificationPolicy | None = None,
+    requirements: BenchmarkRequirements | None = None,
     agent_for: AgentFor | None = None,
     rounds: int = 1,
     repeats: int = 2,
@@ -146,19 +155,42 @@ def improve_benchmark(
         raise ValueError("benchmark improvement requires a stable company source namespace")
     if not harness.identity:
         raise ValueError("benchmark improvement requires an explicit harness identity")
+    if training.split_role == "heldout" or heldout.split_role == "training":
+        raise ValueError("benchmark split roles prohibit using held-out evidence as training or training evidence as held-out")
     rendered, worlds = _sources(training, heldout)
     _require_coverage(training, "training")
     _require_coverage(heldout, "held-out")
-    # _sources proves these optional fields present. Retain a local assertion
-    # so no unchecked provenance can reach the native bridge through this seam.
-    assert training.world is not None and heldout.world is not None
     train = native_task_cases(training.workload.tasks, rendered, namespace=namespace, world=training.world)
     held = native_task_cases(heldout.workload.tasks, rendered, namespace=namespace, world=heldout.world)
-    runner = native_runner(rendered, harness, namespace=namespace, submit_identity=harness.identity, world=worlds)
+    policy = QualificationPolicy() if qualification_policy is None else qualification_policy
+    if {case.id for case in train} & {case.id for case in held}:
+        raise ValueError("native cases cannot be both training and held out")
+    if not audit_splits(train, held, unit_dimension=policy.unit_dimension).isolated:
+        raise ValueError("training and held-out cases share protected evidence or an independent unit")
+    declared = resolve_requirements(training.workload.plan, heldout.workload.plan, additional=requirements)
+    deficits = requirement_deficits(measure_requirements(train, declared, unit_dimension=policy.unit_dimension))
+    if deficits:
+        raise ValueError("training benchmark required coverage is insufficient: " + "; ".join(deficits))
+    units = evidence_components(held, unit_dimension=policy.unit_dimension)
+    # Assess exactly the cohorts QualificationVault will seal, before a target,
+    # proposer or agent factory can observe any data or spend a held-out probe.
+    tranches = qualification_tranches(held, policy=policy)
+    deficits = requirement_deficits(measure_requirements(held, declared, components=units,
+        min_units=policy.min_units, multiplier=policy.trials))
+    if deficits:
+        raise ValueError("held-out benchmark required coverage is insufficient: " + "; ".join(deficits))
+    by_id = {case.id: case for case in held}
+    for index, tranche in enumerate(tranches, start=1):
+        deficits = requirement_deficits(measure_requirements(tuple(by_id[case_id] for case_id in tranche),
+            declared, components=units, min_units=policy.min_units))
+        if deficits:
+            raise ValueError(f"held-out fresh tranche {index} required coverage is insufficient: " + "; ".join(deficits))
+    runner = native_runner(rendered, harness, namespace=namespace,
+        submit_identity={"harness": dict(harness.identity), "requirements": digest(declared.model_dump(mode="json"))}, world=worlds)
     return improve(champion, train, holdout=held, run=runner,
         agent_for=NativePolicyAgent if agent_for is None else agent_for,
         exchange=proposer, out=out, rater=NativeGrader(),
-        qualification=QualificationPolicy() if qualification_policy is None else qualification_policy,
+        qualification=policy,
         rounds=rounds, repeats=repeats, ablate=ablate, candidates=candidates,
         screen_cases=screen_cases, finalists=finalists, round_budget=round_budget,
         pack_roots=pack_roots, authoring_rounds=authoring_rounds,

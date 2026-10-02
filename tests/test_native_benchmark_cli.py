@@ -20,7 +20,7 @@ def package(exchange: Path) -> Path:  # noqa: F811
     root = exchange.parent
     destination = root / "benchmark"
     result = runner.invoke(app, ["native-evals", "build", str(root / "source"), str(root / "scale"),
-        "--plan", str(root / "workload.json"), "--out", str(destination), "--layout", "split"])
+        "--plan", str(root / "workload.json"), "--out", str(destination)])
     assert result.exit_code == 0, result.output
     summary = json.loads(result.output)
     assert summary["target_directory"] == str(destination / "public")

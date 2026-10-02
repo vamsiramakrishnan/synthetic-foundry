@@ -243,6 +243,30 @@ class QualificationExhausted(ValueError):
     """Every predeclared fresh tranche has been consumed."""
 
 
+def qualification_tranches(cases: Sequence[EvalCase], *, policy: QualificationPolicy) -> tuple[tuple[str, ...], ...]:
+    """The actual deterministic fresh cohorts, available to domain preflights.
+
+    A domain may demand evidence in every cohort before running any target.
+    Sharing this allocator prevents a coverage preview from certifying different
+    cases than the sealed experiment will actually measure.
+    """
+    units = evidence_components(cases, unit_dimension=policy.unit_dimension)
+    families: dict[str, list[str]] = {}
+    for case in cases:
+        families.setdefault(units[case.id], []).append(case.id)
+    required = policy.trials * policy.min_units
+    if len(families) < required:
+        raise ValueError(f"qualification needs {required} independent held-out units "
+                         f"({policy.trials} trials x {policy.min_units}); found {len(families)}")
+    parts: list[list[str]] = [[] for _ in range(policy.trials)]
+    counts = [0] * policy.trials
+    for _family, ids in sorted(families.items(), key=lambda item: (-len(item[1]), item[0])):
+        index = min(range(policy.trials), key=lambda i: (counts[i], len(parts[i]), i))
+        parts[index].extend(sorted(ids))
+        counts[index] += 1
+    return tuple(tuple(sorted(part)) for part in parts)
+
+
 @dataclass(frozen=True)
 class QualificationTrial:
     number: int
@@ -270,22 +294,7 @@ class QualificationVault:
         if not audit.isolated:
             raise ValueError("training and held-out cases share protected evidence or an independent unit")
         units = evidence_components(held, unit_dimension=policy.unit_dimension)
-        families: dict[str, list[str]] = {}
-        for case in held:
-            families.setdefault(units[case.id], []).append(case.id)
-        required = policy.trials * policy.min_units
-        if len(families) < required:
-            raise ValueError(f"qualification needs {required} independent held-out units "
-                             f"({policy.trials} trials x {policy.min_units}); found {len(families)}")
-        parts: list[list[str]] = [[] for _ in range(policy.trials)]
-        counts = [0] * policy.trials
-        # First balance units, then cases: every tranche satisfies min_units,
-        # even when one evidence component carries thousands of sibling cases.
-        for _family, ids in sorted(families.items(), key=lambda item: (-len(item[1]), item[0])):
-            index = min(range(policy.trials), key=lambda i: (counts[i], len(parts[i]), i))
-            parts[index].extend(sorted(ids))
-            counts[index] += 1
-        tranches = tuple(tuple(sorted(part)) for part in parts)
+        tranches = qualification_tranches(held, policy=policy)
         manifest = {"schema": QUALIFICATION_SCHEMA, "policy": policy.model_dump(mode="json"),
                     "train": suite_digest(train), "held": suite_digest(held), "grader": dict(grader),
                     "sources": {side: sorted({case.dimensions["source_digest"] for case in cases})
@@ -350,4 +359,4 @@ class QualificationVault:
 
 __all__ = ["QUALIFICATION_SCHEMA", "QualificationPolicy", "QualificationExhausted", "QualificationTrial",
            "QualificationVault", "SplitAudit", "audit_splits", "evidence_components", "isolated_splits", "lineage_tokens",
-           "suite_digest", "with_record_provenance"]
+           "qualification_tranches", "suite_digest", "with_record_provenance"]

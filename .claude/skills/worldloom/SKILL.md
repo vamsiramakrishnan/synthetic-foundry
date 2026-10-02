@@ -48,11 +48,11 @@ Use the public `worldloom.benchmarks` SDK or the `native-evals` commands. Read
 for the target protocol and sealed improvement loop.
 
 ```bash
-worldloom native-evals build ./company ./large-corpus --plan workload.json --layout split --out ./benchmark
+worldloom native-evals build ./company ./large-corpus --plan workload.json --out ./benchmark
 worldloom native-evals partition ./company --plan partition-workload.json --train-families 3 --holdout-families 15 --out ./partitioned
 worldloom native-evals inspect ./benchmark --source-origin company-origin
 worldloom native-evals protocol
-worldloom native-evals run ./benchmark --command 'python ./adapter.py' --out ./run --resume
+worldloom native-evals run ./benchmark --command 'python ./adapter.py' --out ./run
 ```
 
 Keep source origins stable across snapshots. Read coverage findings before

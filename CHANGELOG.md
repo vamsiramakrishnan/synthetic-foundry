@@ -7,6 +7,57 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### Native scenarios, required coverage and measured training curricula
+
+**Generation**
+
+- Registered `NativeScenarioEpisodes` adds bounded supplier reconciliation,
+  customer settlement and inventory replenishment cases to a replayable company.
+  Case-specific canonical facts, events, typed tables, formulas and authored
+  process variants render as business DOCX, PPTX and XLSX files. The parameters
+  are explicit synthetic assumptions, not customer-calibrated distributions.
+- Scenario partitioning selects the declared artifact scope and interleaves
+  process families before allocating training and held-out evidence. Shared
+  facts, formula dependencies and format replicas remain one component.
+  Source scope and allocation are pinned in exact resume configuration.
+- Native discovery adds numeric reads across formats, source-grounded ratios
+  and authored-sum reconciliation. Explicit requirement cells receive bounded
+  task-selection priority. This changes generated workload identities and
+  ordering; unavailable capabilities remain named findings.
+- Benchmark packages use `worldloom.native-benchmark/v2`: canonical World,
+  source manifests, source digest and split role participate in identity.
+  Root-level native exchanges, `export_legacy`, the CLI layout flag and CLI
+  model-import shim are removed. Rebuild old packages; the public task and
+  target exchange protocols remain v1.
+- Removed `worldloom.query_planning` after proving its realized planning and
+  fixture behavior through the canonical enterprise SDK. New-schema corpora
+  must be rebuilt. Nominal `checksum`, `map_reduce` and `chart` labels are not
+  carried forward as executed capabilities; supported topology runs use the
+  existing executable DAG catalogue.
+
+**Evaluation and harness integration**
+
+- `BenchmarkRequirements` declares named operation, format, calculation, scope
+  and verified source-dimension cells. Assessment and improvement enforce
+  independent support in training, the held-out pool and every fresh tranche.
+  Correlated tasks and format copies cannot satisfy another unit; missing
+  support refuses improvement before target or proposer calls.
+- Authored native workflows qualify and grade bounded ordered steps, propagate
+  actual graded update bytes to downstream read/analyze tasks, block descendants
+  after a failed parent, and regrade receipts on resume. They observe runner
+  calls and staged bytes, not internal target trajectories or autonomous plans.
+  Conditional branches, iteration, created-file inputs and derived write
+  contracts remain unsupported; connector workflows remain complementary.
+- Training-only curriculum diagnosis reloads committed receipts and independently
+  regrades their submissions. Versioned proposals carry source, query and
+  evaluation demands with bounded diagnostic codes and explicit ablations.
+  Evolution rederives the proposal before creating new canonical training
+  evidence. New policy claims require a fresh held-out pool and sealed study.
+- The public SDK and `native-evals` expose `scenarios`, `workflow-qualify`,
+  `workflow-run`, `diagnose` and `evolve`; `inspect` and `improve` accept explicit
+  requirements, and `build` can declare a split role. Scripted and reference
+  execution tests establish implementation behavior, not live-model gains.
+
 ### A shared native benchmark workflow for SDKs and harnesses
 
 **Generation**
@@ -32,9 +83,9 @@ reproducibility even when no API moved.
   qualifying, assessing, running and improving native benchmarks. Split packages
   separate public requests/files from private source/oracle material, validate
   exact inventories and reconstruct task contracts from canonical source.
-- `native-evals build --layout split`, `partition`, `inspect`, `protocol`, `run` and `improve`
-  call that seam. Existing root-level exchanges remain supported. Source-free
-  legacy exchanges cannot certify independent promotion evidence.
+- Native build, partition, inspection, protocol, run and improvement commands
+  call that seam. The earlier optional split layout and source-free exchanges
+  are superseded by the mandatory source-bound v2 package described above.
 - Command and callable harness adapters receive task-scoped public inputs.
   Execution pins implementation, input, contract and grading identities;
   persisted submissions are independently regraded on exact resume. Targets

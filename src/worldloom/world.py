@@ -440,6 +440,11 @@ class World:
         ):
             names.update({item.id: item.name for item in group})
         names.update({persona.id: persona.label for persona in self._personas})
+        # An operational episode can itself be a fact's subject: separate
+        # invoice reviews in the same company and period are separate things.
+        # Resolve those canonical event subjects from their recorded business
+        # description, rather than exposing internal event identifiers.
+        names.update({event.id: event.summary for event in self._events})
         return names
 
     # -- named views -------------------------------------------------------

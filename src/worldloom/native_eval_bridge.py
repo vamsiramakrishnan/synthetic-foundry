@@ -158,9 +158,17 @@ def _lineage(task: NativeTask, rendered: Mapping[str, NativeCorpusResult],
             raise ValueError("native improvement manifest disagrees with its byte-bound input")
         source, source_digest = canonical[item.artifact_id]
         direct = sorted({fid for entry in manifest.evidence for fid in entry.fact_ids})
+        artifacts = [source.artifacts[key] for key in sorted({entry.source_artifact_id for entry in manifest.evidence})]
+        coverage_dimensions = {}
+        for dimension, metadata_key in (("scenario_process", "native_scenario_process"),
+                ("scenario_template", "native_scenario_template")):
+            values = {artifact.metadata.get(metadata_key, "") for artifact in artifacts}
+            if len(values) == 1 and "" not in values:
+                coverage_dimensions[dimension] = next(iter(values))
         sources.append({"artifact_id": item.artifact_id, "format": item.format, "sha256": item.sha256,
             "manifest_digest": digest(manifest.model_dump(mode="json")),
             "canonical_source_digest": source_digest, "direct_fact_ids": direct,
+            "coverage_dimensions": coverage_dimensions,
             "fact_ids": list(source.fact_closure(direct)),
             "evidence_ids": sorted({"native-artifact:" + item.artifact_id, "native-bytes:" + manifest.sha256,
                 *(f"native-section:{entry.source_artifact_id}:{entry.section_index}" for entry in manifest.evidence)})})
@@ -172,14 +180,26 @@ def _case_lineage(lineage: Sequence[Mapping[str, Any]]) -> tuple[list[str], list
             not isinstance(source.get(key), list) or any(not isinstance(value, str) or not value for value in source[key])
             for key in ("fact_ids", "evidence_ids")) for source in lineage):
         raise ValueError("native improvement source lineage has invalid evidence tokens")
+    if any(not isinstance(source.get("coverage_dimensions"), dict) or any(
+            key not in {"scenario_process", "scenario_template"} or not isinstance(value, str) or not value
+            for key, value in source["coverage_dimensions"].items()) for source in lineage):
+        raise ValueError("native improvement source lineage has invalid coverage dimensions")
     return (sorted({fid for source in lineage for fid in source["fact_ids"]}),
             sorted({eid for source in lineage for eid in source["evidence_ids"]}))
 
 
-def _dimensions(task: NativeTask, namespace: str, software: Mapping[str, Any]) -> dict[str, str]:
-    return {"source_namespace": namespace, "source_digest": _snapshot(task.inputs),
+def _dimensions(task: NativeTask, namespace: str, software: Mapping[str, Any],
+                lineage: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    result = {"source_namespace": namespace, "source_digest": _snapshot(task.inputs),
         "native_grader_digest": str(software["digest"]), "native_operation": task.operation,
         "use_case_id": task.use_case_id, "native_formats": ",".join(sorted({item.format for item in task.inputs}))}
+    # Only unanimous canonical metadata identifies measured scenario cells.
+    # Task labels and case-unique IDs cannot invent process support.
+    for dimension in ("scenario_process", "scenario_template"):
+        values = {str(source.get("coverage_dimensions", {}).get(dimension, "")) for source in lineage}
+        if len(values) == 1 and "" not in values:
+            result[dimension] = next(iter(values))
+    return result
 
 
 def native_task_cases(
@@ -215,7 +235,7 @@ def native_task_cases(
         if not proof.passed:
             raise ValueError("native improvement task is not reference-qualified: " + task.id)
         cases.append(EvalCase(id=task.id, query=task.prompt,
-            dimensions=_dimensions(task, namespace, software),
+            dimensions=_dimensions(task, namespace, software, lineage),
             plan=PlanContract(nodes=(), edges=(), shape="native." + task.operation), trajectory=TrajectoryContract(),
             outcomes=OutcomeContract(unstructured=UnstructuredOutcome(
                 format=task.output.format if task.output is not None else None, required_fact_ids=tuple(facts)),
@@ -248,7 +268,7 @@ def _tasks(cases: Sequence[EvalCase]) -> tuple[NativeTask, ...]:
                 case.outcomes.unstructured is None or case.outcomes.unstructured.required_fact_ids != tuple(facts)):
             raise ValueError("native improvement evidence lineage differs from its verified source receipt")
         namespace = case.dimensions.get("source_namespace", "")
-        if not namespace.strip() or case.dimensions != _dimensions(task, namespace, software):
+        if not namespace.strip() or case.dimensions != _dimensions(task, namespace, software, lineage):
             raise ValueError("native improvement dimensions differ from its verified source contract")
         tasks.append(task)
     return tuple(tasks)

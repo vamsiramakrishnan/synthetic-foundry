@@ -16,17 +16,27 @@ from ..evalrun.qualification import (
     SplitAudit,
     audit_splits,
     evidence_components,
+    qualification_tranches,
 )
 from ..models import Model
 from ..native_eval_bridge import native_task_cases
 from ..native_query_planning import NativeWorkloadFinding
 from ..providers import digest
+from .requirements import (
+    BenchmarkRequirements,
+    RequirementCoverage,
+    measure_requirements,
+    requirement_deficits,
+    resolve_requirements,
+    task_formats,
+)
 
 if TYPE_CHECKING:
     from ..evalrun.contract import EvalCase
     from ..native_corpus import NativeCorpusResult
     from ..native_query_planning import NativeWorkload
     from ..world import World
+    from .core import BenchmarkSplitRole
 
 
 @dataclass(frozen=True)
@@ -37,6 +47,7 @@ class NativeAssessmentSource:
     rendered: Mapping[str, NativeCorpusResult]
     workload: NativeWorkload
     namespace: str
+    split_role: BenchmarkSplitRole = "unspecified"
 
 
 class BenchmarkFinding(Model):
@@ -89,6 +100,10 @@ class BenchmarkAssessment(Model):
     heldout_coverage_complete: bool | None = None
     findings: tuple[BenchmarkFinding, ...]
     planner_findings: tuple[NativeWorkloadFinding, ...] = ()
+    requirements: BenchmarkRequirements = BenchmarkRequirements()
+    required_coverage: tuple[RequirementCoverage, ...] = ()
+    heldout_required_coverage: tuple[RequirementCoverage, ...] = ()
+    tranche_required_coverage: tuple[tuple[RequirementCoverage, ...], ...] = ()
 
 
 def assess_native_benchmark(
@@ -96,6 +111,8 @@ def assess_native_benchmark(
     namespace: str, qualification_policy: QualificationPolicy | None = None,
     training_task_ids: Sequence[str] | None = None, heldout_task_ids: Sequence[str] | None = None,
     repeats: int | None = None, heldout: NativeAssessmentSource | None = None,
+    requirements: BenchmarkRequirements | None = None,
+    split_role: BenchmarkSplitRole = "unspecified",
 ) -> BenchmarkAssessment:
     """Revalidate source bytes and contracts before counting independent units.
 
@@ -108,6 +125,13 @@ def assess_native_benchmark(
     def add(code: str, detail: str, remediation: str, *blocks: Literal["execution", "coverage", "promotion"]) -> None:
         findings.append(BenchmarkFinding(code=code, detail=detail, remediation=remediation, blocks=blocks))
 
+    # Inspection must not certify a sealed allocation that the improvement
+    # entry point rejects before invoking any target or proposer.
+    if split_role == "heldout" or (heldout is not None and heldout.split_role == "training"):
+        add("benchmark_split_role_conflict",
+            "Benchmark split roles prohibit using held-out evidence as training or training evidence as held-out.",
+            "Use the designated training and held-out packages in their sealed roles.", "promotion")
+
     tasks = tuple(sorted(workload.tasks, key=lambda task: task.id))
     cases: tuple[EvalCase, ...] = ()
     components: dict[str, str] | None = None
@@ -115,13 +139,26 @@ def assess_native_benchmark(
     heldout_qualified: int | None = None
     heldout_coverage_complete: bool | None = None
     external_held: tuple[EvalCase, ...] = ()
+    held: tuple[EvalCase, ...] = ()
+    train: tuple[EvalCase, ...] = ()
+    held_requirements = BenchmarkRequirements()
+    required_coverage: tuple[RequirementCoverage, ...] = ()
+    held_coverage: tuple[RequirementCoverage, ...] = ()
+    tranche_coverage: tuple[tuple[RequirementCoverage, ...], ...] = ()
+    try:
+        effective_requirements = resolve_requirements(workload.plan, additional=requirements)
+        held_requirements = resolve_requirements(workload.plan, *(() if heldout is None else (heldout.workload.plan,)),
+            additional=requirements)
+    except ValueError as error:
+        effective_requirements = BenchmarkRequirements()
+        add("coverage_requirements_invalid", str(error), "Give each distinct required cell a distinct name.",
+            "coverage", "promotion")
     if heldout is not None:
         # The held-out package has its own declared coverage. Enough units
         # cannot qualify an experiment whose requested work is absent there.
         heldout_coverage_complete = True
         held_operations = {task.operation for task in heldout.workload.tasks}
-        held_formats = {item.format for task in heldout.workload.tasks for item in task.inputs} | {
-            task.output.format for task in heldout.workload.tasks if task.output is not None}
+        held_formats = {format for task in heldout.workload.tasks for format in task_formats(task)}
         for dimension, requested, delivered in (("operation", heldout.workload.plan.operations, held_operations),
                 ("format", heldout.workload.plan.formats, held_formats)):
             held_missing = sorted(set(requested) - delivered)
@@ -139,6 +176,7 @@ def assess_native_benchmark(
                 namespace=heldout.namespace, world=heldout.world)
             heldout_qualified = len(external_held)
         except (ValueError, KeyError) as error:
+            heldout_coverage_complete = False
             add("heldout_contract_invalid", str(error),
                 "Rebuild the held-out package from accepted source bytes and canonical provenance.", "promotion")
         if training_task_ids is not None or heldout_task_ids is not None:
@@ -168,8 +206,7 @@ def assess_native_benchmark(
             "Rebuild the workload metadata from its contracts.")
 
     operation_counts = Counter(task.operation for task in tasks)
-    formats_by_task = {task.id: {item.format for item in task.inputs} | (
-        {task.output.format} if task.output is not None else set()) for task in tasks}
+    formats_by_task = {task.id: task_formats(task) for task in tasks}
 
     def count(name: str, requested: bool, selected: Sequence[str]) -> BenchmarkCoverage:
         return BenchmarkCoverage(name=name, requested=requested, tasks=len(selected), independent_units=(
@@ -182,7 +219,8 @@ def assess_native_benchmark(
     formats = tuple(count(format, format in workload.plan.formats,
         [task.id for task in tasks if format in formats_by_task[task.id]])
         for format in sorted(set(workload.plan.formats) | delivered_formats))
-    capabilities = tuple(count(f"{operation}:{format}", True,
+    capabilities = tuple(count(f"{operation}:{format}", any(cell.operation == operation and cell.format == format
+            and cell.format_role == "operation" for cell in effective_requirements.cells),
         [task.id for task in tasks if task.operation == operation and format in formats_by_task[task.id]])
         for operation in sorted(workload.plan.operations) for format in sorted(workload.plan.formats))
     for dimension, coverage in (("operation", operations), ("format", formats)):
@@ -193,8 +231,8 @@ def assess_native_benchmark(
                 "coverage", "promotion")
     absent_cells = [entry.name for entry in capabilities if not entry.tasks]
     if absent_cells:
-        add("operation_format_gaps", "Requested operation/format combinations without tasks: " + ", ".join(absent_cells) + ".",
-            "Inspect the missing combinations before treating aggregate coverage as coverage of every format.")
+        add("operation_format_gaps", "Descriptive operation/format combinations without tasks: " + ", ".join(absent_cells) + ".",
+            "Declare explicit required cells before claiming coverage of every operation/format combination.")
     present_counts = [entry.tasks for entry in operations if entry.requested]
     if present_counts and len(set(present_counts)) > 1:
         add("operation_counts_uneven", "Requested operations have unequal delivered task counts.",
@@ -251,6 +289,45 @@ def assess_native_benchmark(
             if audit.heldout_units < required_units:
                 add("heldout_units_insufficient", f"The policy needs {required_units} held-out units ({qualification_policy.trials} trials x {qualification_policy.min_units}); found {audit.heldout_units}.",
                     "Expand the disjoint held-out pool or explicitly revise the policy before trials begin.", "promotion")
+    if components is not None:
+        training_cases = train or cases
+        required_coverage = measure_requirements(training_cases, effective_requirements, components=components)
+        deficits = requirement_deficits(required_coverage)
+        if deficits:
+            add("required_cell_units_insufficient", "; ".join(deficits),
+                "Generate independent canonical evidence for each named required cell; more questions or format copies cannot supply it.",
+                "coverage", "promotion")
+    elif effective_requirements.cells:
+        add("required_cell_support_unavailable", "Required cell support cannot be measured without validated independent evidence.",
+            "Repair the source contracts or the independent-unit dimension before claiming required coverage.",
+            "coverage", "promotion")
+    held_cases = external_held or held
+    if qualification_policy is not None and held_cases:
+        try:
+            held_components = evidence_components(held_cases, unit_dimension=qualification_policy.unit_dimension)
+            heldout_coverage_complete = heldout_coverage_complete is not False
+            held_coverage = measure_requirements(held_cases, held_requirements, components=held_components,
+                min_units=qualification_policy.min_units, multiplier=qualification_policy.trials)
+            deficits = requirement_deficits(held_coverage)
+            if deficits:
+                heldout_coverage_complete = False
+                add("heldout_required_cell_units_insufficient", "; ".join(deficits),
+                    "Expand each named cell with disjoint evidence sufficient for every fresh held-out trial.", "promotion")
+            tranches = qualification_tranches(held_cases, policy=qualification_policy)
+            by_id = {case.id: case for case in held_cases}
+            tranche_coverage = tuple(measure_requirements(tuple(by_id[case_id] for case_id in tranche),
+                held_requirements, components=held_components, min_units=qualification_policy.min_units)
+                for tranche in tranches)
+            for index, measured in enumerate(tranche_coverage, start=1):
+                deficits = requirement_deficits(measured)
+                if deficits:
+                    heldout_coverage_complete = False
+                    add("heldout_tranche_cell_units_insufficient", f"Fresh tranche {index}: " + "; ".join(deficits),
+                        "Add independent source families that cover the required work in every deterministic fresh tranche.", "promotion")
+        except ValueError as error:
+            heldout_coverage_complete = False
+            add("heldout_requirement_support_unavailable", str(error),
+                "Supply enough validated independent evidence to measure all fresh cohorts.", "promotion")
     source_ids = sorted({item.artifact_id for task in tasks for item in task.inputs})
     source_facts = {fact_id for source_id in source_ids if source_id in rendered
         for entry in rendered[source_id].manifest.evidence for fact_id in entry.fact_ids}
@@ -264,6 +341,8 @@ def assess_native_benchmark(
         qualification_policy=qualification_policy, required_heldout_units=required_units, repeats=repeats,
         split_audit=audit, unassigned_tasks=unassigned, heldout_reference_qualified=heldout_qualified,
         heldout_coverage_complete=heldout_coverage_complete,
+        requirements=effective_requirements, required_coverage=required_coverage,
+        heldout_required_coverage=held_coverage, tranche_required_coverage=tranche_coverage,
         findings=tuple(sorted(findings, key=lambda finding: (finding.code, finding.detail))),
         planner_findings=tuple(sorted(workload.findings, key=lambda finding: (
             finding.code, finding.artifact_id or "", finding.operation or "", finding.detail))))

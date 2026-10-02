@@ -128,6 +128,7 @@ class TableBinding:
     subject: str
     fact: CanonicalFact | None
     formula: bool
+    authored_operation: FormulaKind | None = None
 
 
 def _operands(table_key: str, row_key: str, column_key: str, cell: Cell) -> list[tuple[str, str, str]]:
@@ -328,4 +329,4 @@ def validate_table_binding(
             or metadata["table_title"] != title_locator:
         raise ValueError("native table selector is not bound to its actual row and column")
     return TableBinding(selector=f"the value in table {observed_title!r}, row {row.label!r}, column {column.label!r}",
-        measure=column.label, subject=row.label, fact=fact, formula=formula)
+        measure=column.label, subject=row.label, fact=fact, formula=formula, authored_operation=cell.formula)

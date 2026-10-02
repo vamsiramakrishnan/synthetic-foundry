@@ -1,0 +1,8 @@
+{
+  "discovery_scope": "artifact",
+  "formats": ["docx", "pptx", "xlsx"],
+  "max_tasks": 768,
+  "objective": "Review each business case, reconcile its supported quantities, update the decision while preserving the source, and create a grounded native review artifact.",
+  "operations": ["read", "analyze", "update", "create"],
+  "use_case_id": "native-rebuild-matrix-pilot"
+}
