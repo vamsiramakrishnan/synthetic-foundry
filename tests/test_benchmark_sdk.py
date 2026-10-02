@@ -111,19 +111,42 @@ def test_sdk_resumes_exact_identity_and_refuses_changed_contract(benchmark: Nati
     assert _tree(output) == before
 
 
-def test_legacy_exchange_remains_readable_without_claiming_source_independence(benchmark: NativeBenchmark, tmp_path: Path) -> None:
-    legacy = benchmark.export_legacy(tmp_path / "legacy")
-    assert legacy.world is None and legacy.rendered is None
-    assert legacy.qualify().passed
-    assert benchmark.export_legacy(tmp_path / "legacy", resume=True).workload == legacy.workload
-    with pytest.raises(ValueError, match="mixes evaluator"):
-        _ = legacy.target_directory
-    with pytest.raises(ValueError, match="source lineage unavailable"):
-        legacy.assess()
-    separated = legacy.export(tmp_path / "separated")
-    assert separated.qualify().passed
-    assert (separated.target_directory / "public-tasks.json").is_file()
-    assert not (separated.target_directory / "oracle.json").exists()
+def test_source_free_exchange_and_missing_provenance_are_rejected(benchmark: NativeBenchmark, tmp_path: Path) -> None:
+    root = tmp_path / "exchange"
+    root.mkdir()
+    write_json(root / "oracle.json", benchmark.workload.model_dump(mode="json"))
+    write_json(root / "public-tasks.json", benchmark.public_tasks)
+    with pytest.raises(ValueError, match="manifest missing; rebuild a source-bound package"):
+        NativeBenchmark.load(root)
+    assert not hasattr(benchmark, "export_legacy")
+    with pytest.raises(ValueError, match="require a canonical world"):
+        replace(benchmark, world=None)
+    with pytest.raises(ValueError, match="require a canonical world"):
+        replace(benchmark, rendered=None)
+    package = benchmark.export(tmp_path / "package")
+    manifest_path = package.directory / "benchmark.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["source_digest"]
+    write_json(manifest_path, manifest)
+    with pytest.raises(ValueError, match="source_digest"):
+        NativeBenchmark.load(package.directory)
+
+
+def test_split_role_is_bound_to_identity_and_resume(benchmark: NativeBenchmark, tmp_path: Path) -> None:
+    training = replace(benchmark, split_role="training")
+    heldout = replace(benchmark, split_role="heldout")
+    assert len({benchmark.digest, training.digest, heldout.digest}) == 3
+    package = training.export(tmp_path / "training")
+    assert package.split_role == "training"
+    assert package.qualify().passed
+    with pytest.raises(ValueError, match="resume mismatch"):
+        heldout.export(package.directory, resume=True)
+    manifest_path = package.directory / "benchmark.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["split_role"] = "heldout"
+    write_json(manifest_path, manifest)
+    with pytest.raises(ValueError, match="identity differs"):
+        NativeBenchmark.load(package.directory)
 
 
 @pytest.mark.parametrize("refresh_checksums", [False, True])
@@ -207,7 +230,7 @@ def test_export_refuses_concurrent_writer_and_cleans_interrupted_stage(benchmark
 
 def test_input_mapping_is_copied_before_harness_can_mutate_it(benchmark: NativeBenchmark) -> None:
     supplied = dict(benchmark.inputs)
-    detached = NativeBenchmark(benchmark.workload, supplied)
+    detached = NativeBenchmark(benchmark.workload, supplied, benchmark.world, benchmark.rendered)
     supplied.clear()
     assert detached.qualify().passed
     with pytest.raises(TypeError):

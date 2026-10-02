@@ -307,8 +307,31 @@ def _support(training: NativeBenchmark, heldout: NativeBenchmark, *, training_fa
     return audit
 
 
+def _stratify_processes(world: World, plan: NativePartitionPlan) -> NativePartitionPlan:
+    """Allocate whole families across authored processes before choosing a split.
+
+    Hash order is deterministic but can place every training case in one
+    business process. Round-robin coherent source labels without dividing any
+    evidence component. This is allocation, not a claim of statistical support;
+    the resulting workloads still need independent coverage measurement.
+    """
+    artifacts = {artifact.id: artifact for artifact in world.artifact_irs}
+    buckets: dict[str, list[NativePartitionFamily]] = {}
+    for family in sorted(plan.families, key=lambda family: family.id):
+        labels = {artifacts[content.source_artifact_id].metadata.get("native_scenario_process", "")
+                  for content in family.contents}
+        label = next(iter(labels)) if len(labels) == 1 else ""
+        buckets.setdefault(label, []).append(family)
+    if len(buckets) < 2:
+        return plan
+    ordered = tuple(bucket[position] for position in range(max(map(len, buckets.values())))
+                    for _, bucket in sorted(buckets.items()) if position < len(bucket))
+    return plan.model_copy(update={"families": ordered})
+
+
 def partition_benchmarks(world: World, workload_plan: NativeWorkloadPlan, *, training_families: int,
-                         heldout_families: int, directory: Path, resume: bool = False) -> NativePartitionBuild:
+                         heldout_families: int, directory: Path, resume: bool = False,
+                         source_artifact_ids: tuple[str, ...] | None = None) -> NativePartitionBuild:
     """Build two source-isolated, qualified packages with exact resumable identity.
 
     Cross-artifact tasks can join planned families again. The final workloads
@@ -318,14 +341,16 @@ def partition_benchmarks(world: World, workload_plan: NativeWorkloadPlan, *, tra
     _limit("heldout_families", heldout_families)
     total = training_families + heldout_families
     _limit("total families", total)
-    plan = plan_native_partitions(world, formats=workload_plan.formats, max_families=_MAX_FAMILIES, minimum_families=total)
+    plan = plan_native_partitions(world, formats=workload_plan.formats, source_artifact_ids=source_artifact_ids,
+        max_families=_MAX_FAMILIES, minimum_families=total)
     if not plan.ready:
         raise ValueError(f"native partition source cannot fund {total} independent families; found {plan.available_families}. "
             "Add disjoint authored evidence; copies and renamed sources do not increase this count.")
-    plan = _group_partitions(world, plan, total)
+    plan = _stratify_processes(world, _group_partitions(world, plan, total))
     configuration = {"schema": "worldloom.native-partition-package/v1", "source_digest": plan.source_digest,
         "workload_plan": workload_plan.model_dump(mode="json"), "training_families": training_families,
-        "heldout_families": heldout_families, "partition_plan": plan.model_dump(mode="json")}
+        "heldout_families": heldout_families, "partition_plan": plan.model_dump(mode="json"),
+        "source_artifact_ids": sorted(source_artifact_ids) if source_artifact_ids is not None else None}
     directory = Path(directory).absolute()
     if directory.is_symlink():
         raise ValueError("native partition directory may not be a symbolic link")
@@ -350,10 +375,11 @@ def partition_benchmarks(world: World, workload_plan: NativeWorkloadPlan, *, tra
                 raise ValueError("native partition resume configuration changed")
             training = NativeBenchmark.load(directory / "training")
             heldout = NativeBenchmark.load(directory / "heldout")
-            for benchmark, families in ((training, plan.families[:training_families]), (heldout, plan.families[training_families:])):
+            for benchmark, role, families in ((training, "training", plan.families[:training_families]),
+                                               (heldout, "heldout", plan.families[training_families:])):
                 expected_plans = {native.artifact_id: native for family in families for native in family.plans}
                 if (benchmark.source_digest != plan.source_digest or benchmark.workload.plan != workload_plan
-                        or benchmark.rendered is None or set(benchmark.rendered) != set(expected_plans)):
+                        or benchmark.split_role != role or set(benchmark.rendered) != set(expected_plans)):
                     raise ValueError("native partition resume source, workload or family allocation changed")
                 # A rewritten receipt can describe another valid benchmark.
                 # Replay the bounded source plans to prove this exact recipe.
@@ -368,8 +394,10 @@ def partition_benchmarks(world: World, workload_plan: NativeWorkloadPlan, *, tra
             rendered = plan.render(world)
             training_ids = {native.artifact_id for family in plan.families[:training_families] for native in family.plans}
             heldout_ids = set(rendered) - training_ids
-            training = NativeBenchmark.from_rendered(world, {key: rendered[key] for key in sorted(training_ids)}, workload_plan)
-            heldout = NativeBenchmark.from_rendered(world, {key: rendered[key] for key in sorted(heldout_ids)}, workload_plan)
+            training = NativeBenchmark.from_rendered(world, {key: rendered[key] for key in sorted(training_ids)},
+                workload_plan, split_role="training")
+            heldout = NativeBenchmark.from_rendered(world, {key: rendered[key] for key in sorted(heldout_ids)},
+                workload_plan, split_role="heldout")
             audit = _support(training, heldout, training_families=training_families, heldout_families=heldout_families)
             with TemporaryDirectory(prefix=".native-partitions-", dir=directory.parent) as temporary:
                 stage = Path(temporary) / "package"

@@ -20,6 +20,7 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
 | Compile a diverse queryset with quotas and isolated splits | [Dataset compiler](dataset-compiler.md) | [Qualification](enterprise-qualification.md) and [Quality gates](quality-calibration.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
+| Build native file scenarios, require per-cell support and diagnose training failures | [Native benchmark workflow](native-benchmark-workflow.md) | [Agent workflow evaluations](agent-workflow-evals.md) |
 | Materialise physical scale and qualify harness changes on fresh evidence | [Enterprise benchmark improvement](enterprise-benchmark-improvement.md) | [Self-improvement](self-improvement.md) |
 | Use Worldloom from Python | [Python SDK](sdk.md) | [Episode grammar](episode-grammar.md) |
 | Drive Worldloom with a coding agent | [Agent skills](skills.md) | [AGENTS.md](../AGENTS.md) |

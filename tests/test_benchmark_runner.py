@@ -1,65 +1,67 @@
 """Execute an actual workbook reader, without giving the target an oracle."""
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from dataclasses import replace
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from worldloom.benchmarks.core import NativeBenchmark
-from worldloom.benchmarks.runner import (
-    REQUEST_SCHEMA,
-    RESPONSE_SCHEMA,
+from worldloom.benchmarks import (
     CallableHarness,
     CommandHarness,
     HarnessFailure,
+    NativeBenchmark,
+    NativeWorkloadPlan,
     protocol_manifest,
     run_benchmark,
 )
+from worldloom.benchmarks.runner import REQUEST_SCHEMA, RESPONSE_SCHEMA
 from worldloom.corpus import write_json
 from worldloom.evalrun.agents import ScriptedAgent
 from worldloom.evalrun.policy import AgentPolicy
-from worldloom.native_query_planning import NativeWorkload, NativeWorkloadPlan
+from worldloom.models import (
+    ArtifactIR,
+    ArtifactSection,
+    Authority,
+    CanonicalFact,
+    Company,
+)
+from worldloom.native_corpus import (
+    NativeContent,
+    NativeCorpusPlan,
+    render_native_corpus,
+)
 from worldloom.native_tasks import (
     NativeAnswer,
-    NativeAssertion,
     NativeCitation,
-    NativeInput,
     NativeSubmission,
-    NativeTask,
     public_contract,
 )
 from worldloom.providers import digest
+from worldloom.world import World
 
 
 @pytest.fixture
 def benchmark() -> NativeBenchmark:
-    openpyxl = pytest.importorskip("openpyxl")
-    tasks, inputs = [], {}
-    for identifier, amount in (("east", 125), ("west", 70)):
-        workbook = openpyxl.Workbook()
-        sheet = workbook.active
-        sheet.title = "Ledger"
-        sheet.append(["Store", "Revenue"])
-        sheet.append([identifier, amount])
-        output = BytesIO()
-        workbook.save(output)
-        data = output.getvalue()
-        inputs[identifier] = data
-        source = NativeInput(artifact_id=identifier, format="xlsx", path=f"inputs/{identifier}.xlsx",
-            sha256=hashlib.sha256(data).hexdigest())
-        tasks.append(NativeTask(id=identifier, operation="read", prompt=f"Find revenue for the {identifier} store.",
-            inputs=(source,), assertions=(NativeAssertion(id="revenue",
-                target=NativeCitation(artifact_id=identifier, locator="sheet:Ledger/cell:B2"), expected=str(amount)),)))
-    workload = NativeWorkload(plan=NativeWorkloadPlan(use_case_id="close", objective="Read store revenues.",
-        formats=("xlsx",), operations=("read",)), tasks=tuple(tasks), reference_qualified=2,
-        capability_coverage={"xlsx.read": 2}, operation_counts={"read": 2}, source_fact_counts={"xlsx": 2})
-    return NativeBenchmark(workload, inputs)
+    pytest.importorskip("openpyxl")
+    facts = tuple(CanonicalFact(id=f"FACT-{name.upper()}", kind="financial.revenue.actual", subject=f"store:{name}",
+        period="2026-01", text_value=str(amount), valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+        authority=Authority.SYSTEM_OF_RECORD) for name, amount in (("east", 125), ("west", 70)))
+    world = World(seed=8128, company=Company(id="CO-1", name="Northstar Retail", industry="retail",
+        headquarters="Sydney", fiscal_year_start_month=7, employees_total=100), _facts=facts,
+        _artifact_irs=(ArtifactIR(id="ART-SOURCE", intent_id="INTENT-1", title="January close", sections=[
+            ArtifactSection(heading=f"{fact.subject} revenue", body="{{fact:" + fact.id + "}}",
+                fact_ids=[fact.id]) for fact in facts]),))
+    rendered = {name: render_native_corpus(world, NativeCorpusPlan(artifact_id=name, format="xlsx",
+        title=f"{name} store revenues", contents=(NativeContent(source_artifact_id="ART-SOURCE", section_index=index),)))
+        for index, name in enumerate(("east", "west"))}
+    return NativeBenchmark.from_rendered(world, rendered, NativeWorkloadPlan(use_case_id="close",
+        objective="Read store revenue evidence.", formats=("xlsx",), operations=("read",), discovery_scope="artifact"))
 
 
 _READER = '''import json, os, sys
@@ -78,12 +80,12 @@ assert not list(root.rglob("oracle.json"))
 source = task["inputs"][0]
 with (root / source["path"]).open("rb") as handle:
     workbook = load_workbook(handle, data_only=False)
-    value = str(workbook["Ledger"]["B2"].value)
+    value = str(workbook["Evidence"]["B2"].value)
 workbook.close()
 if os.environ.get("CALL_LOG"):
     with open(os.environ["CALL_LOG"], "a") as output:
         output.write(task["execution_id"] + "\\n")
-if os.environ.get("MODE") == "bad-west" and task["id"] == "west":
+if os.environ.get("MODE") == "bad-west" and source["artifact_id"] == "west":
     print("not JSON")
     raise SystemExit()
 if os.environ.get("MODE") == "wrong":
@@ -91,7 +93,7 @@ if os.environ.get("MODE") == "wrong":
 if os.environ.get("MODE") == "policy":
     assert request["agent"]["policy"]["skills"]["verify"] == "Read workbook bytes."
 submission = {"answers": [{"assertion_id": task["answers"][0]["assertion_id"], "value": value,
-    "citations": [{"artifact_id": source["artifact_id"], "locator": "sheet:Ledger/cell:B2"}]}], "files": []}
+    "citations": [{"artifact_id": source["artifact_id"], "locator": "sheet:Evidence/cell:B2"}]}], "files": []}
 print(json.dumps({"schema": "worldloom.native-harness-response/v1", "task_id": task["id"],
     "execution_id": task["execution_id"], "submission": submission}))
 '''
@@ -125,7 +127,8 @@ def test_malformed_reply_fails_one_task_and_independent_grade_rejects_wrong_answ
 ) -> None:
     report = run_benchmark(benchmark, reader(tmp_path, MODE="bad-west"), directory=tmp_path / "mixed")
     assert report.total == 2 and report.passed_count == 1 and report.harness_failures == 1
-    assert report.trials[1].failure_code == "response_json_invalid"
+    west = next(task.id for task in benchmark.workload.tasks if task.inputs[0].artifact_id == "west")
+    assert next(trial for trial in report.trials if trial.task_id == west).failure_code == "response_json_invalid"
     wrong = run_benchmark(benchmark, reader(tmp_path, MODE="wrong"), directory=tmp_path / "wrong")
     assert wrong.passed_count == wrong.harness_failures == 0
     assert all(not trial.grade.passed for trial in wrong.trials)
@@ -136,10 +139,10 @@ def _read_public(request: dict[str, Any], inputs: Any) -> NativeSubmission:
 
     source = request["inputs"][0]
     workbook = load_workbook(BytesIO(inputs[source["artifact_id"]]))
-    value = str(workbook["Ledger"]["B2"].value)
+    value = str(workbook["Evidence"]["B2"].value)
     workbook.close()
     return NativeSubmission(answers=(NativeAnswer(assertion_id=request["answers"][0]["assertion_id"], value=value,
-        citations=(NativeCitation(artifact_id=source["artifact_id"], locator="sheet:Ledger/cell:B2"),)),))
+        citations=(NativeCitation(artifact_id=source["artifact_id"], locator="sheet:Evidence/cell:B2"),)),))
 
 
 def test_interrupt_preserves_completed_receipts_and_only_reissues_uncommitted_trial(
@@ -173,27 +176,28 @@ def test_resume_refuses_command_configuration_task_and_receipt_tampering_before_
     run_benchmark(benchmark, harness, directory=out)
     with pytest.raises(ValueError, match="configuration changed"):
         run_benchmark(benchmark, harness, directory=out, repeats=2, resume=True)
-    changed = NativeBenchmark(benchmark.workload.model_copy(update={"tasks": (
-        benchmark.workload.tasks[0].model_copy(update={"prompt": "Read a different measure."}),
-        benchmark.workload.tasks[1])}), benchmark.inputs)
+    changed = NativeBenchmark.from_rendered(benchmark.world, benchmark.rendered,
+        benchmark.workload.plan.model_copy(update={"objective": "Read a different measure."}))
     with pytest.raises(ValueError, match="configuration changed"):
         run_benchmark(changed, harness, directory=out, resume=True)
     with pytest.raises(ValueError, match="configuration changed"):
         run_benchmark(benchmark, CallableHarness(target, {"implementation": "reader/v2"}), directory=out, resume=True)
-    path = out / "receipts" / (digest(["west", 1]) + ".json")
+    east = next(task.id for task in benchmark.workload.tasks if task.inputs[0].artifact_id == "east")
+    west = next(task.id for task in benchmark.workload.tasks if task.inputs[0].artifact_id == "west")
+    path = out / "receipts" / (digest([west, 1]) + ".json")
     saved = json.loads(path.read_text())
     saved["submission"]["answers"][0]["value"] = "777"
     # Even a rewritten checksum cannot make a saved success survive the
     # independent byte grader. Also ensure a missing earlier trial is not run.
     saved["digest"] = digest({key: value for key, value in saved.items() if key != "digest"})
     write_json(path, saved)
-    (out / "receipts" / (digest(["east", 1]) + ".json")).unlink()
+    (out / "receipts" / (digest([east, 1]) + ".json")).unlink()
     with pytest.raises(ValueError, match="completed benchmark is missing trial receipts"):
         run_benchmark(benchmark, harness, directory=out, resume=True)
     (out / "run.json").unlink()
     with pytest.raises(ValueError, match="independent byte grading"):
         run_benchmark(benchmark, harness, directory=out, resume=True)
-    assert calls == ["east", "west"]
+    assert calls == sorted(task.id for task in benchmark.workload.tasks)
 
 
 def test_command_pins_script_bytes_and_explicit_dependency_files(benchmark: NativeBenchmark, tmp_path: Path) -> None:
@@ -235,7 +239,7 @@ def test_command_is_native_submit_compatible_and_passes_the_actual_policy_body(
     task = benchmark.workload.tasks[0]
     request = {**public_contract(task), "execution_id": "one"}
     inputs = {task.inputs[0].artifact_id: benchmark.inputs[task.inputs[0].artifact_id]}
-    assert harness(agent, request, inputs).answers[0].value == "125"
+    assert harness(agent, request, inputs).answers[0].value == _read_public(request, inputs).answers[0].value
     broken = CommandHarness((sys.executable, "-c", "print('no')"))
     assert broken(agent, request, inputs) == NativeSubmission()
     protocol = protocol_manifest()
@@ -249,15 +253,16 @@ def test_callable_improvement_receives_policy_and_malformed_replies_fail(
     policies: list[str] = []
     def callback(request: dict[str, Any], inputs: Any) -> NativeSubmission:
         policies.append(request["agent"]["policy"]["system"])
-        assert set(inputs) == {"east"}
+        assert set(inputs) == {request["inputs"][0]["artifact_id"]}
         return _read_public(request, inputs)
     harness = CallableHarness(callback, {"implementation": "policy-reader/v1"})
     agent = ScriptedAgent([], name="policy-target")
     agent.policy = AgentPolicy(system="Verify revenue.")
     task = benchmark.workload.tasks[0]
     request = {**public_contract(task), "execution_id": "one"}
-    inputs = {"east": benchmark.inputs["east"]}
-    assert harness(agent, request, inputs).answers[0].value == "125"
+    source_id = task.inputs[0].artifact_id
+    inputs = {source_id: benchmark.inputs[source_id]}
+    assert harness(agent, request, inputs).answers[0].value == _read_public(request, inputs).answers[0].value
     assert policies == ["Verify revenue."]
     invalid = CallableHarness(lambda *_: {"claimed_pass": True}, {"implementation": "invalid/v1"})
     assert invalid(agent, request, inputs) == NativeSubmission()

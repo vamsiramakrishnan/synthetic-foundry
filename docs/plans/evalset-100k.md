@@ -980,6 +980,11 @@ recording because they were close.
 - **The narration path is untouched.** No row's text comes from a model. The
   harness never calls one, and the request grammar is templates and
   perturbation precisely so that the set replays with no provider.
+> Retirement update: the flat `worldloom.query_planning` module has since been
+> removed after canonical enterprise parity tests. See the
+> [migration guide](../agent-workflow-evals.md#migration-from-the-removed-flat-planner).
+> The planning observations below describe the earlier state.
+
 - **The enterprise planner is not migrated.** It keeps its own query shape
   and its own command. Two eval schemas will coexist for a release; the new
   one is additive, and the older one is left alone rather than half-ported.

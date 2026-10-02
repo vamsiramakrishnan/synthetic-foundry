@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Literal, TypeVar
 
 from pydantic import Field, model_validator
 
-from .models import CanonicalFact, Model
+from .models import CanonicalFact, FormulaKind, Model
 from .narrative import references
 from .native_artifacts import _SourceInspection, inspect_artifact
 from .native_corpus import NativeContentProvenance, NativeCorpusResult
@@ -28,6 +28,7 @@ from .native_query_evidence import (
     validate_table_binding,
 )
 from .native_reference import qualify_native_task
+from .native_requirements import BenchmarkRequirements, CoverageRequirement
 from .native_tasks import (
     NativeAssertion,
     NativeCalculation,
@@ -56,6 +57,7 @@ class NativeWorkloadPlan(Model):
     operations: tuple[NativeOperation, ...] = ("read", "analyze", "update", "create")
     max_tasks: int = Field(default=64, ge=1, le=10000, strict=True)
     discovery_scope: Literal["artifact", "cross_artifact", "mixed"] = "mixed"
+    requirements: BenchmarkRequirements | None = None
 
     @model_validator(mode="after")
     def _nonempty_domains(self) -> NativeWorkloadPlan:
@@ -88,6 +90,7 @@ class _Source:
     input: NativeInput
     units: Mapping[str, str]
     fact_ids: frozenset[str]
+    lineage: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -99,6 +102,7 @@ class _Evidence:
     text: str
     fact_ids: frozenset[str]
     kind: str = "prose"
+    sum_operands: tuple[tuple[NativeCitation, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -262,9 +266,35 @@ def _period_counts(
     return counts
 
 
+def _register_metadata(locator: str, units: Mapping[str, str]) -> dict[str, str] | None:
+    """Recognize the public record schema in bytes, not a manifest claim.
+
+    A business table and a source register may legitimately carry the same
+    fact. Only the visible register column schema supplies a narrower scope;
+    authored tables imitating that schema must share its ambiguity count.
+    """
+    workbook = re.fullmatch(r"(sheet:[^/]+)/cell:D([1-9][0-9]*)", locator)
+    native = re.fullmatch(r"(.+)/row:([1-9][0-9]*)/cell:4", locator)
+    if workbook is not None:
+        prefix, row = workbook.groups()
+        headers = {f"{prefix}/cell:{column}1": label for column, label in zip(
+            "ABCDE", ("Measure", "Subject", "Reporting period", "Value", "Unit"), strict=True)}
+        metadata = {name: f"{prefix}/cell:{column}{row}" for name, column in (
+            ("measure", "A"), ("subject", "B"), ("period", "C"), ("unit", "E"))}
+    elif native is not None:
+        prefix, row = native.groups()
+        headers = {f"{prefix}/row:1/cell:{column}": label for column, label in enumerate(
+            ("Measure", "Subject", "Reporting period", "Value", "Unit"), 1)}
+        metadata = {name: f"{prefix}/row:{row}/cell:{column}" for name, column in (
+            ("measure", 1), ("subject", 2), ("period", 3), ("unit", 5))}
+    else:
+        return None
+    return metadata if all(units.get(address) == label for address, label in headers.items()) else None
+
+
 def _numeric_descriptor(
     entry: NativeContentProvenance, fact: CanonicalFact, units: Mapping[str, str], labels: Mapping[str, str],
-) -> tuple[str, str, bool] | None:
+) -> tuple[str, str, bool, bool] | None:
     """Read actual business metadata; native cell addresses stay private."""
     match = re.fullmatch(r"sheet:([^/]+)/cell:([A-Z]+)([1-9][0-9]*)", entry.locator)
     native_match = re.fullmatch(r"(.+)/row:([1-9][0-9]*)/cell:([1-9][0-9]*)", entry.locator)
@@ -300,7 +330,9 @@ def _numeric_descriptor(
     period_visible = period_value == (fact.period or "") or (period_value is None and fact.period is None)
     if not period_visible and (entry.metadata_locators or metadata["period"] in units):
         raise ValueError(f"native workload reporting period disagrees with canonical fact: {fact.id}")
-    return measure, subject, period_visible
+    register_metadata = _register_metadata(entry.locator, units)
+    register_scope = register_metadata is not None and all(metadata.get(name) == address for name, address in register_metadata.items())
+    return measure, subject, period_visible, register_scope
 
 
 def _inventory(
@@ -337,7 +369,7 @@ def _inventory(
             raise ValueError(f"native workload source cites unknown canonical facts: {artifact_id}")
         source = _Source(NativeInput(artifact_id=artifact_id, format=manifest.format,
                          path=artifact_id + "." + manifest.format, sha256=manifest.sha256),
-                         units, source_fact_ids)
+                         units, source_fact_ids, frozenset(source_index.fact_closure(tuple(source_fact_ids))))
         sources.append(source)
         content_rows: list[tuple[str, str, frozenset[str], NativeCitation]] = []
         numeric_rows: list[tuple[CanonicalFact, NativeCitation, Decimal, NativeContentProvenance, TableBinding | None]] = []
@@ -429,17 +461,41 @@ def _inventory(
                 continue
             evidence.append(_Evidence(source, ref, heading, selector, text, ids))
         table_selectors = Counter(binding.selector for _, binding, _, _ in table_rows)
+        table_values = {ref.locator: (binding, text, ref) for _, binding, text, ref in table_rows}
         for entry, binding, text, ref in table_rows:
             if table_selectors[binding.selector] != 1:
                 findings.append(NativeWorkloadFinding(code="ambiguous_table_selector", artifact_id=artifact_id,
                     detail=f"business table descriptor {binding.selector} identifies multiple native values"))
                 continue
+            sum_operands: tuple[tuple[NativeCitation, str], ...] = ()
+            if binding.authored_operation is FormulaKind.SUM and 2 <= len(entry.dependency_locators) <= 64:
+                operands = [table_values[locator] for locator in entry.dependency_locators]
+                operand_facts = [operand.fact for operand, _, _ in operands if operand.fact is not None
+                    and operand.fact.value is not None and operand.authored_operation is None
+                    and table_selectors[operand.selector] == 1]
+                # A SUM is admitted only because the authored graph explicitly
+                # asks for it. Repeated facts, revisions and ancestor/aggregate
+                # overlap cannot become independent constituent evidence.
+                if len(operand_facts) == len(operands) and len({fact.period for fact in operand_facts}) == 1:
+                    closures = [set(source_index.fact_closure((fact.id,))) for fact in operand_facts]
+                    flattened = [fact_id for closure in closures for fact_id in sorted(closure)]
+                    with localcontext() as context:
+                        context.prec = 50
+                        native_sum = sum((_number(value) for _, value, _ in operands), Decimal(0))
+                    # The task algebra has no rounding operator. A rounded
+                    # authored total may differ from its unrounded operand sum
+                    # and therefore cannot be called a proved reconciliation.
+                    if len(flattened) == len(set(flattened)) and native_sum == Decimal(str(entry.value)):
+                        sum_operands = tuple((operand_ref, operand.selector) for operand, _, operand_ref in operands)
             evidence.append(_Evidence(source, ref, binding.measure, binding.selector, text, frozenset(entry.fact_ids),
-                "formula" if binding.formula else "table"))
+                "formula" if binding.formula else "table", sum_operands))
         seen_selectors: Counter[tuple[str, str, str]] = Counter(
             (fact.kind, fact.subject, str(fact.period)) for fact, _, _, _, _ in numeric_rows
         )
         subject_counts = Counter((fact.kind, fact.subject) for fact, _, _, _, _ in numeric_rows)
+        register_rows = [fact for fact, _, _, entry, _ in numeric_rows if _register_metadata(entry.locator, units) is not None]
+        register_counts = Counter((fact.kind, fact.subject, str(fact.period)) for fact in register_rows)
+        register_subject_counts = Counter((fact.kind, fact.subject) for fact in register_rows)
         for fact, ref, value, entry, numeric_binding in numeric_rows:
             # Native workbook fact rows expose measure and subject as columns.
             # Check those columns in bytes rather than trusting provenance to
@@ -453,35 +509,87 @@ def _inventory(
                 findings.append(NativeWorkloadFinding(code="numeric_selector_not_in_bytes", artifact_id=artifact_id,
                     detail=f"canonical measure and subject are not visible beside {fact.id}"))
                 continue
-            measure, subject, period_visible = descriptor
-            if seen_selectors[(fact.kind, fact.subject, str(fact.period))] != 1 \
-                    or (subject_counts[(fact.kind, fact.subject)] > 1 and not period_visible):
+            measure, subject, period_visible, register_scope = descriptor
+            selected_counts = register_counts if register_scope else seen_selectors
+            selected_subject_counts = register_subject_counts if register_scope else subject_counts
+            if selected_counts[(fact.kind, fact.subject, str(fact.period))] != 1 \
+                    or (selected_subject_counts[(fact.kind, fact.subject)] > 1 and not period_visible):
                 findings.append(NativeWorkloadFinding(code="ambiguous_numeric_selector", artifact_id=artifact_id,
                     detail=f"measure {fact.kind!r} and subject {fact.subject!r} do not uniquely identify their reporting period"))
                 continue
             selector = f"measure {measure!r} for subject {subject!r}"
             if fact.period is not None:
                 selector += f" in reporting period {fact.period!r}"
+            if register_scope:
+                selector += " in the source-record table with columns 'Measure', 'Subject', 'Reporting period', 'Value' and 'Unit'"
             numeric.append(_Numeric(source, ref, fact, value, selector, measure, subject))
     return sources, evidence, numeric, findings
 
 
 def _independent(first: _Source, second: _Source) -> bool:
     return (first.input.artifact_id != second.input.artifact_id
-            and not first.fact_ids & second.fact_ids)
+            and not (first.lineage or first.fact_ids) & (second.lineage or second.fact_ids))
 
 
-def _allowed(sources: tuple[_Source, ...], plan: NativeWorkloadPlan) -> bool:
-    distinct = {source.input.artifact_id for source in sources}
-    if plan.discovery_scope == "artifact":
-        return len(distinct) == 1
-    if plan.discovery_scope == "cross_artifact":
-        return len(distinct) > 1
-    return True
+def _compatible_pair(first: _Numeric, second: _Numeric, *,
+                     independence: dict[tuple[str, str], bool] | None = None) -> _Pair | None:
+    left, right = first.fact, second.fact
+    if left.id == right.id or left.value is None or right.value is None or left.value.unit != right.value.unit:
+        return None
+    if first.source != second.source:
+        cache = {} if independence is None else independence
+        key = first.source.input.artifact_id, second.source.input.artifact_id
+        if key[0] > key[1]:
+            key = key[1], key[0]
+        if key not in cache:
+            cache[key] = _independent(first.source, second.source)
+        if not cache[key]:
+            return None
+    # These comparisons have defined semantics; an unproved population sum
+    # does not. Authored SUM graphs enter through a separate evidence gate.
+    if left.kind == right.kind and left.period is not None and left.period == right.period and left.subject != right.subject:
+        return _Pair(first, second, "subject_difference")
+    if (left.kind == right.kind and left.subject == right.subject and left.period is not None
+            and right.period is not None and left.period != right.period):
+        earlier, later = sorted((first, second), key=lambda item: item.fact.period or "")
+        return _Pair(later, earlier, "period_change")
+    if left.subject == right.subject and left.period is not None and left.period == right.period:
+        for actual, budget_operand in ((first, second), (second, first)):
+            if actual.fact.kind.endswith(".actual") and budget_operand.fact.kind == actual.fact.kind.removesuffix(".actual") + ".budget":
+                return _Pair(actual, budget_operand, "actual_budget_variance")
+    return None
 
 
-def _pairs(numeric: list[_Numeric], *, budget: int) -> list[_Pair]:
-    """Indexed comparisons; archive size does not imply an N² candidate walk."""
+def _pair_probes(first: Sequence[_Numeric], second: Sequence[_Numeric], *, family: str) -> list[tuple[_Numeric, _Numeric]]:
+    """A linear merge of logical operands, never their Cartesian product."""
+    probes: list[tuple[_Numeric, _Numeric]] = []
+    if family == "budget":
+        for left_role, right_role in ((".actual", ".budget"), (".budget", ".actual")):
+            left = [item for item in first if item.fact.kind.endswith(left_role)]
+            right = [item for item in second if item.fact.kind.endswith(right_role)]
+            if left and right:
+                probes.extend((item, right[index % len(right)]) for index, item in enumerate(left))
+        return probes
+    # Sorted adjacent values preserve neighboring subjects/periods, while a
+    # second bounded probe avoids matching a format copy of the same fact.
+    for index, item in enumerate(first):
+        for offset in range(min(2, len(second))):
+            probes.append((item, second[(index + offset) % len(second)]))
+    return probes
+
+
+def _pairs(numeric: list[_Numeric], *, budget: int,
+           scope: Literal["artifact", "cross_artifact", "mixed"] = "mixed") -> list[_Pair]:
+    """Keep source/format lanes before bounding compatible arithmetic.
+
+    Global fact de-duplication previously retained only the first format and
+    erased valid within-file calculations. Native copies share cross-source
+    scheduling components, but each format retains its own real byte proof.
+    Probe work is linear after sorting, including cross-format combinations
+    (the native format vocabulary is fixed), rather than quadratic in files.
+    """
+    if budget <= 0:
+        return []
     groups: dict[tuple[str, str, str], list[_Numeric]] = {}
     for item in numeric:
         fact = item.fact
@@ -493,60 +601,48 @@ def _pairs(numeric: list[_Numeric], *, budget: int) -> list[_Pair]:
             groups.setdefault(("budget", base, fact.subject + "\0" + str(fact.period) + "\0" + fact.value.unit), []).append(item)
     pairs: list[_Pair] = []
     seen: set[tuple[str, str, str, str]] = set()
-    family_counts: Counter[str] = Counter()
-    family_budget = max(1, budget // 3)
-    for _, items in sorted(groups.items()):
+    source_rows = {item.source.input.artifact_id: item.source for item in numeric}
+    signatures = {identifier: digest(sorted(source.fact_ids)) for identifier, source in sorted(source_rows.items())}
+    independence: dict[tuple[str, str], bool] = {}
+    for group, items in sorted(groups.items()):
         ordered = sorted(items, key=lambda item: (item.fact.period or "", item.fact.subject, item.fact.kind,
-                         item.source.input.artifact_id, item.fact.id))
-        distinct: dict[str, _Numeric] = {}
+                         item.fact.id, item.source.input.artifact_id, item.ref.locator))
         per_source: dict[str, list[_Numeric]] = {}
         for item in ordered:
-            distinct.setdefault(item.fact.id, item)
             per_source.setdefault(item.source.input.artifact_id, []).append(item)
-        unique = list(distinct.values())
-        probes = list(pairwise(unique))
-        representatives = [values[0] for _, values in sorted(per_source.items())]
-        probes.extend(pairwise(representatives))
-        for first_values, second_values in pairwise(per_source.values()):
-            by_kind = {value.fact.kind: value for value in second_values}
-            for first in first_values:
-                matching = by_kind.get(first.fact.kind) or by_kind.get(first.fact.kind.removesuffix(".actual") + ".budget")
-                if matching is not None:
-                    probes.append((first, matching))
+        probes: list[tuple[_Numeric, _Numeric]] = []
+        if scope != "cross_artifact":
+            for _, values in sorted(per_source.items()):
+                if group[0] == "budget":
+                    probes.extend(_pair_probes(values, values, family=group[0]))
+                else:
+                    probes.extend(pairwise(values))
+        if scope != "artifact":
+            # One representative file per identical canonical component and
+            # format prevents renamed replicas purchasing cross-file probes.
+            components: dict[str, dict[str, list[_Numeric]]] = {}
+            for source_id, values in sorted(per_source.items()):
+                components.setdefault(signatures[source_id], {}).setdefault(values[0].source.input.format, values)
+            component_values = [values for _, values in sorted(components.items())]
+            for first_component, second_component in pairwise(component_values):
+                for _, first_values in sorted(first_component.items()):
+                    for _, second_values in sorted(second_component.items()):
+                        probes.extend(_pair_probes(first_values, second_values, family=group[0]))
         for first, second in probes:
-            left, right = first.fact, second.fact
-            if left.id == right.id or left.value is None or right.value is None or left.value.unit != right.value.unit:
-                continue
-            if first.source != second.source and not _independent(first.source, second.source):
-                continue
-            # Subtraction has defined semantics across different subjects;
-            # summing populations would need an authored disjointness proof.
-            if left.kind == right.kind and left.period is not None and left.period == right.period and left.subject != right.subject:
-                candidate = _Pair(first, second, "subject_difference")
-            elif (left.kind == right.kind and left.subject == right.subject and left.period is not None
-                  and right.period is not None and left.period != right.period):
-                earlier, later = sorted((first, second), key=lambda item: item.fact.period or "")
-                candidate = _Pair(later, earlier, "period_change")
-            elif left.subject == right.subject and left.period is not None and left.period == right.period:
-                candidate = None
-                for actual, budget_operand in ((first, second), (second, first)):
-                    if actual.fact.kind.endswith(".actual") and budget_operand.fact.kind == actual.fact.kind.removesuffix(".actual") + ".budget":
-                        candidate = _Pair(actual, budget_operand, "actual_budget_variance")
-            else:
-                candidate = None
+            candidate = _compatible_pair(first, second, independence=independence)
             if candidate is not None:
                 key = (candidate.first.fact.id, candidate.second.fact.id, candidate.first.ref.artifact_id, candidate.second.ref.artifact_id)
-                if key not in seen and family_counts[candidate.kind] < family_budget:
+                if key not in seen:
                     seen.add(key)
                     pairs.append(candidate)
-                    family_counts[candidate.kind] += 1
-            if len(pairs) >= budget:
-                break
-        if len(pairs) >= budget:
-            break
-    return sorted(pairs, key=lambda pair: (not pair.cross_artifact,
-                  {"actual_budget_variance": 0, "period_change": 1, "subject_difference": 2}[pair.kind],
-                  pair.first.fact.id, pair.second.fact.id, pair.first.ref.artifact_id, pair.second.ref.artifact_id))
+    lanes: dict[str, list[_Pair]] = {}
+    for pair in pairs:
+        lane = f"{pair.kind}:{pair.cross_artifact}:{pair.first.source.input.format}:{pair.second.source.input.format}"
+        lanes.setdefault(lane, []).append(pair)
+    quotas = _quotas({lane: len(values) for lane, values in lanes.items()}, budget)
+    return _interleave({lane: _sample_sources(values, quotas[lane], key=lambda pair: (
+        digest(sorted((signatures[pair.first.ref.artifact_id], signatures[pair.second.ref.artifact_id]))),
+        pair.first.source.input.format + ":" + pair.second.source.input.format)) for lane, values in sorted(lanes.items())})
 
 
 def _inputs(*sources: _Source) -> tuple[NativeInput, ...]:
@@ -565,7 +661,10 @@ def _identifier(plan: NativeWorkloadPlan, kind: str, refs: tuple[NativeCitation,
                                      [item.model_dump(mode="json") for item in inputs]])[:24]
 
 
-def _evidence_pairs(evidence: list[_Evidence], facts: Mapping[str, CanonicalFact], *, budget: int) -> list[tuple[_Evidence, _Evidence]]:
+def _evidence_pairs(evidence: list[_Evidence], facts: Mapping[str, CanonicalFact], *, budget: int,
+                    scope: Literal["artifact", "cross_artifact", "mixed"] = "mixed") -> list[tuple[_Evidence, _Evidence]]:
+    if budget <= 0:
+        return []
     groups: dict[tuple[str, str, str], list[_Evidence]] = {}
     for item in evidence:
         if item.kind != "prose":
@@ -580,38 +679,53 @@ def _evidence_pairs(evidence: list[_Evidence], facts: Mapping[str, CanonicalFact
             groups.setdefault(group_key, []).append(item)
     result: list[tuple[_Evidence, _Evidence]] = []
     seen: set[tuple[str, str, str, str]] = set()
+    source_rows = {item.source.input.artifact_id: item.source for item in evidence}
+    signatures = {identifier: digest(sorted(source.fact_ids)) for identifier, source in sorted(source_rows.items())}
+    independence: dict[tuple[str, str], bool] = {}
     for group, items in sorted(groups.items(), key=lambda item: str(item[0])):
         by_source: dict[str, list[_Evidence]] = {}
         for item in items:
             by_source.setdefault(item.ref.artifact_id, []).append(item)
         probes: list[tuple[_Evidence, _Evidence]] = []
-        for _, members in sorted(by_source.items()):
-            probes.extend(pairwise(members))
-        source_members = list(by_source.values())
-        for first_members, second_members in pairwise(source_members):
-            probes.append((first_members[-1], second_members[-1]))
+        if scope != "cross_artifact":
+            for _, members in sorted(by_source.items()):
+                probes.extend(pairwise(members))
+        if scope != "artifact":
+            components: dict[str, dict[str, list[_Evidence]]] = {}
+            for source_id, members in sorted(by_source.items()):
+                components.setdefault(signatures[source_id], {}).setdefault(members[0].source.input.format, members)
+            for first_component, second_component in pairwise([members for _, members in sorted(components.items())]):
+                for _, first_members in sorted(first_component.items()):
+                    for _, second_members in sorted(second_component.items()):
+                        probes.append((first_members[-1], second_members[-1]))
         for first, second in probes:
-            if group[0] == "series" and not any(
-                    facts[left].kind == facts[right].kind == group[1]
-                    and facts[left].subject == facts[right].subject == group[2]
-                    and facts[left].period is not None and facts[right].period is not None
-                    and facts[left].period != facts[right].period
-                    for left in first.fact_ids for right in second.fact_ids):
-                continue
+            if group[0] == "series":
+                first_periods = {facts[fid].period for fid in first.fact_ids if facts[fid].kind == group[1]
+                    and facts[fid].subject == group[2] and facts[fid].period is not None}
+                second_periods = {facts[fid].period for fid in second.fact_ids if facts[fid].kind == group[1]
+                    and facts[fid].subject == group[2] and facts[fid].period is not None}
+                if not first_periods or not second_periods or len(first_periods | second_periods) < 2:
+                    continue
             if first.fact_ids & second.fact_ids or first.text == second.text:
                 continue
-            if first.source != second.source and not _independent(first.source, second.source):
-                continue
+            if first.source != second.source:
+                source_key = first.ref.artifact_id, second.ref.artifact_id
+                if source_key not in independence:
+                    independence[source_key] = _independent(first.source, second.source)
+                if not independence[source_key]:
+                    continue
             pair_key = (first.ref.artifact_id, first.ref.locator, second.ref.artifact_id, second.ref.locator)
             if pair_key not in seen:
                 seen.add(pair_key)
                 result.append((first, second))
-            if len(result) >= budget:
-                break
-        if len(result) >= budget:
-            break
-    return sorted(result, key=lambda pair: (pair[0].source == pair[1].source,
-        pair[0].ref.artifact_id, pair[1].ref.artifact_id, pair[0].ref.locator, pair[1].ref.locator))
+    lanes: dict[str, list[tuple[_Evidence, _Evidence]]] = {}
+    for first, second in result:
+        lane = f"{first.source != second.source}:{first.source.input.format}:{second.source.input.format}"
+        lanes.setdefault(lane, []).append((first, second))
+    quotas = _quotas({lane: len(members) for lane, members in lanes.items()}, budget)
+    return _interleave({lane: _sample_sources(members, quotas[lane], key=lambda pair: (
+        digest(sorted((signatures[pair[0].ref.artifact_id], signatures[pair[1].ref.artifact_id]))),
+        pair[0].source.input.format + ":" + pair[1].source.input.format)) for lane, members in sorted(lanes.items())})
 
 
 def _create_evidence(
@@ -667,6 +781,24 @@ def _create_reconciliation(plan: NativeWorkloadPlan, pair: _Pair) -> NativeTask:
         output=NativeOutput(artifact_id=output_id, format="xlsx", assertions=tuple(assertions)))
 
 
+def _requirement_matches(task: NativeTask, requirement: CoverageRequirement) -> bool:
+    """Observable planner selectors; benchmark metadata dimensions stay there."""
+    if requirement.operation is not None and task.operation != requirement.operation:
+        return False
+    if requirement.scope is not None and (len(task.inputs) > 1) != (requirement.scope == "cross_artifact"):
+        return False
+    if requirement.calculation is not None and not any(assertion.calculation is not None
+            and assertion.calculation.operation == requirement.calculation for assertion in task.assertions):
+        return False
+    role = requirement.format_role
+    if role == "operation":
+        role = "output" if task.operation in ("create", "update") else "input"
+    formats = {source.format for source in task.inputs} if role in ("input", "any") else set()
+    if role in ("output", "any") and task.output is not None:
+        formats.add(task.output.format)
+    return requirement.format is None or requirement.format in formats
+
+
 def plan_native_workload(
     world: World, rendered: Mapping[str, NativeCorpusResult], plan: NativeWorkloadPlan,
     *, _inspection: _SourceInspection | None = None,
@@ -683,8 +815,9 @@ def plan_native_workload(
     sources, evidence, numeric, findings = _inventory(world, rendered, plan, _inspection=inspection)
     payloads = {key: result.payload for key, result in sorted(rendered.items())}
     source_groups = {source.input.artifact_id: digest(sorted(source.fact_ids)) for source in sources}
-    pairs = [pair for pair in _pairs(numeric, budget=plan.max_tasks * 4) if _allowed((pair.first.source, pair.second.source), plan)]
-    content_pairs = [pair for pair in _evidence_pairs(evidence, {fact.id: fact for fact in world.facts}, budget=plan.max_tasks * 4) if _allowed((pair[0].source, pair[1].source), plan)]
+    pairs = _pairs(numeric, budget=plan.max_tasks * 4, scope=plan.discovery_scope)
+    content_pairs = _evidence_pairs(evidence, {fact.id: fact for fact in world.facts},
+        budget=plan.max_tasks * 4, scope=plan.discovery_scope)
     candidates: list[tuple[NativeTask, tuple[str, ...]]] = []
     if "read" in plan.operations:
         if plan.discovery_scope != "cross_artifact":
@@ -715,6 +848,17 @@ def plan_native_workload(
                 inputs=_inputs(first.source, second.source), assertions=(NativeAssertion(id="first_evidence", target=first.ref),
                     NativeAssertion(id="second_evidence", target=second.ref)))
             candidates.append((task, ("evidence_discovery", "cross_artifact", "multi_source_citations")))
+    if "analyze" in plan.operations and plan.discovery_scope != "cross_artifact":
+        for item in _sample_sources([item for item in evidence if item.sum_operands], plan.max_tasks * 4,
+                key=lambda item: (source_groups[item.source.input.artifact_id], item.source.input.format)):
+            operands = tuple(ref for ref, _ in item.sum_operands)
+            selectors = "; ".join(selector for _, selector in item.sum_operands)
+            task = NativeTask(id=_identifier(plan, "analyze-authored-sum", operands, (item.source.input,)),
+                use_case_id=plan.use_case_id, operation="analyze", inputs=(item.source.input,),
+                prompt=f"{plan.objective} In {item.ref.artifact_id!r}, reconcile {item.selector} by recomputing its authored sum. "
+                       f"Locate these constituent values: {selectors}. Return their sum as total and cite every constituent native value.",
+                assertions=(NativeAssertion(id="total", calculation=NativeCalculation(operation="sum", operands=operands)),))
+            candidates.append((task, ("evidence_discovery", "business_predicate", "structured_arithmetic", "table_discovery", "authored_sum_reconciliation")))
     for pair in pairs:
         capabilities = ("evidence_discovery", "business_predicate", "structured_arithmetic", pair.kind,
                         *(("cross_artifact", "multi_source_citations") if pair.cross_artifact else ()))
@@ -725,6 +869,17 @@ def plan_native_workload(
                        "Compute first minus second. Return the result as difference and cite both native source values. Match measure, subject and reporting period before computing.",
                 assertions=(NativeAssertion(id="difference", calculation=NativeCalculation(operation="difference", operands=(pair.first.ref, pair.second.ref))),))
             candidates.append((task, capabilities))
+            if pair.second.value != 0:
+                ratio_kind = {"actual_budget_variance": "actual_budget_ratio", "period_change": "period_ratio",
+                    "subject_difference": "subject_ratio"}[pair.kind]
+                ratio = NativeTask(id=_identifier(plan, "analyze-" + ratio_kind, (pair.first.ref, pair.second.ref),
+                    _inputs(pair.first.source, pair.second.source)), use_case_id=plan.use_case_id, operation="analyze",
+                    inputs=_inputs(pair.first.source, pair.second.source),
+                    prompt=f"{plan.objective} Find {pair.first.selector} in {pair.first.ref.artifact_id!r} and {pair.second.selector} in {pair.second.ref.artifact_id!r}. "
+                           "Compute the ratio of the first value to the second value. Return the unscaled ratio as ratio and cite both native source values. "
+                           "Match measure, subject, unit and reporting period before computing.",
+                    assertions=(NativeAssertion(id="ratio", calculation=NativeCalculation(operation="ratio", operands=(pair.first.ref, pair.second.ref))),))
+                candidates.append((ratio, tuple(ratio_kind if value == pair.kind else value for value in capabilities)))
         if "create" in plan.operations and "xlsx" in plan.formats:
             candidates.append((_create_reconciliation(plan, pair), (*capabilities, "structured_output", "native_creation", "formula_output")))
     for first, second in content_pairs:
@@ -753,6 +908,7 @@ def plan_native_workload(
     lanes: dict[str, dict[tuple[bool, bool, str], list[tuple[NativeTask, tuple[str, ...]]]]] = {}
     for task, capabilities in candidates:
         family = next((name for name in ("actual_budget_variance", "period_change", "subject_difference",
+            "actual_budget_ratio", "period_ratio", "subject_ratio", "authored_sum_reconciliation",
             "native_formula_inspection", "speaker_notes", "table_discovery", "content_update") if name in capabilities), "evidence")
         lane_key = ("cross_artifact" in capabilities, "structured_arithmetic" in capabilities, family)
         lanes.setdefault(task.operation, {}).setdefault(lane_key, []).append((task, capabilities))
@@ -775,6 +931,55 @@ def plan_native_workload(
     tasks: list[NativeTask] = []
     coverage: Counter[str] = Counter()
     seen: set[str] = set()
+    requirements = plan.requirements.cells if plan.requirements is not None else ()
+    support: Counter[str] = Counter()
+    claimed: dict[str, set[str]] = {requirement.name: set() for requirement in requirements}
+    source_lineages = {source.input.artifact_id: source.lineage or source.fact_ids for source in sources}
+
+    def lineage(task: NativeTask) -> frozenset[str]:
+        return frozenset(fact_id for source in task.inputs for fact_id in source_lineages[source.artifact_id])
+
+    def admit(task: NativeTask, capabilities: tuple[str, ...]) -> bool:
+        if task.id in seen or len(tasks) >= plan.max_tasks:
+            return False
+        seen.add(task.id)
+        proof = qualify_native_task(task, payloads, _inspection=inspection)
+        if not proof.passed:
+            findings.append(NativeWorkloadFinding(code="reference_qualification_failed", operation=task.operation,
+                detail=f"{task.id}: {', '.join(proof.findings)}"))
+            return False
+        tasks.append(task)
+        coverage.update(capabilities)
+        if requirements:
+            facts = lineage(task)
+            for requirement in requirements:
+                if _requirement_matches(task, requirement) and not facts & claimed[requirement.name]:
+                    support[requirement.name] += 1
+                    claimed[requirement.name].update(facts)
+        return True
+
+    # Explicit cells spend the existing task budget first. Each queue is
+    # traversed once; copies of the same source cannot satisfy a new unit.
+    # Only assess() can certify externally verified metadata dimensions.
+    requirement_pool = _interleave(queues) if requirements else []
+    pending = {requirement.name: iter([item for item in requirement_pool
+        if _requirement_matches(item[0], requirement)]) for requirement in requirements}
+    while requirements and len(tasks) < plan.max_tasks:
+        progressed = False
+        for requirement in requirements:
+            if support[requirement.name] >= requirement.min_independent_units:
+                continue
+            for task, capabilities in pending[requirement.name]:
+                facts = lineage(task)
+                if task.id in seen or facts & claimed[requirement.name]:
+                    continue
+                if admit(task, capabilities):
+                    progressed = True
+                    break
+            if len(tasks) >= plan.max_tasks:
+                break
+        if not progressed:
+            break
     rounds = max((len(queue) for queue in queues.values()), default=0)
     for index in range(rounds):
         for operation in plan.operations:
@@ -782,19 +987,19 @@ def plan_native_workload(
             if index >= len(members) or len(tasks) >= plan.max_tasks:
                 continue
             task, capabilities = members[index]
-            if task.id in seen:
-                continue
-            seen.add(task.id)
-            proof = qualify_native_task(task, payloads, _inspection=inspection)
-            if not proof.passed:
-                findings.append(NativeWorkloadFinding(code="reference_qualification_failed", operation=task.operation,
-                    detail=f"{task.id}: {', '.join(proof.findings)}"))
-                continue
-            tasks.append(task)
-            coverage.update(capabilities)
+            admit(task, capabilities)
         if len(tasks) >= plan.max_tasks:
             break
     counts = Counter(task.operation for task in tasks)
+    for requirement in requirements:
+        if requirement.dimensions:
+            findings.append(NativeWorkloadFinding(code="requirement_dimensions_deferred", operation=requirement.operation,
+                detail=f"requirement {requirement.name!r} needs verified benchmark metadata dimensions; "
+                       "native-byte planning schedules its observable selectors but cannot certify its coverage"))
+        if not requirement.dimensions and support[requirement.name] < requirement.min_independent_units:
+            findings.append(NativeWorkloadFinding(code="requirement_coverage_deficit", operation=requirement.operation,
+                detail=f"requirement {requirement.name!r} selected {support[requirement.name]} disjoint source-evidence contracts; "
+                       f"requires {requirement.min_independent_units}; requested task budget remains {plan.max_tasks}"))
     for operation in plan.operations:
         if not counts[operation]:
             findings.append(NativeWorkloadFinding(code="operation_unavailable", operation=operation,

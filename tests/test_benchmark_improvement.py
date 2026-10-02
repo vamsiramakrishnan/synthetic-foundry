@@ -29,6 +29,7 @@ from worldloom.native_corpus import (
     render_native_corpus,
 )
 from worldloom.native_query_planning import NativeWorkloadPlan
+from worldloom.native_requirements import BenchmarkRequirements, CoverageRequirement
 from worldloom.native_tasks import NativeAnswer, NativeCitation, NativeSubmission
 from worldloom.world import World
 
@@ -123,6 +124,11 @@ def test_benchmark_improvement_delivers_policy_and_reuses_sealed_resume(
     with pytest.raises(ValueError, match="sealed qualification"):
         improve_benchmark(packkit.resolve("agent:baseline"), training, heldout, **args)
     assert len(target.executions) == before and len(proposals) == 2
+    args["harness"] = harness
+    args["requirements"] = BenchmarkRequirements(cells=(CoverageRequirement(name="new-study-claim", operation="read"),))
+    with pytest.raises(ValueError, match="sealed qualification"):
+        improve_benchmark(packkit.resolve("agent:baseline"), training, heldout, **args)
+    assert len(target.executions) == before and len(proposals) == 2
 
 
 def _never(*_: Any) -> Any:
@@ -143,8 +149,9 @@ def test_improvement_refuses_impossible_studies_before_any_external_call(
     repeats = 2
     pattern = ""
     if defect == "legacy":
-        training = replace(training, world=None, rendered=None)
-        pattern = "canonical source provenance"
+        with pytest.raises(ValueError, match="require a canonical world"):
+            replace(training, world=None, rendered=None)
+        return
     elif defect == "lineage":
         assert training.rendered is not None
         key = next(iter(training.rendered))
@@ -251,6 +258,56 @@ def test_improvement_requires_each_split_to_deliver_its_declared_work_before_ext
     else:
         heldout = incomplete
     with pytest.raises(ValueError, match=f"{split} benchmark does not cover requested {gap}: {missing}"):
+        improve_benchmark(packkit.resolve("agent:baseline"), training, heldout, namespace="northstar/company",
+            harness=_NeverHarness(), proposer=_never, out=tmp_path,
+            qualification_policy=QualificationPolicy(trials=1, min_units=2), agent_for=_never)
+
+
+def test_aggregate_heldout_budget_cannot_hide_single_analysis_family(
+    benchmarks: tuple[NativeBenchmark, NativeBenchmark], tmp_path: Path,
+) -> None:
+    training, heldout = benchmarks
+    world = training.world
+    plan = NativeWorkloadPlan(use_case_id="store-comparison", objective="Compare store quantities.",
+        formats=("docx",), operations=("read", "analyze"), discovery_scope="artifact")
+
+    def combined(name: str, sections: tuple[int, ...]):
+        return render_native_corpus(world, NativeCorpusPlan(artifact_id=name, format="docx", title="Store comparison",
+            surface="business", contents=tuple(NativeContent(source_artifact_id="ART-SOURCE", section_index=index)
+                for index in sections)))
+
+    training = NativeBenchmark.from_rendered(world, {"training-comparison": combined("training-comparison", (0, 1))}, plan)
+    heldout = NativeBenchmark.from_rendered(world, {"heldout-comparison": combined("heldout-comparison", (2, 3)),
+        **{key: result for key, result in heldout.rendered.items() if key in {"native-4", "native-5"}}}, plan)
+    report = training.assess(heldout=heldout, qualification_policy=QualificationPolicy(trials=1, min_units=2), repeats=2)
+    assert report.split_audit.isolated and report.split_audit.heldout_units == 3
+    cell = next(cell for cell in report.heldout_required_coverage if cell.name == "operation:analyze")
+    assert cell.tasks >= 1 and cell.independent_units == 1 and not cell.satisfied
+    with pytest.raises(ValueError, match="operation:analyze: requires 2 independent units; found 1"):
+        improve_benchmark(packkit.resolve("agent:baseline"), training, heldout, namespace="northstar/company",
+            harness=_NeverHarness(), proposer=_never, out=tmp_path,
+            qualification_policy=QualificationPolicy(trials=1, min_units=2), agent_for=_never)
+
+
+def test_explicit_capability_demand_blocks_before_target_and_proposer(
+    benchmarks: tuple[NativeBenchmark, NativeBenchmark], tmp_path: Path,
+) -> None:
+    training, heldout = benchmarks
+    requirements = BenchmarkRequirements(cells=(CoverageRequirement(name="analyze:pptx", operation="analyze", format="pptx"),))
+    with pytest.raises(ValueError, match="analyze:pptx: requires 1 independent units; found 0"):
+        improve_benchmark(packkit.resolve("agent:baseline"), training, heldout, namespace="northstar/company",
+            harness=_NeverHarness(), proposer=_never, out=tmp_path, requirements=requirements,
+            qualification_policy=QualificationPolicy(trials=1, min_units=2), agent_for=_never)
+
+
+@pytest.mark.parametrize("swap", ["training", "heldout"])
+def test_declared_split_roles_are_enforced_before_external_calls(
+    swap: str, benchmarks: tuple[NativeBenchmark, NativeBenchmark], tmp_path: Path,
+) -> None:
+    training, heldout = benchmarks
+    training = replace(training, split_role="heldout" if swap == "training" else "training")
+    heldout = replace(heldout, split_role="training" if swap == "heldout" else "heldout")
+    with pytest.raises(ValueError, match="benchmark split roles prohibit"):
         improve_benchmark(packkit.resolve("agent:baseline"), training, heldout, namespace="northstar/company",
             harness=_NeverHarness(), proposer=_never, out=tmp_path,
             qualification_policy=QualificationPolicy(trials=1, min_units=2), agent_for=_never)
