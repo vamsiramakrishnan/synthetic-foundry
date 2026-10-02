@@ -6,6 +6,7 @@ Formula strings are inspected without executing formulas or external links.
 from __future__ import annotations
 
 import hashlib
+from collections import OrderedDict
 from io import BytesIO
 from typing import Any
 from zipfile import BadZipFile, ZipFile
@@ -27,6 +28,56 @@ class NativeSnapshot(Model):
 
 class NativeArtifactError(ValueError):
     """The submitted bytes cannot support native inspection."""
+
+
+class _SourceInspection:
+    """Bounded source-value reuse owned by one planning/qualification call.
+
+    Only immutable extracted units survive a parse, never parser objects or
+    expanded ZIP members. World eligibility, provenance, task assertions and
+    submitted output bytes are deliberately outside this cache. Limits govern
+    admission, so evictions and oversized sources cannot change a verdict.
+    """
+
+    def __init__(self, *, max_entries: int = 64, max_units: int = 200_000,
+                 max_text_bytes: int = 32 * 1024 * 1024) -> None:
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+               for value in (max_entries, max_units, max_text_bytes)):
+            raise ValueError("source inspection cache bounds must be nonnegative integers")
+        self._max_entries = max_entries
+        self._max_units = max_units
+        self._max_text_bytes = max_text_bytes
+        self._entries: OrderedDict[tuple[str, str], tuple[NativeSnapshot, int, int]] = OrderedDict()
+        self._units = 0
+        self._text_bytes = 0
+
+    @staticmethod
+    def _copy(snapshot: NativeSnapshot) -> NativeSnapshot:
+        # Pydantic's frozen model is shallow: a caller can mutate metrics even
+        # though NativeUnit's string fields and the units tuple are immutable.
+        return snapshot.model_copy(update={"metrics": dict(snapshot.metrics)})
+
+    def inspect(self, payload: bytes, format: str) -> NativeSnapshot:
+        # Never key by a caller-supplied manifest hash or artifact id. Revised
+        # bytes must be parsed and checked against the task's expected digest.
+        key = (format, hashlib.sha256(payload).hexdigest())
+        cached = self._entries.get(key)
+        if cached is not None:
+            self._entries.move_to_end(key)
+            return self._copy(cached[0])
+        snapshot = inspect_artifact(payload, format)
+        units = len(snapshot.units)
+        text_bytes = sum(len(unit.locator.encode("utf-8")) + len(unit.text.encode("utf-8")) for unit in snapshot.units)
+        if (self._max_entries and units <= self._max_units and text_bytes <= self._max_text_bytes):
+            while self._entries and (len(self._entries) >= self._max_entries or
+                    self._units + units > self._max_units or self._text_bytes + text_bytes > self._max_text_bytes):
+                _, (_, removed_units, removed_text) = self._entries.popitem(last=False)
+                self._units -= removed_units
+                self._text_bytes -= removed_text
+            self._entries[key] = (self._copy(snapshot), units, text_bytes)
+            self._units += units
+            self._text_bytes += text_bytes
+        return snapshot
 
 
 def _package(payload: bytes, format: str) -> dict[str, bytes]:

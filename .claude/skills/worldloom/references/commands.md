@@ -1468,11 +1468,11 @@ worldloom narrate requests <CORPUS>
 
 ### `worldloom native-evals`
 
-Build discovery tasks over native files and independently grade replies.
+Build, inspect, run and improve harnesses against byte-graded native tasks.
 
 ### `worldloom native-evals build`
 
-Compile and reference-qualify tasks; export public prompts and byte-bound inputs.
+Compile and reference-qualify tasks through the same SDK used by harnesses.
 
 ```
 worldloom native-evals build <CORPUS_PATH> <SCALE_DIRECTORY>
@@ -1480,12 +1480,14 @@ worldloom native-evals build <CORPUS_PATH> <SCALE_DIRECTORY>
 
 | Option | Purpose |
 | --- | --- |
-| `--out`, `-o` | New exchange directory; oracle.json stays evaluator-private. |
-| `--plan` | NativeWorkloadPlan JSON: business objective, formats, operations and task budget. |
+| `--layout` | split separates public inputs from private source/oracle; legacy preserves the existing exchange layout. |
+| `--out`, `-o` | Benchmark package destination. |
+| `--plan` | NativeWorkloadPlan JSON: objective, formats, operations and task budget. |
+| `--resume` | Verify and reuse an identical completed package; refuse drift. |
 
 ### `worldloom native-evals grade`
 
-Require exact task coverage and inspect answers, citations, output types and preservation.
+Require exact task coverage and independently grade replies and files.
 
 ```
 worldloom native-evals grade <DIRECTORY>
@@ -1494,11 +1496,72 @@ worldloom native-evals grade <DIRECTORY>
 | Option | Purpose |
 | --- | --- |
 | `--out`, `-o` | Write grades JSON. |
-| `--replies` | NativeWorkloadReplies JSON, including actual native output bytes as base64. |
+| `--replies` | NativeWorkloadReplies JSON with actual output bytes as base64. |
+
+### `worldloom native-evals improve`
+
+Revise a harness policy and qualify improvements on fresh, isolated evidence.
+
+```
+worldloom native-evals improve <TRAINING> <HELDOUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | Initial champion agent pack reference or path. |
+| `--command` | Native target command consuming the public protocol. |
+| `--identity-file` | Pin target imported modules/configuration; repeat as needed. |
+| `--out`, `-o` | Persistent sealed study, policy revisions and run receipts. |
+| `--proposer-command` | Policy proposer using the existing pack-author JSON exchange. |
+| `--qualification-policy` | Predeclared finite promotion budget and evidence requirements. |
+| `--repeats` |  |
+| `--rounds` |  |
+| `--source-origin` | Stable company origin shared by training and held-out source snapshots. |
+| `--timeout` |  |
+
+### `worldloom native-evals inspect`
+
+Separate executable tasks, requested coverage and independent promotion support.
+
+```
+worldloom native-evals inspect <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--holdout` | Independently built held-out benchmark to audit against training. |
+| `--out`, `-o` | Write readiness and coverage JSON. |
+| `--qualification-policy` | Declared fresh-tranche and repeat requirements. |
+| `--repeats` | Planned observations per task and policy. |
+| `--source-origin` | Stable world origin shared across snapshots and format replicas. |
+
+### `worldloom native-evals partition`
+
+Render disjoint source families and build independently audited train/holdout packages.
+
+```
+worldloom native-evals partition <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--holdout-families` |  |
+| `--out`, `-o` | Atomic destination containing training/, heldout/ and partition.json. |
+| `--plan` | NativeWorkloadPlan JSON for both independently built workloads. |
+| `--resume` | Verify and reuse identical source, plan, family allocation and packages. |
+| `--train-families` |  |
+
+### `worldloom native-evals protocol`
+
+Print the JSON exchange contract for a native harness adapter.
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write the versioned target request/reply contract. |
 
 ### `worldloom native-evals qualify`
 
-Construct reference replies and recheck satisfiability against actual input bytes.
+Construct reference replies and check satisfiability against actual bytes.
 
 ```
 worldloom native-evals qualify <DIRECTORY>
@@ -1506,7 +1569,25 @@ worldloom native-evals qualify <DIRECTORY>
 
 | Option | Purpose |
 | --- | --- |
-| `--out`, `-o` | Write independent qualification grades JSON. |
+| `--out`, `-o` | Write independent reference grades JSON. |
+
+### `worldloom native-evals run`
+
+Run the real target on task-scoped public inputs; regrade actual submitted bytes.
+
+```
+worldloom native-evals run <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--command` | Trusted target executable and arguments; no shell expansion. |
+| `--identity-file` | Pin an imported module or configuration file; repeat as needed. |
+| `--max-output-bytes` | Maximum target stdout/stderr bytes. |
+| `--out`, `-o` | Run directory with independently graded task receipts. |
+| `--repeats` |  |
+| `--resume` | Reuse completed receipts only under identical inputs and harness identity. |
+| `--timeout` | Maximum seconds per task invocation. |
 
 ### `worldloom pack`
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from itertools import pairwise
@@ -20,7 +20,7 @@ from pydantic import Field, model_validator
 
 from .models import CanonicalFact, Model
 from .narrative import references
-from .native_artifacts import inspect_artifact
+from .native_artifacts import _SourceInspection, inspect_artifact
 from .native_corpus import NativeContentProvenance, NativeCorpusResult
 from .native_query_evidence import (
     TableBinding,
@@ -138,27 +138,77 @@ def _subject_labels(world: World) -> dict[str, str]:
 
 def _sample(items: Sequence[_Item], budget: int) -> list[_Item]:
     """Bound candidate creation without selecting only the archive's front."""
+    if budget <= 0:
+        return []
     if len(items) <= budget:
         return list(items)
+    if budget == 1:
+        return [items[0]]
     return [items[index * (len(items) - 1) // (budget - 1)] for index in range(budget)]
+
+
+
+def _quotas(sizes: Mapping[str, int], budget: int) -> dict[str, int]:
+    quotas = {key: 0 for key in sorted(sizes)}
+    remaining = min(max(0, budget), sum(sizes.values()))
+    while remaining:
+        for key in quotas:
+            if quotas[key] < sizes[key]:
+                quotas[key] += 1
+                remaining -= 1
+                if not remaining:
+                    break
+    return quotas
+
+
+def _interleave(groups: Mapping[str, Sequence[_Item]]) -> list[_Item]:
+    return [groups[key][position] for position in range(max((len(group) for group in groups.values()), default=0))
+        for key in sorted(groups) if position < len(groups[key])]
+
+
+def _sample_sources(items: Sequence[_Item], budget: int, *,
+                    key: Callable[[_Item], tuple[str, str]]) -> list[_Item]:
+    """Spend bounded candidates across source evidence, then native formats.
+
+    Global interpolation can skip entire small files beside a large workbook.
+    Equal served-fact signatures share a scheduling lane across format copies;
+    this is selection fairness, not an assertion of statistical independence.
+    Within each file lane, retain the original evenly spaced evidence sample.
+    """
+    sources: dict[str, dict[str, list[_Item]]] = {}
+    for item in items:
+        source, format = key(item)
+        sources.setdefault(source, {}).setdefault(format, []).append(item)
+    allocations = _quotas({source: sum(len(values) for values in formats.values())
+        for source, formats in sources.items()}, budget)
+    selected = {}
+    for source, formats in sorted(sources.items()):
+        format_allocations = _quotas({format: len(values) for format, values in formats.items()}, allocations[source])
+        selected[source] = _interleave({format: _sample(values, format_allocations[format])
+            for format, values in sorted(formats.items())})
+    return _interleave(selected)
 
 
 def _content_selector(
     heading: str, text: str, fact_ids: frozenset[str], *,
     heading_count: int, label_counts: Counter[str],
+    period_counts: Counter[tuple[str, str]],
     facts: Mapping[str, CanonicalFact], labels: Mapping[str, str],
 ) -> str | None:
     # A business section name is a discoverable descriptor, unlike its hidden
     # native address. Repeated headings need a subject present in the prose.
     if heading and heading_count == 1:
         return f"the evidence section headed {heading!r}"
-    for fact_id in sorted(fact_ids):
-        fact = facts[fact_id]
-        for label in dict.fromkeys((labels.get(fact.subject, ""), fact.subject)):
-            if not _contains(text, label):
-                continue
-            if label_counts[_words(label)] == 1:
-                return f"the evidence section headed {heading!r} concerning {label!r}"
+    candidates = [(facts[fact_id], label) for fact_id in sorted(fact_ids)
+        for label in dict.fromkeys((labels.get(facts[fact_id].subject, ""), facts[fact_id].subject))
+        if _contains(text, label)]
+    for _, label in candidates:
+        if label_counts[_words(label)] == 1:
+            return f"the evidence section headed {heading!r} concerning {label!r}"
+    for fact, label in candidates:
+        if (fact.period and _contains(text, fact.period)
+                and period_counts[_words(label), _words(fact.period)] == 1):
+            return f"the evidence section headed {heading!r} concerning {label!r} in reporting period {fact.period!r}"
     return None
 
 
@@ -181,6 +231,34 @@ def _label_counts(
         for size, descriptors in wanted.items():
             found = {" ".join(tokens[index:index + size]) for index in range(max(0, len(tokens) - size + 1))}
             counts.update(found & descriptors)
+    return counts
+
+
+def _period_counts(
+    rows: list[tuple[str, str, frozenset[str], NativeCitation]], facts: Mapping[str, CanonicalFact], labels: Mapping[str, str],
+) -> Counter[tuple[str, str]]:
+    """Count public subject/period pairs within one repeated-heading group.
+
+    Both descriptors must occur in the same inspected prose. A period visible
+    elsewhere in a scalar register cannot identify the corresponding body.
+    """
+    pairs = {(_words(label), _words(fact.period)) for _, _, ids, _ in rows for fact_id in ids for fact in (facts[fact_id],)
+        if fact.period for label in (fact.subject, labels.get(fact.subject, ""))
+        if _words(label)}
+    label_words = {label for label, _ in pairs}
+    period_words = {period for _, period in pairs}
+    wanted: dict[int, set[str]] = {}
+    for descriptor in label_words | period_words:
+        wanted.setdefault(len(descriptor.split()), set()).add(descriptor)
+    counts: Counter[tuple[str, str]] = Counter()
+    for _, text, _, _ in rows:
+        tokens = _words(text).split()
+        found = set()
+        for size, descriptors in wanted.items():
+            windows = {" ".join(tokens[index:index + size]) for index in range(max(0, len(tokens) - size + 1))}
+            found.update(windows & descriptors)
+        counts.update((label, period) for label in found & label_words for period in found & period_words
+            if (label, period) in pairs)
     return counts
 
 
@@ -227,9 +305,13 @@ def _numeric_descriptor(
 
 def _inventory(
     world: World, rendered: Mapping[str, NativeCorpusResult], plan: NativeWorkloadPlan,
+    *, _inspection: _SourceInspection | None = None,
 ) -> tuple[list[_Source], list[_Evidence], list[_Numeric], list[NativeWorkloadFinding]]:
-    facts = {fact.id: fact for fact in world.facts}
-    irs = {ir.id: ir for ir in world.artifact_irs}
+    from .native_query_evidence import SourceEvidenceIndex
+
+    source_index = SourceEvidenceIndex(world)
+    facts = source_index.facts
+    irs = source_index.artifacts
     labels = _subject_labels(world)
     locale = corpus_locale(world)
     presentation = presentation_of(world)
@@ -243,7 +325,8 @@ def _inventory(
             raise ValueError("rendered corpus key does not match its manifest artifact id")
         if manifest.format not in plan.formats:
             continue
-        snapshot = inspect_artifact(result.payload, manifest.format)
+        snapshot = (_inspection.inspect(result.payload, manifest.format) if _inspection is not None
+                    else inspect_artifact(result.payload, manifest.format))
         if snapshot.sha256 != manifest.sha256:
             raise ValueError(f"native workload source bytes changed: {artifact_id}")
         if manifest.file_size_bytes != len(result.payload):
@@ -259,6 +342,10 @@ def _inventory(
         content_rows: list[tuple[str, str, frozenset[str], NativeCitation]] = []
         numeric_rows: list[tuple[CanonicalFact, NativeCitation, Decimal, NativeContentProvenance, TableBinding | None]] = []
         table_rows: list[tuple[NativeContentProvenance, TableBinding, str, NativeCitation]] = []
+        # The same intake serves planning and direct bridge compilation. Check
+        # canonical source eligibility before interpreting private table values,
+        # even when a manifest claims only scalar or formula evidence.
+        source_index.validate_evidence(manifest.evidence)
         table_index = TableEvidenceIndex(manifest.evidence, irs, world=world)
         observed_locators: set[str] = set()
         for entry in manifest.evidence:
@@ -268,10 +355,8 @@ def _inventory(
             if entry.locator in observed_locators:
                 raise ValueError(f"duplicate native workload evidence locator: {artifact_id}:{entry.locator}")
             observed_locators.add(entry.locator)
-            ir = irs.get(entry.source_artifact_id)
-            if ir is None or not 0 <= entry.section_index < len(ir.sections):
-                raise ValueError(f"native workload provenance names an unknown authored section: {artifact_id}")
-            section = ir.sections[entry.section_index]
+            ir = irs[entry.source_artifact_id]
+            section = source_index.section(entry.source_artifact_id, entry.section_index)
             section_facts = frozenset(references.referenced(section.body or ""))
             ref = NativeCitation(artifact_id=artifact_id, locator=entry.locator)
             if entry.table_key is not None:
@@ -306,7 +391,6 @@ def _inventory(
             expected = references.substitute(section.body or "", facts, locale=locale, presentation=presentation)
             if text != expected or frozenset(entry.fact_ids) != section_facts:
                 raise ValueError(f"native workload evidence provenance disagrees with its authored section: {artifact_id}:{entry.locator}")
-            heading = section.heading
             header_locator: str | None = None
             if manifest.format == "docx":
                 position = re.fullmatch(r"paragraph:([1-9][0-9]*)", entry.locator)
@@ -320,7 +404,9 @@ def _inventory(
                 position = re.fullmatch(r"sheet:([^/]+)/cell:B([1-9][0-9]*)", entry.locator)
                 if position is not None:
                     header_locator = f"sheet:{position[1]}/cell:A{position[2]}"
-            if header_locator is None or units.get(header_locator) != heading:
+            heading = units.get(header_locator or "", "")
+            if header_locator is None or heading not in table_index.heading_versions(
+                    section.heading, entry.source_artifact_id, entry.section_index, facts):
                 raise ValueError(f"native workload evidence heading is not bound to its body: {artifact_id}:{entry.locator}")
             content_rows.append((heading, text, frozenset(entry.fact_ids), ref))
         section_count = len({(entry.source_artifact_id, entry.section_index) for entry in manifest.evidence})
@@ -332,9 +418,11 @@ def _inventory(
             by_heading.setdefault(row[0], []).append(row)
         heading_labels = {heading: _label_counts(rows, facts, labels) if len(rows) > 1 else Counter()
             for heading, rows in by_heading.items()}
+        heading_periods = {heading: _period_counts(rows, facts, labels) if len(rows) > 1 else Counter()
+            for heading, rows in by_heading.items()}
         for heading, text, ids, ref in content_rows:
             selector = _content_selector(heading, text, ids, heading_count=len(by_heading[heading]),
-                label_counts=heading_labels[heading], facts=facts, labels=labels)
+                label_counts=heading_labels[heading], period_counts=heading_periods[heading], facts=facts, labels=labels)
             if selector is None:
                 findings.append(NativeWorkloadFinding(code="ambiguous_evidence_selector", artifact_id=artifact_id,
                     detail=f"repeated heading {heading!r} lacks a unique business subject in its prose"))
@@ -478,17 +566,21 @@ def _identifier(plan: NativeWorkloadPlan, kind: str, refs: tuple[NativeCitation,
 
 
 def _evidence_pairs(evidence: list[_Evidence], facts: Mapping[str, CanonicalFact], *, budget: int) -> list[tuple[_Evidence, _Evidence]]:
-    groups: dict[tuple[str, str | None], list[_Evidence]] = {}
+    groups: dict[tuple[str, str, str], list[_Evidence]] = {}
     for item in evidence:
         if item.kind != "prose":
             continue
-        keys = {(facts[fid].kind.rsplit(".", 1)[0] if facts[fid].kind.endswith((".actual", ".budget")) else facts[fid].kind,
-                 facts[fid].period) for fid in item.fact_ids}
+        keys = {("period", facts[fid].kind.rsplit(".", 1)[0] if facts[fid].kind.endswith((".actual", ".budget")) else facts[fid].kind,
+                 facts[fid].period or "") for fid in item.fact_ids}
+        # Related evidence also spans periods of the same measure and subject.
+        # Requiring both avoids appending an unrelated entity's historical text
+        # merely because its heading or reporting date happens to match.
+        keys.update(("series", facts[fid].kind, facts[fid].subject) for fid in item.fact_ids if facts[fid].period is not None)
         for group_key in sorted(keys, key=str):
             groups.setdefault(group_key, []).append(item)
     result: list[tuple[_Evidence, _Evidence]] = []
     seen: set[tuple[str, str, str, str]] = set()
-    for _, items in sorted(groups.items(), key=lambda item: str(item[0])):
+    for group, items in sorted(groups.items(), key=lambda item: str(item[0])):
         by_source: dict[str, list[_Evidence]] = {}
         for item in items:
             by_source.setdefault(item.ref.artifact_id, []).append(item)
@@ -499,6 +591,13 @@ def _evidence_pairs(evidence: list[_Evidence], facts: Mapping[str, CanonicalFact
         for first_members, second_members in pairwise(source_members):
             probes.append((first_members[-1], second_members[-1]))
         for first, second in probes:
+            if group[0] == "series" and not any(
+                    facts[left].kind == facts[right].kind == group[1]
+                    and facts[left].subject == facts[right].subject == group[2]
+                    and facts[left].period is not None and facts[right].period is not None
+                    and facts[left].period != facts[right].period
+                    for left in first.fact_ids for right in second.fact_ids):
+                continue
             if first.fact_ids & second.fact_ids or first.text == second.text:
                 continue
             if first.source != second.source and not _independent(first.source, second.source):
@@ -570,6 +669,7 @@ def _create_reconciliation(plan: NativeWorkloadPlan, pair: _Pair) -> NativeTask:
 
 def plan_native_workload(
     world: World, rendered: Mapping[str, NativeCorpusResult], plan: NativeWorkloadPlan,
+    *, _inspection: _SourceInspection | None = None,
 ) -> NativeWorkload:
     """Build locator-free business requests over byte-bound, accepted evidence.
 
@@ -579,15 +679,18 @@ def plan_native_workload(
     target performance or calibrated difficulty. Unsupported requested work
     remains in findings even when other capabilities have usable tasks.
     """
-    sources, evidence, numeric, findings = _inventory(world, rendered, plan)
+    inspection = _SourceInspection() if _inspection is None else _inspection
+    sources, evidence, numeric, findings = _inventory(world, rendered, plan, _inspection=inspection)
     payloads = {key: result.payload for key, result in sorted(rendered.items())}
+    source_groups = {source.input.artifact_id: digest(sorted(source.fact_ids)) for source in sources}
     pairs = [pair for pair in _pairs(numeric, budget=plan.max_tasks * 4) if _allowed((pair.first.source, pair.second.source), plan)]
     content_pairs = [pair for pair in _evidence_pairs(evidence, {fact.id: fact for fact in world.facts}, budget=plan.max_tasks * 4) if _allowed((pair[0].source, pair[1].source), plan)]
     candidates: list[tuple[NativeTask, tuple[str, ...]]] = []
     if "read" in plan.operations:
         if plan.discovery_scope != "cross_artifact":
             numeric_refs = {(item.ref.artifact_id, item.ref.locator) for item in numeric}
-            for item in _sample(evidence, plan.max_tasks * 4):
+            for item in _sample_sources(evidence, plan.max_tasks * 4,
+                    key=lambda item: (source_groups[item.source.input.artifact_id], item.source.input.format)):
                 if item.kind == "table" and (item.ref.artifact_id, item.ref.locator) in numeric_refs:
                     continue
                 task = NativeTask(id=_identifier(plan, "read-evidence", (item.ref,), (item.source.input,)), operation="read", use_case_id=plan.use_case_id,
@@ -597,7 +700,8 @@ def plan_native_workload(
                 candidates.append((task, ("evidence_discovery", *(('speaker_notes',) if "/notes" in item.ref.locator else ()),
                     *(("table_discovery",) if item.kind != "prose" else ()),
                     *(("native_formula_inspection",) if item.kind == "formula" else ()))))
-            for numeric_item in _sample(numeric, plan.max_tasks * 4):
+            for numeric_item in _sample_sources(numeric, plan.max_tasks * 4,
+                    key=lambda item: (source_groups[item.source.input.artifact_id], item.source.input.format)):
                 task = NativeTask(id=_identifier(plan, "read-measure", (numeric_item.ref,), (numeric_item.source.input,)), operation="read", use_case_id=plan.use_case_id,
                     prompt=f"{plan.objective} In {numeric_item.ref.artifact_id!r}, find {numeric_item.selector}. Return its numeric value as value with a native citation.",
                     inputs=(numeric_item.source.input,), assertions=(NativeAssertion(id="value", target=numeric_item.ref),))
@@ -654,8 +758,12 @@ def plan_native_workload(
         lanes.setdefault(task.operation, {}).setdefault(lane_key, []).append((task, capabilities))
     queues: dict[str, list[tuple[NativeTask, tuple[str, ...]]]] = {}
     for operation, families in lanes.items():
-        for members in families.values():
+        for lane_key, members in families.items():
             members.sort(key=lambda item: item[0].id)
+            families[lane_key] = _sample_sources(members, len(members), key=lambda item: (
+                digest(sorted({source_groups[source.artifact_id] for source in item[0].inputs})),
+                ",".join(sorted({source.format for source in item[0].inputs} | (
+                    {item[0].output.format} if item[0].output is not None else set())))))
         # Cross-file business arithmetic first, then alternate available
         # families within the operation. Operations themselves get equal turns.
         queue = []
@@ -677,7 +785,7 @@ def plan_native_workload(
             if task.id in seen:
                 continue
             seen.add(task.id)
-            proof = qualify_native_task(task, payloads)
+            proof = qualify_native_task(task, payloads, _inspection=inspection)
             if not proof.passed:
                 findings.append(NativeWorkloadFinding(code="reference_qualification_failed", operation=task.operation,
                     detail=f"{task.id}: {', '.join(proof.findings)}"))

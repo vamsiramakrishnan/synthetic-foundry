@@ -1,0 +1,411 @@
+{
+  "configuration": {
+    "heldout_families": 15,
+    "qualification_policy": {
+      "confidence": 0.95,
+      "min_repeats": 2,
+      "min_units": 5,
+      "trials": 3,
+      "unit_dimension": null
+    },
+    "repeats": 2,
+    "training_families": 3,
+    "workload_plan": {
+      "discovery_scope": "artifact",
+      "formats": [
+        "docx",
+        "pptx",
+        "xlsx"
+      ],
+      "max_tasks": 256,
+      "objective": "Review the company reporting evidence, reconcile the reported values, and preserve source content in requested updates.",
+      "operations": [
+        "read",
+        "analyze",
+        "update",
+        "create"
+      ],
+      "use_case_id": "monthly-enterprise-close"
+    }
+  },
+  "construction": {
+    "actual_heldout_units": 8,
+    "actual_training_units": 3,
+    "elapsed_seconds": 314.61,
+    "exit_code": 1,
+    "overlapping_units": 0,
+    "packages_published": 0,
+    "partial_task_counts_retained": false,
+    "passed": false,
+    "refusal": "native partition workload does not cover the requested disjoint families; requested training=3, heldout=15; delivered training=3, heldout=8, overlap=0. Increase max_tasks, use artifact discovery scope, or revise the workload to cover every family."
+  },
+  "default_policy_support": {
+    "actual_heldout_units": 8,
+    "heldout_unit_budget_sufficient": false,
+    "repeats_declared": 2,
+    "repeats_executed": 0,
+    "required_heldout_units": 15
+  },
+  "diagnosis": {
+    "evidence": {
+      "families_with_inventory_but_no_sample": [
+        "4780afaf4a854208a787213ec80bdae0",
+        "9b9eca5925b1b3b49cdf6c81779eedfb",
+        "ab83a663a4457f70aec024fed4b872b8",
+        "c20cb80877c434e7761141d1290fd9ab",
+        "cf32e2a087917d25ee4fde7fa6212fb5"
+      ],
+      "sampled": 1024,
+      "sampled_counts_by_family": {
+        "41c2daa0d8a4a567f449b6f2a3ced6a2": 1,
+        "4dc661bd37adc66b9f10f53799f7a465": 1,
+        "513d049c47d4f44ee384eb7e4169666b": 1,
+        "72f1ff1f4e564df11ae1831289de61a6": 1,
+        "98824bb54aa49565ab2060ba6fe5bb13": 1,
+        "9f55da34befdd603fe862b8960edc656": 1,
+        "a85c27db2bef32b69cdff637db5e0587": 1,
+        "be7c3165b7a51e8a64e48dc4d40cedb6": 1014,
+        "c6d3281fcbd785b2f315b7b128abbdb4": 1,
+        "fdf2d133e9665770429614b268e10106": 2
+      },
+      "sampled_sources": 13,
+      "source_files": 45,
+      "total": 27576
+    },
+    "inventory_findings": {
+      "ambiguous_evidence_selector": 408,
+      "ambiguous_numeric_selector": 1600
+    },
+    "method": "Subsequent inventory-only replay of the same rendered sources; old global sampler at 4 \u00d7 256. No task qualification or constructor replay.",
+    "numeric": {
+      "families_with_inventory_but_no_sample": [
+        "513d049c47d4f44ee384eb7e4169666b",
+        "9f55da34befdd603fe862b8960edc656"
+      ],
+      "sampled": 1024,
+      "sampled_counts_by_family": {
+        "41c2daa0d8a4a567f449b6f2a3ced6a2": 1,
+        "4dc661bd37adc66b9f10f53799f7a465": 1,
+        "72f1ff1f4e564df11ae1831289de61a6": 1,
+        "98824bb54aa49565ab2060ba6fe5bb13": 1,
+        "a85c27db2bef32b69cdff637db5e0587": 1,
+        "be7c3165b7a51e8a64e48dc4d40cedb6": 1015,
+        "c6d3281fcbd785b2f315b7b128abbdb4": 1,
+        "fdf2d133e9665770429614b268e10106": 3
+      },
+      "sampled_sources": 10,
+      "source_files": 28,
+      "total": 24859
+    }
+  },
+  "exact_large_resume": {
+    "performed": false
+  },
+  "limitations": [
+    "Reference qualification proves satisfiability, not external harness performance.",
+    "Promotion readiness establishes experiment prerequisites, not a measured improvement or successful promotion.",
+    "Source is the unchanged prior 18-month pilot; sections rejected by current source gates remain excluded.",
+    "Format replicas and related canonical facts count as one independent evidence family.",
+    "Independence requires each target invocation receive only its declared task input files.",
+    "The 256-task workload budget did not preserve all requested held-out families; task or family allocation requires diagnosis.",
+    "The largest 224-section financial and incident component contains 9360 transitive canonical facts and remains one indivisible source component; family count is not a count of independent financial episodes."
+  ],
+  "live_target_trials": 0,
+  "measurement_status": "Final contextual and cached 256-task construction refused because only 8 of the 15 requested held-out families were represented. No packages were published; no external target trials, promotion, separate assessment or resume were performed.",
+  "method": "partition-before-render; transitive canonical fact and native formula closure; independent byte qualification; canonical evidence split audit",
+  "partition_inventory": {
+    "allocated_source_components": 44,
+    "available_families": 44,
+    "component_section_count_distribution": {
+      "1": 42,
+      "224": 1,
+      "54": 1
+    },
+    "grouped_families": [
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "9be3027fbf5358e6073521a631e838b2",
+          "a2520c3df2f21cc2bfa180010a9fa55a"
+        ],
+        "content_units": 2,
+        "id": "0556ff40e247bd6af916aded5c247295",
+        "planned_split": "training"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "982830227d8a0fc5b611da16a9b8b142",
+          "a3c9162486f77394ca9178ff5ca85619"
+        ],
+        "content_units": 2,
+        "id": "1e6211c6d497115e494350b00bf3135f",
+        "planned_split": "training"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "b2a4a8e65d32b736f97c6441170008d5",
+          "cbd30bbcee7c91114d878d707cabaa76"
+        ],
+        "content_units": 2,
+        "id": "1ea055c8704ae2b2683e14eaf6ed7be7",
+        "planned_split": "training"
+      },
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "c71aef83fafd71222c01d646843eb732",
+          "e31a91ae5a0e3405f65642be87539f78"
+        ],
+        "content_units": 2,
+        "id": "41c2daa0d8a4a567f449b6f2a3ced6a2",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "81546a36202038a48d8530678a5c9535",
+          "822db37e353a74eeb611aab05e60cb7e"
+        ],
+        "content_units": 2,
+        "id": "4780afaf4a854208a787213ec80bdae0",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "6f9509608607d676a85f2cdeade898ed",
+          "756e929a3e1f49890876269d4039efbf",
+          "7588cebdd3d5f4e64b9c9b92d19ab225",
+          "89663559cf6f102f0e013b846a5e70f5"
+        ],
+        "content_units": 4,
+        "id": "4dc661bd37adc66b9f10f53799f7a465",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "5211369ca26f45fb9dd6e4da2787ebf5",
+          "5d29ddce7d63c7d231954571f41b26dd",
+          "661e2cd487889b38f30e32776cd2b3f7",
+          "6ac23f9017bdffaff594ffcdb60c8de6"
+        ],
+        "content_units": 4,
+        "id": "513d049c47d4f44ee384eb7e4169666b",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "01629c4eb05398d9ab3e2e61ebe98fd8",
+          "087e6fda96c88a500c216f90e25ebe1d",
+          "0bec5c649e5c05d00f52adf799ff2b13",
+          "367685fc63735e89fddee3d33ef0017c"
+        ],
+        "content_units": 4,
+        "id": "72f1ff1f4e564df11ae1831289de61a6",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "44e7d4e8fdbafe59a7dcea89104c46c4",
+          "4b5c6d3f68e4569566f8962458994335",
+          "4b6f839c3a408cb09da78f9f819acb0b",
+          "61034c71771ab7becaecf0df53a3c233"
+        ],
+        "content_units": 4,
+        "id": "98824bb54aa49565ab2060ba6fe5bb13",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "a9f299529fdd02ac19636265c2a75058",
+          "caa925fa7f7d05c9fa3dcaeec72a327d"
+        ],
+        "content_units": 2,
+        "id": "9b9eca5925b1b3b49cdf6c81779eedfb",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "a59fc1878805b9577b2ae690ef697410",
+          "c62d3e574753a9c9d76c0008570b50e1"
+        ],
+        "content_units": 2,
+        "id": "9f55da34befdd603fe862b8960edc656",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "905ef23dc54ad44dc5f4329f4110a0af",
+          "9bb2a875068490e453437fbcf1c1414d"
+        ],
+        "content_units": 2,
+        "id": "a85c27db2bef32b69cdff637db5e0587",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "d9c4c4440177542e34f1bdcfcbc18a6b",
+          "eb40e69d1df3eedbb3c29d757c862ebd"
+        ],
+        "content_units": 2,
+        "id": "ab83a663a4457f70aec024fed4b872b8",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 9360,
+        "component_ids": [
+          "be7c3165b7a51e8a64e48dc4d40cedb6"
+        ],
+        "content_units": 224,
+        "id": "be7c3165b7a51e8a64e48dc4d40cedb6",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "9361faa7971ae8ff05b36bba212e2903",
+          "93b848d1175424220e34ac6d6a8d0295"
+        ],
+        "content_units": 2,
+        "id": "c20cb80877c434e7761141d1290fd9ab",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "0c81f244d084b547b230f293ed49bac4",
+          "1cf99528002c3ad26044ded8c9519629",
+          "2863ad5a8ebd8f281819b72eab933244",
+          "3e18157ea248daae4a3ec4cceb65f3c8"
+        ],
+        "content_units": 4,
+        "id": "c6d3281fcbd785b2f315b7b128abbdb4",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "8a87c3b914d19f2ed799dea32e093eb4",
+          "97ec51e9c20ca4acb836dc56c3c62609"
+        ],
+        "content_units": 2,
+        "id": "cf32e2a087917d25ee4fde7fa6212fb5",
+        "planned_split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 72,
+        "component_ids": [
+          "fdf2d133e9665770429614b268e10106"
+        ],
+        "content_units": 54,
+        "id": "fdf2d133e9665770429614b268e10106",
+        "planned_split": "heldout"
+      }
+    ],
+    "largest_components": [
+      {
+        "canonical_fact_closure": 9360,
+        "content_units": 224,
+        "id": "be7c3165b7a51e8a64e48dc4d40cedb6",
+        "source_artifacts": 128
+      },
+      {
+        "canonical_fact_closure": 72,
+        "content_units": 54,
+        "id": "fdf2d133e9665770429614b268e10106",
+        "source_artifacts": 54
+      }
+    ],
+    "omitted_families": 0,
+    "planned_output_families": 18,
+    "retained_content_units": 320,
+    "retained_distinct_fact_closure": 9510,
+    "retained_families": 44
+  },
+  "phase": "contextual_and_cached_before_task_budget_fairness",
+  "qualification": {
+    "partial_workloads_retained": false,
+    "reason": "The constructor refused at the split audit before export; no package qualification result is claimed.",
+    "separate_qualification_performed": false
+  },
+  "resource_observations": {
+    "method": "externally sampled kernel process VmHWM before completion",
+    "samples": [
+      {
+        "peak_rss_so_far": "1052564 kB",
+        "pid": 16215,
+        "rss": "1000520 kB"
+      }
+    ]
+  },
+  "schema": "worldloom.native-benchmark-partition-measurement/v1",
+  "sdk_assessment": {
+    "performed": false
+  },
+  "source": {
+    "artifact_irs": 162,
+    "authored_sections": 792,
+    "company": "Northstar Retail",
+    "company_id": "CO-0001",
+    "excluded_sections": 472,
+    "exclusion_codes": {
+      "duplicate_grounded_content": 70,
+      "invalid_native_evidence": 234,
+      "private_native_section": 168
+    },
+    "facts": 11624,
+    "file_count": 10,
+    "periods": [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12",
+      "2027-01",
+      "2027-02",
+      "2027-03",
+      "2027-04",
+      "2027-05",
+      "2027-06"
+    ],
+    "recipe_digest": "7088298e5b502df50da36a9a51ca60f26b510c8a26af3adb526f80b4c4f456b8",
+    "seed": 8128,
+    "selected_sections": 320,
+    "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+    "tree_digest": "c0851147b3676f70f4c1430350d6ebc03388adb03cf704745ec267e97d342e01"
+  },
+  "source_code_digests": {
+    "src/worldloom/benchmarks/core.py": "fc5176f8a20f6f205236515f187c95409c5ab689d13003db491d6d236db82dd2",
+    "src/worldloom/benchmarks/coverage.py": "187fe34a60761a763d241416bc9a333a11f8a1ad6ede509e8a4fbafcea52cdb1",
+    "src/worldloom/benchmarks/partitions.py": "6ac49e87f24229612a3a9669910d06bbe162ef77bc35a3b103cee7e6b124a63b",
+    "src/worldloom/native_artifacts.py": "b8a43f9fed5def4a94aa2985739f57bd09a90d02adbb81a379aa778e9c896170",
+    "src/worldloom/native_business.py": "7906772e179c2e22e538f51fe69ba03970c4de158620241618aae80724365d33",
+    "src/worldloom/native_corpus.py": "62b75f07cb3021dabcc46d010b42a16855f9a79132b4340ea8cb80b988ec828c",
+    "src/worldloom/native_eval_bridge.py": "3d5fee3be58d7832e47695238d72877376ca4efa0cffcbe8c005a7e26c6af6a8",
+    "src/worldloom/native_query_evidence.py": "9336c3b1f6bd02520b04626db1ea2a574f9bcc34ec8d1ff571bb304848723709",
+    "src/worldloom/native_query_planning.py": "2ae7b5bf9cc74eb99cbd107ac43d7d0bb9ca3bdde30f0a1e74341c653abfeffa",
+    "src/worldloom/native_reference.py": "027cba759dd01c4625e26c22030cb9e14559bd5d76004bb8fd8a01430a4e7d7c",
+    "src/worldloom/native_tasks.py": "51b273d78793cf029911997253e9730c72973384b267874b7cd5470068390456"
+  },
+  "source_code_observation": {
+    "all_source_mtimes_preceded_build_start": true,
+    "method": "Digests collected immediately after refusal; all listed production files have modification times preceding the recorded build_start log. Initial in-memory digests were not retained by the exception handler."
+  },
+  "source_inspection_measurement": "native-source-inspection.json"
+}

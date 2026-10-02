@@ -41,6 +41,34 @@ keep cases correlated even when questions, formats or names change. A prepared
 queryset has no measured target pass rate. Never reduce support requirements or
 widen the target band merely to make a blocked calibration pass.
 
+## Run or improve a native-file harness
+
+Use the public `worldloom.benchmarks` SDK or the `native-evals` commands. Read
+[the native benchmark workflow](../../../../docs/native-benchmark-workflow.md)
+for the target protocol and sealed improvement loop.
+
+```bash
+worldloom native-evals build ./company ./large-corpus --plan workload.json --layout split --out ./benchmark
+worldloom native-evals partition ./company --plan partition-workload.json --train-families 3 --holdout-families 15 --out ./partitioned
+worldloom native-evals inspect ./benchmark --source-origin company-origin
+worldloom native-evals protocol
+worldloom native-evals run ./benchmark --command 'python ./adapter.py' --out ./run --resume
+```
+
+Keep source origins stable across snapshots. Read coverage findings before
+claiming a dataset supports an experiment. Count independent evidence units,
+not paraphrases or format copies. Use `--holdout` and `--qualification-policy`
+with `inspect` before `improve`; the held-out pool must fund the declared fresh
+tranches. Pass only task-scoped public inputs to the target. The local command
+adapter is a trusted process, not an OS sandbox. Record actual target trials
+separately from reference qualification. Use a new run when pinned inputs change.
+
+Use `partition` when aggregate files join otherwise independent source evidence.
+It keeps shared facts, canonical ancestors and formula dependencies in one
+family. A source shortage is a refusal; never rename copies to manufacture
+independence. Use artifact-scoped discovery and enough task budget to cover
+every requested family.
+
 ## The journey
 
 ```bash

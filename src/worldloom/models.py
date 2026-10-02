@@ -771,6 +771,12 @@ class Cell(Model):
     fact_id: str | None = None
     formula: FormulaKind | None = None
     operands: list[str] = Field(default_factory=list)
+    formula_decimal_places: int | None = Field(default=None, ge=0, le=12)
+    """Round the computation to these decimal places, ties away from zero.
+
+    Applied in the cell's semantic units, before any display scaling. ``None``
+    preserves the unrounded formula and the wire shape of historical corpora.
+    """
     band: MagnitudeBand | None = None
     """Where this value sits in its column's range — see `MagnitudeBand`.
 
@@ -785,7 +791,16 @@ class Cell(Model):
     def _formula_needs_operands(self) -> Cell:
         if self.formula is not None and not self.operands:
             raise ValueError(f"a {self.formula.value} cell must name its operands")
+        if self.formula_decimal_places is not None and self.formula is None:
+            raise ValueError("formula precision requires a declared formula")
         return self
+
+    @model_serializer(mode="wrap")
+    def _formula_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.formula_decimal_places is None:
+            data.pop("formula_decimal_places", None)
+        return data
 
 
 class Column(Model):

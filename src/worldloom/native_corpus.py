@@ -12,7 +12,12 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from .models import Model, Table
 from .narrative import references
@@ -47,6 +52,18 @@ class NativeCorpusPlan(Model):
     contents: tuple[NativeContent, ...]
     surface: Literal["legacy", "business"] = "legacy"
     excluded_contents: tuple[NativeContentExclusion, ...] = ()
+    contextual_headings: bool = False
+    """Expose a section's single canonical reporting period in its public labels.
+
+    Applies only to business surfaces. The renderer derives this context from
+    evidence actually served by the section, including table dependencies.
+    """
+
+    @model_validator(mode="after")
+    def _context_requires_business(self) -> NativeCorpusPlan:
+        if self.contextual_headings and self.surface != "business":
+            raise ValueError("contextual headings require the business surface")
+        return self
 
     @model_serializer(mode="wrap")
     def _legacy_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -55,6 +72,8 @@ class NativeCorpusPlan(Model):
             data.pop("surface", None)
         if not self.excluded_contents:
             data.pop("excluded_contents", None)
+        if not self.contextual_headings:
+            data.pop("contextual_headings", None)
         return data
 
 
@@ -183,6 +202,7 @@ def plan_native_corpus(
     minimum_distinct_facts: int = 1,
     source_artifact_ids: tuple[str, ...] | None = None,
     surface: Literal["legacy", "business"] = "legacy",
+    contextual_headings: bool = False,
 ) -> NativeCorpusPlan:
     """Select authored sections in stable source order, refusing missing scope.
 
@@ -205,7 +225,8 @@ def plan_native_corpus(
             for index, section in enumerate(ir.sections)
             if section.body and references.referenced(section.body)
         )
-    plan = NativeCorpusPlan(artifact_id=artifact_id, format=format, title=title, minimum_units=minimum_units, minimum_distinct_facts=minimum_distinct_facts, contents=contents, surface=surface, excluded_contents=excluded)
+    plan = NativeCorpusPlan(artifact_id=artifact_id, format=format, title=title, minimum_units=minimum_units, minimum_distinct_facts=minimum_distinct_facts, contents=contents, surface=surface, excluded_contents=excluded,
+                            contextual_headings=contextual_headings)
     _contents(world, plan)
     return plan
 

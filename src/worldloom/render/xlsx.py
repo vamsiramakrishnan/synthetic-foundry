@@ -21,7 +21,8 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 from ..compiler.style import StyleGenome, genome
-from ..models import ArtifactIR, FormulaKind, Table
+from ..formula_semantics import rounded_expression
+from ..models import ArtifactIR, Cell, FormulaKind, Table
 from . import Rendered, RenderError, fonts, ooxml, slug_for
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -129,6 +130,35 @@ def _operand(table_key: str, operand: str, column_key: str) -> tuple[str, str, s
 
 
 def _formula(
+    ir: ArtifactIR, table: Table, row_key: str, column_key: str,
+    cell: Cell, *, layout: _Layout,
+) -> str | None:
+    expression = _unrounded_formula(ir, table, row_key, column_key, cell, layout=layout)
+    if expression is None or cell.formula_decimal_places is None:
+        return expression
+    column = next(column for column in table.columns if column.key == column_key)
+    percent = bool(column.number_format and column.number_format.endswith("%"))
+    # Existing sheet formulas operate on Excel's stored fractions. Precision
+    # belongs to semantic percentage units; rounding a fraction to 2 decimals
+    # would turn a 24.89% margin into 25%.
+    expression = expression[1:]
+    # A reference may expose a percentage source in a plain numeric summary.
+    # Read the referenced storage format; the destination controls only the
+    # final presentation scaling, never the value ROUND receives.
+    operand_percent = percent
+    if cell.formula is FormulaKind.REFERENCE:
+        source_table, _, source_column = _operand(table.key, cell.operands[0], column_key)
+        origin = next((section.table for section in ir.sections
+                       if section.table is not None and section.table.key == source_table), None)
+        source = next((column for column in origin.columns if column.key == source_column), None) if origin else None
+        operand_percent = bool(source and source.number_format and source.number_format.endswith("%"))
+    if operand_percent or cell.formula is FormulaKind.RATIO_PCT:
+        expression = f"({expression})*100"
+    expression = rounded_expression(expression, cell.formula_decimal_places)
+    return "=" + expression + ("/100" if percent else "")
+
+
+def _unrounded_formula(
     ir: ArtifactIR,
     table: Table,
     row_key: str,

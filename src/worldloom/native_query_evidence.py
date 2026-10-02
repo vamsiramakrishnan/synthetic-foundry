@@ -7,12 +7,118 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from .formula_semantics import rounded_expression
 from .locales import Locale
-from .models import ArtifactIR, CanonicalFact, Cell, Column, FormulaKind, Row, Table
+from .models import (
+    ArtifactIR,
+    ArtifactSection,
+    CanonicalFact,
+    Cell,
+    Column,
+    FormulaKind,
+    Row,
+    Table,
+)
+from .narrative import references
 from .native_corpus import NativeContent, NativeContentProvenance, _Content
 
 if TYPE_CHECKING:
     from .world import World
+
+
+class SourceEvidenceIndex:
+    """Unambiguous canonical truth and public, grounded authored sections.
+
+    Native files may enter through the SDK without our renderer. Their byte
+    checksums cannot certify privacy or excuse an invalid source snapshot.
+    Validate each selected section once, before binding any of its evidence.
+    """
+
+    def __init__(self, world: World):
+        self.facts: dict[str, CanonicalFact] = {}
+        self.artifacts: dict[str, ArtifactIR] = {}
+        self._validated: dict[tuple[str, int], ArtifactSection] = {}
+        self._closures: dict[tuple[str, ...], tuple[str, ...]] = {}
+        for fact in world.facts:
+            if fact.id in self.facts:
+                raise ValueError(f"duplicate canonical fact identity: {fact.id}")
+            self.facts[fact.id] = fact
+        for ir in world.artifact_irs:
+            if ir.id in self.artifacts:
+                raise ValueError(f"duplicate authored artifact identity: {ir.id}")
+            self.artifacts[ir.id] = ir
+
+    def fact_closure(self, fact_ids: Sequence[str]) -> tuple[str, ...]:
+        """Facts and their canonical derived/superseded ancestors, never aliases.
+
+        Unknown or cyclic reachable ancestry cannot establish independent
+        evidence. Iterative traversal also supports long revision chains.
+        """
+        roots = tuple(sorted(set(fact_ids)))
+        if roots in self._closures:
+            return self._closures[roots]
+        closed: set[str] = set()
+        active: set[str] = set()
+        for root in roots:
+            stack = [(root, False)]
+            while stack:
+                identifier, finish = stack.pop()
+                if finish:
+                    active.remove(identifier)
+                    closed.add(identifier)
+                    continue
+                if identifier in closed:
+                    continue
+                if identifier in active:
+                    raise ValueError(f"canonical fact ancestry cycle: {identifier}")
+                fact = self.facts.get(identifier)
+                if fact is None:
+                    raise ValueError(f"canonical fact ancestry names an unknown fact: {identifier}")
+                active.add(identifier)
+                stack.append((identifier, True))
+                parents = set(fact.derived_from)
+                if fact.supersedes is not None:
+                    parents.add(fact.supersedes)
+                stack.extend((parent, False) for parent in sorted(parents, reverse=True))
+        result = tuple(sorted(closed))
+        self._closures[roots] = result
+        return result
+
+    def validate_evidence(self, entries: Sequence[NativeContentProvenance]) -> None:
+        # Removing every binding must not make otherwise unverifiable bytes
+        # eligible for the direct bridge with an empty canonical lineage.
+        if not any(entry.fact_ids for entry in entries):
+            raise ValueError("native workload source has no canonical evidence")
+        for entry in entries:
+            self.section(entry.source_artifact_id, entry.section_index)
+
+    def section(self, source_artifact_id: str, section_index: int) -> ArtifactSection:
+        ir = self.artifacts.get(source_artifact_id)
+        if ir is None or not 0 <= section_index < len(ir.sections):
+            raise ValueError(f"native workload provenance names an unknown authored section: {source_artifact_id}:{section_index}")
+        section = ir.sections[section_index]
+        key = source_artifact_id, section_index
+        if self._validated.get(key) is section:
+            return section
+        if section.hidden:
+            raise ValueError(f"private authored section: {source_artifact_id}:{section_index}")
+        body = section.body or ""
+        authored_ids = set(references.referenced(body))
+        carried = authored_ids | set(section.fact_ids)
+        if section.table is not None:
+            carried.update(cell.fact_id for row in section.table.rows for cell in row.cells.values()
+                           if cell.fact_id is not None)
+        unknown = sorted((carried - self.facts.keys()) | set(references.unresolved(body, self.facts)))
+        if unknown:
+            raise ValueError(f"native source section cites unknown canonical facts: {unknown}")
+        if references.bare_numbers(body):
+            raise ValueError("native source prose must reference canonical figures")
+        if body.strip() and not authored_ids:
+            raise ValueError("native source evidence must occur in authored prose")
+        if not authored_ids and section.table is None:
+            raise ValueError("native source section has no canonical evidence")
+        self._validated[key] = section
+        return section
 
 
 @dataclass(frozen=True)
@@ -48,6 +154,15 @@ class TableEvidenceIndex:
         self.rows: dict[tuple[str, str, str], Row] = {}
         self.columns: dict[tuple[str, str, str], Column] = {}
         self.closed: dict[tuple[str, str, str, str], frozenset[str]] = {}
+        self.section_facts: dict[tuple[str, int], frozenset[str]] = {}
+        for entry in entries:
+            source = irs.get(entry.source_artifact_id)
+            if source is None or not 0 <= entry.section_index < len(source.sections):
+                raise ValueError("native table provenance names an unknown authored section")
+            section = source.sections[entry.section_index]
+            if section.table is None:
+                self.section_facts[entry.source_artifact_id, entry.section_index] = frozenset(
+                    references.referenced(section.body or ""))
         selected = set()
         for entry in entries:
             if entry.table_key is None or entry.row_key is None or entry.column_key is None:
@@ -69,6 +184,8 @@ class TableEvidenceIndex:
             assert table is not None
             contents.append(_Content(NativeContent(source_artifact_id=source_id, section_index=position),
                 section.heading, section.body or "", (), table))
+            self.section_facts[source_id, position] = frozenset(references.referenced(section.body or "")) | frozenset(
+                cell.fact_id for row in table.rows for cell in row.cells.values() if cell.fact_id is not None)
             self.columns.update({(source_id, table.key, column.key): column for column in table.columns})
             for row in table.rows:
                 self.rows[source_id, table.key, row.key] = row
@@ -78,7 +195,23 @@ class TableEvidenceIndex:
         # Reuse its canonical arithmetic gate once per selected graph: matching
         # checksums and authored literals cannot make false derived values true.
         from .native_business import _table_graph
-        self.units = _table_graph(world, tuple(contents)).units
+        graph = _table_graph(world, tuple(contents))
+        self.units = graph.units
+        for address, owner in graph.owners.items():
+            section_key = owner.source.source_artifact_id, owner.source.section_index
+            self.section_facts[section_key] |= frozenset(graph.facts[address])
+
+    def heading_versions(self, heading: str, source_artifact_id: str, section_index: int,
+                         facts: Mapping[str, CanonicalFact]) -> frozenset[str]:
+        """Only source labels and context derived from complete section facts.
+
+        A cell's own period cannot label a mixed-period table or prose backed by
+        it. Reuse the renderer's full body/table dependency union. If a table
+        has no served bindings, its dependency graph cannot justify context.
+        """
+        from .native_business import contextual_heading
+        ids = self.section_facts.get((source_artifact_id, section_index))
+        return frozenset((heading,)) if ids is None else frozenset((heading, contextual_heading(heading, ids, facts)))
 
     def closure(self, key: tuple[str, str, str, str], visiting: frozenset[tuple[str, str, str, str]] = frozenset()) -> frozenset[str]:
         if key in self.closed:
@@ -104,14 +237,16 @@ def _expression(cell: Cell, dependencies: tuple[str, ...]) -> str:
             raise ValueError("native workbook formula has an unsupported dependency locator")
         values.append("'" + position[1].replace("'", "''") + "'!" + position[2])
     if cell.formula is FormulaKind.SUM:
-        return "=SUM(" + ",".join(values) + ")"
-    if cell.formula is FormulaKind.DIFFERENCE and len(values) == 2:
-        return f"={values[0]}-{values[1]}"
-    if cell.formula is FormulaKind.RATIO_PCT and len(values) == 2:
-        return f"=IF({values[1]}=0,0,{values[0]}/{values[1]}*100)"
-    if cell.formula is FormulaKind.REFERENCE and len(values) == 1:
-        return "=" + values[0]
-    raise ValueError("native workbook formula has unsupported operands")
+        expression = "SUM(" + ",".join(values) + ")"
+    elif cell.formula is FormulaKind.DIFFERENCE and len(values) == 2:
+        expression = f"{values[0]}-{values[1]}"
+    elif cell.formula is FormulaKind.RATIO_PCT and len(values) == 2:
+        expression = f"IF({values[1]}=0,0,{values[0]}/{values[1]}*100)"
+    elif cell.formula is FormulaKind.REFERENCE and len(values) == 1:
+        expression = values[0]
+    else:
+        raise ValueError("native workbook formula has unsupported operands")
+    return "=" + rounded_expression(expression, cell.formula_decimal_places)
 
 
 def validate_table_binding(
@@ -171,8 +306,11 @@ def validate_table_binding(
     if units[entry.locator] != expected:
         raise ValueError("native table bytes disagree with the authored value or formula")
     metadata = entry.metadata_locators
-    descriptors = {"table_title": table.title, "row_label": row.label, "column_label": column.label}
+    descriptors = {"row_label": row.label, "column_label": column.label}
     if any(units.get(metadata.get(name, "")) != value for name, value in descriptors.items()):
+        raise ValueError("native table selector labels disagree with authored business descriptors")
+    observed_title = units.get(metadata.get("table_title", ""), "")
+    if observed_title not in index.heading_versions(table.title, ir.id, entry.section_index, facts):
         raise ValueError("native table selector labels disagree with authored business descriptors")
     position = re.fullmatch(r"(.*)/(?:cell:([A-Z]+)([1-9][0-9]*)|row:([1-9][0-9]*)/cell:([1-9][0-9]*))", entry.locator)
     if position is None:
@@ -189,5 +327,5 @@ def validate_table_binding(
     if metadata["row_label"] != row_locator or metadata["column_label"] != column_locator \
             or metadata["table_title"] != title_locator:
         raise ValueError("native table selector is not bound to its actual row and column")
-    return TableBinding(selector=f"the value in table {table.title!r}, row {row.label!r}, column {column.label!r}",
+    return TableBinding(selector=f"the value in table {observed_title!r}, row {row.label!r}, column {column.label!r}",
         measure=column.label, subject=row.label, fact=fact, formula=formula)

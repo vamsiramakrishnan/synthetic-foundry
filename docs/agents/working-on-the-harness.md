@@ -8,6 +8,13 @@ tags: [contributing, docs-gate, determinism-sweep, retrievers, layout]
 # Where things are
 
 For large benchmark construction, read [Enterprise benchmark improvement](../enterprise-benchmark-improvement.md).
+For the public SDK, target protocol, resumable runs and native policy improvement,
+read [Native benchmark workflow](../native-benchmark-workflow.md).
+`worldloom native-evals inspect` audits coverage and independent support;
+`worldloom native-evals partition` constructs disjoint source families before rendering;
+`worldloom native-evals protocol` describes the public target exchange;
+`worldloom native-evals run` executes and resumes actual target trials;
+`worldloom native-evals improve` connects native outcomes to sealed policy improvement.
 `worldloom corpus-scale assess` checks source and population floors;
 `worldloom corpus-scale build` materialises bounded files;
 `worldloom corpus-scale verify` reconstructs their source projections.
@@ -51,7 +58,7 @@ every command in every agent-facing document and requires it to exist, and
 requires every command to be documented somewhere.
 
 `worldloom seams` lists the library seams a harness composes against
-(`connectors`, `evals`, `pipeline`) with the canonical import for each;
+(`connectors`, `evals`, `pipeline`, `benchmarks`) with the canonical import for each;
 `--json` emits the full contract. Import through those names rather than the
 modules behind them: the seam is what stays put when a subsystem is
 reorganised, and it is what the SDK, the CLI, and the skills all share.

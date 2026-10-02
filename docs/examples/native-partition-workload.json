@@ -1,0 +1,8 @@
+{
+  "use_case_id": "close-review-families",
+  "objective": "Review independently grounded business evidence and prepare accurate operating artifacts.",
+  "formats": ["docx", "pptx", "xlsx"],
+  "operations": ["read", "analyze", "update", "create"],
+  "max_tasks": 256,
+  "discovery_scope": "artifact"
+}

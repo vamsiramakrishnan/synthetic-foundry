@@ -7,6 +7,64 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### A shared native benchmark workflow for SDKs and harnesses
+
+**Generation**
+
+- Formula rounding is explicit source semantics. Optional
+  `Cell.formula_decimal_places` and authored derivation precision use decimal
+  `ROUND_HALF_UP`. Retail margin facts and P&L ratios keep their two-decimal
+  business meaning; XLSX and native formulas reproduce it with `ROUND` in
+  percentage units. Halfway values can differ from earlier binary rounding.
+  Cells without declared precision retain their serialized shape.
+- Banking network totals sum only children that carry the requested numeric
+  measure. Missing deposits or turnover remain absent rather than becoming
+  invented zero-valued formula leaves. Valid financial tables can now enter
+  native corpora instead of being excluded for inconsistent computations.
+- Native partition plans opt into canonical reporting-period context in section
+  headings and table titles. Repeated monthly records become discoverable from
+  the actual files. The option defaults off for existing native plans; intake
+  accepts contextual labels only when they match the served canonical evidence.
+
+**Evaluation and harness integration**
+
+- `worldloom.benchmarks` is the public seam for building, exporting, loading,
+  qualifying, assessing, running and improving native benchmarks. Split packages
+  separate public requests/files from private source/oracle material, validate
+  exact inventories and reconstruct task contracts from canonical source.
+- `native-evals build --layout split`, `partition`, `inspect`, `protocol`, `run` and `improve`
+  call that seam. Existing root-level exchanges remain supported. Source-free
+  legacy exchanges cannot certify independent promotion evidence.
+- Command and callable harness adapters receive task-scoped public inputs.
+  Execution pins implementation, input, contract and grading identities;
+  persisted submissions are independently regraded on exact resume. Targets
+  receive actual revised policy bodies during improvement. Local subprocesses
+  remain trusted processes, not an OS sandbox.
+- Assessments distinguish executable tasks, requested coverage and promotion
+  support. They count transitive evidence components and audit train/held-out
+  overlap, fresh-tranche budgets and repeat requirements using existing gates.
+  More paraphrases and format copies do not increase independent support.
+- Source-family partitioning constructs disjoint train/held-out packages before
+  rendering. Shared facts, derivation/supersession ancestry and table dependencies
+  stay together. Final byte-bound workloads must prove the requested family
+  support; caps, copies and cross-artifact tasks cannot inflate independence.
+  Whole components can be grouped into richer local files; original component
+  counts and allocation remain explicit. Prose synthesis can pair the same
+  measure and subject across distinct periods without joining unrelated work.
+- Bounded discovery samples source evidence and formats fairly before rotating
+  task lanes. Small files remain eligible beside large workbooks; format copies
+  share a scheduling lane. Canonical lineage still decides independence.
+- Native runners require canonical source snapshots to independently verify
+  expanded ancestry and pin the source graph. Caller-provided lineage claims
+  cannot certify split isolation.
+- Planning and native improvement intake share source-evidence guards. Hidden
+  source sections, duplicate canonical identities and ungrounded changed prose
+  cannot bypass source checks by presenting previously rendered bytes.
+- Planning and native case compilation reuse bounded source snapshots within
+  each invocation, keyed by actual bytes and format. They retain extracted
+  immutable units rather than parser objects; source checks, qualification and
+  fresh submitted-output inspection continue to run.
+
 ### Physical enterprise corpora and independent promotion evidence
 
 **Generation**

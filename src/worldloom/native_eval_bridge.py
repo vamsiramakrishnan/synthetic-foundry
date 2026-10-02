@@ -35,6 +35,7 @@ from .evalrun.grading import (
 from .evalrun.runner import CaseResult, RunReport, case_set_digest
 from .native_artifacts import inspect_artifact
 from .native_corpus import NativeCorpusResult
+from .native_query_evidence import SourceEvidenceIndex
 from .native_reference import qualify_native_task
 from .native_tasks import (
     NativeGrade,
@@ -56,6 +57,7 @@ NativeSubmit = Callable[[AgentUnderTest, dict[str, Any], Mapping[str, bytes]], N
 def native_grader_identity() -> dict[str, Any]:
     """Pin byte grading, accepted source semantics and parser dependencies."""
     from . import (
+        formula_semantics,
         native_artifacts,
         native_business,
         native_corpus,
@@ -66,7 +68,7 @@ def native_grader_identity() -> dict[str, Any]:
     )
 
     sources = {}
-    for module in (native_artifacts, native_business, native_corpus, native_query_evidence,
+    for module in (formula_semantics, native_artifacts, native_business, native_corpus, native_query_evidence,
                    native_query_planning, native_reference, native_tasks):
         if module.__file__ is None:
             raise ValueError("native grader software source cannot be pinned")
@@ -119,7 +121,34 @@ def _bytes(tasks: Sequence[NativeTask], inputs: Mapping[str, bytes]) -> dict[str
     return used
 
 
-def _lineage(task: NativeTask, rendered: Mapping[str, NativeCorpusResult]) -> list[dict[str, Any]]:
+def _source_digest(source: SourceEvidenceIndex) -> str:
+    return digest({"schema": "worldloom.native-canonical-source/v1",
+        "facts": [source.facts[key].model_dump(mode="json") for key in sorted(source.facts)],
+        "artifacts": [source.artifacts[key].model_dump(mode="json") for key in sorted(source.artifacts)]})
+
+
+def native_source_digest(world: World) -> str:
+    """Pin evaluator-owned canonical facts and authored IR, not caller claims."""
+    return _source_digest(SourceEvidenceIndex(world))
+
+
+def _canonical_sources(worlds: Mapping[str, World]) -> dict[str, tuple[SourceEvidenceIndex, str]]:
+    snapshots: list[tuple[World, SourceEvidenceIndex, str]] = []
+    result = {}
+    for artifact_id, world in sorted(worlds.items()):
+        cached = next(((source, pin) for prior, source, pin in snapshots if prior is world), None)
+        if cached is None:
+            source = SourceEvidenceIndex(world)
+            pin = _source_digest(source)
+            snapshots.append((world, source, pin))
+        else:
+            source, pin = cached
+        result[artifact_id] = source, pin
+    return result
+
+
+def _lineage(task: NativeTask, rendered: Mapping[str, NativeCorpusResult],
+             canonical: Mapping[str, tuple[SourceEvidenceIndex, str]]) -> list[dict[str, Any]]:
     sources = []
     for item in sorted(task.inputs, key=lambda value: value.artifact_id):
         if item.artifact_id not in rendered:
@@ -127,9 +156,12 @@ def _lineage(task: NativeTask, rendered: Mapping[str, NativeCorpusResult]) -> li
         manifest = rendered[item.artifact_id].manifest
         if (manifest.artifact_id, manifest.format, manifest.sha256) != (item.artifact_id, item.format, item.sha256):
             raise ValueError("native improvement manifest disagrees with its byte-bound input")
+        source, source_digest = canonical[item.artifact_id]
+        direct = sorted({fid for entry in manifest.evidence for fid in entry.fact_ids})
         sources.append({"artifact_id": item.artifact_id, "format": item.format, "sha256": item.sha256,
             "manifest_digest": digest(manifest.model_dump(mode="json")),
-            "fact_ids": sorted({fid for entry in manifest.evidence for fid in entry.fact_ids}),
+            "canonical_source_digest": source_digest, "direct_fact_ids": direct,
+            "fact_ids": list(source.fact_closure(direct)),
             "evidence_ids": sorted({"native-artifact:" + item.artifact_id, "native-bytes:" + manifest.sha256,
                 *(f"native-section:{entry.source_artifact_id}:{entry.section_index}" for entry in manifest.evidence)})})
     return sources
@@ -164,16 +196,22 @@ def native_task_cases(
     if any(not task.inputs or any(item.format not in ("docx", "pptx", "xlsx") for item in task.inputs) for task in tasks):
         raise ValueError("native improvement lineage requires grounded DOCX, PPTX or XLSX inputs")
     selected = {item.artifact_id: rendered[item.artifact_id] for task in tasks for item in task.inputs}
+    from .native_artifacts import _SourceInspection
     from .native_query_planning import NativeWorkloadPlan, _inventory
 
-    _inventory(world, selected, NativeWorkloadPlan(use_case_id="native-bridge", objective="Validate source provenance."))
+    inspection = _SourceInspection()
+    _inventory(world, selected, NativeWorkloadPlan(use_case_id="native-bridge", objective="Validate source provenance."),
+        _inspection=inspection)
     inputs = _bytes(tasks, {key: result.payload for key, result in selected.items()})
+    source = SourceEvidenceIndex(world)
+    source_digest = _source_digest(source)
+    canonical = {key: (source, source_digest) for key in selected}
     software = native_grader_identity()
     cases = []
     for task in sorted(tasks, key=lambda item: item.id):
-        lineage = _lineage(task, selected)
+        lineage = _lineage(task, selected, canonical)
         facts, evidence = _case_lineage(lineage)
-        proof = qualify_native_task(task, inputs)
+        proof = qualify_native_task(task, inputs, _inspection=inspection)
         if not proof.passed:
             raise ValueError("native improvement task is not reference-qualified: " + task.id)
         cases.append(EvalCase(id=task.id, query=task.prompt,
@@ -266,10 +304,14 @@ class NativeRunner:
     """Existing improvement ``Runner`` with fresh repeat IDs and a byte grader."""
 
     def __init__(self, rendered: Mapping[str, NativeCorpusResult], submit: NativeSubmit, *,
+                 world: World | Mapping[str, World],
                  namespace: str, submit_identity: Mapping[str, Any]):
         if not namespace.strip() or not submit_identity:
             raise ValueError("native runner needs a stable origin and explicit submission harness identity")
         self.rendered = dict(rendered)
+        self.worlds = dict(world) if isinstance(world, Mapping) else {key: world for key in self.rendered}
+        if set(self.worlds) != set(self.rendered):
+            raise ValueError("native runner requires a trusted source world for every served artifact")
         self.submit = submit
         self.namespace = namespace
         self.submit_identity = dict(submit_identity)
@@ -282,16 +324,33 @@ class NativeRunner:
                 raise ValueError("native runner source bytes differ from the served manifest")
             served.append((artifact_id, manifest.format, manifest.sha256, digest(manifest.model_dump(mode="json"))))
         parts = {**_grading_identity(rater, self.submit_identity), "native_serving": served}
+        canonical = _canonical_sources(self.worlds)
+        parts["native_canonical_sources"] = [(key, canonical[key][1]) for key in sorted(canonical)]
         parts.pop("digest")
         return {**parts, "digest": digest(parts)}
 
     def validate_cases(self, cases: Sequence[EvalCase]) -> None:
         """Refuse relabeled independence before qualification or cached runs."""
         tasks = _tasks(cases)
+        canonical = _canonical_sources(self.worlds)
+        from .native_query_planning import NativeWorkloadPlan, _inventory
+
+        selected: list[tuple[World, dict[str, NativeCorpusResult]]] = []
+        for artifact_id in sorted({item.artifact_id for task in tasks for item in task.inputs}):
+            if artifact_id not in self.rendered:
+                raise ValueError("native improvement provenance source is missing: " + artifact_id)
+            world = self.worlds[artifact_id]
+            group = next((files for prior, files in selected if prior is world), None)
+            if group is None:
+                group = {}
+                selected.append((world, group))
+            group[artifact_id] = self.rendered[artifact_id]
+        for world, files in selected:
+            _inventory(world, files, NativeWorkloadPlan(use_case_id="native-runner", objective="Validate trusted source provenance."))
         for case, task in zip(cases, tasks, strict=True):
             if case.dimensions.get("source_namespace") != self.namespace:
                 raise ValueError("native runner origin differs from its sealed cases")
-            if case.row["native_lineage"] != _lineage(task, self.rendered):
+            if case.row["native_lineage"] != _lineage(task, self.rendered, canonical):
                 raise ValueError("native runner evidence lineage differs from actual source manifests")
 
     def __call__(self, cases: Sequence[EvalCase], agent: AgentUnderTest) -> RunReport:
@@ -318,9 +377,11 @@ class NativeRunner:
 
 
 def native_runner(rendered: Mapping[str, NativeCorpusResult], submit: NativeSubmit, *,
+                  world: World | Mapping[str, World],
                   namespace: str, submit_identity: Mapping[str, Any]) -> NativeRunner:
-    return NativeRunner(rendered, submit, namespace=namespace, submit_identity=submit_identity)
+    """Bind native runs to evaluator-owned source worlds, including ancestry."""
+    return NativeRunner(rendered, submit, world=world, namespace=namespace, submit_identity=submit_identity)
 
 
-__all__ = ["NativeGrader", "NativeRunner", "NativeSubmit", "native_grader_identity", "native_run_report",
+__all__ = ["NativeGrader", "NativeRunner", "NativeSubmit", "native_grader_identity", "native_run_report", "native_source_digest",
            "native_runner", "native_task_cases"]
