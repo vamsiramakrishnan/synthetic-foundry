@@ -12,7 +12,7 @@ from decimal import Decimal, localcontext
 from io import BytesIO
 from typing import Any
 
-from .native_artifacts import inspect_artifact
+from .native_artifacts import _SourceInspection, inspect_artifact
 from .native_tasks import (
     MAX_FILE_BYTES,
     NativeAnswer,
@@ -125,13 +125,15 @@ def _output(task: NativeTask, inputs: Mapping[str, bytes]) -> bytes:
     return normalise(stream.getvalue(), created="1980-01-01T00:00:00Z")
 
 
-def reference_submission(task: NativeTask, inputs: Mapping[str, bytes]) -> NativeSubmission:
+def reference_submission(task: NativeTask, inputs: Mapping[str, bytes], *,
+                         _inspection: _SourceInspection | None = None) -> NativeSubmission:
     units: dict[str, dict[str, str]] = {}
     for item in task.inputs:
         payload = inputs[item.artifact_id]
         if len(payload) > MAX_FILE_BYTES:
             raise ValueError("input exceeds size budget")
-        snapshot = inspect_artifact(payload, item.format)
+        snapshot = (_inspection.inspect(payload, item.format) if _inspection is not None
+                    else inspect_artifact(payload, item.format))
         if snapshot.sha256 != item.sha256:
             raise ValueError("input checksum mismatch")
         units[item.artifact_id] = {unit.locator: unit.text for unit in snapshot.units}
@@ -162,9 +164,11 @@ def reference_submission(task: NativeTask, inputs: Mapping[str, bytes]) -> Nativ
     return NativeSubmission(answers=tuple(answers), files=files)
 
 
-def qualify_native_task(task: NativeTask, inputs: Mapping[str, bytes]) -> NativeGrade:
+def qualify_native_task(task: NativeTask, inputs: Mapping[str, bytes], *,
+                        _inspection: _SourceInspection | None = None) -> NativeGrade:
+    inspection = _SourceInspection() if _inspection is None else _inspection
     try:
-        reference = reference_submission(task, inputs)
-        return grade_native_task(task, inputs, reference)
+        reference = reference_submission(task, inputs, _inspection=inspection)
+        return grade_native_task(task, inputs, reference, _inspection=inspection)
     except (ValueError, KeyError, OSError, ArithmeticError, ImportError, TypeError) as error:
         return NativeGrade(passed=False, findings=(f"reference_invalid:{type(error).__name__}",), metrics={"reference": "native_bytes"})

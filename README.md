@@ -154,9 +154,12 @@ Transaction totals can reconcile exactly to canonical company facts. The
 manifest measures delivered rows, relations and evidence; verification
 reconstructs them from the recipe. [Enterprise benchmark workflow](docs/enterprise-benchmark-improvement.md).
 
-`worldloom native-evals` builds discovery tasks over business DOCX, PPTX and
-XLSX files and checks reference solvability against their bytes. The SDK feeds
-independently graded file outcomes into the policy improvement loop.
+`worldloom native-evals` builds independent benchmarks and runs policy improvement over
+business DOCX, PPTX and XLSX tasks. `worldloom.benchmarks` exposes the same
+workflow to Python callers. Packages separate public inputs from private
+oracles; run receipts pin inputs and resume completed tasks. Inspection reports
+requested coverage and independent evidence separately from task counts.
+[Native benchmark workflow](docs/native-benchmark-workflow.md).
 
 For harness improvement, audit shared evidence with `worldloom evalrun audit-split`
 and give `evalrun improve` a `--qualification-policy` to consume fresh evidence

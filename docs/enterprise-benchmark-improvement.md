@@ -10,6 +10,9 @@ rows. File materialisation owns the delivered bytes. Task contracts own the
 requested work. Reference execution checks solvability. A pinned grader judges
 the target; the improvement loop changes its policy and skills.
 
+For the complete SDK and command workflow, including a target process, exact
+resume and coverage preflight, see [Native benchmarks for coding harnesses](native-benchmark-workflow.md).
+
 ## Materialise the declared scale
 
 Install the renderer dependencies before asking for native files:
@@ -141,7 +144,7 @@ from worldloom.native_eval_bridge import NativeGrader, native_task_cases, native
 
 cases = native_task_cases(workload.tasks, rendered, world=world, namespace="world-8128")
 run = native_runner(
-    rendered, submit, namespace="world-8128",
+    rendered, submit, namespace="world-8128", world=world,
     submit_identity={"harness": "my-native-adapter", "revision": "pinned-revision"},
 )
 report = improve(
@@ -159,6 +162,11 @@ reply, reports native failures to the existing autopsy/proposer, and pins the
 native grader, parser dependencies, served files and submission adapter during
 execution and resume. It observes **outcomes only**; replies provide no evidence
 of a plan or tool trajectory.
+
+Pass `world=world` (or an artifact-ID-to-World mapping for multiple snapshots)
+to `native_runner`. It recomputes derivation and supersession ancestry from
+canonical sources before qualification and cache reuse. Renamed sources and
+distinct derived fact IDs sharing an ancestor remain correlated.
 
 Qualification still requires sufficient independent source graphs. The default
 three probes with five units each require at least fifteen held-out families,

@@ -10,11 +10,14 @@ import binascii
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import PurePosixPath
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, model_validator
 
 from .models import Model
+
+if TYPE_CHECKING:
+    from .native_artifacts import _SourceInspection
 
 MAX_FILE_BYTES = 64 * 1024 * 1024
 
@@ -190,7 +193,8 @@ def _preserved_units(units: dict[str, str], format: str) -> dict[str, str]:
     return {key: value for key, value in units.items() if key not in aliases}
 
 
-def grade_native_task(task: NativeTask, inputs: Mapping[str, bytes], submission: NativeSubmission) -> NativeGrade:
+def grade_native_task(task: NativeTask, inputs: Mapping[str, bytes], submission: NativeSubmission, *,
+                      _inspection: _SourceInspection | None = None) -> NativeGrade:
     """Inspect actual input and submitted bytes; never accept agent-reported success."""
     from .native_artifacts import inspect_artifact
 
@@ -204,7 +208,8 @@ def grade_native_task(task: NativeTask, inputs: Mapping[str, bytes], submission:
             findings.append(f"input_missing_or_oversized:{item.artifact_id}")
             continue
         try:
-            snapshot = inspect_artifact(payload, item.format)
+            snapshot = (_inspection.inspect(payload, item.format) if _inspection is not None
+                        else inspect_artifact(payload, item.format))
             if snapshot.sha256 != item.sha256:
                 raise ValueError("checksum mismatch")
             units[item.artifact_id] = {unit.locator: unit.text for unit in snapshot.units}

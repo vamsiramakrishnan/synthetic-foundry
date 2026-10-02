@@ -434,9 +434,18 @@ class DerivationSpec(DocModel):
     commutative. Arity is checked by ``columns.lint`` rather than by the schema,
     because the finding says what a wrong count *does* (``render.xlsx._formula``
     emits nothing at all) and a bare ``min_length=2`` would not."""
+    decimal_places: int | None = Field(default=None, ge=0, le=12)
+
+    @model_serializer(mode="wrap")
+    def _precision_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.decimal_places is None:
+            data.pop("decimal_places", None)
+        return data
 
     def as_derivation(self) -> columns_module.Derivation:
-        return columns_module.Derivation(kind=self.formula, operands=tuple(self.operands))
+        return columns_module.Derivation(kind=self.formula, operands=tuple(self.operands),
+                                         decimal_places=self.decimal_places)
 
 
 class ColumnSpec(DocModel):

@@ -10,13 +10,14 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Literal
 
 import networkx as nx
 
+from .formula_semantics import formula_value, rounded_expression
 from .models import Cell, FormulaKind
 from .narrative import references
 from .native_artifacts import inspect_artifact
@@ -84,7 +85,7 @@ def _same_value(first: float | str | None, second: float | str | None) -> bool:
 def _content_identity(body: str, table: Table | None) -> str:
     identity = " ".join(body.split()).casefold()
     if table is not None:
-        identity += repr(tuple(tuple((cell.value, cell.fact_id, cell.formula)
+        identity += repr(tuple(tuple((cell.value, cell.fact_id, cell.formula, cell.formula_decimal_places)
             if (cell := row.cells.get(column.key)) is not None else None
             for column in table.columns) for row in table.rows))
     return identity
@@ -267,12 +268,11 @@ def _table_graph(world: World, contents: tuple[_Content, ...]) -> _Tables:
             if any(not isinstance(value, (int, float)) for value in values):
                 raise ValueError("native arithmetic formula operand must be numeric")
             numbers = [float(value) for value in values if isinstance(value, (int, float))]
-            if cell.formula is FormulaKind.SUM:
-                expected = math.fsum(numbers)
-            elif cell.formula is FormulaKind.DIFFERENCE:
-                expected = numbers[0] - numbers[1]
-            else:
-                expected = numbers[0] / numbers[1] * 100 if numbers[1] else 0.0
+            expected = formula_value(cell.formula, numbers, decimal_places=cell.formula_decimal_places)
+        if cell.formula is FormulaKind.REFERENCE and cell.formula_decimal_places is not None:
+            if not isinstance(expected, (int, float)):
+                raise ValueError("rounded reference must be numeric")
+            expected = formula_value(cell.formula, (expected,), decimal_places=cell.formula_decimal_places)
         if not _same_value(cell.value, expected):
             raise ValueError(f"native table formula literal disagrees with its operands: {address}")
         if not bound[address]:
@@ -348,7 +348,29 @@ def prepare_business_content(world: World, plan: NativeCorpusPlan) -> tuple[_Con
         raise ValueError("native corpus section has no canonical evidence")
     if len({fid for content in result for fid in content.fact_ids}) < plan.minimum_distinct_facts:
         raise ValueError("insufficient distinct canonical facts for native business corpus")
+    if plan.contextual_headings:
+        result = tuple(replace(content,
+            heading=contextual_heading(content.heading, content.fact_ids, facts),
+            table=(content.table.model_copy(update={"title": contextual_heading(
+                content.table.title, content.fact_ids, facts)}) if content.table is not None else None))
+            for content in result)
     return result
+
+
+def contextual_heading(heading: str, fact_ids: Iterable[str], facts: Mapping[str, CanonicalFact]) -> str:
+    """Add a reporting period only when served canonical evidence agrees on it.
+
+    A section's metadata-only citations cannot supply context. Callers pass the
+    same body/table dependency facts whose values occur in the public artifact.
+    Undated facts (such as a company name) do not contradict a dated cohort.
+    Mixed-period sections retain their source labels rather than selecting a
+    convenient period from the private oracle.
+    """
+    periods = {facts[identifier].period for identifier in fact_ids if facts[identifier].period is not None}
+    if len(periods) != 1:
+        return heading
+    period = next(iter(periods))
+    return f"{heading} — reporting period {period}"
 
 
 def _text(value: float | str | None) -> str:
@@ -538,16 +560,19 @@ def _excel_formula(address: _Address, tables: _Tables, addresses: dict[_Address,
         sheet, coordinate = locator.removeprefix("sheet:").split("/cell:")
         return f"{quote_sheetname(sheet)}!{coordinate}"
     values = [cell(operand) for operand in tables.dependencies[address]]
-    kind = tables.cells[address].formula
+    source = tables.cells[address]
+    kind = source.formula
     if kind is FormulaKind.SUM:
-        return "=SUM(" + ",".join(values) + ")"
-    if kind is FormulaKind.DIFFERENCE:
-        return f"={values[0]}-{values[1]}"
-    if kind is FormulaKind.RATIO_PCT:
-        return f"=IF({values[1]}=0,0,{values[0]}/{values[1]}*100)"
-    if kind is FormulaKind.REFERENCE:
-        return "=" + values[0]
-    raise ValueError("native cell has no declared formula")
+        expression = "SUM(" + ",".join(values) + ")"
+    elif kind is FormulaKind.DIFFERENCE:
+        expression = f"{values[0]}-{values[1]}"
+    elif kind is FormulaKind.RATIO_PCT:
+        expression = f"IF({values[1]}=0,0,{values[0]}/{values[1]}*100)"
+    elif kind is FormulaKind.REFERENCE:
+        expression = values[0]
+    else:
+        raise ValueError("native cell has no declared formula")
+    return "=" + rounded_expression(expression, source.formula_decimal_places)
 
 
 def _write_cell(sheet: Any, row: int, column: int, value: float | str | None) -> Any:
@@ -701,4 +726,4 @@ def render_business_corpus(world: World, plan: NativeCorpusPlan) -> NativeCorpus
     ))
 
 
-__all__ = ["business_label", "prepare_business_content", "render_business_corpus"]
+__all__ = ["business_label", "contextual_heading", "prepare_business_content", "render_business_corpus"]

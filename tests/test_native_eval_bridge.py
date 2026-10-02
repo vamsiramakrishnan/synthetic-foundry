@@ -136,10 +136,10 @@ def test_target_schema_failures_are_observed_outcomes(corpus: tuple) -> None:
 
 
 def test_runner_preflight_refuses_relabeling_source_independence(corpus: tuple) -> None:
-    _, rendered, _, cases = corpus
+    world, rendered, _, cases = corpus
     def submit(*_: Any) -> NativeSubmission:
         raise AssertionError("provenance must be checked before invoking the target")
-    runner = native_runner(rendered, submit, namespace="northstar/seed-8128", submit_identity={"command": "target-v1"})
+    runner = native_runner(rendered, submit, world=world, namespace="northstar/seed-8128", submit_identity={"command": "target-v1"})
     first = cases[0]
     forged_facts = first.model_copy(update={"row": {**first.row, "expected_fact_ids": ["FACT-9999"]}})
     with pytest.raises(ValueError, match="evidence lineage"):
@@ -158,13 +158,13 @@ def test_runner_preflight_refuses_relabeling_source_independence(corpus: tuple) 
 
 
 def test_runner_refuses_stale_sources_before_cache_lookup_and_changes_repeat_request_ids(corpus: tuple, tmp_path: Path) -> None:
-    _, rendered, _, cases = corpus
+    world, rendered, _, cases = corpus
     ids = []
     def submit(agent: Any, public: dict, inputs: dict) -> NativeSubmission:
         assert "native_task" not in public and "expected" not in public and "experiment" not in public
         ids.append(public["execution_id"])
         return NativeSubmission()
-    runner = native_runner(rendered, submit, namespace="northstar/seed-8128", submit_identity={"command": "native-test-v1"})
+    runner = native_runner(rendered, submit, world=world, namespace="northstar/seed-8128", submit_identity={"command": "native-test-v1"})
     agent = ScriptedAgent([], name="native-test")
     identity = runner.grading_identity(NativeGrader())
     for repeat in (1, 2):
@@ -198,7 +198,7 @@ def _proposal(payload: dict) -> dict:
 def test_real_native_failure_drives_qualified_improvement_with_fresh_repeats(
     corpus: tuple, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _, rendered, _, cases = corpus
+    world, rendered, _, cases = corpus
     train = tuple(case for case in cases if int(case.row["expected_fact_ids"][0].split("-")[1]) < 4)
     held = tuple(case for case in cases if case not in train)
     executions: list[tuple[str, str]] = []
@@ -218,7 +218,7 @@ def test_real_native_failure_drives_qualified_improvement_with_fresh_repeats(
             unit = next(unit for unit in units if "/row:2/cell:4" in unit.locator)
         return NativeSubmission(answers=(NativeAnswer(assertion_id=answer_id, value=unit.text,
             citations=(NativeCitation(artifact_id=source["artifact_id"], locator=unit.locator),)),))
-    runner = native_runner(rendered, submit, namespace="northstar/seed-8128", submit_identity={"command": "native-business-parser-v1"})
+    runner = native_runner(rendered, submit, world=world, namespace="northstar/seed-8128", submit_identity={"command": "native-business-parser-v1"})
     report = improve(packkit.resolve("agent:baseline"), train, holdout=held, run=runner,
         agent_for=_PolicyAgent, exchange=_proposal, out=tmp_path, rater=NativeGrader(), rounds=1,
         repeats=2, ablate=False, qualification=QualificationPolicy(trials=2, min_units=2))
