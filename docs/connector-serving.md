@@ -34,11 +34,57 @@ Point an MCP client at `http://127.0.0.1:8000/mcp`. The client calls:
    document; `worldloom evalrun import-served` collects them into a run.
 6. `eval_end(run_id)` to grade and release the run.
 
-Retrieve the trace before ending. Runs live in memory and are lost when the
-process stops. A request that starts a run is not idempotent: save the returned
-handle. There is no automatic expiry, replay cache or shared storage. End runs
-explicitly. Run one worker; multiple workers need a routing layer that keeps a
-run on its owning process.
+Retrieve the trace before ending. By default runs live in memory and are lost
+when the process stops; `--run-store` (below) keeps them across a restart. A
+request that starts a run is not idempotent: save the returned handle. There is
+no automatic expiry, replay cache or shared storage. End runs explicitly. Run
+one worker; multiple workers need a routing layer that keeps a run on its
+owning process.
+
+## Keep runs across a restart
+
+```console
+worldloom enterprise-evals serve dist/enterprise-evals --run-store runs.jsonl
+```
+
+`--run-store PATH` (the SDK's `ConnectorEvaluationService(..., run_store=PATH)`)
+journals runs to an append-only JSONL file, created on first use. Each record is
+one line, written, flushed and fsynced before the call that made it returns:
+
+| Record | Written when | Carries |
+|---|---|---|
+| `begin` | `eval_begin` mints a run id | run id, ordinal, principal, query id, SHA-256 of the compiled row |
+| `event` | a connector call, `eval_ask`, or a refusal another surface recorded | the entry point and its arguments, written once the call has taken effect, whether it returned or was refused |
+| `end` | `eval_end` | the final grade |
+
+The journal holds what callers did, not emulator state. A service started on an
+existing journal replays each open run's calls in their journal order against
+its own rows; the emulator is deterministic, so the replayed run has the same
+spans, refusals, questions, record state and grade, and `eval_trace`,
+`eval_grade`, `eval_score` and the connector tools continue it under its old
+run id. New run ids continue after the highest ordinal in the journal. An ended
+run is not replayed: its journalled grade is kept, and
+`ConnectorEvaluationService.list_runs(principal)` lists it beside the open runs
+in the order they began. Without a store, `end` forgets a run and `list_runs`
+lists open runs only. `list_runs` is an SDK method; the MCP surface has no
+listing tool.
+
+Reload failure behaviour:
+
+- A final line with no newline, or a final line that does not parse, is what a
+  crash mid-write leaves. It is dropped with a `RunStoreWarning` and cut from
+  the file, so the next record does not join it. The call it recorded is lost.
+- A bad line before the last one is corruption, and startup is refused.
+- An open run whose query is no longer served, or whose compiled row's digest
+  differs from the one it began on, is not replayed (`RunStoreWarning`); its
+  calls would grade against a different case.
+- With a store, connector arguments must be plain JSON; anything else is
+  refused before the call runs. A write that fails raises on the call that
+  made it.
+
+A journal belongs to one process. It is not a shared registry, does not make
+several workers see each other's runs, and is not compacted: it grows with
+every call until you remove it.
 
 ## Bound the surface
 
@@ -62,8 +108,8 @@ synchronous tools serialize the calls of one run under that run's lock, and
 calls on different runs proceed in parallel; this is an evaluation service,
 not a high-throughput connector proxy.
 
-Runs live in the memory of the process that began them, so one server is one
-worker. To serve more, start several processes, give each its own
+Runs live in the memory of the process that began them (journalled to its own
+`--run-store` file, when one is given), so one server is one worker. To serve more, start several processes, give each its own
 `--worker-id` (worker `w3` mints run ids `w3-run-1`, `w3-run-2`, ...), and put
 them behind a proxy with sticky routing by run id. A call that reaches a
 process that did not begin its run is refused as an unknown run; run state is

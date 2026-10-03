@@ -153,9 +153,11 @@ before applying its output limit.
   operational totals reconcile with the World's macro facts.
 - Fact coverage checks deterministic grounding. It does not grade the truth
   or quality of final prose, and pure DAG result transforms are not an LLM.
-- The service is an in-memory, single-worker evaluation endpoint. Public TLS,
-  OAuth integration, durable runs, multi-worker routing and a live Gemini
-  Enterprise deployment have not been implemented or tested in this change.
+- The service is a single-worker evaluation endpoint. Runs are in memory by
+  default; `--run-store PATH` journals them to an fsynced append-only JSONL
+  file and replays them on restart (`docs/connector-serving.md`). Public TLS,
+  OAuth integration, multi-worker routing (shared run state across processes)
+  and a live Gemini Enterprise deployment have not been implemented or tested.
 - Generation changes are documented in `CHANGELOG.md`. Reproducibility holds
   for repeated execution of this generation, not byte identity with the old
   enterprise query and fixture schema. Existing exports need rematerialization
