@@ -106,9 +106,11 @@ class RunStore:
                 handle.write(line)
                 handle.flush()
                 os.fsync(handle.fileno())
-            if created:
+            if created and os.name != "nt":
                 # The file's directory entry is durable only once its
                 # directory is synced; otherwise a crash can lose the file.
+                # Windows cannot open a directory as a file (PermissionError
+                # on CI) and NTFS commits the entry with the file's own flush.
                 directory = os.open(self.path.parent, os.O_RDONLY)
                 try:
                     os.fsync(directory)

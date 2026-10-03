@@ -60,6 +60,7 @@ RETRIEVERS = "both"
 #: ground. Large enough to reach every shape and designed failure the default
 #: world supports; small enough to run in seconds.
 CASE_LIMIT = 48
+_ENTRY = "from worldloom.cli import app; app(windows_expand_args=False)"
 CASE_ARGS = ("--exhaustive", "--limit", str(CASE_LIMIT), "--dag-shape", "*")
 
 #: `worldloom.evalrun.runner.case_set_digest` of the cases above, as
@@ -87,8 +88,10 @@ def _worldloom(*args: str, cwd: Path) -> str:
         part for part in (str(ROOT / "src"), env.get("PYTHONPATH", "")) if part
     )
     env.update({"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"})
+    # Not `-m worldloom.cli`: on Windows click glob-expands every argument, so
+    # the literal `--dag-shape *` became the checkout's file names in CI.
     completed = subprocess.run(
-        [sys.executable, "-m", "worldloom.cli", *args],
+        [sys.executable, "-c", _ENTRY, *args],
         cwd=cwd, env=env, capture_output=True, text=True, check=False,
     )
     if completed.returncode != 0:
