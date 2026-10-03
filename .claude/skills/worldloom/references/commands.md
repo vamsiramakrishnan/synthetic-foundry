@@ -499,6 +499,7 @@ worldloom enterprise-evals serve <CORPUS_PATH>
 | `--max-runs` | Runs open at once (default: policy `connectors.serving.max_runs`). |
 | `--port` |  |
 | `--query-id` | Serve only these query IDs; repeat to select more. |
+| `--run-store` | Journal runs to this append-only JSONL file (fsynced per record) and, on start, reload the runs it holds: open runs are replayed, ended runs keep their grades. Unset, runs live in memory only. |
 | `--surface` | The tools served: contract (each locked contract's operations exactly as Anvil projects them for MCP; a connector with no locked contract keeps its own; the default: policy `connectors.surface`) or native (each connector definition's own). |
 | `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
 | `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
