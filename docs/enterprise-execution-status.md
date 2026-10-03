@@ -28,9 +28,60 @@ legacy tool errors are the 229 explicitly designed failure outcomes. The
 grammar's `behavior` category also includes ten valid conditional executions
 without an error. Its 44 refusals are insufficient bound source records
 (42 at `read-0`, two at `read-1`), not missing tools. All eight authored shapes
-occur in the grammar population. The populations differ because shape
-expansion and compatibility happen before the limit; this is not a paired
-comparison of legacy and grammar difficulty.
+occur in the grammar population. The populations in this table differ because
+shape expansion and compatibility happen before the limit, so its columns are
+not a paired comparison of legacy and grammar difficulty. The paired
+measurement below is, for the identities it selects.
+
+## Paired comparison
+
+`--paired` selects the limit's base identities first: the first rows of the
+same fair exhaustive stream, so the legacy arm is exactly the default legacy
+population at that limit (a test strips the key and compares the bytes).
+Each identity then gets one grammar variant, built as the default `--dag-shape
+'*'` expansion builds that row and shape; the shape is chosen among the
+compatible ones by a content key of the identity. Both arms carry the legacy
+query id as the `pair_key` dimension. An identity no shape admits stays in the
+table as a grammar planning refusal. Each arm is materialised and graded
+separately with the gates above, and compile or runtime refusals would be
+reported per pair (none occurred here).
+
+Measured at `30e3b953f3a27f0217c35caa694ed3b303baa9ce`, clean tree, untouched
+`examples/retail-close`:
+
+```bash
+python tools/measure_enterprise_execution.py --paired --limit 400 --output paired.json
+python tools/measure_enterprise_execution.py --paired --limit 100 --failure none --output paired-healthy.json
+```
+
+| Pair outcome | 400 identities, all failure kinds | 100 identities, `--failure none` |
+| --- | ---: | ---: |
+| Both `ok` | 65 | 85 |
+| Legacy-only `ok` (grammar `behavior`) | 11 | 15 |
+| Grammar-only `ok` | 0 | 0 |
+| Neither `ok` (both `behavior`) | 204 | 0 |
+| Refused in grammar arm (legacy `ok`) | 120 | 0 |
+| Refused in legacy arm | 0 | 0 |
+| Refused in both arms | 0 | 0 |
+
+No row in either arm graded `fail` and none raised. All 120 refusals are at
+planning: 70 `stale_source` and 50 `ambiguous_join` identities, the
+perturbations the grammar refuses by design. Every disagreement between
+executed arms is `ok` against `behavior`, not `ok` against `fail`: in the
+400-identity run 9 are `conditional` and 2 `delete_chain`; in the healthy run
+12 are `conditional` and 3 `delete_chain`. Every other shape agrees with legacy
+on every executed pair. So on these identities the grammar is not measured as
+harder in the sense of wrong answers; it changes which identities can be
+attempted and how two shapes are graded.
+
+Limits of this reading: one grammar shape per identity, so a shape's count is
+how often the content key chose it among the compatible shapes, not its
+difficulty over the whole space. The legacy arm at this revision (196 `ok`,
+204 `behavior`, no evidence findings) differs from the "updated legacy" column
+above, which was measured at an earlier revision; that table stays as the
+record of its own revision. Raw reports with per-pair rows:
+[enterprise-paired.json](measurements/enterprise-paired.json) and
+[enterprise-paired-healthy.json](measurements/enterprise-paired-healthy.json).
 
 Evidence validation now detects ungrounded placeholders and missing minimum
 cardinality. These counts are findings, not distinct queries. The hand-authored
@@ -79,6 +130,7 @@ Contracts and examples: [state and fields](enterprise-evaluation-contracts.md),
 python tools/measure_enterprise_execution.py --output measurement.json
 python tools/measure_enterprise_execution.py --dag-shape '*' --output grammar-measurement.json
 python tools/measure_enterprise_execution.py --failure none --output healthy-measurement.json
+python tools/measure_enterprise_execution.py --paired --limit 400 --output paired-measurement.json
 pytest -q tests/test_enterprise_operational_execution.py tests/test_enterprise_dag.py tests/test_connector_serving.py tests/test_enterprise_replay.py
 ```
 
