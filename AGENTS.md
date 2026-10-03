@@ -99,6 +99,8 @@ Determinism spine:
 pip install -e ".[dev]"            # add renderers as needed: ,xlsx,docx,pdf,pptx,polars
 pre-commit install                 # ruff-check + worldloom docs --check
 worldloom doctor                   # verifies the install; names exact fixes; --json for data
+worldloom guide                    # which commands to run, by what you are testing
+worldloom guide agent --json       # one goal's ordered commands, as data
 
 pytest -q                          # house gate (slow tests deselected via addopts)
 pytest tests/test_render.py -q     # one file; -k "name" for one test
@@ -109,6 +111,12 @@ mypy                               # type gate (CI-blocking; new modules checked
 worldloom validate retail-close    # golden corpus must stay coherent (CI gate)
 worldloom docs --check             # generated CLI reference must be current
 ```
+
+`worldloom guide` maps what is being tested (retrieval, rendered documents,
+connector agents, native files, agent improvement, a specific company,
+authored prose, the SDK) to an ordered command sequence; its data lives in
+`src/worldloom/guide.py`, and `tests/test_guide.py` parses every command in it
+against the CLI, so a CLI change that breaks a sequence fails there.
 
 Corpus loop (`worldloom smoke` chains build, narrate, render, validate and
 evaluate on a tiny world, then enterprise cases and the reference agent, in

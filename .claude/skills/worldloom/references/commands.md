@@ -1221,6 +1221,18 @@ worldloom gemini-enterprise score <CORPUS> <RESULTS>
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. |
 
+### `worldloom guide`
+
+Which commands to run, by what you are testing.
+
+```
+worldloom guide <GOAL>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the goals and their command sequences as data. |
+
 ### `worldloom industry`
 
 Derive the whole evaluation programme an industry implies: its lines of business, processes, requests and counts.
