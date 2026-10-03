@@ -44,7 +44,10 @@ names it counts the records the world offers that carry a fact or a pinned
 observation, and a source with fewer than its role's minimum is left out of
 the candidate space. The report's `ungroundable_sources` names those sources.
 A world that grounds no row of any selected workflow is refused as
-`ungroundable_world`. `space` has no world and counts the whole space.
+`ungroundable_world`. `space` has no world and counts the whole space. A row
+that still reaches `enterprise-evals build` over sources the world cannot
+supply is refused as `sources_insufficient`, naming the connector, entity,
+counts and query, and nothing is written.
 
 ## CLI
 
@@ -97,8 +100,10 @@ recipe and program digests, scope, record identities, consecutive history and
 values are checked and pinned in `expected_evidence_ids`. This verifies local
 history integrity. It does not replay an unavailable synthesis ledger or prove
 that operational totals reconcile with the World's financial facts. A placeholder
-with neither fact evidence nor valid operational observations fails validation;
-`strict_sources` remains opt-in.
+with neither fact evidence nor valid operational observations fails validation.
+Materialization is `strict_sources` by default, so a case whose sources the
+world cannot supply is refused before it is built; `strict_sources=False` is
+the explicit opt-out.
 
 Simulation reports each query's finding and one of `completed`,
 `blocked_at_designed_write`, `stopped_before_failure_point`, or `raised`.

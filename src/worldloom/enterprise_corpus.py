@@ -156,8 +156,22 @@ def materialize_corpus(
     queries: Iterable[PlannedEnterpriseQuery],
     *,
     projections: ConnectorProjectionRegistry | None = None,
-    strict_sources: bool = False,
+    strict_sources: bool = True,
 ) -> EnterpriseCorpus:
+    """Generate connector records and bind each planned query to its sources.
+
+    ``strict_sources`` is the default: a planned query whose sources the
+    world's records cannot supply is refused with a ``missing_source`` or
+    ``insufficient_sources`` ``ValueError`` naming the connector, entity,
+    counts and queries, before any fixture exists. ``strict_sources=False`` is
+    the explicit opt-out for a caller that wants the permissive contract. It
+    no longer mints filler records (that path became the ``ungroundable_source``
+    tripwire below), so a source pool short of what a row demands is refused
+    either way, and the opt-out mostly changes which refusal names it. Only
+    an unfiltered, unbound requirement is relaxed by it at all; a
+    predicate-filtered or case-bound one is checked in both modes, because a
+    short read there answers a different claim.
+    """
     planned = tuple(queries)
     needed = tuple(sorted({requirement.connector for query in planned for requirement in query.generation.source_requirements} | {query.generation.mutation.connector for query in planned}))
     data = generate_connector_data(
@@ -186,6 +200,11 @@ def materialize_corpus(
         shortfall = demanded.get((connector, entity), 1) - present
         if shortfall <= 0:
             continue
+        short = sorted({
+            query.id for query in planned for requirement in query.generation.source_requirements
+            if (requirement.connector, requirement.entity) == (connector, entity) and requirement.minimum > present
+        })
+        named = ", ".join(short[:3]) + (f" and {len(short) - 3} more" if len(short) > 3 else "")
         # A row that filters its sources by a predicate must read real evidence:
         # a filler record satisfies the count and not the claim, so the honest
         # answer is still a refusal that names what is short.
@@ -194,7 +213,7 @@ def materialize_corpus(
                                  if (requirement.connector, requirement.entity) == (connector, entity)):
             raise ValueError(
                 f"missing_source: {connector}:{entity} has {present} record(s) and a planned row"
-                f" needs {demanded[(connector, entity)]}; generate operational evidence"
+                f" needs {demanded[(connector, entity)]} (query {named}); generate operational evidence"
                 " before planning this query"
             )
         # A tripwire, where a filler record used to be minted. The filler met
@@ -203,12 +222,7 @@ def materialize_corpus(
         # source the world cannot ground before a row is planned over it, so a
         # query reaching this line is a planning defect, and the refusal names
         # the query and the source instead of hiding the defect in a record.
-        short = sorted({
-            query.id for query in planned for requirement in query.generation.source_requirements
-            if (requirement.connector, requirement.entity) == (connector, entity) and requirement.minimum > present
-        })
         grounded = sum(carries_evidence(record) for record in matching)
-        named = ", ".join(short[:3]) + (f" and {len(short) - 3} more" if len(short) > 3 else "")
         raise ValueError(
             f"ungroundable_source: query {named} needs {demanded[(connector, entity)]} {connector}:{entity}"
             f" record(s) for evidence and this world has {present} ({grounded} carrying evidence);"

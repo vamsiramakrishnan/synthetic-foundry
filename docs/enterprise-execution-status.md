@@ -28,16 +28,81 @@ legacy tool errors are the 229 explicitly designed failure outcomes. The
 grammar's `behavior` category also includes ten valid conditional executions
 without an error. Its 44 refusals are insufficient bound source records
 (42 at `read-0`, two at `read-1`), not missing tools. All eight authored shapes
-occur in the grammar population. The populations differ because shape
-expansion and compatibility happen before the limit; this is not a paired
-comparison of legacy and grammar difficulty.
+occur in the grammar population. The populations in this table differ because
+shape expansion and compatibility happen before the limit, so its columns are
+not a paired comparison of legacy and grammar difficulty. The paired
+measurement below is, for the identities it selects.
+
+## Paired comparison
+
+`--paired` selects the limit's base identities first: the first rows of the
+same fair exhaustive stream, so the legacy arm is exactly the default legacy
+population at that limit (a test strips the key and compares the bytes).
+Each identity then gets one grammar variant, built as the default `--dag-shape
+'*'` expansion builds that row and shape; the shape is chosen among the
+compatible ones by a content key of the identity. Both arms carry the legacy
+query id as the `pair_key` dimension. An identity no shape admits stays in the
+table as a grammar planning refusal. Each arm is materialised and graded
+separately with the gates above, and compile or runtime refusals would be
+reported per pair (none occurred here).
+
+Measured at `30e3b953f3a27f0217c35caa694ed3b303baa9ce`, clean tree, untouched
+`examples/retail-close`:
+
+```bash
+python tools/measure_enterprise_execution.py --paired --limit 400 --output paired.json
+python tools/measure_enterprise_execution.py --paired --limit 100 --failure none --output paired-healthy.json
+```
+
+| Pair outcome | 400 identities, all failure kinds | 100 identities, `--failure none` |
+| --- | ---: | ---: |
+| Both `ok` | 65 | 85 |
+| Legacy-only `ok` (grammar `behavior`) | 11 | 15 |
+| Grammar-only `ok` | 0 | 0 |
+| Neither `ok` (both `behavior`) | 204 | 0 |
+| Refused in grammar arm (legacy `ok`) | 120 | 0 |
+| Refused in legacy arm | 0 | 0 |
+| Refused in both arms | 0 | 0 |
+
+No row in either arm graded `fail` and none raised. All 120 refusals are at
+planning: 70 `stale_source` and 50 `ambiguous_join` identities, the
+perturbations the grammar refuses by design. Every disagreement between
+executed arms is `ok` against `behavior`, not `ok` against `fail`: in the
+400-identity run 9 are `conditional` and 2 `delete_chain`; in the healthy run
+12 are `conditional` and 3 `delete_chain`. Every other shape agrees with legacy
+on every executed pair. So on these identities the grammar is not measured as
+harder in the sense of wrong answers; it changes which identities can be
+attempted and how two shapes are graded.
+
+Limits of this reading: one grammar shape per identity, so a shape's count is
+how often the content key chose it among the compatible shapes, not its
+difficulty over the whole space. The legacy arm at this revision (196 `ok`,
+204 `behavior`, no evidence findings) differs from the "updated legacy" column
+above, which was measured at an earlier revision; that table stays as the
+record of its own revision. Raw reports with per-pair rows:
+[enterprise-paired.json](measurements/enterprise-paired.json) and
+[enterprise-paired-healthy.json](measurements/enterprise-paired-healthy.json).
 
 Evidence validation now detects ungrounded placeholders and missing minimum
-cardinality. These counts are findings, not distinct queries. The hand-authored
-retail example does not supply every operational source demanded by the full
-shipped registry. It is unchanged, and the HTTP corpus loader correctly refuses
-an invalid corpus. Use a scenario with matching evidence or supply operational
-projections. `strict_sources` remains opt-in for materialization.
+cardinality. These counts are findings, not distinct queries, measured at the
+commit above. The hand-authored retail example does not supply every
+operational source demanded by the full shipped registry. It is unchanged, and
+the HTTP corpus loader correctly refuses an invalid corpus. Use a scenario with
+matching evidence or supply operational projections.
+
+Since then the planner plans only against the world's groundable inventory, and
+`strict_sources` is the default for materialization: a case the source corpus
+cannot answer is refused with `missing_source` or `insufficient_sources`,
+naming the connector, entity, counts and query, instead of being built.
+`enterprise-evals build` reports it as the `sources_insufficient` refusal.
+Re-measured on `examples/retail-close` with `plan_queries(strategy="exhaustive",
+limit=400)` and the default registry and profile, the first 400
+grounded queries materialize with zero evidence-validation findings under
+either setting; with `ground=False`, the first 400 are refused at
+`email:thread`, which the world never projects. `strict_sources=False` remains
+as an explicit opt-out in `materialize_corpus` and `EnterpriseEvalHarness`. It
+no longer mints filler records, so a short source pool is refused there too, as
+the `ungroundable_source` tripwire.
 
 For a positive end-to-end evidence check,
 `tests/test_enterprise_operational_execution.py` builds actual retail inventory
@@ -79,6 +144,7 @@ Contracts and examples: [state and fields](enterprise-evaluation-contracts.md),
 python tools/measure_enterprise_execution.py --output measurement.json
 python tools/measure_enterprise_execution.py --dag-shape '*' --output grammar-measurement.json
 python tools/measure_enterprise_execution.py --failure none --output healthy-measurement.json
+python tools/measure_enterprise_execution.py --paired --limit 400 --output paired-measurement.json
 pytest -q tests/test_enterprise_operational_execution.py tests/test_enterprise_dag.py tests/test_connector_serving.py tests/test_enterprise_replay.py
 ```
 
@@ -108,9 +174,11 @@ before applying its output limit.
   operational totals reconcile with the World's macro facts.
 - Fact coverage checks deterministic grounding. It does not grade the truth
   or quality of final prose, and pure DAG result transforms are not an LLM.
-- The service is an in-memory, single-worker evaluation endpoint. Public TLS,
-  OAuth integration, durable runs, multi-worker routing and a live Gemini
-  Enterprise deployment have not been implemented or tested in this change.
+- The service is a single-worker evaluation endpoint. Runs are in memory by
+  default; `--run-store PATH` journals them to an fsynced append-only JSONL
+  file and replays them on restart (`docs/connector-serving.md`). Public TLS,
+  OAuth integration, multi-worker routing (shared run state across processes)
+  and a live Gemini Enterprise deployment have not been implemented or tested.
 - Generation changes are documented in `CHANGELOG.md`. Reproducibility holds
   for repeated execution of this generation, not byte identity with the old
   enterprise query and fixture schema. Existing exports need rematerialization

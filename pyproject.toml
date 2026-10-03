@@ -248,6 +248,10 @@ ignore_missing_imports = true
 module = [
     "anyio.*",
     "docx.*",
+    # `from google import genai` resolves the namespace package itself, which
+    # `google.*` alone does not match; the visuals extra is absent from CI.
+    "google",
+    "google.*",
     "huggingface_hub.*",
     "jsonschema.*",
     "lxml.*",

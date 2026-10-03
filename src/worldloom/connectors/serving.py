@@ -7,10 +7,13 @@ protocol concurrency stay outside the deterministic generator.
 from __future__ import annotations
 
 import copy
+import hashlib
 import hmac
 import json
+import os
+import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field, replace
 from threading import RLock
 from typing import Any
@@ -26,6 +29,7 @@ from ..connector_emulator import (
 )
 from ..connector_keys import RECORDED_ALIAS_KEYS
 from ..connector_trace import grade_trace
+from .run_store import RunStore, RunStoreError, RunStoreWarning
 
 _READ_OPS = frozenset({"search", "get", "download"})
 _MANAGEMENT_TOOLS = 6
@@ -104,6 +108,19 @@ class _Run:
     #: `end` released it, and waited on the lock meanwhile, is refused rather
     #: than acting on a released fork.
     ended: bool = False
+    #: The ordinal its id was minted from, so a listing orders runs as they began.
+    ordinal: int = 0
+    #: How deep the journalled entry points are nested on this run (`call`
+    #: reaches `call_connector`; both are entry points). Only the outermost
+    #: is journalled: replaying it makes the inner calls again. It is read
+    #: and changed only under the run's lock, which nested calls already hold.
+    journal_depth: int = 0
+
+
+def _row_digest(row: Mapping[str, Any]) -> str:
+    """What a journalled run was begun against; a reload refuses to replay it against anything else."""
+    text = json.dumps(row, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _resolve_surfaces(choice: Any, connectors: Sequence[str]) -> Any:
@@ -189,6 +206,15 @@ class ConnectorEvaluationService:
     runs every run's searches under that engine (``connector_emulator``'s
     ``predicate`` or ``native``); unset, the policy
     ``connectors.query.engine`` decides, as it always has.
+
+    ``run_store`` names an append-only JSONL journal (``connectors.run_store``)
+    that makes runs durable: every begin, every call, question and recorded
+    refusal, and every end with its grade is written and fsynced before the
+    entry point returns. A service constructed on an existing journal
+    replays the open runs' calls (the service is deterministic, so they leave
+    the same spans, records and grades) and keeps the ended runs' grades for
+    `list_runs`. Unset, runs live in memory only and `end` forgets them, as
+    they always have.
     """
 
     def __init__(
@@ -202,6 +228,7 @@ class ConnectorEvaluationService:
         run_prefix: str = "",
         query_engine: str | None = None,
         surface: Any = None,
+        run_store: str | os.PathLike[str] | None = None,
     ) -> None:
         if query_engine is not None and query_engine not in QUERY_ENGINES:
             raise ServingError(f"query_engine: one of {', '.join(QUERY_ENGINES)}")
@@ -279,6 +306,16 @@ class ConnectorEvaluationService:
         self._retrieval_contracts: dict[str, Any] = {}
         self._retrieval_nodes: dict[str, str] = {}
         self._prepare_retrieval()
+        #: Ended runs' summaries, kept only when a store is set: without one,
+        #: `end` forgets a run exactly as it always has.
+        self._ended: dict[str, dict[str, Any]] = {}
+        self._replaying = False
+        try:
+            self.run_store = RunStore(run_store) if run_store is not None else None
+            if self.run_store is not None:
+                self._restore(self.run_store.load())
+        except (OSError, RunStoreError) as error:
+            raise ServingError(str(error)) from error
 
     def _prepare_retrieval(self) -> None:
         """Refuse invalid or unsatisfiable controlled searches before a target runs."""
@@ -343,12 +380,17 @@ class ConnectorEvaluationService:
                 "next_offset": offset + limit if offset + limit < len(ids) else None}
 
     def begin(self, principal: str, query_id: str) -> dict[str, Any]:
+        return self._begin(principal, query_id)
+
+    def _begin(self, principal: str, query_id: str, *, restored: tuple[str, int] | None = None) -> dict[str, Any]:
+        """Begin a run; *restored* is the id and ordinal a journal gave it, replayed without admission."""
         if not principal:
             raise ServingError("principal_required")
         with self._lock:
             if query_id not in self.rows:
                 raise ServingError(f"unknown_query: {query_id}")
-            self._admit(principal)
+            if restored is None:
+                self._admit(principal)
             row = self.rows[query_id]
             servers = sorted({str(node["server"]) for node in row["expected_dag"]["nodes"] if node.get("node_kind") != "transform"})
             # The shared inputs are built once, under the registry lock; the
@@ -359,12 +401,21 @@ class ConnectorEvaluationService:
         before = {fid: dict(record) for server in sorted(emulators)
                   for fid, record in sorted(emulators[server].records.items())}
         with self._lock:
-            # Checked again: another begin may have taken the last slot while
-            # this one was forking.
-            self._admit(principal)
-            self._ordinal += 1
-            run_id = f"{self.run_prefix}run-{self._ordinal}"
-            self._runs[run_id] = _Run(principal, query_id, emulators, before=before)
+            if restored is None:
+                # Checked again: another begin may have taken the last slot
+                # while this one was forking.
+                self._admit(principal)
+                self._ordinal += 1
+                run_id, ordinal = f"{self.run_prefix}run-{self._ordinal}", self._ordinal
+                if self.run_store is not None:
+                    # Under the registry lock, before the id is handed out:
+                    # no call on the run can be journalled ahead of its begin.
+                    self._append({"kind": "begin", "run_id": run_id, "ordinal": ordinal, "principal": principal,
+                                  "query_id": query_id, "row": _row_digest(row)})
+            else:
+                run_id, ordinal = restored
+                self._ordinal = max(self._ordinal, ordinal)
+            self._runs[run_id] = _Run(principal, query_id, emulators, before=before, ordinal=ordinal)
         return {"run_id": run_id, "query_id": query_id, "query": row.get("query", ""),
                 "max_calls": self.limits.max_calls_per_run,
                 **({"execution_mode": "controlled_retrieval"} if query_id in self._retrieval_contracts else {})}
@@ -494,6 +545,7 @@ class ConnectorEvaluationService:
                     continue
                 if int(args["start_at"]) == int(prior.args.get("start_at", 0)) + prior.items:
                     return prior.node
+        candidates: list[tuple[str, set[str]]] = []
         for node in nodes:
             if f"{node['server']}.{node['tool']}" != name:
                 continue
@@ -518,8 +570,17 @@ class ConnectorEvaluationService:
                     continue
             if args.get("entity") and node.get("entity") != args["entity"]:
                 continue
-            return str(node["id"])
-        return None
+            candidates.append((str(node["id"]), parents))
+        # A read and its readback share a tool and a fixture, so a call both
+        # match is the readback once the readback's parents have run: a get
+        # issued after the write is that write's verify, whatever came before.
+        # First-declared-wins used to give it to the read, so a run that
+        # skipped the read and wrote blind was graded as missing its *verify*
+        # (the grader mutation suite's `drop_read` on `legacy-update`).
+        for node_id, parents in candidates:
+            if parents and parents.issubset(completed):
+                return node_id
+        return candidates[0][0] if candidates else None
 
     def _grammar_attribution(
         self, run: _Run, name: str, arguments: Mapping[str, Any],
@@ -720,6 +781,10 @@ class ConnectorEvaluationService:
         return tuple(reversed(consumed))
 
     def call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        with self._journal("call", principal, run_id, {"name": name, "arguments": dict(arguments)}):
+            return self._call(principal, run_id, name, arguments)
+
+    def _call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         """One call on the surface this run presents.
 
         On the native surface *name* is ``connector.tool``. On the contract
@@ -786,6 +851,10 @@ class ConnectorEvaluationService:
                 raise
 
     def call_planned(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        with self._journal("call_planned", principal, run_id, {"name": name, "arguments": dict(arguments)}):
+            return self._call_planned(principal, run_id, name, arguments)
+
+    def _call_planned(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         """A planned connector call (``connector.tool``), made on the surface this run presents.
 
         On the native surface it is ``call``. On the contract surface the call
@@ -921,6 +990,10 @@ class ConnectorEvaluationService:
         return {name: set(self.definitions[connector].tool(tool).params) for name, (connector, tool) in self.tools.items()}
 
     def call_connector(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        with self._journal("call_connector", principal, run_id, {"name": name, "arguments": dict(arguments)}):
+            return self._call_connector(principal, run_id, name, arguments)
+
+    def _call_connector(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         """The connector tool ``connector.tool`` itself, whatever surface the run presents: the call graded.
 
         What the contract surface's mapping, the Anvil provider and the
@@ -1089,6 +1162,10 @@ class ConnectorEvaluationService:
             return tuple(dict(item) for item in run.refusals)
 
     def ask(self, principal: str, run_id: str, question: str, about: tuple[str, ...] = ()) -> str:
+        with self._journal("ask", principal, run_id, {"question": question, "about": [str(value) for value in about]}):
+            return self._ask(principal, run_id, question, about)
+
+    def _ask(self, principal: str, run_id: str, question: str, about: tuple[str, ...] = ()) -> str:
         """Record a question to the user and answer it from the case.
 
         The reply comes from the row's own question points — the first
@@ -1141,6 +1218,12 @@ class ConnectorEvaluationService:
         return behaviours
 
     def record_refusal(self, principal: str, run_id: str, name: str, arguments: Iterable[str], message: str) -> None:
+        arguments = tuple(arguments)
+        with self._journal("record_refusal", principal, run_id,
+                           {"name": name, "arguments": [str(key) for key in arguments], "message": message}):
+            self._record_refusal(principal, run_id, name, arguments, message)
+
+    def _record_refusal(self, principal: str, run_id: str, name: str, arguments: Iterable[str], message: str) -> None:
         """Record a call another surface refused before any connector saw it.
 
         An Anvil server answers some calls itself (auth, an injected fault,
@@ -1350,10 +1433,137 @@ class ConnectorEvaluationService:
         # them in, so an end racing a call on the same run waits for it.
         with self._held(principal, run_id) as run:
             grade = self.grade(principal, run_id)
+            if self.run_store is not None:
+                summary = {"run_id": run_id, "ordinal": run.ordinal, "principal": principal,
+                           "query_id": run.query_id, "grade": grade}
+                # Written before the run is released: a failed write leaves
+                # it open, never ended in memory and open on disk.
+                self._append({"kind": "end", **summary})
+                # The listing returns what a reload would read back, so a
+                # grade is the same value before and after a restart.
+                self._ended[run_id] = json.loads(json.dumps(summary, sort_keys=True, default=str))
             run.ended = True
             with self._lock:
                 del self._runs[run_id]
         return {"run_id": run_id, "ended": True, "grade": grade}
+
+    def list_runs(self, principal: str) -> list[dict[str, Any]]:
+        """This principal's runs, open and (with a run store) ended, in the order they began.
+
+        An open run reports its calls so far; an ended one its final grade,
+        read back from the journal after a restart. Without a run store `end`
+        forgets a run, so only open runs are listed.
+        """
+        with self._lock:
+            opened = [(run_id, run) for run_id, run in self._runs.items() if run.principal == principal]
+            ended = [dict(item) for item in self._ended.values() if item["principal"] == principal]
+        listed: list[tuple[int, dict[str, Any]]] = []
+        for run_id, run in opened:
+            with run.lock:
+                if run.ended:
+                    continue
+                listed.append((run.ordinal, {"run_id": run_id, "query_id": run.query_id, "status": "open",
+                                             "calls": len(run.spans), "attempts": run.attempts}))
+        for item in ended:
+            listed.append((int(item["ordinal"]), {"run_id": item["run_id"], "query_id": item["query_id"],
+                                                  "status": "ended", "grade": item["grade"]}))
+        return [entry for _, entry in sorted(listed, key=lambda pair: (pair[0], pair[1]["run_id"]))]
+
+    # -- durability ---------------------------------------------------------
+
+    def _append(self, record: Mapping[str, Any]) -> None:
+        if self.run_store is None or self._replaying:
+            return
+        try:
+            self.run_store.append(record)
+        except (OSError, RunStoreError) as error:
+            raise ServingError(f"run_store: {error}") from error
+
+    @contextmanager
+    def _journal(self, op: str, principal: str, run_id: str, args: Mapping[str, Any]) -> Iterator[None]:
+        """Journal one entry-point call on a run once it has run, whether it returned or raised.
+
+        A refused call changes the run too (an attempt, a refusal), so it is
+        journalled and replayed like any other. Only the outermost entry
+        point on a run is written; the run's lock is held throughout, so the
+        journal's order for a run is the order its calls took effect.
+        """
+        if self.run_store is None or self._replaying:
+            yield
+            return
+        record = {"kind": "event", "op": op, "run_id": run_id, "principal": principal, "args": dict(args)}
+        try:
+            json.dumps(record, allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ServingError(f"run_store: {op} arguments must be plain JSON to be journalled ({error})") from error
+        try:
+            run: _Run | None = self._run(principal, run_id)
+        except ServingError:
+            # Unknown here: the call refuses without touching any run, so
+            # there is nothing to replay.
+            run = None
+        with run.lock if run is not None else nullcontext():
+            outer = run is not None and run.journal_depth == 0
+            if run is not None:
+                run.journal_depth += 1
+            try:
+                yield
+            finally:
+                if run is not None:
+                    run.journal_depth -= 1
+                    if outer and not run.ended:
+                        self._append(record)
+
+    def _restore(self, records: Sequence[Mapping[str, Any]]) -> None:
+        """Rebuild the runs a journal holds: ended runs as their summaries, open runs by replaying their calls."""
+        begun: dict[str, Mapping[str, Any]] = {}
+        events: dict[str, list[Mapping[str, Any]]] = {}
+        for record in records:
+            kind, run_id = record.get("kind"), str(record.get("run_id"))
+            if kind == "begin":
+                if run_id in begun:
+                    warnings.warn(f"run_store: {run_id} begins twice; keeping the first", RunStoreWarning, stacklevel=3)
+                    continue
+                begun[run_id] = record
+                events[run_id] = []
+                self._ordinal = max(self._ordinal, int(record["ordinal"]))
+            elif run_id not in begun:
+                warnings.warn(f"run_store: a {kind} record names {run_id}, which never began; skipped",
+                              RunStoreWarning, stacklevel=3)
+            elif kind == "end":
+                self._ended[run_id] = {key: record[key] for key in ("run_id", "ordinal", "principal", "query_id", "grade")}
+            elif kind == "event":
+                events[run_id].append(record)
+        self._replaying = True
+        try:
+            for run_id, begin in sorted(begun.items(), key=lambda item: (int(item[1]["ordinal"]), item[0])):
+                if run_id in self._ended:
+                    continue
+                query_id, principal = str(begin["query_id"]), str(begin["principal"])
+                if query_id not in self.rows or _row_digest(self.rows[query_id]) != begin.get("row"):
+                    warnings.warn(f"run_store: {run_id} began on query {query_id} as it no longer is; "
+                                  "not replayed", RunStoreWarning, stacklevel=3)
+                    continue
+                self._begin(principal, query_id, restored=(run_id, int(begin["ordinal"])))
+                for event in events[run_id]:
+                    self._replay(principal, run_id, event)
+        finally:
+            self._replaying = False
+
+    def _replay(self, principal: str, run_id: str, event: Mapping[str, Any]) -> None:
+        op, args = event.get("op"), dict(event.get("args") or {})
+        try:
+            if op in {"call", "call_planned", "call_connector"}:
+                getattr(self, str(op))(principal, run_id, args["name"], args["arguments"])
+            elif op == "ask":
+                self.ask(principal, run_id, args["question"], tuple(args.get("about") or ()))
+            elif op == "record_refusal":
+                self.record_refusal(principal, run_id, args["name"], args["arguments"], args["message"])
+            else:
+                warnings.warn(f"run_store: {run_id} has an unknown event {op!r}; skipped", RunStoreWarning, stacklevel=4)
+        except Exception:
+            # The journalled call raised too; replaying it rebuilds the same refusal.
+            pass
 
 
 def _recorded_aliases(outputs: Mapping[str, Sequence[Any]]) -> dict[str, str]:

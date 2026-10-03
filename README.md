@@ -64,6 +64,17 @@ worldloom evaluate ./corpus --retriever both
 worldloom status ./corpus
 ```
 
+To check that the whole pipeline works on this install before building
+anything larger, run the smoke. It builds a tiny world, narrates it through
+the agent handshake with the offline writer, renders, validates, scores the
+retrieval baselines, generates six enterprise eval cases, and runs the
+reference agent over them, printing one line per stage with its timing. It
+exits non-zero at the first stage that fails and names it:
+
+```bash
+worldloom smoke --out ./smoke    # omit --out to run in a temporary directory
+```
+
 ## Install
 
 Three ways in. Nothing is published to an index yet, so each starts from a
