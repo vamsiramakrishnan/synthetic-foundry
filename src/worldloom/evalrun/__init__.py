@@ -176,6 +176,24 @@ if TYPE_CHECKING:
     from .harness import (
         requests_document as requests_document,
     )
+    from .harness_dags import (
+        HarnessDagConfig as HarnessDagConfig,
+    )
+    from .harness_dags import (
+        HarnessDagReference as HarnessDagReference,
+    )
+    from .harness_dags import (
+        HarnessDagSuite as HarnessDagSuite,
+    )
+    from .harness_dags import (
+        HarnessDagTask as HarnessDagTask,
+    )
+    from .harness_dags import (
+        build_harness_dags as build_harness_dags,
+    )
+    from .harness_dags import (
+        build_world_harness_dags as build_world_harness_dags,
+    )
     from .improve import (
         Gate as Gate,
     )
@@ -329,6 +347,27 @@ if TYPE_CHECKING:
     from .results import (
         write_studio_csv as write_studio_csv,
     )
+    from .retrieval import (
+        ControlledRetrieval as ControlledRetrieval,
+    )
+    from .retrieval import (
+        QueryAlias as QueryAlias,
+    )
+    from .retrieval import (
+        QueryIntent as QueryIntent,
+    )
+    from .retrieval import (
+        ResponsePolicy as ResponsePolicy,
+    )
+    from .retrieval import (
+        RetrievalContract as RetrievalContract,
+    )
+    from .retrieval import (
+        RetrievalFault as RetrievalFault,
+    )
+    from .retrieval import (
+        RetrievalReceipt as RetrievalReceipt,
+    )
     from .runner import (
         RUN_SCHEMA as RUN_SCHEMA,
     )
@@ -427,6 +466,19 @@ if TYPE_CHECKING:
 # `--help`. Every name in `__all__` is served on first access from the module
 # that defines it, and mypy reads the `TYPE_CHECKING` block above.
 _EXPORTS: dict[str, str] = {
+    'HarnessDagConfig': '.harness_dags',
+    'HarnessDagReference': '.harness_dags',
+    'HarnessDagSuite': '.harness_dags',
+    'HarnessDagTask': '.harness_dags',
+    'build_harness_dags': '.harness_dags',
+    'build_world_harness_dags': '.harness_dags',
+    'ControlledRetrieval': '.retrieval',
+    'QueryAlias': '.retrieval',
+    'QueryIntent': '.retrieval',
+    'ResponsePolicy': '.retrieval',
+    'RetrievalContract': '.retrieval',
+    'RetrievalFault': '.retrieval',
+    'RetrievalReceipt': '.retrieval',
     'ASK': '.agents',
     'AgentResponse': '.agents',
     'AgentTask': '.agents',
@@ -613,6 +665,9 @@ def seam_contract() -> dict[str, object]:
 
 
 __all__ = [
+    "HarnessDagConfig", "HarnessDagReference", "HarnessDagSuite", "HarnessDagTask",
+    "build_harness_dags", "build_world_harness_dags", "ControlledRetrieval",
+    "QueryAlias", "QueryIntent", "ResponsePolicy", "RetrievalContract", "RetrievalFault", "RetrievalReceipt",
     "ASK",
     "QUESTION_LAWS",
     # Contracts.

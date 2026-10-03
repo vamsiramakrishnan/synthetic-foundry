@@ -35,6 +35,7 @@ from .. import packkit
 from ..models import Model
 from .agents import AgentResponse
 from .contract import EvalCase, FailurePoint, StructuredOutcome
+from .retrieval_grading import RetrievalGrade, grade_retrieval, is_retrieval_attempt
 from .safety import (
     ErrorCode,
     OperationSafety,
@@ -159,7 +160,7 @@ def _tool_edges(case: EvalCase) -> tuple[tuple[str, str], ...]:
 
 
 def grade_plan(case: EvalCase, spans: Spans, response: AgentResponse | None = None) -> PlanGrade:
-    materialized = [_span(span) for span in spans]
+    materialized = [held for span in spans if not is_retrieval_attempt(case.row, held := _span(span))]
     reachable = _reachable(case, skipped_nodes(case, spans))
     first_seen: dict[str, int] = {}
     for index, span in enumerate(materialized):
@@ -264,10 +265,13 @@ class TrajectoryGrade(Model):
     #: what the emulator returned against the gold evidence at each node.
     #: Additive like ``PlanGrade.nodes``: absent when not graded.
     queries: QueryGrade | None = None
+    #: Private delivery receipts prove query quality and actual refinement.
+    #: Absent for ordinary cases, preserving their historical ledger bytes.
+    retrieval: RetrievalGrade | None = None
 
     @model_serializer(mode="wrap")
     def _omit_absent_stage(self, handler: Any) -> Any:
-        return _omit_none(handler(self), ("queries",))
+        return _omit_none(handler(self), ("queries", "retrieval"))
 
 
 def _reference_tools(case: EvalCase, skipped: frozenset[str] = frozenset()) -> tuple[str, ...]:
@@ -431,6 +435,9 @@ def grade_trajectory(
         # share honoured, and nothing when the row wanted none and the run
         # asked none — which keeps every existing ledger's score what it was.
         parts.append(_round(honoured_questions / len(expected_questions)) if expected_questions else 0.0)
+    retrieval = grade_retrieval(case.row, materialized)
+    if retrieval is not None:
+        parts.append(1.0 if retrieval.passed else 0.0)
     score = _mean(parts)
     return TrajectoryGrade(
         reference=reference, observed=observed, calls=len(materialized), errors=len(errors),
@@ -442,10 +449,10 @@ def grade_trajectory(
         questions_asked=len(asked), questions_expected=len(expected_questions),
         questions_honoured=honoured_questions, unsolicited_questions=len(unsolicited),
         question_findings=tuple(question_findings),
-        score=score,
+        score=score, retrieval=retrieval,
         passed=(recall == 1.0 and not storm and not findings and not budget_exceeded and not refused
                 and honoured == expected_failures and honoured_questions == len(expected_questions)
-                and not unsolicited),
+                and not unsolicited and (retrieval is None or retrieval.passed)),
     )
 
 
@@ -611,6 +618,13 @@ def grade_outcomes(
             if candidates:
                 record, met = candidates[0], True
                 claimed = tuple(candidates) if expected.node in mapped else (candidates[0],)
+                # Creating a record is only the structural outcome. When the
+                # case pins computed fields, their actual persisted values
+                # must satisfy the same contract as an update's fields.
+                wrong = {key: value for key, value in expected.fields.items()
+                         if after.get(record, {}).get(key) != value}
+                if wrong:
+                    met, detail = False, f"{record} differs from expected fields: {sorted(wrong)}"
             else:
                 detail = f"no {expected.connector}/{expected.entity} record was created"
         elif expected.kind == "update":

@@ -28,7 +28,22 @@ PPTX and XLSX tasks for reading, comparison, updates and creation. The console,
 Optional calibration measures target outcomes with independent held-out evidence.
 
 Status: 0.1.0, unreleased. Nothing is on PyPI yet, so every install below
-starts from this checkout. The library never calls an LLM service by itself.
+starts from this checkout. Normal builds and replay require no model service.
+Optional [Nano Banana visual generation](docs/visual-generation.md) uses an
+explicit provider and records its image bytes for offline replay.
+
+[Realism tactics](docs/native-realism-tactics.md) control line counts,
+concentration, exception prevalence, revision views and evidence presentation.
+[Controlled retrieval](docs/harness-controlled-retrieval.md) makes source
+availability deterministic so DAG evaluations measure the harness's queries,
+operations and recovery. Its CLI entry point is
+`worldloom enterprise-evals harness-dags`; existing `evalrun` commands execute
+and grade the generated cases.
+
+Use `worldloom visuals plan` to bind an infographic to canonical facts, then
+`worldloom visuals generate` to call Nano Banana or replay an existing PNG.
+`--offline` requires recorded bytes. Generated images remain unqualified
+visual evidence until their visible content is independently checked.
 
 ## Quickstart
 

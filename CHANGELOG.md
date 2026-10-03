@@ -7,6 +7,59 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### Controlled harness queries, native realism tactics and visual proposals
+
+**Generation**
+
+- Optional `NativeScenarioDemand.realism` records population and presentation
+  tactics in the existing replay recipe. Profiles add 3–64 canonical lines,
+  Zipf/lognormal budget allocation, bounded exception prevalence, time-valid
+  working assessments and configurable evidence presentation. Existing detail
+  allocation and Simulator arithmetic own the results. Omitting the profile
+  preserves the earlier recipe and generated facts.
+- Native realism measurements distinguish realised simulation/IR quantities
+  from physical pagination or perceived realism. Presentation changes preserve
+  canonical facts; source variants retain their case ancestry.
+- `HarnessDagConfig` compiles supplied, evidence-bearing connector records into
+  search/read/reconcile/create-or-update/readback cases. Source cohorts,
+  mutation variants and insufficient-result conditions are explicit. Missing
+  evidence and impossible budgets refuse or produce named omissions.
+- `project_native_sources` connects byte-qualified native files to that DAG
+  path through an explicit extracted-content projection. Exact measure/unit
+  selection, authority, source hashes and locators are retained; replicas are
+  deduplicated and overlapping aggregates refused. This is not a claim that
+  the target itself downloaded or parsed the original binary file.
+- Optional Nano Banana generation binds infographic requests to canonical fact
+  snapshots. A caller-owned Gemini Interactions client proposes PNG bytes;
+  bounded decoding and content-addressed receipts permit exact offline replay.
+  Images remain unqualified visual evidence. Native attachments preserve
+  existing evidence and require task re-planning against their new digest.
+
+**Evaluation and harness integration**
+
+- Controlled retrieval evaluates typed predicates over the real ACL-visible
+  corpus, with declared empty/partial/stale responses and transient faults.
+  It bypasses upstream ranking. Unsupported native query syntax exposes the
+  typed alternative; ordinary connector query execution is unchanged.
+- Evaluator-owned receipts bind queries to delivered records, payload digests,
+  pagination and semantic progress. Failed/oversized deliveries cannot satisfy
+  access; their attempt history survives rollback. Unchanged insufficient
+  queries cannot satisfy recovery. Correct first queries need no forced retry.
+- The existing three-axis evaluator admits legitimate recovery attempts and
+  grades query progress separately from computed values, mutations and readback.
+  Bounded exact aggregation consumes actual source results. Public-only
+  reference workers exercise direct and refining strategies.
+- Grader identity advances to version 4. Create outcomes now check the
+  expected persisted fields; explicitly independent mapped reads may arrive
+  in either order without relaxing source attribution or result bindings.
+- Native command harnesses preserve the selected executable entry path when
+  staging inputs. Resolving a virtual environment's Python symlink previously
+  launched its base interpreter and silently lost installed dependencies.
+- `enterprise-evals harness-dags` writes standard evalrun case sets. `visuals
+  plan` and `visuals generate` share the visual SDK and support offline replay.
+  Model API tests use injected clients; no live image quality or live-harness
+  improvement is claimed by these implementation tests.
+
 ### Native scenarios, required coverage and measured training curricula
 
 **Generation**

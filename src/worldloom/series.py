@@ -313,7 +313,7 @@ def decompose(values: tuple[float, ...] | list[float], *, period: int) -> Decomp
             f"at least {period * MINIMUM_OBSERVATIONS} are needed for a seasonal index "
             "to average more than one number"
         )
-    series = np.asarray(values, dtype=float)
+    series: np.ndarray = np.asarray(values, dtype=float)
     n = series.size
 
     # Refit with the first pass's outliers replaced by what the first pass
@@ -380,7 +380,7 @@ def anomalies(
     Returns ``()`` when the residuals have no spread at all — a perfectly
     regular series has no anomalies, rather than all of them.
     """
-    residual = np.asarray(decomposition.residual, dtype=float)
+    residual: np.ndarray = np.asarray(decomposition.residual, dtype=float)
     if residual.size == 0:
         return ()
     median = float(np.median(residual))

@@ -11,7 +11,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from ..corpus_scale import _world_digest
 from ..documents import compile_intent, register_artifact_types
@@ -49,6 +54,14 @@ from ..synthesis.engine import Simulator
 from ..synthesis.models import Column as SimulationColumn
 from ..synthesis.models import Expr, Limits, Program
 from ..synthesis.models import Table as SimulationTable
+from .tactics import (
+    NativeRealismMeasurements,
+    NativeRealismProfile,
+    apply_population_tactics,
+    apply_presentation_tactics,
+    historical_views,
+    measure_realism,
+)
 
 if TYPE_CHECKING:
     from ..world import World
@@ -67,6 +80,14 @@ class NativeScenarioDemand(Model):
     start_period: str = Field(default="2026-01", pattern=r"^\d{4}-\d{2}$")
     rows_per_episode: int = Field(default=3, ge=3, le=8, strict=True)
     batch_id: str = Field(default="native-cases", min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+    realism: NativeRealismProfile | None = None
+
+    @model_serializer(mode="wrap")
+    def _without_absent_profile(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.realism is None:
+            data.pop("realism", None)
+        return data
 
     @model_validator(mode="after")
     def _bounded(self) -> NativeScenarioDemand:
@@ -91,6 +112,8 @@ class NativeScenarioEpisode(Model):
     numeric_facts: int
     formula_cells: int
     simulation_digest: str
+    companion_artifact_ids: tuple[str, ...] = ()
+    realism: NativeRealismMeasurements | None = None
 
 
 @dataclass(frozen=True)
@@ -102,7 +125,8 @@ class NativeScenarioBuild:
 
     @property
     def source_artifact_ids(self) -> tuple[str, ...]:
-        return tuple(episode.source_artifact_id for episode in self.episodes)
+        return tuple(identifier for episode in self.episodes
+                     for identifier in (episode.source_artifact_id, *episode.companion_artifact_ids))
 
     def verify_source_replay(self) -> None:
         """Re-run the registered source recipe and compare the complete world.
@@ -129,19 +153,22 @@ class NativeScenarioBuild:
         rendered = {}
         seen: set[str] = set()
         for episode in self.episodes:
-            artifact = index.artifacts[episode.source_artifact_id]
-            for format in sorted(formats):
-                plan = NativeCorpusPlan(artifact_id=artifact.id + "-" + format, format=format,
-                    title=artifact.title, surface="business", contextual_headings=True,
-                    contents=tuple(NativeContent(source_artifact_id=artifact.id, section_index=i)
-                                   for i in range(len(artifact.sections))),
-                    minimum_units=len(artifact.sections), minimum_distinct_facts=episode.numeric_facts)
-                result = render_native_corpus(self.world, plan)
-                actual = index.fact_closure(tuple(sorted({fact for entry in result.manifest.evidence
-                                                        for fact in entry.fact_ids})))
-                if actual != episode.fact_ids:
-                    raise ValueError("native scenario rendered facts differ from the complete case closure")
-                rendered[plan.artifact_id] = result
+            for source_id in (episode.source_artifact_id, *episode.companion_artifact_ids):
+                artifact = index.artifacts[source_id]
+                main = source_id == episode.source_artifact_id
+                minimum_facts = episode.numeric_facts if main else 1
+                for format in sorted(formats):
+                    plan = NativeCorpusPlan(artifact_id=artifact.id + "-" + format, format=format,
+                        title=artifact.title, surface="business", contextual_headings=True,
+                        contents=tuple(NativeContent(source_artifact_id=artifact.id, section_index=i)
+                                       for i in range(len(artifact.sections))),
+                        minimum_units=len(artifact.sections), minimum_distinct_facts=minimum_facts)
+                    result = render_native_corpus(self.world, plan)
+                    actual = index.fact_closure(tuple(sorted({fact for entry in result.manifest.evidence
+                                                            for fact in entry.fact_ids})))
+                    if (main and actual != episode.fact_ids) or not set(actual) <= set(episode.fact_ids):
+                        raise ValueError("native scenario rendered facts differ from the complete case closure")
+                    rendered[plan.artifact_id] = result
             if seen.intersection(episode.fact_ids):
                 raise ValueError("native scenarios share canonical ancestry across cases")
             seen.update(episode.fact_ids)
@@ -185,7 +212,7 @@ def _simulation(process: NativeScenarioProcess, case_id: str, rows: int, seed: i
             _calculated("shortage", "sub", "actual", "supply"))
     return Simulator(Program(namespace="native_case_" + case_id,
         tables=(SimulationTable(name="transactions", count=rows, columns=columns),)), seed=seed,
-        limits=Limits(max_rows=8, max_work=10000))
+        limits=Limits(max_rows=max(8, rows), max_work=100000))
 
 
 _DESCRIPTORS: dict[str, tuple[str, tuple[str, ...], str, tuple[str, ...]]] = {
@@ -219,7 +246,12 @@ def _episode(world: World, demand: NativeScenarioDemand, process: NativeScenario
     opened = datetime.fromisoformat(period + "-01T09:00:00+00:00") + timedelta(days=rng.integer(1, 9))
     reviewed = opened + timedelta(days=rng.integer(1, 3))
     closed = reviewed + timedelta(days=rng.integer(1, 2))
-    title, labels, stream, activities = _DESCRIPTORS[process]
+    title, base_labels, stream, activities = _DESCRIPTORS[process]
+    rows = demand.realism.line_count if demand.realism and demand.realism.line_count else demand.rows_per_episode
+    cohorts = ("Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel")
+    labels = tuple(base_labels[position % len(base_labels)] +
+                   (" / allocation cohort " + cohorts[position // len(base_labels)] if position >= len(base_labels) else "")
+                   for position in range(rows))
     preferred_functions = (("Procurement", "Finance") if process == "supplier_reconciliation"
         else ("Operations", "ServiceOperations") if process == "customer_settlement"
         else ("Merchandising", "Procurement", "Operations"))
@@ -264,7 +296,9 @@ def _episode(world: World, demand: NativeScenarioDemand, process: NativeScenario
     final_status = fact("final_status", "Approved for controlled execution", authority=Authority.APPROVED_REPORT,
         previous=reviewed_status)
     owner = fact("accountable_owner", actor.name if actor else world.company.name, authority=Authority.APPROVED_REPORT)
-    simulation = _simulation(process, case_id, demand.rows_per_episode, world.seed)
+    simulation = _simulation(process, case_id, rows, world.seed)
+    if demand.realism is not None:
+        simulation = apply_population_tactics(simulation, demand.realism, process=process, case_id=case_id)
     values = [{cell.name: int(cell.value) for cell in row.cells} for row in simulation.rows()]
     unit = "units" if process == "inventory_replenishment" else world.company.currency
     divisor = 1 if unit == "units" else 100
@@ -425,12 +459,17 @@ def _episode(world: World, demand: NativeScenarioDemand, process: NativeScenario
             "process_catalogue_stream": stream, "process_catalogue_activities": ",".join(activities),
             "created_at": closed.isoformat(), "authority": Authority.APPROVED_REPORT.value,
             "author": actor.name if actor else world.company.name, "author_id": actor.id if actor else ""})
+    if demand.realism is not None:
+        artifact = apply_presentation_tactics(artifact, demand.realism, seed=world.seed, case_id=case_id)
+    companions = historical_views(artifact, facts, demand.realism) if demand.realism is not None else ()
     description = NativeScenarioEpisode(process=process, case_id=case_id, source_artifact_id=source_id,
         fact_ids=tuple(sorted(record.id for record in facts)), event_ids=event_ids, period=period,
         template_variant=variant, numeric_facts=sum(record.value is not None for record in facts),
-        formula_cells=sum(cell.formula is not None for section in sections if section.table
+        formula_cells=sum(cell.formula is not None for section in artifact.sections if section.table
                           for row in section.table.rows for cell in row.cells.values()),
-        simulation_digest=simulation.run_digest)
+        simulation_digest=simulation.run_digest, companion_artifact_ids=tuple(view.artifact.id for view in companions),
+        realism=measure_realism(artifact, simulation, process=process, historical_artifacts=len(companions))
+            if demand.realism is not None else None)
     return description, tuple(facts), events, artifact
 
 
@@ -461,10 +500,21 @@ def build_native_scenarios(world: World, demand: NativeScenarioDemand) -> Native
         descriptions.append(description)
         facts.extend(case_facts)
         events.extend(case_events)
+        previous = None
+        if demand.realism is not None:
+            for view in historical_views(artifact, case_facts, demand.realism):
+                artifacts.append(view.artifact)
+                intents.append(ArtifactIntent(id=view.artifact.id,
+                    artifact_type="native_case_working_assessment",
+                    domain="governance", audience="all_staff", author_id=artifact.metadata["author_id"],
+                    triggered_by=[view.event_id], required_fact_ids=list(view.fact_ids), revises=previous,
+                    rationale="Time-bounded working assessment used by the subsequent approved execution report."))
+                previous = view.artifact.id
         artifacts.append(artifact)
         intents.append(ArtifactIntent(id=artifact.id, artifact_type="native_case_review", domain="governance",
             audience="all_staff", author_id=artifact.metadata["author_id"],
             triggered_by=list(description.event_ids), required_fact_ids=list(description.fact_ids),
+            derived_from=[previous] if previous else [],
             rationale="Case-level evidence review and controlled execution decision."))
     result = replace(world, _facts=(*world._facts, *facts), _events=(*world._events, *events),
         _artifact_intents=(*world._artifact_intents, *intents),
@@ -509,8 +559,10 @@ def _compile_native_case(world: World, intent: ArtifactIntent, minter: Minter) -
     return source
 
 
-register_artifact_types(standing={"native_case_review": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED)},
-    lags={"native_case_review": timedelta()}, compilers={"native_case_review": _compile_native_case})
+_STANDING = {"native_case_review": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+    "native_case_working_assessment": (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT)}
+register_artifact_types(standing=_STANDING,
+    lags={kind: timedelta() for kind in _STANDING}, compilers={kind: _compile_native_case for kind in _STANDING})
 
 
 __all__ = ["NativeScenarioProcess", "NativeScenarioDemand", "NativeScenarioEpisode", "NativeScenarioBuild", "build_native_scenarios"]

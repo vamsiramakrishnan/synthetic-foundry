@@ -10,7 +10,10 @@ timelines, org graphs, business processes) and materialises them as realistic
 documents (xlsx/docx/pdf/pptx/markdown/html), evaluation sets, and permissioned
 drive layouts.
 
-The harness never calls a language model; **the agent is the writer**. The loop:
+For narration, **the agent is the writer**; normal builds never call a language
+model. Optional `worldloom.visuals` providers generate image proposals only on
+explicit invocation, record exact bytes for replay, and do not qualify visual
+truth. The narration loop:
 
 1. `worldloom narrate requests ./corpus -o requests.json` hands you bounded prose
    requests (allowed facts, temporal cutoff).

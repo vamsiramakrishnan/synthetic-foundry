@@ -402,6 +402,19 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 | `--shard-index` |  |
 | `--strength` |  |
 
+### `worldloom enterprise-evals harness-dags`
+
+Generate search/read/reconcile/write/readback DAGs with controlled retrieval.
+
+```
+worldloom enterprise-evals harness-dags <RECORDS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--config` | HarnessDagConfig JSON defining cohort fields, operations and response conditions. |
+| `--out`, `-o` | New evalrun case-set directory with a separate public task view. |
+
 ### `worldloom enterprise-evals housekeeping`
 
 Build a hero use case: a drive, inbox or channel list that needs tidying, and the cases that grade it.
@@ -2581,6 +2594,43 @@ worldloom verify <CORPUS>
 ### `worldloom version`
 
 Print the installed version.
+
+### `worldloom visuals`
+
+Plan fact-grounded infographics, generate with Nano Banana, and replay recorded image bytes.
+
+### `worldloom visuals generate`
+
+Replay first, or explicitly generate one unqualified PNG with Nano Banana.
+
+```
+worldloom visuals generate <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--config` | NanoBananaConfig JSON; model, aspect ratio and resolution are replay inputs. |
+| `--offline` | Require a recorded result; never initialize an SDK client or call a provider. |
+| `--out`, `-o` | Destination PNG; a differing existing file is refused. |
+| `--spec` | VisualSpec JSON from visuals plan. |
+| `--store` | Recorded visual requests and image blobs; keep with the corpus. |
+
+### `worldloom visuals plan`
+
+Bind an infographic request to existing facts without calling a provider.
+
+```
+worldloom visuals plan <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--brief` | Presentation instructions; canonical facts remain authoritative. |
+| `--fact-id` | Existing canonical fact to depict; repeatable. |
+| `--id` | Stable visual request name. |
+| `--out`, `-o` | Write a VisualSpec JSON request. |
+| `--style` | Visual style instructions. |
+| `--title` | Infographic title. |
 
 ### `worldloom workspace`
 

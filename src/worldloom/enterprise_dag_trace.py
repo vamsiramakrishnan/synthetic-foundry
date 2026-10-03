@@ -31,6 +31,12 @@ def grade_execution_contract(
     if len(positions) != len(spans):
         fails.append("duplicate_span_id")
     for span in spans:
+        from .evalrun.retrieval_grading import is_retrieval_attempt
+
+        # An inadequate search is observed trajectory work, not a fabricated
+        # successful plan node. Only an evaluator-owned receipt admits it.
+        if is_retrieval_attempt(row, span):
+            continue
         identifier = str(span.get("node"))
         if identifier not in wire:
             fails.append(f"unknown_node:{identifier}")
@@ -101,7 +107,15 @@ def grade_execution_contract(
             if any(positions[parent] >= positions[str(span["id"])] for parent in parent_spans):
                 fails.append(f"order_violated:{node.id}")
             try:
-                args = bound_arguments(node, outputs, iterations[index] if node.for_each and index < len(iterations) else None)
+                item = iterations[index] if node.for_each and index < len(iterations) else None
+                if node.for_each and node.for_each.order == "any" and node.kind == "read":
+                    matching = [value for value in iterations if isinstance(value, Mapping)
+                                and str(value.get("id")) in span.get("reads", ())]
+                    if len(matching) != 1:
+                        fails.append(f"per_item_identity:{node.id}")
+                        continue
+                    item = matching[0]
+                args = bound_arguments(node, outputs, item)
             except (ValueError, IndexError) as error:
                 fails.append(f"invalid_binding:{node.id}:{error}")
                 continue
@@ -113,10 +127,19 @@ def grade_execution_contract(
             # `fields` inside that query too; the records it returned are held
             # to the snapshot taken with the same columns.
             vendor_search = search and actual.get("query") is not None and actual.get("predicate") is None
+            from .evalrun.retrieval_grading import retrieval_receipt
+
+            receipt = retrieval_receipt(row, span) if search else None
+            controlled_search = receipt is not None and receipt.intent_status == "sufficient"
             for key, value in args.items():
                 if key in {"id", "start_at", "max_results"}:
                     continue
                 if vendor_search and key in {"predicate", "entity", "fields"}:
+                    continue
+                if controlled_search and key in {"predicate", "query"}:
+                    # The controlled contract checks semantic implication.
+                    # Equivalent predicates and useful refinements need not
+                    # reproduce the reference plan's dictionary ordering.
                     continue
                 if actual.get(key) != value:
                     fails.append(f"argument_mismatch:{node.id}:{key}")
@@ -146,7 +169,19 @@ def grade_execution_contract(
                     fails.append(f"entity_mismatch:{node.id}")
             target_ids = tuple(str(value) for value in span.get("reads", ())) if node.operation in {"reply", "forward"} else identities
             if args.get("id") is not None and node.operation not in {"create", "send", "post", "upload", "search"}:
-                if str(args["id"]) not in target_ids:
+                target_aliases = set(target_ids)
+                identity_keys = ("ident", "external_id", "id", "Id", "sys_id", "key", "number")
+                for identifier in target_ids:
+                    record = (post_state or {}).get(identifier, {})
+                    target_aliases.update(str(record[key]) for key in identity_keys if record.get(key) is not None)
+                for produced in outputs.values():
+                    for value in produced:
+                        if isinstance(value, Mapping) and value.get("id") in target_ids and isinstance(value.get("payload"), Mapping):
+                            target_aliases.update(str(value["payload"][key]) for key in identity_keys if value["payload"].get(key) is not None)
+                # A public agent sees native IDs, while spans carry canonical
+                # fixture IDs. Both identify the same observed target; a
+                # literal membership test incorrectly rejected valid bindings.
+                if str(args["id"]) not in target_aliases:
                     fails.append(f"target_mismatch:{node.id}")
             if node.kind == "write":
                 if not span.get("writes"):

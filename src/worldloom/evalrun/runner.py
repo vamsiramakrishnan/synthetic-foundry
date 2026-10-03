@@ -78,10 +78,13 @@ class CaseResult(Model):
     #: its source, digest, how it exited and the plan read off its source.
     #: Absent for every other agent, so their ledger lines keep their bytes.
     program: dict[str, Any] | None = None
+    #: Controlled retrieval serves typed connector tools and records private
+    #: evaluator receipts. Absent for ordinary case execution.
+    execution_mode: str | None = None
 
     @model_serializer(mode="wrap")
     def _omit_absent_program(self, handler: Any) -> Any:
-        return _omit_none(handler(self), ("program",))
+        return _omit_none(handler(self), ("program", "execution_mode"))
 
     @property
     def graded(self) -> bool:
@@ -222,6 +225,9 @@ def run_case(
 ) -> CaseResult:
     """One case on its own fork. With ``anvil``, Anvil serves the case's connectors (``evalrun.anvil``)."""
 
+    if anvil is not None and "controlled_retrieval" in case.row:
+        raise ServingError("controlled_retrieval: external Anvil serving cannot provide evaluator-owned typed retrieval receipts")
+    mode = "controlled_retrieval" if "controlled_retrieval" in case.row else None
     who = principal or case.principal
     try:
         begun = service.begin(who, case.id)
@@ -273,7 +279,9 @@ def run_case(
         # What the agent sent and saw over HTTP, per replayed span: lineage
         # reads these, not the replay's connector arguments.
         observations = getattr(served, "observations", None) or None
-    spans = service.spans(who, run_id)
+    # Only the evaluator gets controlled retrieval receipts. The target's
+    # span view contains its calls and results, never the hidden intent.
+    spans = service.grading_spans(who, run_id)
     refusals = service.refusals(who, run_id)
     questions = tuple(dict(item) for item in service.questions(who, run_id))
     after = service.snapshot(who, run_id)
@@ -306,7 +314,7 @@ def run_case(
         case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
         agent=agent.name, status="graded", score=score, answer=response.answer, notes=response.notes,
         calls=len(materialized), spans=materialized, refused=len(refusals), refusals=refusals,
-        questions=questions, latency=latency, program=program,
+        questions=questions, latency=latency, program=program, execution_mode=mode,
     )
 
 
@@ -349,6 +357,8 @@ def run_cases(
     """
 
     listed = list(cases)
+    if anvil is not None and any("controlled_retrieval" in case.row for case in listed):
+        raise ServingError("controlled_retrieval: external Anvil serving cannot provide evaluator-owned typed retrieval receipts")
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
     safety = _safety(service)

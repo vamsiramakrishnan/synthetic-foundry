@@ -175,7 +175,12 @@ class CommandHarness:
         executable = shutil.which(self.argv[0], path=environment.get("PATH"))
         if executable is None:
             raise ValueError("harness executable was not found: " + self.argv[0])
-        resolved = [str(Path(executable).resolve())]
+        # Preserve the selected executable's entry path. Resolving a venv's
+        # python symlink before launch silently selects the base interpreter,
+        # discarding its installed dependencies after cwd changes. Hash the
+        # entry path's bytes (following its current target) for identity, but
+        # launch that absolute entry path, not its resolved binary target.
+        resolved = [str(Path(executable).absolute())]
         files = [Path(resolved[0])]
         # Resolve arguments before moving the child into its public workspace;
         # python ./adapter.py must continue to work after cwd changes.

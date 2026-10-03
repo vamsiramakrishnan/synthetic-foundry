@@ -69,6 +69,9 @@ xlsx = ["openpyxl>=3.1"]
 docx = ["python-docx>=1.1"]
 pdf = ["reportlab>=4.0"]
 pptx = ["python-pptx>=1.0"]
+# Explicit, optional image generation. Accepted PNG bytes replay locally;
+# ordinary world generation and narration do not depend on a model SDK.
+visuals = ["google-genai>=2.28,<3", "Pillow>=10.0"]
 polars = ["polars>=0.20"]
 pandas = ["pandas>=2.0"]
 arrow = ["pyarrow>=15.0"]
@@ -76,8 +79,8 @@ arrow = ["pyarrow>=15.0"]
 # agent harness. An extra rather than a core dependency because every other
 # command works without it: the same measurements are reachable through
 # `worldloom diversity`, `topology`, `series` and `validate`, which need no
-# protocol at all. No model-SDK extra exists: this package never calls a
-# language model — the coding harness driving it is the writer.
+# protocol at all. The coding harness driving narration remains the writer;
+# optional visual generation has its own provider and recorded-byte boundary.
 mcp = ["mcp>=2.2,<3"]
 # `worldloom evaluate --retriever embedding` — dense retrieval, so a hardness
 # claim rests on something other than 1990s lexical matching. An extra, and

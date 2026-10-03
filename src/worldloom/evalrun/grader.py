@@ -44,8 +44,11 @@ GRADER_SCHEMA = "worldloom.evalrun-grader/v1"
 #: (`catalog.evidence`): a field bound to an evidence document must cite
 #: every evidence record, as a field bound to the evidence set always had
 #: to, and a search in a language that names its columns (SOQL) is no
-#: longer held to carry the plan's `fields` beside its query.
-GRADER_VERSION = "3"
+#: longer held to carry the plan's `fields` beside its query. Version 4:
+#: controlled retrieval is graded from evaluator-owned delivery receipts
+#: (`retrieval.py`, `retrieval_grading.py`), including semantic refinement,
+#: complete pagination and declared independent mapped-read ordering.
+GRADER_VERSION = "4"
 
 #: Every policy key grading reads, plus the band a comparison's verdicts use.
 #: `grading.py` reads `evalrun.answer_pass_score` (an answer's pass mark);
