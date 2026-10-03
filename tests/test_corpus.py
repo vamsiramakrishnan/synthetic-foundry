@@ -246,3 +246,30 @@ def test_export_refuses_to_clobber_by_default(world: World, tmp_path) -> None:
 def test_loading_something_that_is_not_a_corpus_is_a_clear_error() -> None:
     with pytest.raises(CorpusError, match="no corpus at"):
         World.load("no-such-world")
+
+
+def test_the_refusal_names_only_bundled_examples_that_are_corpora() -> None:
+    """`examples/` holds packs, datasets and interviews beside the corpora.
+
+    The refusal used to list every directory there, so it offered `packs` as
+    a corpus to load. What it names now must each load, and what it leaves
+    out must not resolve by name either: a bundled name that is not offered
+    is refused with the same list, not half-loaded until `world.json` is
+    missing.
+    """
+    from worldloom.corpus import WORLD_FILE, bundled_corpora, bundled_examples_dir
+
+    names = bundled_corpora()
+    assert "retail-close" in names
+    for name in names:
+        assert World.load(name).company.name, name
+    others = sorted(
+        path.name for path in bundled_examples_dir().iterdir()
+        if path.is_dir() and not (path / WORLD_FILE).is_file()
+    )
+    assert "packs" in others, others
+    assert not set(others) & set(names)
+    with pytest.raises(CorpusError) as refused:
+        World.load("packs")
+    listed = str(refused.value).split("Bundled corpora: ", 1)[1].split(", ")
+    assert listed == names

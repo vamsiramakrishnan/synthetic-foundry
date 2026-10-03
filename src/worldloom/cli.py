@@ -732,6 +732,7 @@ _REFUSALS: dict[str, str] = {
     "synthesis_failed": "the operational synthesis contract was refused; data.finding names the rule",
     "access_profile_failed": "the corpus's documents could not be re-gated under the asked-for access profile",
     "actor_episode_failed": "the actor episode could not run to completion",
+    "bad_housekeeping_spec": "the housekeeping knobs do not describe a valid mess to generate",
     "bad_physics": "a physics override names an unknown parameter or an impossible span",
     "bad_shard": "the shard arguments do not describe a partition of the mosaic",
     "cannot_combine": "two flags were given that cannot both decide the same build",
@@ -825,6 +826,9 @@ _REFUSALS: dict[str, str] = {
     "unknown_harness_mode": "the --harness-mode value is not turns or sdk-program",
     "unknown_lever": "the --levers value names something other than agent and interface",
     "unknown_curriculum": "the --curriculum value is not a curriculum the improve loop knows (failures)",
+    "unknown_brief": "the --brief value is not a brief mode the improve loop knows (summary or traces)",
+    "unknown_surface": "the --surface value is not a connector surface this package serves (native or contract)",
+    "surface_unavailable": "the contract surface cannot be loaded from the --contract bundles",
     "anvil_unavailable": "Anvil cannot serve the run: no Anvil CLI, an unreadable contract, or a contract its connector's mapping does not cover",
     # `worldloom contracts`.
     "contract_refused": "the contract lock does not read, a source's sha256 is not the locked one, Anvil refused the compile, or the mapping does not cover the bundle",
@@ -874,6 +878,54 @@ _REFUSALS: dict[str, str] = {
     "workspace_unwritable": "the workspace cannot be written",
 }
 
+#: The next command to run for a refusal whose site names no fix of its own.
+#: A site's own `fix=` always wins; this is the fallback, so an entry has to
+#: be the right next action at *every* site of its code that passes none, not
+#: merely at the commonest one. Each is a real invocation (a test parses
+#: every one against the live typer surface, flags included), with the
+#: example paths `AGENTS.md` uses, so a harness can show it verbatim.
+#:
+#: Chosen by walking the codes in order of how many `_refuse` sites use them.
+#: The most frequent codes are deliberately absent, because no single command
+#: is their remedy: `cannot_combine`, `missing_flag` and `exactly_one` are
+#: fixed by editing the flags the message already names; `unreadable_document`
+#: by repairing the file it names; `pack_rejected`, `studio_rejected`,
+#: `interview_refused` and `dataset_rejected` by answering the findings they
+#: carry; `destination_exists` by `--overwrite`, which only some of its
+#: commands take (its sites say so themselves); and the evalrun refusals
+#: (`results_unjoinable`, `service_unbuildable`, `cases_uncompilable`) by
+#: whatever the input they name got wrong. An entry that was right at one site
+#: and wrong at the next would be worse than none: a confident wrong fix is
+#: followed.
+_REFUSAL_FIXES: dict[str, str] = {
+    # Nothing at that path loads (or carries a recipe): make one that does.
+    "corpus_unloadable": "worldloom build --seed 8128 --out ./corpus",
+    "no_recipe": "worldloom build --seed 8128 --out ./corpus",
+    # The evalrun inputs, each with the command that writes one.
+    "run_unreadable": "worldloom evalrun run ./cases -o ./runs/reference",
+    "no_cases": "worldloom enterprise-evals build ./corpus ./cases --exhaustive",
+    "case_set_unreadable": "worldloom enterprise-evals build ./corpus ./cases --exhaustive",
+    # Unknown names: the command that lists the known ones.
+    "unknown_archetype": "worldloom archetypes",
+    "unknown_engine": "worldloom pack targets",
+    "unknown_facet": "worldloom pack facets",
+    "unknown_landscape": "worldloom pack landscapes",
+    "unknown_locale": "worldloom pack locales",
+    "unknown_messiness": "worldloom pack messiness",
+    "unknown_parameter": "worldloom pack params",
+    "unknown_profile": "worldloom present describe",
+    "no_matching_facts": "worldloom inspect ./corpus --facts",
+    # An installation that cannot do what was asked: doctor names the extra.
+    "render_failed": "worldloom doctor",
+    "mcp_unavailable": "worldloom doctor",
+    "smoke_failed": "worldloom doctor",
+    # Out of step with the loop: ask where the corpus is, or hand-write.
+    "nothing_awaiting_prose": "worldloom status ./corpus",
+    "loop_exhausted": "worldloom status ./corpus",
+    "no_writer": "worldloom narrate requests ./corpus -o requests.json",
+    "interview_incomplete": "worldloom interview status ./interview",
+}
+
 
 def _refuse(
     code: str,
@@ -885,10 +937,14 @@ def _refuse(
 ) -> NoReturn:
     """Refuse with *message*, as prose by default and as data on request.
 
-    Default mode prints *message*: the exact string the site printed before
-    this helper existed: through `err`, so default stderr is byte-identical
-    and every test pinned to those strings still holds. With
-    ``WORLDLOOM_OUTPUT=json`` in the environment, one line of JSON goes to
+    Default mode prints *message* through `err` (the exact string the site
+    printed before this helper existed, so every test pinned to it still
+    holds), then, when a next action is known, one dim ``  fix: …`` line under
+    it. The fix is the site's own *fix*, else the code's `_REFUSAL_FIXES`
+    entry; it is left off when the message already says it word for word,
+    which several older sites do. A refusal that names what went wrong but
+    not what to do next used to say the second half only to JSON readers.
+    With ``WORLDLOOM_OUTPUT=json`` in the environment, one line of JSON goes to
     stderr instead: ``{"refusal": code, "message": …, "fix": …, "data": …}``.
     An env var and not a global ``--json`` flag because per-command ``--json``
     flags already exist with a different meaning (success payloads) and a
@@ -906,13 +962,16 @@ def _refuse(
         raise RuntimeError(
             f"unregistered refusal code {code!r}; add it to _REFUSALS"
         )
-    if os.environ.get("WORLDLOOM_OUTPUT") == "json":
-        # Rich's own markup parser recovers the plain text, so `escape()`d
-        # brackets in the message read back as the user typed them. Written
-        # with `typer.echo` and not `err.print` because the envelope must be
-        # one machine-readable line and `err` soft-wraps at terminal width.
-        from rich.text import Text
+    if fix is None:
+        fix = _REFUSAL_FIXES.get(code)
+    # Rich's own markup parser recovers the plain text, so `escape()`d
+    # brackets in the message read back as the user typed them.
+    from rich.text import Text
 
+    if os.environ.get("WORLDLOOM_OUTPUT") == "json":
+        # Written with `typer.echo` and not `err.print` because the envelope
+        # must be one machine-readable line and `err` soft-wraps at terminal
+        # width.
         envelope = {
             "refusal": code,
             "message": Text.from_markup(message).plain,
@@ -924,6 +983,10 @@ def _refuse(
         typer.echo(json.dumps(envelope, ensure_ascii=False, default=str), err=True)
     else:
         err.print(message)
+        # Fixes are plain text (the envelope carries them verbatim), so they
+        # are escaped here: `worldloom[xlsx]` must not be eaten as markup.
+        if fix and fix not in Text.from_markup(message).plain:
+            err.print(f"  [dim]fix: {escape(fix)}[/dim]")
     raise typer.Exit(code=exit_code)
 
 
