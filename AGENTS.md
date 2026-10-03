@@ -98,7 +98,7 @@ Determinism spine:
 ```bash
 pip install -e ".[dev]"            # add renderers as needed: ,xlsx,docx,pdf,pptx,polars
 pre-commit install                 # ruff-check + worldloom docs --check
-worldloom doctor                   # verifies the install; names exact fixes; --json for data
+worldloom doctor                   # verifies the install and agent setup; names exact fixes; --json for data
 
 pytest -q                          # house gate (slow tests deselected via addopts)
 pytest tests/test_render.py -q     # one file; -k "name" for one test
@@ -211,9 +211,12 @@ format.
 - Python ≥ 3.11 (floor); CI matrix 3.11/3.12/3.13. `uv run <cmd>` works for
   one-off commands in a checkout.
 - pip + hatchling; version single-sourced from `src/worldloom/__init__.py`.
-- Optional extras unlock features, and `worldloom doctor` names the missing pip
-  extra per format: `xlsx`, `docx`, `pdf`, `pptx`, `polars`, `mcp`,
-  `embeddings` (downloads weights, so it is never core), `all`, `dev`.
+- Optional extras unlock features: `xlsx`, `docx`, `pdf`, `pptx`, `polars`,
+  `mcp`, `visuals`, `embeddings` (downloads weights, so it is never core),
+  `all`, `dev`. `worldloom doctor` names the missing pip extra per format,
+  checks the agent setup (the `worldloom` on PATH is this install, the `mcp`
+  extra, every `.mcp.json` server command resolving), and reports
+  `embeddings` and `visuals` as optional (–, never a failure).
 - `tools/` scripts run as `python3 tools/<name>.py` (they sys.path-insert
   `src/`); stdlib-only, dev-only.
 - Site tooling is npm/Node (Astro 5 + Starlight), isolated to `site/`.

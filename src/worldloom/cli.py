@@ -7948,6 +7948,68 @@ def archetypes() -> None:
         )
 
 
+#: The optional extras `doctor` reports on beyond the renderers (which it
+#: probes through their own `_require_*` functions) and `mcp` (through the
+#: server's): extra name, the modules the extra's code imports, and what is
+#: unavailable without it. The names are `[project.optional-dependencies]`
+#: keys, held to pyproject by a test; the extras left out are the renderer
+#: ones, the SDK's dataframe exports (`polars`, `pandas`, `arrow`), the
+#: bundles (`all`, `dev`) and `ingest`, which nothing under `src/` imports.
+_DOCTOR_EXTRAS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("embeddings", ("model2vec", "huggingface_hub"), "`evaluate --retriever embedding`"),
+    ("visuals", ("google.genai", "PIL"), "`visuals generate`"),
+)
+
+#: What `doctor` names as the next command once every required check passes:
+#: the bundled corpus built, validated and exported, end to end.
+_DOCTOR_NEXT = "worldloom demo"
+
+
+def _extra_hint(extra: str) -> str:
+    """The pip command that installs *extra* into this installation.
+
+    An editable install from a checkout gets ``pip install -e '<root>[extra]'``
+    (``.`` when run from that root): the checkout's own pyproject declares the
+    extras it imports, and ``worldloom[extra]`` names an index release that
+    may not exist or may declare different ones.
+    """
+    root = Path(__file__).resolve().parents[2]
+    if (root / "pyproject.toml").is_file() and (root / "src" / "worldloom").is_dir():
+        here = "." if Path.cwd().resolve() == root else str(root)
+        return f"pip install -e '{here}[{extra}]'"
+    return f"pip install 'worldloom[{extra}]'"
+
+
+def _is_this_installation(executable: str) -> bool:
+    """Whether the *executable* found on PATH runs this process's worldloom.
+
+    By location rather than by version: two checkouts at one version still
+    serve different code, and the one an agent's harness launches by name is
+    the one whose edits it will see. A console script lives in its
+    environment's scripts directory, or is a link to one (`uv tool`, pipx); a
+    user-site install shares `~/.local/bin` across interpreters, so there the
+    script's shebang decides, compared unresolved, because a virtualenv's
+    python is a symlink to the base interpreter it must not be mistaken for.
+    """
+    import sys
+    import sysconfig
+
+    def place(path: str | Path) -> str:
+        return os.path.normcase(os.path.realpath(path))
+
+    homes = {place(sysconfig.get_path("scripts")), place(os.path.dirname(sys.executable))}
+    found = Path(executable)
+    if any(place(candidate.parent) in homes for candidate in (found, found.resolve())):
+        return True
+    try:
+        with found.open("rb") as handle:
+            first = handle.readline(4096)
+    except OSError:
+        return False
+    words = first[2:].split() if first.startswith(b"#!") else []
+    return bool(words) and os.path.abspath(os.fsdecode(words[0])) == os.path.abspath(sys.executable)
+
+
 @app.command()
 def doctor(
     as_json: bool = typer.Option(False, "--json", help="Emit the check list as JSON."),
@@ -7956,28 +8018,39 @@ def doctor(
 
     Each check reports ✓ or ✗ with the exact fix when it fails: the Python
     floor (read from the package's own metadata), every registered render
-    format's optional dependency, the bundled example corpus validating, and
-    the generated command reference being current. Exit 0 when everything
-    passes, 1 otherwise. Reads only this process and this disk; no network,
-    ever.
+    format's optional dependency, the bundled example corpus validating, the
+    generated command reference being current, and the agent setup: the
+    `worldloom` on PATH being this installation, the `mcp` extra, and every
+    server command in a `.mcp.json` here resolving. Optional extras
+    (`embeddings`, `visuals`) report – with the install command when absent
+    and never fail the run. Exit 0 when every required check passes, 1
+    otherwise; the last line names the command to run next. Reads only this
+    process and this disk; no network, ever.
     """
+    import shutil
     import sys as sys_module
+    import sysconfig
+    from importlib import import_module
     from importlib import metadata as importlib_metadata
 
     from . import World
     from . import docs as docs_generator
     from . import render as render_module
     from .corpus import CorpusError
+    from .mcp import _require_mcp
     from .render import RenderError
 
     checks: list[dict[str, Any]] = []
 
-    def check(name: str, ok: bool, detail: str, fix: str | None = None) -> None:
+    def check(name: str, ok: bool, detail: str, fix: str | None = None,
+              *, optional: bool = False) -> None:
         # `fix` is nulled on a passing check rather than stored, so the JSON
         # never shows a remedy beside a ✓ — a fix string is a claim that
-        # something needs fixing.
-        checks.append({"check": name, "ok": ok, "detail": detail,
-                       "fix": None if ok else fix})
+        # something needs fixing. An `optional` check that is not ok keeps its
+        # fix (the install command) but does not make the installation
+        # unhealthy: the prose marks it – rather than ✗.
+        checks.append({"check": name, "ok": ok, "optional": optional,
+                       "detail": detail, "fix": None if ok else fix})
 
     # 1. The Python floor, read from the installed package's own metadata
     # rather than restated here: `requires-python` lives in pyproject.toml,
@@ -8083,21 +8156,132 @@ def doctor(
             fix="run `worldloom docs` from the repository root and commit the result",
         )
 
-    healthy = all(entry["ok"] for entry in checks)
+    # 5. The `worldloom` an agent's harness runs. AGENTS.md, the skills and
+    # `.mcp.json` all say `worldloom …` and leave it to PATH, so this process
+    # can be healthy (run as `.venv/bin/worldloom doctor`) while the one a
+    # harness launches is missing, or is another installation with other
+    # code and other extras, whose refusals would then describe a CLI this
+    # checkout does not have.
+    scripts = sysconfig.get_path("scripts")
+    on_path = shutil.which("worldloom")
+    if on_path is None:
+        check(
+            "path:worldloom", False,
+            "no `worldloom` executable on PATH; agent harnesses and .mcp.json launch it by name",
+            fix=f"put {scripts} on PATH (activate the environment worldloom is installed in)",
+        )
+    elif _is_this_installation(on_path):
+        check("path:worldloom", True, f"{on_path} is this installation")
+    else:
+        check(
+            "path:worldloom", False,
+            f"{on_path} is another installation; this one's scripts are in {scripts}",
+            fix=f"put {scripts} ahead of {Path(on_path).parent} on PATH",
+        )
+
+    # 6. `.mcp.json` here: every server a client would launch must resolve,
+    # and one launching `worldloom mcp` makes the `mcp` extra required rather
+    # than optional. Read before the extra's check for that reason; servers
+    # with no `command` are remote and launch nothing.
+    config = Path(".mcp.json")
+    servers: dict[str, Any] = {}
+    config_error: str | None = None
+    if config.is_file():
+        try:
+            parsed = json.loads(config.read_text(encoding="utf-8"))
+            declared = parsed.get("mcpServers", {}) if isinstance(parsed, dict) else None
+            if not isinstance(declared, dict):
+                raise ValueError("`mcpServers` is not an object")
+            servers = declared
+        except (OSError, ValueError) as exc:
+            config_error = str(exc)
+    launches = {
+        name: server for name, server in sorted(servers.items())
+        if isinstance(server, dict) and isinstance(server.get("command"), str)
+    }
+    serves_mcp = any(
+        Path(server["command"]).stem == "worldloom"
+        and isinstance(server.get("args"), list) and server["args"][:1] == ["mcp"]
+        for server in launches.values()
+    )
+
+    # 7. The `mcp` extra, probed through the same `_require_mcp` the server
+    # calls first, so doctor cannot disagree with `worldloom mcp`.
+    try:
+        _require_mcp()
+    except RuntimeError:
+        check(
+            "extra:mcp", False,
+            "not installed: .mcp.json here launches `worldloom mcp`, which cannot start"
+            if serves_mcp else "not installed (optional): `worldloom mcp` cannot start",
+            fix=_extra_hint("mcp"), optional=not serves_mcp,
+        )
+    else:
+        check("extra:mcp", True, "importable: `worldloom mcp` can serve", optional=not serves_mcp)
+    if config_error is not None:
+        check("mcp.json", False, f".mcp.json cannot be read: {config_error}",
+              fix="make .mcp.json a JSON object whose `mcpServers` maps names to servers")
+    for name, server in launches.items():
+        command = server["command"]
+        resolved = shutil.which(command)
+        ours = Path(command).stem == "worldloom"
+        if resolved is None:
+            check(
+                f"mcp.json:{name}", False,
+                f"`{command}` is not on PATH, so an MCP client cannot launch this server",
+                fix=f"put {scripts} on PATH (activate the environment worldloom is installed in)"
+                    if ours else f"install `{command}` or put its directory on PATH",
+            )
+        elif ours and not _is_this_installation(resolved):
+            # Resolving is not enough for our own server: the client would
+            # serve another installation's tools to an agent editing this one.
+            check(
+                f"mcp.json:{name}", False,
+                f"`{command}` resolves to {resolved}, another installation",
+                fix=f"put {scripts} ahead of {Path(resolved).parent} on PATH",
+            )
+        else:
+            check(f"mcp.json:{name}", True, f"`{command}` resolves to {resolved}")
+
+    # 8. Optional extras: reported so an agent knows what it may not ask
+    # for, never counted against the installation.
+    for extra, modules, enables in _DOCTOR_EXTRAS:
+        try:
+            for module in modules:
+                import_module(module)
+        except Exception:
+            # Not only ImportError: a half-installed dependency raises what
+            # it likes at import, and doctor must report it, not crash on it.
+            check(f"extra:{extra}", False, f"not installed (optional): {enables} is unavailable",
+                  fix=_extra_hint(extra), optional=True)
+        else:
+            check(f"extra:{extra}", True, f"importable: {enables} is available")
+
+    healthy = all(entry["ok"] or entry["optional"] for entry in checks)
+    next_command = _DOCTOR_NEXT if healthy else "worldloom doctor"
     if as_json:
-        typer.echo(json.dumps({"ok": healthy, "checks": checks}, indent=2))
+        typer.echo(json.dumps({"ok": healthy, "checks": checks, "next": next_command}, indent=2))
     else:
         for entry in checks:
-            mark = "[green]✓[/green]" if entry["ok"] else "[red]✗[/red]"
+            if entry["ok"]:
+                mark = "[green]✓[/green]"
+            elif entry["optional"]:
+                mark = "[dim]–[/dim]"
+            else:
+                mark = "[red]✗[/red]"
             console.print(f"{mark} {escape(entry['check'])}: {escape(entry['detail'])}")
             if not entry["ok"] and entry["fix"]:
-                console.print(f"  [yellow]fix:[/yellow] {escape(entry['fix'])}")
+                label = "[dim]install:[/dim]" if entry["optional"] else "[yellow]fix:[/yellow]"
+                console.print(f"  {label} {escape(entry['fix'])}")
+        if healthy:
+            console.print(f"[dim]next:[/dim] {_DOCTOR_NEXT}")
     if not healthy:
-        failed = [entry["check"] for entry in checks if not entry["ok"]]
+        failed = [entry["check"] for entry in checks if not entry["ok"] and not entry["optional"]]
         _refuse(
             "doctor_unhealthy",
             f"[red]error:[/red] {len(failed)} of {len(checks)} check(s) failed:"
             f" {', '.join(failed)}: each names its fix above",
+            fix="apply each fix above, then run `worldloom doctor` again",
             exit_code=1,
             failed=failed,
         )
