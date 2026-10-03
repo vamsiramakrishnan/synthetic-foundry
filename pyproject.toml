@@ -135,6 +135,9 @@ dev = [
     # it changes how tests are scheduled, never what they assert, and every
     # test must pass under it and without it.
     "pytest-xdist>=3.5",
+    # Shards the suite across CI jobs by recorded durations (`.test_durations`);
+    # like xdist it moves tests between machines and never changes what runs.
+    "pytest-split>=0.10",
 ]
 
 [project.scripts]

@@ -87,7 +87,99 @@ jobs:
           --sample-size 3
           --root "${{ runner.temp }}/dispersed-replay"
 
+  # The suite, split four ways per interpreter. One leg's ~38 CPU-minutes on
+  # a 4-core runner set a floor near ten minutes however many xdist workers
+  # ran, and the coverage leg sat at ~34 minutes as the workflow's critical
+  # path. pytest-split assigns tests to shards by the durations recorded in
+  # `.test_durations` (refresh with `pytest -n auto --store-durations`; a test
+  # missing from it is placed by the average, so a stale file only costs
+  # balance, never coverage). Every test still runs on every interpreter.
   test:
+    name: test (${{ matrix.python-version }}, ${{ matrix.group }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        group: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+
+      # `-n auto` (pytest-xdist, one worker per runner core) inside each
+      # shard. Every test is parallel-safe (its own tmp_path, env changes
+      # through monkeypatch, nothing written to a fixed, cwd-relative or home
+      # path), so workers and shards change the schedule and never the
+      # verdict. A test that cannot share a machine with its neighbours gets
+      # `xdist_group` and these runs get `--dist loadgroup`; it is never
+      # skipped to make this green.
+      - name: Tests
+        if: matrix.python-version != '3.12'
+        run: pytest -q -n auto --splits 4 --group ${{ matrix.group }}
+
+      # One interpreter measures coverage; report-only is deliberate and is
+      # not a skipped gate: a coverage *threshold* invites tests written to
+      # move a number. Each shard writes its own data file and the `coverage`
+      # job below combines them, so the read-out is the whole suite's.
+      # `COVERAGE_CORE=sysmon` traces through 3.12's `sys.monitoring` rather
+      # than `sys.settrace`, which cost this leg roughly 3x the plain legs'
+      # CPU; the suite measures line coverage only, which sysmon supports.
+      - name: Tests (with coverage data)
+        if: matrix.python-version == '3.12'
+        env:
+          COVERAGE_CORE: sysmon
+          COVERAGE_FILE: .coverage.shard-${{ matrix.group }}
+        run: |
+          uv pip install --system pytest-cov
+          pytest -q -n auto --splits 4 --group ${{ matrix.group }} --cov=worldloom --cov-report=
+
+      - name: Keep the shard's coverage data
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-shard-${{ matrix.group }}
+          path: .coverage.shard-${{ matrix.group }}
+          include-hidden-files: true
+          if-no-files-found: error
+
+  coverage:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-shard-*
+          merge-multiple: true
+
+      # The four shards' data, combined and read out against this checkout's
+      # sources (same runner path as the shards, so no path remapping).
+      - name: Coverage read-out
+        run: |
+          pip install coverage
+          coverage combine .coverage.shard-*
+          coverage report
+
+  # The CLI's own gates, in parallel with the suite rather than after it: they
+  # took ~5 minutes at the tail of every test leg, and they do not depend on
+  # the suite's result. Every interpreter, as before.
+  cli:
+    name: cli (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -110,36 +202,9 @@ jobs:
       # output (build, narrate through the handshake, render, validate,
       # evaluate, enterprise cases, the reference agent). The steps below
       # exercise each stage richly but separately; this is the one that
-      # crosses the seams between them, and it names the stage that broke
-      # before the full suite has spent its minutes.
+      # crosses the seams between them, and it names the stage that broke.
       - name: The whole pipeline runs end to end
         run: worldloom smoke --out "${{ runner.temp }}/smoke"
-
-      # `-n auto` (pytest-xdist, one worker per runner core): serially this
-      # step took ~23 minutes a leg, and a gate that costs the better part of
-      # an hour is one contributors learn to push past. Every test is
-      # parallel-safe (its own tmp_path, env changes through monkeypatch,
-      # nothing written to a fixed, cwd-relative or home path), so the
-      # workers change the schedule and never the verdict. A test that cannot
-      # share a machine with its neighbours gets `xdist_group` and these runs
-      # get `--dist loadgroup`; it is never skipped to make this green.
-      - name: Tests
-        if: matrix.python-version != '3.12'
-        run: pytest -q -n auto
-
-      # One leg measures coverage and prints it in the job log. Report-only
-      # is deliberate and is not a skipped gate: a coverage *threshold* is a
-      # proxy gate that invites test theatre — tests written to move a number
-      # rather than to catch anything. Visibility is the product here; the
-      # suite's pass/fail is the gate. Parallel too: pytest-cov collects a
-      # data file per xdist worker and combines them before the read-out, so
-      # the report is the whole suite's; serially this leg took ~70 minutes,
-      # the longest in the workflow.
-      - name: Tests (with coverage read-out)
-        if: matrix.python-version == '3.12'
-        run: |
-          uv pip install --system pytest-cov
-          pytest -q -n auto --cov=worldloom --cov-report=term
 
       # The agent-facing documents must describe the harness that exists. These
       # are what an agent reads before it knows anything, so a stale flag there
@@ -471,7 +536,14 @@ jobs:
   # reporting divergences in host-separator form. Gating since the first
   # green run. Never make this leg green by skipping a test.
   windows:
+    name: windows (${{ matrix.group }}/2)
     runs-on: windows-latest
+    # Two shards: at ~16 minutes this leg became the workflow's critical path
+    # once the linux legs were split four ways.
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2]
     env:
       # GitHub step output is a pipe, not a console, so sys.stdout falls back
       # to the locale codec (cp1252) and any ✓ the CLI prints raises
@@ -507,7 +579,7 @@ jobs:
       # this leg took ~47 minutes, twice a linux leg, because process start
       # and file IO cost more here and the suite does a great deal of both.
       - name: Tests
-        run: pytest -q -n auto
+        run: pytest -q -n auto --splits 2 --group ${{ matrix.group }}
 
       # The coherence gate on the pinned example: proves the shipped corpus
       # loads and validates when read on a CRLF-native filesystem.
