@@ -19,6 +19,7 @@ import io
 import json
 import math
 import os
+import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal
@@ -180,6 +181,117 @@ def ledger_allocation_source(world: World, *, fact_id: str, rows: int, seed: int
                 Column(name="amount_scaled", expression=expr("if", expr("lt", ref("allocation_rank"), literal(head_rows)), head_value, tail_value), unit=unit))),
     ))
     return LedgerAllocationSource(Simulator(program, seed=seed, limits=limits), binding)
+
+
+@dataclass(frozen=True)
+class _ReconciliationRule:
+    """One operational measure whose integer column sum *is* a canonical fact.
+
+    ``flow`` separates quantities that accumulate over a period (revenue,
+    gross profit) from stocks observed at a moment (headcount). A flow may be
+    summed across a temporal table's ticks; a stock summed across ticks counts
+    the same employee once per day, so a stock binds only to a snapshot table.
+    """
+
+    fact_kind: str
+    columns: frozenset[str]
+    flow: bool
+
+
+#: Only measures with a registered company-level fact kind are listed. The
+#: obvious third pair, inventory, is absent on purpose: no generator mints an
+#: inventory fact (``ops.affected_records`` counts SKUs touched by an
+#: incident, not stock on hand), so naming one would bind to nothing.
+#: ``banking.lending.balance`` is minted per segment, not for the company, and
+#: ``cost`` columns have no cost-of-sales fact to meet. Column names are the
+#: business words a program author uses; the unit check below, not the name,
+#: is what makes the match safe (the retail mechanism's ``margin`` is money
+#: in ``minor_currency``, and never meets a fact in ``AUD_thousands``).
+RECONCILIATION_RULES: tuple[_ReconciliationRule, ...] = (
+    _ReconciliationRule("financial.revenue.actual", frozenset({"revenue", "sales", "net_sales"}), flow=True),
+    _ReconciliationRule("financial.gross_profit.actual", frozenset({"gross_profit", "margin"}), flow=True),
+    _ReconciliationRule("org.headcount", frozenset({"headcount", "employees"}), flow=False),
+)
+
+_SCALED_UNIT = re.compile(r"^(?P<unit>.+)\*10\^-(?P<decimals>[0-6])$")
+
+
+class UnboundReconciliation(Model):
+    """A pair the derivation considered and refused, with the reason in words."""
+
+    fact_kind: str
+    table: str | None = None
+    column: str | None = None
+    reason: str
+
+
+class ReconciliationDerivation(Model):
+    bound: tuple[FactReconciliation, ...] = ()
+    unbound: tuple[UnboundReconciliation, ...] = ()
+
+
+def derive_reconciliations(world: World, program: Program, *, period: str | None = None,
+                           declared: Iterable[FactReconciliation] = ()) -> ReconciliationDerivation:
+    """Bind each operational measure to its company-level canonical fact when both exist.
+
+    A pair binds only when the column name is a known business word for the
+    fact kind, the column is an integer scaled into exactly the fact's unit
+    (``<unit>*10^-<decimals>``), the stock/flow shape fits the table, and the
+    world holds exactly one current company-level fact of that kind for the
+    period. A program carries no calendar, so "same period" is the caller's
+    ``period`` or, without one, the world's only period: binding asserts the
+    program's whole run is that period, which is why this is opt-in. Every
+    pair that does not bind is reported with its reason instead of silently
+    skipped; a column already in ``declared`` is left to its declaration.
+    """
+    declared_columns = {(binding.table, binding.column) for binding in declared}
+    superseded = {fact.supersedes for fact in world.facts if fact.supersedes}
+    bound: list[FactReconciliation] = []
+    unbound: list[UnboundReconciliation] = []
+    for rule in RECONCILIATION_RULES:
+        columns = [(table, column) for table in sorted(program.tables, key=lambda t: t.name)
+                   for column in sorted(table.columns, key=lambda c: c.name) if column.name in rule.columns]
+        if not columns:
+            unbound.append(UnboundReconciliation(fact_kind=rule.fact_kind,
+                reason=f"no operational column named {' or '.join(sorted(rule.columns))}"))
+            continue
+        candidates = sorted((fact for fact in world.facts
+                             if fact.kind == rule.fact_kind and fact.subject == world.company.id
+                             and fact.value is not None and fact.id not in superseded
+                             and fact.observer is None and fact.source != "latent"
+                             and (period is None or fact.period == period)),
+                            key=lambda fact: fact.id)
+        fact = candidates[0] if len(candidates) == 1 else None
+        for table, column in columns:
+            scaled = _SCALED_UNIT.match(column.unit or "")
+            reason: str | None = None
+            if (table.name, column.name) in declared_columns:
+                reason = "declared explicitly"
+            elif not candidates:
+                reason = (f"world has no current company-level {rule.fact_kind} fact"
+                          + (f" for period {period}" if period is not None else ""))
+            elif fact is None:
+                periods = sorted({str(candidate.period) for candidate in candidates})
+                reason = f"{len(candidates)} company-level {rule.fact_kind} facts ({', '.join(periods)}); name one period"
+            elif (fact.value is None or column.kind != "int" or scaled is None
+                  or scaled["unit"] != fact.value.unit):
+                unit = fact.value.unit if fact.value is not None else "<unit>"
+                reason = f"column unit {column.unit!r} is not {unit}*10^-<decimals>"
+            elif not rule.flow and table.temporal:
+                reason = "a stock summed across a temporal table's ticks counts each holding once per tick"
+            if reason is None and fact is not None and scaled is not None:
+                binding = FactReconciliation(table=table.name, column=column.name, fact_id=fact.id,
+                                             decimals=int(scaled["decimals"]))
+                try:
+                    _fact_amount(world, binding)
+                except SynthesisError as error:
+                    reason = str(error)
+                else:
+                    bound.append(binding)
+                    continue
+            unbound.append(UnboundReconciliation(fact_kind=rule.fact_kind, table=table.name,
+                                                 column=column.name, reason=reason or "not bound"))
+    return ReconciliationDerivation(bound=tuple(bound), unbound=tuple(unbound))
 
 
 class CorpusScalePlan(Model):
@@ -344,6 +456,8 @@ def plan_corpus_scale(world: World, simulator: Simulator, *,
                       native_plans: Iterable[NativeCorpusPlan] | None = None,
                       native_surface: Literal["legacy", "business"] = "business",
                       reconciliations: Iterable[FactReconciliation] = (),
+                      reconcile: Literal["declared", "auto"] = "declared",
+                      reconcile_period: str | None = None,
                       csv_shard_rows: int = 100_000,
                       csv_shard_bytes: int = 32 * 1024 * 1024,
                       maximum_files: int = 10_000,
@@ -353,7 +467,9 @@ def plan_corpus_scale(world: World, simulator: Simulator, *,
     The simulator is an explicit operational scope for this company. Its
     integer money is not silently promoted into pre-existing macro facts.
     Pass native plans to control file topology; otherwise one long native
-    file is selected for each profile target.
+    file is selected for each profile target. ``reconcile="auto"`` adds the
+    pairs :func:`derive_reconciliations` binds to the declared ones; the plan
+    records the result, so verification replays it as declared bindings.
     """
     target = scale_profile(profile)
     if simulator.compiled.rows < target.minimum_relational_rows:
@@ -384,7 +500,13 @@ def plan_corpus_scale(world: World, simulator: Simulator, *,
         if not any(plan.format == native.format and plan.minimum_units >= native.minimum_units
                    and plan.minimum_distinct_facts >= native.minimum_distinct_facts for plan in chosen):
             raise SynthesisError("native_target_shortfall", native.format)
-    bindings = tuple(sorted(reconciliations, key=lambda b: (b.table, b.column, b.fact_id)))
+    declared = tuple(reconciliations)
+    if reconcile == "auto":
+        declared += derive_reconciliations(world, simulator.program, period=reconcile_period,
+                                           declared=declared).bound
+    elif reconcile != "declared" or reconcile_period is not None:
+        raise SynthesisError("reconciliation_binding", "reconcile_period belongs to reconcile='auto'")
+    bindings = tuple(sorted(declared, key=lambda b: (b.table, b.column, b.fact_id)))
     if len({(binding.table, binding.column) for binding in bindings}) != len(bindings):
         raise SynthesisError("reconciliation_binding", "a quantity column has more than one canonical total")
     for binding in bindings:
@@ -744,6 +866,7 @@ __all__ = [
     "NativeScaleTarget", "CorpusScaleProfile", "SCALE_PROFILES", "scale_profile",
     "ScaleFinding", "CorpusScaleAdequacy", "assess_corpus_scale", "CorpusScalePlan", "plan_corpus_scale",
     "FactReconciliation", "LedgerAllocationSource", "ledger_allocation_source",
+    "RECONCILIATION_RULES", "UnboundReconciliation", "ReconciliationDerivation", "derive_reconciliations",
     "CorpusFile", "CorpusColumn", "CorpusTable", "CorpusScaleManifest",
     "export_corpus_scale", "verify_corpus_scale",
 ]

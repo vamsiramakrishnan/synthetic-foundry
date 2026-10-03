@@ -316,12 +316,31 @@ worldloom corpus-scale build <CORPUS_PATH>
 | `--out`, `-o` | New destination; source corpus is unchanged. |
 | `--profile` | development, enterprise, stress, or a profile JSON path. |
 | `--program` | Versioned operational synthesis Program JSON. |
+| `--reconcile` | declared: only --reconciliation bindings. auto: also bind each operational measure to its company-level fact when both exist (see `corpus-scale reconcile`). |
+| `--reconcile-period` | Fact period the operational run covers, for --reconcile auto. |
 | `--reconciliation` | FactReconciliation JSON for --program; repeat for each exact total. |
 | `--resume` | Reuse a completed destination only after source reconstruction and verification. |
 | `--rows` | Explicit transaction population for --fact. |
 | `--shard-bytes` | Maximum bytes per CSV shard. |
 | `--shard-rows` | Maximum physical data rows per CSV shard. |
 | `--xlsx` | Also write typed workbooks from each relational shard. |
+
+### `worldloom corpus-scale reconcile`
+
+Show which measure-to-fact reconciliations `build --reconcile auto` binds, and why the rest do not.
+
+```
+worldloom corpus-scale reconcile <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--fact` | Canonical numeric fact to allocate into an exactly reconciling transaction ledger. |
+| `--limits` | Explicit synthesis resource budgets JSON. |
+| `--period` | Fact period the operational run covers. |
+| `--program` | Versioned operational synthesis Program JSON. |
+| `--reconciliation` | FactReconciliation JSON already declared; its column is not re-derived. |
+| `--rows` | Explicit transaction population for --fact. |
 
 ### `worldloom corpus-scale verify`
 
@@ -499,6 +518,7 @@ worldloom enterprise-evals serve <CORPUS_PATH>
 | `--max-runs` | Runs open at once (default: policy `connectors.serving.max_runs`). |
 | `--port` |  |
 | `--query-id` | Serve only these query IDs; repeat to select more. |
+| `--run-store` | Journal runs to this append-only JSONL file (fsynced per record) and, on start, reload the runs it holds: open runs are replayed, ended runs keep their grades. Unset, runs live in memory only. |
 | `--surface` | The tools served: contract (each locked contract's operations exactly as Anvil projects them for MCP; a connector with no locked contract keeps its own; the default: policy `connectors.surface`) or native (each connector definition's own). |
 | `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
 | `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
@@ -777,6 +797,9 @@ worldloom evalrun improve <CORPUS>
 | `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--contract` | With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface, or in process on the contract surface its bundles project with --surface contract (no Anvil server per case). |
+| `--curriculum` | failures: between rounds, add training cases drawn from --curriculum-pool for the clusters the round's champion failed (by the declared finding-key mapping, weighted by cluster size), never a held-out case. Off by default: the training set stays fixed. |
+| `--curriculum-cases` | With --curriculum: training cases each round adds (default 8). |
+| `--curriculum-pool` | With --curriculum: the corpus or case set new cases are drawn from, such as an `evalrun corners` case set. Default: the cases of CORPUS that --limit left out. |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
@@ -2160,6 +2183,16 @@ worldloom series <CORPUS>
 | `--json` | Emit the decomposition as JSON: stable keys and ordering. |
 | `--kind` | Fact kind to read. Default: the longest series in the corpus. |
 | `--subject` | Entity id the series is about. Default: whichever has the most periods. |
+
+### `worldloom smoke`
+
+Run the whole pipeline on a tiny world, one line per stage, in seconds.
+
+| Option | Purpose |
+| --- | --- |
+| `--format`, `-f` | Render these formats (repeatable). Default: markdown and xlsx; pass `-f markdown` alone on an install without the xlsx extra. |
+| `--out`, `-o` | Directory to run the pipeline in; kept afterwards for inspection. Must be empty or absent. Omit to run in a temporary directory that is removed. |
+| `--seed`, `-s` | World seed for the tiny world. |
 
 ### `worldloom spaces`
 

@@ -410,6 +410,9 @@ def enterprise_evals_build(
 ) -> None:
     """Plan, materialize, validate, prove, export, and optionally render a connector corpus.
 
+    A case whose sources the world cannot supply is refused before anything
+    is written, naming the connector, the entity, the counts and the cases.
+
     Before anything is written, every case is proved solvable
     (`worldloom evalrun prove`): its gold DAG replayed through the connector
     emulator under the vendor query engine. A corpus with an unsolvable case
@@ -453,7 +456,13 @@ def enterprise_evals_build(
         shard_count=shard_count,
         dag_shapes=resolve_shapes(dag_shape),
     )
-    corpus = materialize_corpus(world, queries)
+    try:
+        corpus = materialize_corpus(world, queries)
+    except ValueError as exc:
+        # Every materializer refusal names the connector, entity and counts;
+        # a traceback would bury that under the stack.
+        _refuse("sources_insufficient", f"[red]error:[/red] {escape(str(exc))}",
+                fix="supply operational projections or a scenario profile whose sources the world can ground")
     findings = validate_corpus(corpus)
     if findings:
         for finding in findings:
@@ -806,6 +815,7 @@ _REFUSALS: dict[str, str] = {
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
     # `worldloom evalrun`.
     "corpus_unreadable": "the enterprise-evals directory cannot be read or is not one",
+    "sources_insufficient": "a planned case needs source records the world cannot supply; the message names the connector, the entity and the counts",
     "cases_uncompilable": "the row compiler refused a query in the corpus; the message names the first reasons",
     "no_cases": "the corpus compiled to no cases, so there is nothing to run",
     "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",
@@ -814,6 +824,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_connectors": "the --connectors value is not emulator or anvil",
     "unknown_harness_mode": "the --harness-mode value is not turns or sdk-program",
     "unknown_lever": "the --levers value names something other than agent and interface",
+    "unknown_curriculum": "the --curriculum value is not a curriculum the improve loop knows (failures)",
     "anvil_unavailable": "Anvil cannot serve the run: no Anvil CLI, an unreadable contract, or a contract its connector's mapping does not cover",
     # `worldloom contracts`.
     "contract_refused": "the contract lock does not read, a source's sha256 is not the locked one, Anvil refused the compile, or the mapping does not cover the bundle",
@@ -826,6 +837,7 @@ _REFUSALS: dict[str, str] = {
     "evalrun_shard_invalid": "--shard is not i/n with 1 <= i <= n",
     "resume_mismatch": "--resume found a ledger for a different run; the message names each identity field that differs",
     "concurrency_refused": "the connector service does not admit the requested --concurrency",
+    "smoke_failed": "a `worldloom smoke` stage failed; data.stage names it and data.output is the tail of what it printed",
     "shards_unmergeable": "the shard directories are not one complete sharded run; the message names what differs or is missing",
     "results_unreadable": "an external harness's results file cannot be read",
     "case_set_unreadable": "the case set directory's cases or records cannot be read",
@@ -8026,6 +8038,75 @@ def doctor(
             exit_code=1,
             failed=failed,
         )
+
+
+@app.command()
+def smoke(
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Directory to run the pipeline in; kept afterwards for inspection. Must"
+             " be empty or absent. Omit to run in a temporary directory that is removed.",
+    ),
+    seed: int = typer.Option(8128, "--seed", "-s", help="World seed for the tiny world."),
+    formats: list[str] = typer.Option(
+        None, "--format", "-f",
+        help="Render these formats (repeatable). Default: markdown and xlsx; pass"
+             " `-f markdown` alone on an install without the xlsx extra.",
+    ),
+) -> None:
+    """Run the whole pipeline on a tiny world, one line per stage, in seconds.
+
+    Build, narrate through the agent handshake with the offline writer, render,
+    validate, score the retrieval baselines, generate enterprise eval cases, and
+    run the reference agent over them. Every stage is the real CLI command run
+    as its own process, on the previous stage's output. Exits non-zero at the
+    first stage that fails, naming it and printing the tail of what it said.
+    """
+    import tempfile
+    import time
+
+    from . import smoke as smoke_module
+
+    def report(outcome: Any) -> None:
+        console.print(
+            f"[green]✓[/green] {outcome.name:<17} {outcome.seconds:6.2f}s"
+            f"  [dim]{escape(outcome.detail)}[/dim]",
+            soft_wrap=True,
+        )
+
+    chosen = tuple(formats) if formats else smoke_module.DEFAULT_FORMATS
+    started = time.perf_counter()
+
+    def go(directory: Path) -> list[Any]:
+        try:
+            return smoke_module.run(directory, seed=seed, formats=chosen, on_stage=report)
+        except smoke_module.SmokeFailure as failure:
+            console.print(f"[red]✗[/red] {failure.stage:<17} {failure.seconds:6.2f}s")
+            # In JSON mode the tail rides in the envelope's data instead:
+            # stderr there is one machine-readable line, and the child's own
+            # output may itself hold an envelope a harness would match first.
+            if failure.output and os.environ.get("WORLDLOOM_OUTPUT") != "json":
+                err.print(escape(failure.output), soft_wrap=True)
+            _refuse(
+                "smoke_failed",
+                f"[red]error:[/red] smoke stage [bold]{escape(failure.stage)}[/bold]"
+                f" failed: {escape(failure.reason)}",
+                exit_code=1,
+                stage=failure.stage,
+                reason=failure.reason,
+                output=failure.output,
+            )
+
+    if out is None:
+        with tempfile.TemporaryDirectory(prefix="worldloom-smoke-") as scratch:
+            outcomes = go(Path(scratch) / "smoke")
+    else:
+        outcomes = go(out)
+    console.print(
+        f"[green]✓[/green] smoke passed: {len(outcomes)} stages in"
+        f" {time.perf_counter() - started:.1f}s"
+        + (f" [dim](kept in {escape(str(out))})[/dim]" if out is not None else "")
+    )
 
 
 @app.command()

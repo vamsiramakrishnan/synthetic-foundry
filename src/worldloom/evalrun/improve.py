@@ -112,6 +112,13 @@ from ..packkit.resolve import ResolvedPack
 from .agents import AgentUnderTest, fingerprint
 from .autopsy import autopsy
 from .contract import EvalCase
+from .failure_curriculum import (
+    CURRICULUM_MODES,
+    DEFAULT_CURRICULUM_CASES,
+    FailureCurriculum,
+    check_unseen,
+    draw_failure_cases,
+)
 from .grader import GraderDrift, check_frozen, grader_identity
 from .harness import skills_cache_in
 from .noise import Interval, PairedComparison, confidence_level, paired, resample_count
@@ -435,6 +442,10 @@ class RoundReceipt(Model):
     transfer: Gate | None = None
     #: The one-use held-out experiment reserved before either side ran.
     qualification: dict[str, Any] | None = None
+    #: With a ``failures`` curriculum, the training cases this round added
+    #: and the clusters of the previous round's champion that drove each
+    #: (``failure_curriculum.FailureDraw.record``); absent otherwise.
+    curriculum: dict[str, Any] | None = None
 
     @model_serializer(mode="wrap")
     def _narrow_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -446,7 +457,8 @@ class RoundReceipt(Model):
 
 
 #: Receipt fields only wide search, or the interface lever, fills, and so only their receipts carry.
-_WIDE_FIELDS: tuple[str, ...] = ("parent", "screening", "spent", "lever", "interface", "transfer", "qualification")
+_WIDE_FIELDS: tuple[str, ...] = ("parent", "screening", "spent", "lever", "interface", "transfer", "qualification",
+                                 "curriculum")
 
 
 class ImproveReport(Model):
@@ -475,13 +487,16 @@ class ImproveReport(Model):
     levers: tuple[str, ...] | None = None
     interface: dict[str, Any] | None = None
     qualification: dict[str, Any] | None = None
+    #: With a ``failures`` curriculum: its settings, the cases it added over
+    #: every round, and the training set the loop ended with; absent otherwise.
+    curriculum: dict[str, Any] | None = None
 
     @model_serializer(mode="wrap")
     def _single_run_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.repeats == 1:
             data.pop("repeats", None)
-        for name in ("search", "spent", "levers", "interface", "qualification"):
+        for name in ("search", "spent", "levers", "interface", "qualification", "curriculum"):
             if data.get(name, False) is None:
                 data.pop(name)
         return data
@@ -634,7 +649,18 @@ class Improver:
     #: Fresh evidence-disjoint promotion tranches, independent-unit inference,
     #: and a sealed probe budget. Disabled preserves the legacy wire format.
     qualification: QualificationPolicy | None = None
+    #: A ``failure_curriculum.FailureCurriculum``: between rounds, new
+    #: training cases drawn from its pool and aimed at the clusters the
+    #: round's champion failed. ``None`` keeps the training set fixed, and
+    #: every receipt, run directory and byte exactly as without it.
+    curriculum: FailureCurriculum | None = None
     _qualification: QualificationVault | None = field(default=None, repr=False)
+    #: The label training runs are filed under: ``train`` for the set the
+    #: loop started with, ``train-<digest>`` once a curriculum has grown it,
+    #: so a run over one set is never read back as a run over another.
+    _train_label: str = "train"
+    #: The champion's first training run of the latest round, which the curriculum reads.
+    _last_train_run: RunReport | None = field(default=None, repr=False)
     _variant: Any = None
     _variants: dict[str, Any] = field(default_factory=dict)
     _runs: dict[tuple[str, str, str], RunReport] = field(default_factory=dict)
@@ -1002,6 +1028,7 @@ class Improver:
             raise ValueError(f"repeats must be at least 1, not {self.repeats}")
         self._check_search()
         self._check_levers()
+        self._check_curriculum()
         # The budget caps what a round spends, screening or not: the finalists'
         # full training runs are its floor, so a budget below them could never
         # be kept and is refused rather than silently overrun.
@@ -1048,6 +1075,8 @@ class Improver:
         receipts: list[RoundReceipt] = []
         self.out.mkdir(parents=True, exist_ok=True)
         last, protected = self._earlier()
+        initial_train = tuple(train)
+        grown: dict[str, Any] | None = None
         for number in range(last + 1, last + rounds + 1):
             protected |= {f"{champion.kind}:{champion.name}"}
             before = self._spent
@@ -1057,6 +1086,8 @@ class Improver:
             except QualificationExhausted as error:
                 receipt = RoundReceipt(round=number, grader=grader["digest"], champion=_identity(champion),
                                        decision="qualification_exhausted", reasons=(str(error),))
+            if grown is not None:
+                receipt = receipt.model_copy(update={"curriculum": grown})
             if self.wide:
                 receipt = receipt.model_copy(update={"spent": self._spent - before})
             if receipt.candidate is not None:
@@ -1078,8 +1109,11 @@ class Improver:
                 # answer before a harness can go on, or the harness is not
                 # answering at all: another round would repeat this one.
                 break
-        report = ImproveReport(grader=grader, train_cases=len(train), holdout_cases=len(holdout),
-                               train_case_set=case_set_digest(train), holdout_case_set=case_set_digest(holdout),
+            if self.curriculum is not None and number < last + rounds:
+                train, grown = self._grow(number, train, holdout)
+        report = ImproveReport(grader=grader, train_cases=len(initial_train), holdout_cases=len(holdout),
+                               train_case_set=case_set_digest(initial_train),
+                               holdout_case_set=case_set_digest(holdout),
                                initial=_identity(initial), champion=_identity(champion), rounds=tuple(receipts),
                                promotions=sum(item.decision == "promoted" for item in receipts),
                                held_out_dropped=held_out_dropped, repeats=self.repeats,
@@ -1088,15 +1122,70 @@ class Improver:
                                levers=self.levers if self.interface is not None else None,
                                interface=self._interface_summary(initial_variant) if self.interface is not None
                                else None,
-                               qualification=self._qualification.summary() if self._qualification is not None else None)
+                               qualification=self._qualification.summary() if self._qualification is not None else None,
+                               curriculum=None if self.curriculum is None else {
+                                   **self.curriculum.settings(),
+                                   "added": len(train) - len(initial_train),
+                                   "final_train_cases": len(train),
+                                   "final_train_case_set": case_set_digest(train)})
         _write(self.out / "improve.json", report.model_dump(mode="json", by_alias=True))
         return report
+
+    # -- failure curriculum -----------------------------------------------------
+
+    def _check_curriculum(self) -> None:
+        if self.curriculum is None:
+            return
+        if self.curriculum.mode not in CURRICULUM_MODES:
+            raise ValueError(f"unknown curriculum {self.curriculum.mode!r}; use one of {list(CURRICULUM_MODES)}")
+        if self.curriculum.cases < 1:
+            raise ValueError(f"a curriculum round adds at least one case, not {self.curriculum.cases}")
+        # Each of these is fixed over the training set it was built for: a
+        # sealed qualification experiment, a value table keyed by the
+        # corpus's case ids, and an archive whose cluster means are over one
+        # case set. A growing training set would quietly break each.
+        if self.qualification is not None:
+            raise ValueError("a failures curriculum cannot grow a sealed qualification experiment's training set")
+        if self.values is not None:
+            raise ValueError("a failures curriculum adds cases no value table covers; drop --value or the curriculum")
+        if self.parents == "archive":
+            raise ValueError("a failures curriculum changes the training set the archive's cluster means are over; "
+                             "use --parents champion with it")
+
+    def _grow(self, number: int, train: Sequence[EvalCase],
+              holdout: Sequence[EvalCase]) -> tuple[Sequence[EvalCase], dict[str, Any] | None]:
+        """The next round's training cases: *train* plus the curriculum's draw from round *number*'s failures.
+
+        The draw reads the champion's first training run of the round just
+        receipted, never a held-out run, and every case it adds is checked
+        against the held-out cases by id, content key, source-record digest
+        and gold-DAG digest before it can train.
+        """
+        assert self.curriculum is not None
+        run = self._last_train_run
+        if run is None:
+            return train, None
+        # Every cluster, not the brief's top twelve: a small cluster still
+        # earns its share of the new cases.
+        found = autopsy(run, cases=train, top=max(1, len(run.results)) * 64)
+        if found.failing == 0:
+            return train, None
+        draw = draw_failure_cases(found, self.curriculum.pool, count=self.curriculum.cases, round=number + 1,
+                                  train=train, held=holdout, exclude=self.curriculum.exclude)
+        check_unseen(draw.cases, holdout)
+        grown = (*train, *draw.cases)
+        if draw.cases:
+            self._validate_cases(grown)
+            self._train_label = f"train-{case_set_digest(grown)[:12]}"
+        record = draw.record(source_round=number, train_cases=len(grown), train_case_set=case_set_digest(grown))
+        return grown, record
 
     def _round(self, number: int, champion: ResolvedPack, train: Sequence[EvalCase], holdout: Sequence[EvalCase],
                grader: dict[str, Any], stem: str, protected: frozenset[str] = frozenset(), *,
                min_train: float, min_held: float, max_fall: float) -> RoundReceipt:
         base = {"round": number, "grader": grader["digest"], "champion": _identity(champion)}
-        champion_train = self._pinned_runs(champion, train, "train", grader)
+        champion_train = self._pinned_runs(champion, train, self._train_label, grader)
+        self._last_train_run = champion_train[0]
         parent, parent_train = champion, tuple(champion_train)
         archive: Archive | None = None
         wide: dict[str, Any] = {}
@@ -1182,7 +1271,7 @@ class Improver:
         for item in finalists:
             assert item.candidate is not None
             self._candidates[item.candidate.digest] = item.candidate
-            runs = self._pinned_runs(item.candidate, train, "train", grader, variant=item.variant)
+            runs = self._pinned_runs(item.candidate, train, self._train_label, grader, variant=item.variant)
             gate = self._gate(champion_train, runs, name="train", min_delta=min_train, strict=False,
                               max_fall=max_fall, values=self.values)
             # The archive holds agent policies; an interface candidate is not one.
@@ -1396,7 +1485,7 @@ class Improver:
         if parent is None:
             return archive, champion, tuple(champion_train), {
                 **record, **_identity(champion), "reason": f"{entry.ref}@{entry.digest} no longer resolves"}
-        runs = tuple(champion_train) if parent is champion else self._pinned_runs(parent, train, "train", grader)
+        runs = tuple(champion_train) if parent is champion else self._pinned_runs(parent, train, self._train_label, grader)
         return archive, parent, runs, {**record, **_identity(parent)}
 
     def _archive_add(self, archive: Archive, pack: ResolvedPack, runs: Sequence[RunReport], train: Sequence[EvalCase],
@@ -1572,7 +1661,7 @@ class Improver:
                 records.append(_contribution(hunk, position, decision="kept",
                                                 reason=f"the rest does not lint without it: {'; '.join(findings[:2])}"))
                 continue
-            trial_run = self._pinned_runs(trial, train, "train", grader)
+            trial_run = self._pinned_runs(trial, train, self._train_label, grader)
             cost, bounds = self._cost(trial_run, current_run)
             # One run a side: the measured cost against the tolerance. Over
             # repeats: the upper bound of its interval, so a hunk goes only
@@ -1843,7 +1932,7 @@ class Improver:
                                              reason=f"the rest does not lint without it: {'; '.join(findings[:2])}"))
                 continue
             self._variants[trial.digest] = trial
-            trial_run = self._pinned_runs(champion, train, "train", grader, variant=trial)
+            trial_run = self._pinned_runs(champion, train, self._train_label, grader, variant=trial)
             cost, bounds = self._cost(trial_run, current_run)
             low, high = (None, None) if bounds is None else bounds
             ceiling = cost if high is None else high
@@ -1925,7 +2014,9 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
             finalists: int | None = None, parents: str | None = None,
             round_budget: int | None = None, levers: Sequence[str] | str | None = None, interface: Any = None,
             transfer: AgentUnderTest | None = None,
-            qualification: QualificationPolicy | None = None) -> ImproveReport:
+            qualification: QualificationPolicy | None = None, curriculum: str | None = None,
+            curriculum_pool: Sequence[EvalCase] | None = None,
+            curriculum_cases: int | None = None) -> ImproveReport:
     """Run the loop from *champion* over *cases*; the held-out cases are *holdout* or a stable share of *cases*.
 
     A separate *holdout* (cases compiled from fresh seeds) is the stronger
@@ -1972,15 +2063,35 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
     and when resuming; ordinary two-argument runners keep their contract.
     Optional ``validate_cases(cases)`` verifies domain provenance before
     sealing and before any execution or cached-run reuse.
+
+    *curriculum* ``failures`` grows the training set between rounds: after
+    each round, *curriculum_cases* (default 8) cases of *curriculum_pool* are
+    drawn for the clusters that round's champion failed, by the declared
+    mapping ``failure_curriculum.FINDING_TARGETS`` and weighted by cluster
+    size, and join the next round's training cases. A pool case that shares
+    an id, a content key, a source-record digest or a gold-DAG digest with a
+    held-out case, declares a held-out split, or would have been held out by
+    the share split, is never drawn. The next round's receipt records which
+    clusters drove which cases. Without it (the default) the training set is
+    fixed and nothing about the loop changes.
     """
     from .evidence import admit_reference, brief_mode
     from .interface import parse_levers
 
     dropped = 0
+    exclude: Callable[[EvalCase], bool] | None = None
     if holdout is None:
         share = float(packkit.policy("evalrun.improve.holdout_share")) if holdout_share is None else holdout_share
         train, held = (split_cases(cases, holdout_share=share) if qualification is None else
                        isolated_splits(cases, holdout_share=share, unit_dimension=qualification.unit_dimension))
+
+        def held_by_share(case: EvalCase) -> bool:
+            # A pool case the share split would have held out stays out of
+            # training, so the same corpus compiled larger never trains on
+            # what a smaller compile of it held back.
+            return bool(split_cases((case,), holdout_share=share)[1])
+
+        exclude = held_by_share
     else:
         # A case the training corpus itself declares held out stays sealed
         # even when the holdout comes from elsewhere: it is dropped, counted.
@@ -1988,6 +2099,14 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
         dropped = len(cases) - len(train)
         held = tuple(holdout)
     mode = brief_mode(brief)
+    plan: FailureCurriculum | None = None
+    if curriculum is not None:
+        if curriculum not in CURRICULUM_MODES:
+            raise ValueError(f"unknown curriculum {curriculum!r}; use one of {list(CURRICULUM_MODES)}")
+        plan = FailureCurriculum(pool=tuple(curriculum_pool or ()), mode=curriculum, exclude=exclude,
+                                 cases=DEFAULT_CURRICULUM_CASES if curriculum_cases is None else int(curriculum_cases))
+    elif curriculum_pool is not None or curriculum_cases is not None:
+        raise ValueError("curriculum_pool and curriculum_cases need curriculum='failures'")
     if reference_run is not None:
         # Refused here, before any run is paid for, as well as at every brief.
         reference_run = admit_reference(reference_run, train=train, holdout=held)
@@ -2014,7 +2133,7 @@ def improve(champion: ResolvedPack, cases: Sequence[EvalCase], *, run: Runner, a
                         round_budget=_optional_int(packkit.policy("evalrun.improve.round_budget"))
                         if round_budget is None else int(round_budget),
                         levers=parse_levers(levers), interface=interface, transfer=transfer,
-                        qualification=qualification)
+                        qualification=qualification, curriculum=plan)
     return improver.improve(champion, train, held,
                             rounds=int(packkit.policy("evalrun.improve.rounds")) if rounds is None else rounds,
                             min_train_delta=min_train_delta, min_holdout_delta=min_holdout_delta,

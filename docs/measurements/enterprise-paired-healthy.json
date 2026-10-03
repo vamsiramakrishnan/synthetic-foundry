@@ -1,0 +1,1832 @@
+{
+  "arms": {
+    "grammar": {
+      "by_failure": {
+        "none": {
+          "compiled": 100,
+          "executed": 100,
+          "execution_with_tool_error": 3,
+          "grade_behavior": 15,
+          "grade_ok": 85
+        }
+      },
+      "by_shape": {
+        "conditional": 12,
+        "deep_chain": 18,
+        "delete_chain": 3,
+        "diamond": 18,
+        "fan_in": 12,
+        "fan_out": 3,
+        "map_read": 12,
+        "read_chain": 2,
+        "write_chain": 20
+      },
+      "compile_percent": 100.0,
+      "compile_refusals": {},
+      "compiled": 100,
+      "execution": {
+        "executed": 100,
+        "execution_with_tool_error": 3,
+        "grade_behavior": 15,
+        "grade_ok": 85
+      },
+      "grade_failures": {},
+      "planning_refusals": {},
+      "planning_refused": 0,
+      "population": 100,
+      "refused": 0,
+      "runtime_error_rows": [],
+      "runtime_errors": {},
+      "validation_examples": [],
+      "validation_finding_count": 0
+    },
+    "legacy": {
+      "by_failure": {
+        "none": {
+          "compiled": 100,
+          "executed": 100,
+          "grade_ok": 100
+        }
+      },
+      "by_shape": {
+        "legacy": 100
+      },
+      "compile_percent": 100.0,
+      "compile_refusals": {},
+      "compiled": 100,
+      "execution": {
+        "executed": 100,
+        "grade_ok": 100
+      },
+      "grade_failures": {},
+      "population": 100,
+      "refused": 0,
+      "runtime_error_rows": [],
+      "runtime_errors": {},
+      "validation_examples": [],
+      "validation_finding_count": 0
+    }
+  },
+  "paired": {
+    "by_grammar_shape": {
+      "conditional": {
+        "legacy_only_ok": 12
+      },
+      "deep_chain": {
+        "both_ok": 18
+      },
+      "delete_chain": {
+        "legacy_only_ok": 3
+      },
+      "diamond": {
+        "both_ok": 18
+      },
+      "fan_in": {
+        "both_ok": 12
+      },
+      "fan_out": {
+        "both_ok": 3
+      },
+      "map_read": {
+        "both_ok": 12
+      },
+      "read_chain": {
+        "both_ok": 2
+      },
+      "write_chain": {
+        "both_ok": 20
+      }
+    },
+    "categories": {
+      "both_ok": 85,
+      "grammar_only_ok": 0,
+      "legacy_only_ok": 15,
+      "neither_ok": 0,
+      "refused_both": 0,
+      "refused_grammar": 0,
+      "refused_legacy": 0
+    },
+    "pairs": 100,
+    "refusal_reasons": {},
+    "rows": [
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "5db2be1189babfae560db1f03155eb60",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "ace8ff70094aaacb1a2508053ebef386",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "ace8ff70094aaacb1a2508053ebef386"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "c801e944a38bc125348cc3e7c48eec8b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "039bd16f65ac63c8b05d6331a313d667",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "039bd16f65ac63c8b05d6331a313d667"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "9e405b40705df4b957cfb550748a1cb7",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "64a5ec8e3846af872ce9fea7662b010d",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "64a5ec8e3846af872ce9fea7662b010d"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "a5b9501356a67a91d6d9d7cc69fd9796",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "682d0f4b54550bc555388fa1b1611045",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "682d0f4b54550bc555388fa1b1611045"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "c411a6f23816fbc7ef85bdc2ca53bd27",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "550b527eec0b0d7098d50e3317dea49e",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "550b527eec0b0d7098d50e3317dea49e"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "fe3c95c2c49a2bea1da91b954fc07750",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "6e0139f75e4f1630b0622e8e7dd3e31f",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "6e0139f75e4f1630b0622e8e7dd3e31f"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "a8cc9486724a0af1b6d9ad238805b045",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "444194e72efd1cdc9332683163777ebf",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "444194e72efd1cdc9332683163777ebf"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "e4667f902cf6442f45b68408ae25e3a8",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "9ff6ce7c6a40f02e8229a930c443e27e",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "9ff6ce7c6a40f02e8229a930c443e27e"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "dccb6669a02c3ad0f0fbae1b9c2e0f87",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "b7edfc12f40c57e69cd73148870e3565",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "b7edfc12f40c57e69cd73148870e3565"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "9d67aef55efa70fd0668bfd6e43b6cf6",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "ad4d5669d09998ab9cc996de3d7220cf",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "ad4d5669d09998ab9cc996de3d7220cf"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "dcc1ada58d8a505e01a31888c01a9cd2",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "227ab1f3adf9f6d057b2f466c1c10d36",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "227ab1f3adf9f6d057b2f466c1c10d36"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "294d5584b08ac1b58773422f138806e9",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "a539a1fcd1e7d31fc7920692ee7afeb2",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a539a1fcd1e7d31fc7920692ee7afeb2"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "cd5625c7c0079695716821d1eabcab52",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "a3881261cc48e6fcd4dfdabaf2b531f2",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a3881261cc48e6fcd4dfdabaf2b531f2"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "32c999bc405d818df3c49e271f032098",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "2a4d660b020ac5a5004e6daaa838c48e",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "2a4d660b020ac5a5004e6daaa838c48e"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "87d8eff15728a0bd66b64a19ccad6032",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "f15bbddb563738d9bdc81d603c482192",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "f15bbddb563738d9bdc81d603c482192"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "8185a9a97628cf84b66ee15afbef4b97",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "00dfe0c37896f35eb5cf89c86d04d0bf",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "00dfe0c37896f35eb5cf89c86d04d0bf"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "bea9d6d13b38159f98643c924ae92365",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "56c902212fbd2e8831a318c256f3dc55",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "56c902212fbd2e8831a318c256f3dc55"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "e259e812dc1229f1104b96ec699f9bcb",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "a740be8067df02df9309af3472425478",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a740be8067df02df9309af3472425478"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "b40ee1fdbe40f6a9aec7b507d6e53039",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "8a9b7d3d6c83509a1200de6aa706be06",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "8a9b7d3d6c83509a1200de6aa706be06"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "0ff8f7c92133c6c60696f2afff02dbaa",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "delete_chain",
+        "legacy": {
+          "query_id": "e4f6ba7da6c35aefa99dcf55f16fcffa",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "e4f6ba7da6c35aefa99dcf55f16fcffa"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "8f965b282f79395535dede19028c0a38",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "97728205409366caee6994449dbdc309",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "97728205409366caee6994449dbdc309"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "90a5731831e9cc2d38dd39958c6579f3",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "7e8cbffb19c90e22e28f052c85d7800b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "7e8cbffb19c90e22e28f052c85d7800b"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "7a1e3a7faba63935761888602ff0b799",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "8d80706a88c10acb892722d5431c404c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "8d80706a88c10acb892722d5431c404c"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "2e042b27b674a9e942f0f57d4eed2190",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "edd35f4d5129c6b6c7fbe3291382d40a",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "edd35f4d5129c6b6c7fbe3291382d40a"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "04a6235ec3448f3ddb25bf49a4b710a0",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "502ab6ecdcf7fd93dc9b8a7f9b543ea3",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "502ab6ecdcf7fd93dc9b8a7f9b543ea3"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "e71a801aa4507467f19fabed16949123",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "9b72a9d39b45b2113876cd12a16553b2",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "9b72a9d39b45b2113876cd12a16553b2"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "069299947df674a794a73f8fdc85ab73",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "fb983a4fc4410a11f29039abd47e320d",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "fb983a4fc4410a11f29039abd47e320d"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "d4d80b160019d69999627725ddfb1f04",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "93008ba69646636d385adfe42237b18b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "93008ba69646636d385adfe42237b18b"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "8f1254d0f3dcfc88339718bae00db9df",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "bacdb1aa612efa49c32d57add6d39b2a",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "bacdb1aa612efa49c32d57add6d39b2a"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "c0c8a5ad809b2bfac11bdd01abf1dc07",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "e82061a04fbf4ccbe01ce6962bbe5602",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "e82061a04fbf4ccbe01ce6962bbe5602"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "576fbca8e7f2151273350f56f06fb3ed",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "ac8870e4990a18dc09897f1b715fd47b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "ac8870e4990a18dc09897f1b715fd47b"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "c4cb882bde548931dc1b89a520cb2984",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "327beaec294c6f5cbe26520de522fc14",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "327beaec294c6f5cbe26520de522fc14"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "a5ebd414d6e9ddc4b51588b69493415c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "a0167209c1ef4a4ec6b6af43260f1505",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a0167209c1ef4a4ec6b6af43260f1505"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "3926b823313cdf582b59a2d5e05c3725",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "ef05ce4b3a448fe46c9d7188990e0593",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "ef05ce4b3a448fe46c9d7188990e0593"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "4e0f2080876ed8e67936aa589b715b6f",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "619ba1bb58861a2e3b30bdecf6adeb1b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "619ba1bb58861a2e3b30bdecf6adeb1b"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "dccc4d953eebc582278bf1dde26790d0",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "d376e1d1b0e78415c5822c44d03f2b42",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "d376e1d1b0e78415c5822c44d03f2b42"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "956660f2c55c07b9ffd88a58614c6311",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "6c2e46cfb324aa9269feff06c6ac48f5",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "6c2e46cfb324aa9269feff06c6ac48f5"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "338c5f9fb3dd3b9eccbcd90cfa083291",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "fd3fb1467020a640071cd0c3a1ac89af",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "fd3fb1467020a640071cd0c3a1ac89af"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "7136085ed6e37f11fe70fdd70f91bb85",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "1d0ebb7c4fbdae566faa64babb641293",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "1d0ebb7c4fbdae566faa64babb641293"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "dcf1381df62862af7d61360976502299",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "6e17813555675027ea05adf845b1f70b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "6e17813555675027ea05adf845b1f70b"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "7a6ca70d2dc7b6b2fcdc2d10a69be944",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_out",
+        "legacy": {
+          "query_id": "0a31e4d9e2d11d266849c5aed4102f6d",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "0a31e4d9e2d11d266849c5aed4102f6d"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "42e00c7f0be6d642704faf10340c399c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "15fa3c0d01414c2724676b341518effe",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "15fa3c0d01414c2724676b341518effe"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "bd02769fa1dd0834c1df84e5f8631dd9",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "3b82146c8ae8a4a979c5f6e40083a774",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "3b82146c8ae8a4a979c5f6e40083a774"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "36989a22079a193876afe3a14846cbc7",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "301afcaf0efc9065ccf55841f9f8a153",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "301afcaf0efc9065ccf55841f9f8a153"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "161c36774c0ea761ab9ae3e050efb858",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "06cc3829223e2964894dbe6e56809732",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "06cc3829223e2964894dbe6e56809732"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "86b7509cf3aaebac825c95e1dbc9439e",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "702d6d3c5fa68dcb6d69d96320927fd5",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "702d6d3c5fa68dcb6d69d96320927fd5"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "0fb9c28169a55a55b71f5fcbb943b6fc",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "8e62f6abfc003e46368594664e1b3194",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "8e62f6abfc003e46368594664e1b3194"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "5faa1528af0ef643d3d4a7229c75f820",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "7f912a137dceec5173c2664c2178afed",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "7f912a137dceec5173c2664c2178afed"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "4da8a098adcc6623d39e5110816f658c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "b8d9de8d57a2295dd6b97a7bfa5f1eb7",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "b8d9de8d57a2295dd6b97a7bfa5f1eb7"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "4b115e80c516a801c305cee965cc02a8",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "a30fc58833712598a8db1a9be9959d31",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a30fc58833712598a8db1a9be9959d31"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "61b30ddfe695f3c48ebd33665d503060",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "85099a9de3393b216f4c536e0511548c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "85099a9de3393b216f4c536e0511548c"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "d3f91bd677cc8c2217ae9a33c860888d",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "77346e744ccfb1a7d7863a5bc0c92e14",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "77346e744ccfb1a7d7863a5bc0c92e14"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "0169d557e7e716e72cd1eb381888153a",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "78aa3d5bd0670cd3acd20009d2c2b393",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "78aa3d5bd0670cd3acd20009d2c2b393"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "211a9cd705652519c0def8ae0df913b8",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "a7a5f4e4dab38ff395ab179b37fb297b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a7a5f4e4dab38ff395ab179b37fb297b"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "b4de732727fbe2055641fe7aca082663",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "75ea85d861a21177ea6ba8fb37604f7d",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "75ea85d861a21177ea6ba8fb37604f7d"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "305d341bfd770526afbdf1d33d60ddb3",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "53c7915260e374044f165d18abe429e1",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "53c7915260e374044f165d18abe429e1"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "6d76e933ef95324ca2a4414c7e23505e",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "519756c4da9963919aea577cb5993d25",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "519756c4da9963919aea577cb5993d25"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "c10bec5fd03b750e3434a7e469f80640",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "b82713c3b90397a71a47ef070b04ff42",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "b82713c3b90397a71a47ef070b04ff42"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "7c2f3cf5873a50b3dc36322942e0ac09",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "46fccf179cfae0569f495a6e4bb0c721",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "46fccf179cfae0569f495a6e4bb0c721"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "ac21008bc9684e37d17d6a6b521d8078",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_out",
+        "legacy": {
+          "query_id": "32435bebbfb28919a9ed7852bb66c20b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "32435bebbfb28919a9ed7852bb66c20b"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "6fc58da0ee80b8be821d638c1b9206a3",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "b55b68e9344bba6c9faa15407b7a81ec",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "b55b68e9344bba6c9faa15407b7a81ec"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "10964768222f71dbc9d38cf64dd67a78",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "818d5052dcb61e2b416db1f1f73885e9",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "818d5052dcb61e2b416db1f1f73885e9"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "160b7c30a0cd17c20da9bd0c4f1eaa69",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "4c5ab44b12608ee82689ca8e12c2ceab",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "4c5ab44b12608ee82689ca8e12c2ceab"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "631c10219361b6f2a927abf4f49a8420",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "fd4f37127f3b8110a768de04cafaa27a",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "fd4f37127f3b8110a768de04cafaa27a"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "ba484c1e5947ffc04b3a58a61e92e0b6",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "f68043fed39e5b6a495ed05ff569e6dc",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "f68043fed39e5b6a495ed05ff569e6dc"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "851edb7f9bd391e7fa67a1b03b6abdc0",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "f317b3b90dc38100f4945bd647b9eef3",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "f317b3b90dc38100f4945bd647b9eef3"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "a77ee04e83c81d3cc71268198e345209",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "delete_chain",
+        "legacy": {
+          "query_id": "2acf9cd21d1d1f34c74d1d795fdc778c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "2acf9cd21d1d1f34c74d1d795fdc778c"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "0892124955d8704a0cbde04d2e6621ca",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "a6c5494e94e4903873823dcc276e25c7",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a6c5494e94e4903873823dcc276e25c7"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "d5df02b49300b61e5e31735efad44ff3",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "eeaf1647edf8dea1c46e76c82d019047",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "eeaf1647edf8dea1c46e76c82d019047"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "2461b279908bf59105e8a4457837d8ac",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "1f14ded5c7c62fb615f1e3d3328d3760",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "1f14ded5c7c62fb615f1e3d3328d3760"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "7dd62fa57b9b8e45c283503937865e20",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "490bc831b64b55aa84d2867ccb42a8f3",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "490bc831b64b55aa84d2867ccb42a8f3"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "bcf9c10e774c7a4dbd77b6b565af9645",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "3609b7298548c73ae8a6cf664d6f6eaf",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "3609b7298548c73ae8a6cf664d6f6eaf"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "a81b69770138f891c43f7347c4c89525",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "e27970d1ced56e31948dc0590f7c3f72",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "e27970d1ced56e31948dc0590f7c3f72"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "c220ed6a7b5506b50af4ba1c29197f89",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "58d714b1efff911a4a0ada14d3c90acb",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "58d714b1efff911a4a0ada14d3c90acb"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "5c23266ff3326265e52f000e3ba3fa83",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "3269583c61c61cea77c2e13b27df8053",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "3269583c61c61cea77c2e13b27df8053"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "1a04f07d5d2c885e78be962551462eb4",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "f1087ee60534802a5e047f35a2b67795",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "f1087ee60534802a5e047f35a2b67795"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "d1c3b688426bf3a4d50354016095980a",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "delete_chain",
+        "legacy": {
+          "query_id": "efaa3f4e5ef674135bc52953d50b6e49",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "efaa3f4e5ef674135bc52953d50b6e49"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "a2cd89b865a665e5628dc2a8958f542c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "6c33108d0d7b7bde2555534f4497f2a9",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "6c33108d0d7b7bde2555534f4497f2a9"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "1242bbadfaea4526cca70ba40ea43448",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "a82b9539783269c70bcb06e4b664c871",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a82b9539783269c70bcb06e4b664c871"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "9d1a4541c193aee67dd1b314604e178c",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_out",
+        "legacy": {
+          "query_id": "ba5fd32bf73519cc96ec8b175ec81c77",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "ba5fd32bf73519cc96ec8b175ec81c77"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "dd3fed96a53725c579459876233bc8b1",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "1c3932a8c9267cdfd60914c7b5c0f484",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "1c3932a8c9267cdfd60914c7b5c0f484"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "e984bd35ac958dee7c7438c746eb2d6b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "a174f01b88cc68ffea9df094dc4874f7",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a174f01b88cc68ffea9df094dc4874f7"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "dbbab5519417070a4b7327bfa82c9fc6",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "fan_in",
+        "legacy": {
+          "query_id": "cbcd770fefc3563045011cb558fe0458",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "cbcd770fefc3563045011cb558fe0458"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "bd02cb64b02b46d225508e1724bc03e9",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "fa5bdd215683ac942643b7621549f7dc",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "fa5bdd215683ac942643b7621549f7dc"
+      },
+      {
+        "category": "legacy_only_ok",
+        "grammar": {
+          "query_id": "23c67c5bdecb13721d2b93b92f740980",
+          "reason": null,
+          "stage": null,
+          "status": "behavior"
+        },
+        "grammar_shape": "conditional",
+        "legacy": {
+          "query_id": "1b9ec033a544a4201cb738a1fda1c269",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "1b9ec033a544a4201cb738a1fda1c269"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "2c08665b748bbd114d82d86b35e1f947",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "15ff178d6ed34f764bf2ba30af8f6129",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "15ff178d6ed34f764bf2ba30af8f6129"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "7cc451dac6acf06c229149c49cb917cf",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "5f56d75649792e249c3ccc26b7a4164a",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "5f56d75649792e249c3ccc26b7a4164a"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "f7fdaf7012fb3e57760819e3efaa788b",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "d4e125db4fb59eff6195a43eee544c62",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "d4e125db4fb59eff6195a43eee544c62"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "1978cb2fc22fb13785ddfadc5b163759",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "7f1623d0f55378d85716c3ff6ee278ee",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "7f1623d0f55378d85716c3ff6ee278ee"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "657b7cd6b2f6dc01dc0d75d67b4b8794",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "13cbe4be441f15e3ed5622c3989195eb",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "13cbe4be441f15e3ed5622c3989195eb"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "7cd47b77718ff2af2f2998fac640cf3d",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "read_chain",
+        "legacy": {
+          "query_id": "89439640ebe02033c4351d55a647a0ac",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "89439640ebe02033c4351d55a647a0ac"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "70b7e7c0cf893bab59daa424ae70f7e7",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "f4fcab432733fa639983b54f687fb753",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "f4fcab432733fa639983b54f687fb753"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "13597008b06df7e2c41cc9777f8b389a",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "deep_chain",
+        "legacy": {
+          "query_id": "986edf9ab9b04fca73bb726eaa0a4c20",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "986edf9ab9b04fca73bb726eaa0a4c20"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "78e232a427271bf9c122a729a248d134",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "59bee2a89fabdc993c9a6bdc335a5497",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "59bee2a89fabdc993c9a6bdc335a5497"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "17b92538e89f35fc851ccea443ff1879",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "877535ebbc31e57eefe201f6bf6d4878",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "877535ebbc31e57eefe201f6bf6d4878"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "d2af39d77d8198b022bbd67229dc3787",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "write_chain",
+        "legacy": {
+          "query_id": "df1f51e88dfd4742e7e17f60aaabf1b9",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "df1f51e88dfd4742e7e17f60aaabf1b9"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "dc6c7451f6066273e3f97132283ad012",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "read_chain",
+        "legacy": {
+          "query_id": "ba24cd7ef414f5561434d65014d293cc",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "ba24cd7ef414f5561434d65014d293cc"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "85ab951850d9d516aecbb98b0f53a13f",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "fcd7f7444fed417e0e41373b2aa52675",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "fcd7f7444fed417e0e41373b2aa52675"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "79585247d6077130a4f308cd598b1547",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "map_read",
+        "legacy": {
+          "query_id": "a250894cc4bdad526171123a86c614be",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "a250894cc4bdad526171123a86c614be"
+      },
+      {
+        "category": "both_ok",
+        "grammar": {
+          "query_id": "d79882047cc1f94253ebddfa9cd14daa",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "grammar_shape": "diamond",
+        "legacy": {
+          "query_id": "b87558b46cedb700962bbbb388a420e6",
+          "reason": null,
+          "stage": null,
+          "status": "ok"
+        },
+        "pair_key": "b87558b46cedb700962bbbb388a420e6"
+      }
+    ],
+    "status_crosstab": {
+      "legacy=ok grammar=behavior": 15,
+      "legacy=ok grammar=ok": 85
+    }
+  },
+  "parameters": {
+    "dag_shapes": [
+      "*"
+    ],
+    "failures": [
+      "none"
+    ],
+    "limit": 100,
+    "paired": true,
+    "strategy": "exhaustive",
+    "world": "examples/retail-close"
+  },
+  "revision": "30e3b953f3a27f0217c35caa694ed3b303baa9ce",
+  "working_tree_dirty": false
+}

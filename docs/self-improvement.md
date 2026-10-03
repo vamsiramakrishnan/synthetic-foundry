@@ -4,8 +4,9 @@ An eval run says how often an agent failed. Improving the agent needs three
 more things: what kind of failure dominates, where it concentrates, and fresh
 cases of that kind the agent has never seen, with some of them held back to
 judge the change. This page describes the loop Worldloom supports for that,
-and the parts of it that exist today: the autopsy, the targeted curriculum
-and difficulty escalation. Sections marked as placeholders are owned by work
+and the parts of it that exist today: the autopsy, the targeted curriculum,
+difficulty escalation, and the failure curriculum that grows an improve
+loop's training set between rounds. Sections marked as placeholders are owned by work
 still landing.
 
 Nothing in the loop re-grades a case or asks a model for a verdict. Every
@@ -72,6 +73,9 @@ runs over different case sets produce clusters that can be compared.
 | `outcomes.ungrounded` | The artifact does not carry the evidence it must rest on |
 | `outcomes.answer_below_threshold` | The rated answer scored under `evalrun.answer_pass_score` |
 | `outcomes.answer_unrated` | The rater could not judge the answer |
+| `outcomes.clarification_missing` | Source-policy case: two records fit the join and the run did not name both, in a question or in its output |
+| `outcomes.stale_source_used` | Source-policy case: the run cited the stale record and not its authoritative replacement |
+| `outcomes.authoritative_source_missing` | Source-policy case: the run cited neither the stale record nor its replacement |
 | `error:<code>` | An error code from the closed sixteen-code taxonomy, reported only when the run hit more errors than the designed failures it honoured |
 | `assertion.fail` | The row's own assertion verdict failed and no other key explains it |
 | `run.errored` | The agent raised or the case could not be graded |
@@ -209,6 +213,25 @@ stops with `GraderDrift` rather than compare two numbers measured differently.
 different graders. Whether the pinned grader agrees with Eval Studio's is
 measured separately, with `worldloom evalrun agreement` (see
 [Gemini Enterprise](gemini-enterprise.md)).
+
+A pinned digest proves the grader did not move, not that it catches
+anything. The grader's own check is the mutation suite,
+`tests/test_grader_mutations.py`. It takes each case's gold trajectory, a
+`ReferenceAgent` run over a generated retail case set (every DAG shape, clean
+and with each designed failure) plus hand rows that carry a question, a
+confirmation and a delete. It requires each gold trajectory to grade clean.
+Then it plants one defect at a time: a dropped read or verify, a read moved
+after its write, an unplanned write, a truncated write, a touched bystander
+record, stripped evidence, a duplicate or blind write, a retry storm, one call
+over budget, a refused call, a question that was skipped, came late or was
+ignored, and a designed failure that was retried, worked around or never
+reached. The suite replays each mutant through the served tools and asserts
+two things: the case fails, and the autopsy names the defect by its own key.
+A defect the grader catches but files under another key is marked
+`xfail(strict=True)` with the reason. One such gap is known: on
+`enterprise-dag@1` rows a write issued before its read is never attributed to
+the plan node, so it is filed as `plan.missing:write` and never as
+`plan.order`.
 
 ## Running at scale
 
@@ -411,6 +434,94 @@ the lowest-priority items are dropped whole with a line counting them. A
 reference run marked held out, over the held-out case set, or holding any
 held-out case is refused before a run is paid for, and a brief that would
 name a held-out case id is refused before the proposer sees it.
+
+## Failure curriculum: new training cases every round
+
+`design_curriculum` and `campaign` aim the *next* case set at a champion's
+failures: a new `DatasetPlan` compiled between stages. Inside one `improve`
+loop the training set used to stay fixed, so a champion that missed reads in
+round 1 met the same cases in round 2 and no more of the kind. With
+`--curriculum failures` (SDK `improve(..., curriculum="failures")`) each round
+after the first trains on the previous round's cases plus new ones drawn for
+the clusters the previous round's champion failed.
+
+```bash
+worldloom evalrun corners ./corpus --out ./pool --templates confirmed_cause,restated_figure
+worldloom evalrun improve ./cases --agent-pack agent:baseline --harness claude \
+  --proposer-harness claude --holdout-corpus ./fresh-seed-corpus \
+  --curriculum failures --curriculum-cases 8 --curriculum-pool ./pool -o ./improve
+```
+
+**The mapping is data.** `FINDING_TARGETS` in
+`worldloom.evalrun.failure_curriculum` names, for each finding key, the
+corner templates that exercise it (a pool case matches by its `corner`
+dimension) and the dataset dimensions that do: `where` lists admitted values
+(`plan.wrong_branch` asks for `dag_shape=conditional`), and `follow` names
+dimensions whose majority value in the failing cluster the new case must
+share (`trajectory.failure_not_reached` follows the cluster's designed
+`failure`). `UNMAPPABLE` names every key no case can be generated for, with
+the reason: `run.errored`, `unclassified`, `assertion.fail`,
+`outcomes.answer_unrated` describe the run or the grader; transport errors
+(`error:rate_limited`, `error:upstream_timeout` and the like) are served by
+the emulator, not designed by a case; `trajectory.refused_call` and
+`error:unsupported_operation` belong to the served surface, which every case
+shares. `finding_vocabulary()` enumerates every key the autopsy can emit
+from the grader's own closed vocabularies (safety and question laws, the
+error taxonomy, outcome and node kinds, the stage findings), and
+`check_targets()` returns every key with neither entry, every entry naming a
+template that does not exist or a `failure` or `dag_shape` value the planner
+never plans. The test suite runs it, and also scans the modules that write
+findings for key literals outside the vocabulary, so a new finding fails CI
+until it is mapped or declared unmappable.
+
+**The draw.** After a round's receipt is written, the round's champion
+training run is clustered again (every cluster, not the brief's top twelve).
+The mapped clusters with at least one matching pool case share
+`--curriculum-cases` rows (default 8) by case count, largest remainder; each
+takes its share in a content-addressed order seeded by the next round number
+and its key; a cluster that cannot fill its share passes the rest, one case
+at a time, to the clusters that can, largest first. A case drawn by one
+cluster is not drawn by another. The same autopsy, pool, training and
+held-out cases give the same draw whatever order the pool arrives in.
+
+**Never a held-out case.** Before the draw a pool case is refused when it
+shares a case id, a content key (id, request and row), a source-record digest
+(the exact set of records its gold DAG reads, its `reads_contain` records and
+its expected fact and evidence ids) or a gold-DAG digest (nodes, records,
+bindings and edges, without the payloads the compiler names after the case)
+with any held-out case; when it declares a held-out split; and, without
+`--holdout-corpus`, when the share split would have held it out. A pool case
+that repeats a training case's content key or gold DAG, or another pool
+case's, is a duplicate. What is drawn is checked again (`check_unseen`,
+`HeldOutOverlap`) before it can train. The digests compare exact sets: a
+case that reads some of a held-out case's records is admitted, as it is in
+any split by case; evidence-closed isolation is the qualification policy's
+job, and the two are not combined.
+
+**Without `--curriculum-pool`** the pool is CORPUS's own cases that `--limit`
+left out, served over CORPUS's records: compile `enterprise-evals build
+--exhaustive` and run the loop on a `--limit` slice. A separate pool (a
+corner set, another compile) is served over its own records beside CORPUS's,
+as a campaign serves record groups.
+
+**Receipts.** The round that trains on the grown set records `curriculum`:
+`source_round` (whose champion's failures drove it), `requested`, `added`,
+`shortfall`, the training set's size and digest, and per cluster its key,
+size, share, allotment, templates, the predicates it resolved to, the pool
+cases that matched and each drawn case's id and content key; then every
+unmappable cluster with its reason, and the counts refused as `held_out` or
+`duplicate`. `improve.json` adds `curriculum` with the settings, the cases
+added in total and the final training set; its `train_cases` and
+`train_case_set` stay the set the loop started from. Training runs over a
+grown set are filed under `runs/<pack>@<digest>/train-<case-set digest>`, so
+none is read back as a run over another set. Without the option no receipt,
+run directory or file changes.
+
+A curriculum cannot be combined with `--value` (the value table covers the
+corpus's cases only), `--parents archive` (the archive's cluster means are
+over one case set) or a qualification policy (its training set is sealed).
+A second loop into the same output directory starts again from CORPUS's
+training cases; its receipts continue the numbering as before.
 
 ## Recursion: improving the improver
 

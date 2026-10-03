@@ -84,6 +84,9 @@ GLOSSES: dict[str, str] = {
     "outcomes.ungrounded": "the produced artifact does not carry the evidence it must rest on",
     "outcomes.answer_below_threshold": "the rated answer scored under the pass threshold",
     "outcomes.answer_unrated": "the rater could not judge the answer",
+    "outcomes.clarification_missing": "two records fit the join and the run did not name both (it picked one, or said nothing)",
+    "outcomes.stale_source_used": "the run rested on the stale record, not the authoritative replacement it names",
+    "outcomes.authoritative_source_missing": "the run cited neither the stale record nor its authoritative replacement",
     "assertion.fail": "the row's own assertion verdict failed and no finding above explains it",
     "run.errored": "the agent raised or the run could not be graded",
     "unclassified": "the case failed and no finding explains it (a grader gap worth reporting)",
@@ -187,6 +190,8 @@ def finding_keys(result: CaseResult, case: EvalCase | None = None) -> tuple[str,
             keys.add("outcomes.collateral")
         if outcomes.grounding is not None and outcomes.grounding < 1.0:
             keys.add("outcomes.ungrounded")
+        if outcomes.source_policy is not None:
+            keys.update(f"outcomes.{finding}" for finding in outcomes.source_policy.findings)
         if outcomes.answer_error is not None:
             keys.add("outcomes.answer_unrated")
         elif outcomes.answer_score is not None:
@@ -386,6 +391,10 @@ def _evidence(key: str, result: CaseResult, case: EvalCase | None) -> tuple[str,
                      for match in score.outcomes.structured if not match.met and match.expected.kind == kind)
     elif key == "outcomes.collateral":
         lines.append(f"{len(score.outcomes.collateral)} unexpected change(s): {', '.join(score.outcomes.collateral[:3])}")
+    elif key in {"outcomes.clarification_missing", "outcomes.stale_source_used", "outcomes.authoritative_source_missing"}:
+        policy = score.outcomes.source_policy
+        if policy is not None:
+            lines.append(f"{policy.kind}: named {', '.join(policy.named) or 'none of its records'}")
     elif key == "outcomes.ungrounded":
         lines.append(f"grounding {score.outcomes.grounding} over {score.outcomes.artifacts_produced} artifact(s)")
     elif key in {"outcomes.answer_below_threshold", "outcomes.answer_unrated"}:

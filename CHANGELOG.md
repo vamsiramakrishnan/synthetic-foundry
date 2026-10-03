@@ -7,6 +7,45 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### Strict sources, a mutation-tested grader and a failure curriculum
+
+**Generation**
+
+- Enterprise materialization defaults to `strict_sources=True`: a case the
+  source corpus cannot ground is refused (`missing_source`), and
+  `enterprise-evals build` reports it as the `sources_insufficient` refusal
+  rather than a traceback. Corpora that built before build the same bytes.
+- Opt-in `--reconcile auto` on `corpus-scale build` (and
+  `corpus-scale reconcile`) derives revenue, gross-profit and headcount
+  `FactReconciliation`s where unit, period and stock/flow semantics match, and
+  reports each pair it did not bind with the reason.
+- Opt-in source policies (`source_policy=True`) grade ambiguous joins as a
+  clarifying question naming every candidate and stale sources as a citation
+  of the authoritative replacement (`outcomes.clarification_missing`,
+  `outcomes.stale_source_used`, `outcomes.authoritative_source_missing`).
+  Existing case sets keep their bytes.
+
+**Evaluation and harness integration**
+
+- `tests/test_grader_mutations.py` replays 21 mutation classes over gold runs
+  and requires the exact finding key for each. It caught a legacy-row
+  attribution bug (a readback taken for a skipped read), now fixed;
+  `plan.order` on generated rows remains an explicit strict xfail.
+- `tools/measure_enterprise_execution.py --paired` measures legacy and grammar
+  arms over one identity set with a shared pairing key and retained refusals.
+- `improve --curriculum failures` adds training cases drawn from the previous
+  champion's failure clusters each round, never overlapping held-out cases by
+  id, content, source records or gold DAG. Every finding key is mapped or
+  declared unmappable, and a test fails on an unregistered key.
+- `worldloom enterprise-evals serve --run-store PATH` journals runs to an
+  fsynced append-only JSONL file and replays open runs after a restart.
+- `worldloom smoke` runs build, narrate, render, validate, evaluate,
+  enterprise case generation and a reference `evalrun` end to end; CI runs it
+  first. `tools/scoreboard.py` writes a digest-pinned release scoreboard, which
+  the release workflow uploads.
+- Cloud sessions install the package at start so the `worldloom` MCP server
+  connects; mypy no longer fails on the optional `google-genai` import.
+
 ### Controlled harness queries, native realism tactics and visual proposals
 
 **Generation**

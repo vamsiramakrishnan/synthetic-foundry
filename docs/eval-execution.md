@@ -51,6 +51,21 @@ The trajectory grade counts the points honoured under four laws,
 that requires no question and gets none scores exactly as before. The
 reference agent asks what the row requires, so the ceiling still passes.
 
+**Source defects can be graded under a policy (opt-in).** An enterprise
+corpus can inject an `ambiguous_join` (an indistinguishable second record) or
+a `stale_source` (the bound record rolled back a version). The legacy gold for
+both is still the single write. `cases_from_corpus(corpus, source_policy=True)`
+(`worldloom.evalrun.source_policy.with_source_policies` for an existing case
+list) regrades those cases. The ambiguous case reads both candidates and asks
+which is meant, naming both (`question_required`, declined). It writes
+nothing; the write tools stay offered, gated, and off the plan. The stale case
+materialises the authoritative replacement (the override's
+`authoritative_replacement` detail): the stale record names it in
+`superseded_by`, and the gold reads it and cites it. `OutcomeGrade.source_policy`
+records the result, and the autopsy keys are `outcomes.clarification_missing`,
+`outcomes.stale_source_used` and `outcomes.authoritative_source_missing`.
+Without the flag, cases, grades and ledgers keep their bytes.
+
 **A refused call is still an attempt.** A call the surface does not admit
 (an unknown tool, an undeclared argument, a limit) never reaches a connector,
 so no span exists for it; the service records it as a refusal instead, the

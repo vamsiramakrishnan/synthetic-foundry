@@ -91,7 +91,7 @@ interview request to a reply), which is how a test drives the loop offline.
 
 - `references/loop-and-gates.md`: a round step by step, both gates, holdout, resume, knobs.
 - `references/agent-packs.md`: the policy, locked rules, the skills tree and diffs against it.
-- `references/failures-and-curriculum.md`: autopsy keys, the brief, curricula, escalation.
+- `references/failures-and-curriculum.md`: autopsy keys, the brief, curricula, escalation, and `--curriculum failures`, which adds training cases aimed at the last champion's failures every round (never a held-out case).
 - `references/grader-and-agreement.md`: grader identity, drift, agreement with Eval Studio.
 - `references/scale.md`: concurrency, shards, merge and resume for the runs a loop pays for.
 - `references/training-data.md`: exporting runs as SFT, pairs or rewards; the holdout guard.
