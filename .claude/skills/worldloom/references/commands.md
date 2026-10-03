@@ -1084,10 +1084,23 @@ worldloom evals dataset verify <DIRECTORY>
 
 ### `worldloom evals export`
 
-Export the evaluation set as JSONL, ready to score a retrieval system.
+Export the evaluation set, ready to score a retrieval system or hand to a harness.
 
 ```
 worldloom evals export <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--format` | worldloom (the default: the evaluation set as JSONL, unchanged), ragas (JSONL rows with user_input, reference and the reference_contexts the answer rests on) or promptfoo (a JSON array of test cases with substring assertions only; cases no substring can check are left out and counted on stderr). |
+| `--out`, `-o` | Write the export here instead of stdout. |
+
+### `worldloom evals passages`
+
+Export the passages `evaluate` indexes as JSONL, for your own retriever to index.
+
+```
+worldloom evals passages <CORPUS>
 ```
 
 | Option | Purpose |
@@ -1105,6 +1118,7 @@ worldloom evaluate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop; an agent deciding what to change next should read data, not parse a bar chart. |
+| `--predictions` | Grade your own system's rankings instead of a built-in retriever: JSONL, one {"id", "passage_ids" or "artifact_ids" best first, "abstain"} line per case. Same grading, -k and per-family scorecard as --retriever; passage ids are the ones `worldloom evals passages` exports. A case with no line fails and is listed; an id this corpus does not hold refuses. |
 | `--retriever` | bm25 (the default: the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family; see src/worldloom/evaluate/tfidf.py), embedding (dense vectors against a pinned model; needs the `embeddings` extra or a vector cache), both (the two lexical baselines side by side, with a per-family agreement reading), or all (every retriever this installation can run, skipping any whose model is unavailable). |
 | `--vectors` | Vector cache for --retriever embedding: a file, or a directory to keep one per model. A corpus that carries its cache scores against the embedding retriever with no model installed at all. |
 | `--verbose`, `-v` | Show every question. |

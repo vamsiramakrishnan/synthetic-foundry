@@ -129,7 +129,9 @@ GOALS: tuple[Goal, ...] = (
         ),
         steps=(
             Step("worldloom evaluate ./corpus --retriever both", "BM25 and TF-IDF baselines per question family: the floor a retriever has to beat."),
-            Step("worldloom evals export ./corpus -o evals.jsonl", "Questions, expected answers and evidence fact ids as JSONL, to score your own system."),
+            Step("worldloom evals passages ./corpus -o passages.jsonl", "The passages the baselines rank, with stable ids: index their `text` in your own system."),
+            Step("worldloom evals export ./corpus -o evals.jsonl", "Questions, expected answers and evidence fact ids; `--format ragas` or `--format promptfoo` for those harnesses."),
+            Step("worldloom evaluate ./corpus --predictions predictions.jsonl", 'Your system\'s rankings, one `{"id", "passage_ids"}` line per question, graded by the scorer the baselines use.'),
             Step('worldloom benchmark run ./corpus --exec "python3 my_reader.py"', "Your reader over the same questions: it gets the top passages, returns passage ids, and is scored on ids alone."),
         ),
         read_next=".claude/skills/worldloom/references/evaluating.md",
@@ -301,7 +303,7 @@ GOALS: tuple[Goal, ...] = (
 #: under the goals rather than leaving the reader to infer it from them.
 EVALUATION_COMMANDS: tuple[EvaluationCommand, ...] = (
     EvaluationCommand("evaluate", ("rag",), "Built-in retrievers on the corpus's own questions."),
-    EvaluationCommand("evals", ("rag",), "The evaluation set: export, construct or compile it."),
+    EvaluationCommand("evals", ("rag",), "The evaluation set and its passages: export them, or construct or compile it."),
     EvaluationCommand("benchmark", ("rag",), "Your reader on those questions, scored by passage id."),
     EvaluationCommand("enterprise-evals", ("agent", "improve"), "Multi-connector agent cases, each proved solvable."),
     EvaluationCommand("evalrun", ("agent", "improve"), "Agent runs graded on plan, trajectory and outcomes."),

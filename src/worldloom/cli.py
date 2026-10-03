@@ -864,6 +864,9 @@ _REFUSALS: dict[str, str] = {
     "resume_invalid": "a completed world does not validate for resume",
     "scenario_profile_rejected": "the enterprise scenario profile names something this registry does not hold, or selects nothing",
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
+    # `worldloom evaluate --predictions`.
+    "predictions_unreadable": "the --predictions file cannot be read, or a line is not {id, passage_ids or artifact_ids, abstain}; data.line names it",
+    "predictions_unknown_ids": "the --predictions file names case, passage or artifact ids this corpus does not hold; data lists each",
     # `worldloom evalrun`.
     "corpus_unreadable": "the enterprise-evals directory cannot be read or is not one",
     "sources_insufficient": "a planned case needs source records the world cannot supply; the message names the connector, the entity and the counts",
@@ -5426,18 +5429,107 @@ def evolve_run(
 @evals_app.command("export")
 def evals_export(
     corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
-    out: Path = typer.Option(None, "--out", "-o", help="Write JSONL here instead of stdout."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write the export here instead of stdout."),
+    fmt: str = typer.Option(
+        "worldloom", "--format",
+        help=(
+            "worldloom (the default: the evaluation set as JSONL, unchanged), "
+            "ragas (JSONL rows with user_input, reference and the "
+            "reference_contexts the answer rests on) or promptfoo (a JSON "
+            "array of test cases with substring assertions only; cases no "
+            "substring can check are left out and counted on stderr)."
+        ),
+    ),
 ) -> None:
-    """Export the evaluation set as JSONL, ready to score a retrieval system."""
+    """Export the evaluation set, ready to score a retrieval system or hand to a harness.
+
+    `--format worldloom` writes the cases exactly as they always have been.
+    `ragas` and `promptfoo` are projections of the same cases into those
+    tools' shapes; neither adds a model to the grading. Pair any of them with
+    `worldloom evals passages` for the units to index.
+    """
+    from .evaluate.interchange import (
+        EXPORT_FORMATS,
+        jsonl,
+        promptfoo_tests,
+        ragas_records,
+    )
+
+    if fmt not in EXPORT_FORMATS:
+        raise typer.BadParameter(f"must be one of {list(EXPORT_FORMATS)}", param_hint="--format")
     world = _load(corpus)
+    if fmt == "ragas":
+        # Reference contexts are passages, so the corpus has to be compiled,
+        # the same precondition `evaluate` and `evals passages` have.
+        records = ragas_records(_compiled(world, corpus))
+        _emit(jsonl(records), out, f"{len(records)} case(s)")
+        return
+    if fmt == "promptfoo":
+        tests, left_out = promptfoo_tests(world)
+        if not tests:
+            _refuse(
+                "cases_unexportable",
+                f"[red]error:[/red] none of {len(left_out)} case(s) states a figure or short value"
+                " a substring assertion can check",
+                fix="use --format worldloom or ragas, which carry every case",
+                left_out=left_out,
+            )
+        _emit(json.dumps(tests, indent=2, sort_keys=True) + "\n", out, f"{len(tests)} test case(s)")
+        if left_out:
+            # Stderr, so stdout stays the JSON document promptfoo reads.
+            err.print(
+                f"[yellow]![/yellow] {len(left_out)} case(s) left out: the expected answer states no"
+                " figure or short value the question does not already contain (abstention, or an"
+                " answer stated only in prose)"
+            )
+        return
+    # The default keeps its exact bytes: the same dumps, the same join, and the
+    # same lone newline for an empty set that it has always written.
     lines = [json.dumps(case.model_dump(mode="json"), sort_keys=True) for case in world.evaluations]
-    payload = "\n".join(lines) + "\n"
+    _emit("\n".join(lines) + "\n", out, f"{len(lines)} case(s)")
+
+
+def _emit(payload: str, out: Path | None, summary: str) -> None:
+    """*payload* to *out*, or to stdout when no file was named.
+
+    The file is written with ``newline="\\n"`` for `corpus.write_jsonl`'s
+    reason: these exports are what an external index and an external harness
+    are built from, and a Windows checkout adding a CR to every line would
+    make one export two files depending on who ran it.
+    """
     if out is None:
         typer.echo(payload, nl=False)
-    else:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(payload, encoding="utf-8")
-        console.print(f"[green]✓[/green] {len(lines)} case(s) written to [bold]{out}[/bold]")
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload, encoding="utf-8", newline="\n")
+    console.print(f"[green]✓[/green] {summary} written to [bold]{out}[/bold]")
+
+
+@evals_app.command("passages")
+def evals_passages(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write JSONL here instead of stdout."),
+) -> None:
+    """Export the passages `evaluate` indexes as JSONL, for your own retriever to index.
+
+    One line per passage, in index order, keys sorted: `passage_id`,
+    `artifact_id`, `artifact_type`, `title`, `heading`, `source`, `authority`,
+    `created_at`, `fact_ids` and `text`. `text` is exactly the string the
+    built-in retrievers rank, so a system that indexes it is compared like for
+    like; `passage_id` is what `evaluate --predictions` joins a ranking on.
+    The same passages `search` and `evaluate` read, not a second chunking.
+    """
+    from .evaluate.interchange import jsonl, passage_records
+
+    world = _compiled(_load(corpus), corpus)
+    records = passage_records(world)
+    if not records:
+        # The state `search` refuses for the same reason: an empty index
+        # file reads downstream as "indexed, nothing relevant", which every
+        # case would then fail for a reason that is not retrieval.
+        _refuse("no_passages", "[red]error:[/red] this corpus has no retrievable passages",
+                fix="narrate and render the corpus first", corpus=str(corpus))
+    _emit(jsonl(records), out, f"{len(records)} passage(s)")
 
 
 @evals_app.command("construct")
@@ -5624,6 +5716,17 @@ def evaluate(
             "the embedding retriever with no model installed at all."
         ),
     ),
+    predictions: Path | None = typer.Option(
+        None, "--predictions",
+        help=(
+            "Grade your own system's rankings instead of a built-in retriever: "
+            'JSONL, one {"id", "passage_ids" or "artifact_ids" best first, '
+            '"abstain"} line per case. Same grading, -k and per-family '
+            "scorecard as --retriever; passage ids are the ones `worldloom evals "
+            "passages` exports. A case with no line fails and is listed; an id "
+            "this corpus does not hold refuses."
+        ),
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
     as_json: bool = typer.Option(
         False, "--json",
@@ -5646,10 +5749,14 @@ def evaluate(
     both of those are still *keyword* heuristics: a family the embedding
     retriever also fails is hard for a reason no ranking function fixes, and a
     family it walks past was a lexical trap rather than a difficult question.
+
+    `--predictions` grades a system this package never ran, by the same code:
+    index `worldloom evals passages`, rank each question, write the rankings.
     """
     import json as json_module
 
     from .evaluate import (
+        DEFAULT_RETRIEVER,
         LEXICAL_RETRIEVERS,
         RETRIEVERS,
         compare,
@@ -5663,6 +5770,21 @@ def evaluate(
     choices = sorted([*RETRIEVERS, "both", "all"])
     if retriever not in choices:
         raise typer.BadParameter(f"must be one of {choices}", param_hint="--retriever")
+
+    if predictions is not None:
+        if retriever != DEFAULT_RETRIEVER or vectors:
+            # Two answers to "whose ranking is graded": the file's, or a
+            # built-in one's. Picking either silently would print a scorecard
+            # for the ranking the caller did not mean.
+            _refuse(
+                "cannot_combine",
+                "[red]error:[/red] --predictions is the ranking being graded;"
+                " --retriever and --vectors choose a built-in one",
+                fix="run the built-in retriever as a separate `worldloom evaluate`",
+                flags=["--predictions", "--retriever" if retriever != DEFAULT_RETRIEVER else "--vectors"],
+            )
+        _evaluate_predictions(corpus, predictions, k=k, verbose=verbose, as_json=as_json)
+        return
 
     if vectors:
         # Bound for this invocation only, and by rebinding the registry entry
@@ -5777,11 +5899,84 @@ def evaluate(
     console.print(str(card))
 
     if verbose:
-        console.print("")
-        for outcome in card.outcomes:
-            mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
-            console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
-            console.print(f"      {outcome.detail}")
+        _print_outcomes(card)
+
+
+def _print_outcomes(card: Any) -> None:
+    """Every case of one scorecard, mark and detail, for `evaluate -v`."""
+    console.print("")
+    for outcome in card.outcomes:
+        mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
+        console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
+        # Escaped because a detail can quote ids from a predictions file, and
+        # rich reads a bracketed word as a style tag and drops it.
+        console.print(f"      {escape(outcome.detail)}")
+
+
+#: How many unanswered case ids the prose scorecard names before counting the
+#: rest. `--json` carries every one of them.
+_MISSING_NAMED = 20
+
+
+def _evaluate_predictions(corpus: str, path: Path, *, k: int, verbose: bool, as_json: bool) -> None:
+    """`evaluate --predictions`: grade a ranking another system wrote down.
+
+    The scorecard is `evaluate.score.grade()`'s, the one every built-in
+    retriever gets, labelled with the file's name the way `bm25` and `tfidf`
+    label theirs. The file is read and parsed before the corpus is loaded,
+    because a malformed line is the cheaper failure to report and needs no
+    corpus to find.
+    """
+    import json as json_module
+
+    from .evaluate.predictions import PredictionsError, parse, score_predictions
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        _refuse("predictions_unreadable", f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix="pass the path of a predictions JSONL file, UTF-8", path=str(path), line=0)
+    try:
+        parsed = parse(text)
+    except PredictionsError as exc:
+        _refuse(exc.code, f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix=exc.fix, path=str(path), **exc.data)
+
+    world = _compiled(_load(corpus), corpus)
+    try:
+        result = score_predictions(world, parsed, k=k, label=path.name)
+    except PredictionsError as exc:
+        _refuse(exc.code, f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix=exc.fix, path=str(path), **exc.data)
+    except ValueError as exc:
+        # `score()`'s empty-pool sentence, mapped where `benchmark run` maps it.
+        _refuse("no_passages", f"[red]error:[/red] {escape(str(exc))}")
+
+    card = result.card
+    if as_json:
+        # The single-retriever shape, so a harness that parses `--retriever
+        # bm25 --json` parses this unchanged, plus three additive keys: the
+        # file as given, the unit it ranked, and the cases it never answered.
+        typer.echo(json_module.dumps({
+            "retriever": card.retriever,
+            "k": card.k,
+            "predictions": str(path),
+            "granularity": result.granularity,
+            "missing": list(result.missing),
+            **_card_json(card),
+        }, indent=2))
+        return
+    console.print(f"[bold]predictions:[/bold] {escape(str(path))} ({result.granularity} ids)")
+    console.print(str(card))
+    if result.missing:
+        named = ", ".join(result.missing[:_MISSING_NAMED])
+        more = len(result.missing) - _MISSING_NAMED
+        console.print(
+            f"  {len(result.missing)} case(s) have no prediction and are scored as failures: {named}"
+            + (f", +{more} more (--json lists every one)" if more > 0 else "")
+        )
+    if verbose:
+        _print_outcomes(card)
 
 
 @app.command()
