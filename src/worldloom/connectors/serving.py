@@ -545,6 +545,7 @@ class ConnectorEvaluationService:
                     continue
                 if int(args["start_at"]) == int(prior.args.get("start_at", 0)) + prior.items:
                     return prior.node
+        candidates: list[tuple[str, set[str]]] = []
         for node in nodes:
             if f"{node['server']}.{node['tool']}" != name:
                 continue
@@ -569,8 +570,17 @@ class ConnectorEvaluationService:
                     continue
             if args.get("entity") and node.get("entity") != args["entity"]:
                 continue
-            return str(node["id"])
-        return None
+            candidates.append((str(node["id"]), parents))
+        # A read and its readback share a tool and a fixture, so a call both
+        # match is the readback once the readback's parents have run: a get
+        # issued after the write is that write's verify, whatever came before.
+        # First-declared-wins used to give it to the read, so a run that
+        # skipped the read and wrote blind was graded as missing its *verify*
+        # (the grader mutation suite's `drop_read` on `legacy-update`).
+        for node_id, parents in candidates:
+            if parents and parents.issubset(completed):
+                return node_id
+        return candidates[0][0] if candidates else None
 
     def _grammar_attribution(
         self, run: _Run, name: str, arguments: Mapping[str, Any],
