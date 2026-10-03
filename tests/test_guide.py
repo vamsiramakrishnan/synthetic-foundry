@@ -261,6 +261,25 @@ def test_status_without_a_corpus_is_unchanged(monkeypatch: pytest.MonkeyPatch, t
     assert "guide" not in result.stderr
 
 
+def test_the_readme_front_door_matches_the_guide() -> None:
+    """The README's goal table is the guide's table, row for row.
+
+    The README is read first and the guide second; if they disagreed about the
+    first command or the page to read, one of them would be sending a new
+    reader somewhere the other does not.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    front = readme[: readme.index("## Quickstart")]
+    assert "worldloom guide" in front
+    rows = [line for line in front.splitlines() if line.startswith("| ") and "`" in line]
+    for goal in guide.GOALS:
+        row = [line for line in rows if f"| `{goal.id}` |" in line]
+        assert len(row) == 1, f"README front door has no single row for `{goal.id}`"
+        assert f"| `{goal.first_command}` |" in row[0], row[0]
+        assert f"]({goal.read_next})" in row[0], row[0]
+    assert len(rows) == len(guide.GOALS), "the README table has a row the guide does not"
+
+
 def test_guide_is_the_first_command_in_help() -> None:
     """Registration order is help order; the front door is listed first."""
     root = typer.main.get_command(app)
