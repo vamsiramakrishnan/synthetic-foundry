@@ -43,5 +43,11 @@ jobs:
           pip install uv
           uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
 
+      # Serial on purpose, unlike ci.yml's `-n auto`. Three of these four
+      # tests share two session-scoped density builds (tests/conftest.py),
+      # and xdist gives each worker its own session, so in parallel every
+      # worker would rebuild the worlds those fixtures exist to build once;
+      # and the dense build carries a wall-clock guard that neighbouring
+      # workers competing for the cores would only make noisier.
       - name: The slow suite
         run: pytest -m slow -q

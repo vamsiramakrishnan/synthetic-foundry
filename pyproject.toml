@@ -129,6 +129,12 @@ dev = [
     # reproducible from its own database, which `.gitignore` keeps out of the
     # repo so CI derives counterexamples rather than replaying a cached file.
     "hypothesis>=6.100",
+    # `pytest -n auto`. Run serially, the suite cost ~23 minutes per Linux CI
+    # leg, ~47 on Windows and ~70 under coverage, and a gate that takes the
+    # better part of an hour is one contributors learn to push past. Dev-only:
+    # it changes how tests are scheduled, never what they assert, and every
+    # test must pass under it and without it.
+    "pytest-xdist>=3.5",
 ]
 
 [project.scripts]
