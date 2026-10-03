@@ -210,6 +210,25 @@ different graders. Whether the pinned grader agrees with Eval Studio's is
 measured separately, with `worldloom evalrun agreement` (see
 [Gemini Enterprise](gemini-enterprise.md)).
 
+A pinned digest proves the grader did not move, not that it catches
+anything. The grader's own check is the mutation suite,
+`tests/test_grader_mutations.py`. It takes each case's gold trajectory, a
+`ReferenceAgent` run over a generated retail case set (every DAG shape, clean
+and with each designed failure) plus hand rows that carry a question, a
+confirmation and a delete. It requires each gold trajectory to grade clean.
+Then it plants one defect at a time: a dropped read or verify, a read moved
+after its write, an unplanned write, a truncated write, a touched bystander
+record, stripped evidence, a duplicate or blind write, a retry storm, one call
+over budget, a refused call, a question that was skipped, came late or was
+ignored, and a designed failure that was retried, worked around or never
+reached. The suite replays each mutant through the served tools and asserts
+two things: the case fails, and the autopsy names the defect by its own key.
+A defect the grader catches but files under another key is marked
+`xfail(strict=True)` with the reason. One such gap is known: on
+`enterprise-dag@1` rows a write issued before its read is never attributed to
+the plan node, so it is filed as `plan.missing:write` and never as
+`plan.order`.
+
 ## Running at scale
 
 Each round runs two agents over the training cases and, when the candidate
