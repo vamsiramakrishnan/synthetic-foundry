@@ -357,6 +357,61 @@ theirs. `--json` keeps the single-retriever shape (`retriever`, `k`,
 reproduces `--retriever bm25` case for case; only the abstention detail
 differs, since there is no score to print.
 
+One case on a `--seed 8128 --incident` corpus no ranking can pass: "What
+was the close status once the period was finalised?" puts its cut-off at the
+finalisation, and the only passage stating the status was written two days
+later. The scorecard still counts it reachable, because reachability asks
+whether any passage carries the fact, not whether one was written in time.
+`tests/test_evaluate_byo.py` pins it, so a perfect ranking scores every case
+but that one.
+
+### Standard formats
+
+`worldloom evals export --format` writes the same evaluation set in two
+harnesses' shapes. `worldloom`, the default, is the JSONL above, byte for byte
+what the command has always written. Neither of the others puts a model into
+the grading.
+
+```bash
+worldloom evals export ./corpus --format ragas -o ragas.jsonl
+worldloom evals export ./corpus --format promptfoo -o promptfoo-tests.json
+```
+
+- **ragas**: one row per case with `user_input` (the question), `reference`
+  (the expected answer), `reference_contexts` and `reference_context_ids`,
+  plus `id` and `metadata` (family, difficulty, fact ids, cut-off) for joining
+  scores back. `EvaluationDataset.from_jsonl` loads it into `SingleTurnSample`s
+  and ignores `id` and `metadata`. The reference passages are the ones
+  carrying an expected fact, narrowed to the case's `required_artifact_ids`
+  when it names any; a `temporal_state` case keeps only passages written by
+  its cut-off, as its grading does. The ids are `evals passages` ids, so
+  ragas's id-based context metrics join the same passages `--predictions`
+  does. Abstention rows have no references, and neither does a temporal case
+  whose evidence was all written after its cut-off; drop
+  `metadata.expects_abstention` rows before scoring context recall.
+- **promptfoo**: a JSON array for `tests: file://promptfoo-tests.json`.
+  `description` is the case id, `vars.question` the question, `metadata` the
+  rest. Assertions are substring checks taken from the expected answer, and
+  each one is passable by quoting the corpus:
+  - `contains` checks a figure the expected answer states, spelled as the
+    exported passages spell it (the corpus locale's digits, `617,200` or
+    `617.200`). Figures of one digit are skipped: `contains "1"` passes nearly
+    any answer.
+  - `icontains` checks a text value of four words or fewer that the expected
+    answer states: a status, an owner, a hypothesis's name. promptfoo matches
+    it as a plain substring, so `final` also matches `finalised`.
+
+  No value the question already contains is asserted, so an answer that only
+  repeats the question fails every check. A pass means the answer reproduces
+  those values. It does not check the reasoning, a name the fact ledger holds
+  only as a subject, or a figure restated at another scale (`617.2m` fails
+  where the corpus says `617,200`). A case with nothing to assert is left out
+  and counted on stderr, never exported with an empty list promptfoo would
+  pass. That leaves out every abstention case and every answer stated only in
+  prose; on a narrated `--seed 8128 --incident` corpus, 21 of 51 cases are
+  exported. Run through promptfoo 0.123.1 with no model, the reference
+  answers passed all 21 and a provider echoing the question passed none.
+
 ## `worldloom stats`: what's in the corpus, not how hard it is
 
 `evaluate` and `stats` (`src/worldloom/stats.py`) answer different questions and

@@ -350,7 +350,7 @@ def test_a_line_separator_inside_a_string_is_not_a_record_boundary() -> None:
     the record there and refuse a valid file."""
     from worldloom.evaluate.predictions import parse
 
-    parsed = parse('{"id": "EVAL-0001", "abstain": true, "metadata": {"note": "a b"}}\r\n')
+    parsed = parse('{"id": "EVAL-0001", "abstain": true, "metadata": {"note": "a\u2028b"}}\r\n')
     assert parsed.by_case["EVAL-0001"].abstain
 
 
@@ -423,3 +423,160 @@ def test_predictions_and_a_builtin_retriever_cannot_both_be_graded(
     path = _write(tmp_path / "p.jsonl", [{"id": "EVAL-0001", "abstain": True}])
     envelope = _refusal(monkeypatch, ["evaluate", str(corpus), "--predictions", str(path), "--retriever", "tfidf"])
     assert envelope["refusal"] == "cannot_combine"
+
+
+# ---------------------------------------------------------------------------
+# evals export --format: the same cases in other harnesses' shapes
+# ---------------------------------------------------------------------------
+
+
+def _export(corpus: Path, *args: str) -> str:
+    result = runner.invoke(app, ["evals", "export", str(corpus), *args])
+    assert result.exit_code == 0, result.output
+    return result.stdout
+
+
+def test_the_default_export_keeps_its_bytes(corpus: Path, tmp_path: Path) -> None:
+    """`--format worldloom` is the default and the default is what `evals
+    export` has always written: one sorted-keys dump per case, newline-joined."""
+    world = World.load(corpus)
+    before = "".join(json.dumps(case.model_dump(mode="json"), sort_keys=True) + "\n"
+                     for case in world.evaluations)
+    assert _export(corpus) == before
+    assert _export(corpus, "--format", "worldloom") == before
+    path = tmp_path / "evals.jsonl"
+    _export(corpus, "-o", str(path))
+    assert path.read_bytes() == before.encode("utf-8") == (corpus / "evals.jsonl").read_bytes()
+
+
+def test_ragas_rows_reference_the_passages_the_grading_credits(corpus: Path, exported: Path) -> None:
+    world = World.load(corpus)
+    cases = {case.id: case for case in world.evaluations}
+    text_of = {r["passage_id"]: r["text"] for r in _records(exported)}
+    facts_of = {r["passage_id"]: set(r["fact_ids"]) for r in _records(exported)}
+    artifact_of = {r["passage_id"]: r["artifact_id"] for r in _records(exported)}
+    rows = [json.loads(line) for line in _export(corpus, "--format", "ragas").splitlines()]
+
+    assert [row["id"] for row in rows] == list(cases)
+    for row in rows:
+        case = cases[row["id"]]
+        assert set(row) == {"id", "user_input", "reference", "reference_contexts",
+                            "reference_context_ids", "metadata"}
+        assert row["user_input"] == case.question
+        assert row["reference"] == case.expected_answer
+        assert row["reference_contexts"] == [text_of[i] for i in row["reference_context_ids"]]
+        assert row["metadata"]["evaluation_type"] == case.evaluation_type.value
+        if case.expects_abstention:
+            assert row["reference_context_ids"] == []
+            continue
+        for passage_id in row["reference_context_ids"]:
+            assert facts_of[passage_id] & set(case.expected_fact_ids)
+            if case.required_artifact_ids:
+                assert artifact_of[passage_id] in case.required_artifact_ids
+
+    # The only answerable rows with nothing to reference are the temporal
+    # cases no ranking can pass: every carrier written after the cut-off.
+    empty = [row["id"] for row in rows
+             if not row["reference_context_ids"] and not cases[row["id"]].expects_abstention]
+    assert [cases[i].evaluation_type.value for i in empty] == ["temporal_state"] * len(empty)
+    assert len(empty) == 1
+
+
+def test_ragas_rows_are_byte_stable(corpus: Path, tmp_path: Path) -> None:
+    path = tmp_path / "ragas.jsonl"
+    _export(corpus, "--format", "ragas", "-o", str(path))
+    assert path.read_bytes() == _export(corpus, "--format", "ragas").encode("utf-8")
+
+
+def test_promptfoo_assertions_are_values_the_answer_states_and_the_corpus_prints(
+    corpus: Path, exported: Path
+) -> None:
+    """Each assertion is passable by quoting the corpus and implied by the
+    reference answer, and a case with nothing to assert is left out, not
+    exported with an empty list promptfoo would pass."""
+    world = World.load(corpus)
+    cases = {case.id: case for case in world.evaluations}
+    records = _records(exported)
+    result = runner.invoke(app, ["evals", "export", str(corpus), "--format", "promptfoo"])
+    assert result.exit_code == 0, result.output
+    tests = json.loads(result.stdout)
+
+    assert tests and isinstance(tests, list)
+    narrowed = False
+    for test in tests:
+        case = cases[test["description"]]
+        assert test["metadata"]["case_id"] == case.id
+        assert test["vars"] == {"question": case.question}
+        assert not case.expects_abstention
+        assert test["assert"]
+        expected = set(case.expected_fact_ids)
+        carrying = [r["text"] for r in records if expected & set(r["fact_ids"])]
+        for check in test["assert"]:
+            assert check["type"] in ("contains", "icontains")
+            # An answer that only repeats the question must fail every check.
+            assert check["value"].casefold() not in case.question.casefold(), check
+            if check["type"] == "contains":
+                assert any(check["value"] in text for text in carrying), check
+                assert check["value"] in (case.expected_answer or ""), check
+                assert sum(ch.isdigit() for ch in check["value"]) >= 2
+            else:
+                assert any(check["value"].casefold() in text.casefold() for text in carrying), check
+                assert check["value"].casefold() in (case.expected_answer or "").casefold(), check
+        numeric = [f for f in world.facts if f.id in expected and f.value is not None]
+        narrowed = narrowed or len(test["assert"]) < len(numeric)
+    # At least one comparison asserts only the figure its answer names, not
+    # every figure it needed to compare.
+    assert narrowed
+
+    left_out = sorted(set(cases) - {test["description"] for test in tests})
+    assert all(case_id in left_out for case_id, case in cases.items() if case.expects_abstention)
+    assert f"{len(left_out)} case(s) left out" in " ".join(result.stderr.split())
+
+
+def test_promptfoo_spells_a_figure_the_way_the_corpus_locale_does() -> None:
+    """Found in the answer by the answer key's spelling, asserted in the
+    documents': a German corpus prints `617.200`, so that is what a system
+    quoting it says."""
+    from datetime import UTC, datetime
+
+    from worldloom.evaluate.interchange import assertions
+    from worldloom.locales import named
+    from worldloom.models import (
+        Authority,
+        CanonicalFact,
+        EvaluationCase,
+        EvaluationType,
+        Quantity,
+    )
+
+    def fact(fact_id: str, amount: float, unit: str) -> CanonicalFact:
+        return CanonicalFact(id=fact_id, kind="financial.revenue.actual", subject="GROUP",
+                             value=Quantity(amount=amount, unit=unit),
+                             valid_from=datetime(2026, 3, 31, tzinfo=UTC), authority=Authority.SYSTEM_OF_RECORD)
+
+    facts = {"F1": fact("F1", 617200.0, "EUR_thousands"), "F2": fact("F2", 1.0, "business_days"),
+             "F3": fact("F3", 7022.0, "EUR_thousands")}
+    case = EvaluationCase(id="EVAL-0001", question="q", evaluation_type=EvaluationType.DIRECT_LOOKUP,
+                          expected_answer="617,200 EUR_thousands, after 1 business day; not 17,022.",
+                          expected_fact_ids=["F1", "F2", "F3"])
+    # The one-digit delay is stated but not asserted; 7,022 is not found
+    # inside 17,022.
+    assert assertions(case, facts, named("germany")) == [{"type": "contains", "value": "617.200"}]
+    assert assertions(case, facts, named("australia")) == [{"type": "contains", "value": "617,200"}]
+
+
+def test_promptfoo_with_nothing_to_assert_refuses(
+    corpus: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from worldloom.evaluate import interchange
+
+    monkeypatch.setattr(interchange, "promptfoo_tests", lambda world: ([], ["EVAL-0001"]))
+    envelope = _refusal(monkeypatch, ["evals", "export", str(corpus), "--format", "promptfoo"])
+    assert envelope["refusal"] == "cases_unexportable"
+    assert envelope["data"]["left_out"] == ["EVAL-0001"]
+
+
+def test_an_unknown_format_is_a_clean_usage_error(corpus: Path) -> None:
+    result = runner.invoke(app, ["evals", "export", str(corpus), "--format", "csv"])
+    assert result.exit_code == 2
+    assert "Traceback" not in result.output

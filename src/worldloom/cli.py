@@ -5315,18 +5315,64 @@ def evolve_run(
 @evals_app.command("export")
 def evals_export(
     corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
-    out: Path = typer.Option(None, "--out", "-o", help="Write JSONL here instead of stdout."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write the export here instead of stdout."),
+    fmt: str = typer.Option(
+        "worldloom", "--format",
+        help=(
+            "worldloom (the default: the evaluation set as JSONL, unchanged), "
+            "ragas (JSONL rows with user_input, reference and the "
+            "reference_contexts the answer rests on) or promptfoo (a JSON "
+            "array of test cases with substring assertions only; cases no "
+            "substring can check are left out and counted on stderr)."
+        ),
+    ),
 ) -> None:
-    """Export the evaluation set as JSONL, ready to score a retrieval system."""
+    """Export the evaluation set, ready to score a retrieval system or hand to a harness.
+
+    `--format worldloom` writes the cases exactly as they always have been.
+    `ragas` and `promptfoo` are projections of the same cases into those
+    tools' shapes; neither adds a model to the grading. Pair any of them with
+    `worldloom evals passages` for the units to index.
+    """
+    from .evaluate.interchange import (
+        EXPORT_FORMATS,
+        jsonl,
+        promptfoo_tests,
+        ragas_records,
+    )
+
+    if fmt not in EXPORT_FORMATS:
+        raise typer.BadParameter(f"must be one of {list(EXPORT_FORMATS)}", param_hint="--format")
     world = _load(corpus)
+    if fmt == "ragas":
+        # Reference contexts are passages, so the corpus has to be compiled,
+        # the same precondition `evaluate` and `evals passages` have.
+        records = ragas_records(_compiled(world, corpus))
+        _emit(jsonl(records), out, f"{len(records)} case(s)")
+        return
+    if fmt == "promptfoo":
+        tests, left_out = promptfoo_tests(world)
+        if not tests:
+            _refuse(
+                "cases_unexportable",
+                f"[red]error:[/red] none of {len(left_out)} case(s) states a figure or short value"
+                " a substring assertion can check",
+                fix="use --format worldloom or ragas, which carry every case",
+                left_out=left_out,
+            )
+        _emit(json.dumps(tests, indent=2, sort_keys=True) + "\n", out, f"{len(tests)} test case(s)")
+        if left_out:
+            # Stderr, so stdout stays the JSON document promptfoo reads.
+            err.print(
+                f"[yellow]![/yellow] {len(left_out)} case(s) left out: the expected answer states no"
+                " figure or short value the question does not already contain (abstention, or an"
+                " answer stated only in prose)"
+            )
+        return
+    # The default keeps its exact bytes: the same dumps, the same join, and the
+    # same lone newline for an empty set that it has always written.
     lines = [json.dumps(case.model_dump(mode="json"), sort_keys=True) for case in world.evaluations]
-    payload = "\n".join(lines) + "\n"
-    if out is None:
-        typer.echo(payload, nl=False)
-    else:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(payload, encoding="utf-8")
-        console.print(f"[green]✓[/green] {len(lines)} case(s) written to [bold]{out}[/bold]")
+    _emit("\n".join(lines) + "\n", out, f"{len(lines)} case(s)")
 
 
 def _emit(payload: str, out: Path | None, summary: str) -> None:

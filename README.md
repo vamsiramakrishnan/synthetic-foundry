@@ -123,6 +123,28 @@ Inspect the generated files alongside the facts and evaluation records.
 the included cases. A passing validator does not establish realism or strong
 retrieval performance. `status` identifies the next incomplete stage.
 
+## Score your own retrieval system
+
+`worldloom evaluate` grades its built-in BM25, TF-IDF and embedding baselines.
+To grade your own system on the same answer key, index the passages those
+baselines index, rank each question, and hand the rankings back:
+
+```bash
+worldloom evals passages ./corpus -o passages.jsonl   # index the `text` field
+worldloom evals export ./corpus -o evals.jsonl        # the questions
+# your system writes one line per case to predictions.jsonl:
+#   {"id": "EVAL-0001", "passage_ids": ["ART-0002#1", "ART-0003#0"]}
+worldloom evaluate ./corpus --predictions predictions.jsonl
+```
+
+The rankings are graded by the code that grades the baselines, with the same
+`-k`, per-family scorecard and `--json` shape. A pass is decided from fact
+ids, timestamps and authority in the manifest; no model judges anything. A
+case with no line fails and is listed; an id the corpus does not hold is
+refused. `worldloom evals export --format ragas` and `--format promptfoo`
+write the same cases for those harnesses, with promptfoo limited to substring
+assertions. Details: [scoring your own system](.claude/skills/worldloom/references/evaluating.md).
+
 ## The Studio console
 
 `worldloom studio serve` opens a local console for one company at a time.

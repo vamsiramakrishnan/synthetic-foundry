@@ -1084,7 +1084,7 @@ worldloom evals dataset verify <DIRECTORY>
 
 ### `worldloom evals export`
 
-Export the evaluation set as JSONL, ready to score a retrieval system.
+Export the evaluation set, ready to score a retrieval system or hand to a harness.
 
 ```
 worldloom evals export <CORPUS>
@@ -1092,7 +1092,8 @@ worldloom evals export <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
-| `--out`, `-o` | Write JSONL here instead of stdout. |
+| `--format` | worldloom (the default: the evaluation set as JSONL, unchanged), ragas (JSONL rows with user_input, reference and the reference_contexts the answer rests on) or promptfoo (a JSON array of test cases with substring assertions only; cases no substring can check are left out and counted on stderr). |
+| `--out`, `-o` | Write the export here instead of stdout. |
 
 ### `worldloom evals passages`
 

@@ -51,6 +51,10 @@ graded by the same code as the built-in retrievers:
 worldloom evaluate <CORPUS> --predictions predictions.jsonl
 ```
 
+For a ragas or promptfoo harness, `worldloom evals export <CORPUS> --format ragas`
+or `--format promptfoo` writes the same cases in that tool's shape; see
+`references/evaluating.md` for what each promptfoo assertion checks.
+
 `worldloom stats` is `evaluate`'s sibling for a different question. It does not
 ask "is this hard to retrieve from" but "what does it actually contain": document
 counts, length distributions, vocabulary, near-duplicate rate, fact-citation
