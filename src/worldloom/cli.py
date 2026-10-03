@@ -23,6 +23,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
+from .cli_panels import WorkflowGroup, assign_panels
 
 # Type-only: this module's import time is the console script's startup floor
 # (W6), and `World`/`ValidationReport`/`CorpusError` each drag the pydantic
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from .world import World
 
 app = typer.Typer(
-    add_completion=False,
+    cls=WorkflowGroup,
     no_args_is_help=True,
     help="Generate coherent synthetic enterprise worlds.",
 )
@@ -680,9 +681,19 @@ console = Console()
 err = Console(stderr=True)
 
 
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
+
+
 @app.callback()
 def _install_domains(
     ctx: typer.Context,
+    _version: bool = typer.Option(
+        False, "--version", is_eager=True, callback=_print_version,
+        help="Print the installed version and exit.",
+    ),
     pack: list[str] | None = typer.Option(
         None, "--pack",
         help="Put a pack in force for this command (kind:name, kind:name@digest or a file; repeatable, "
@@ -8379,6 +8390,11 @@ def spaces(
         f" {space.size_at(strength):,} combinations"
         f": {space.exhaustive // max(1, len(rows)):,}x smaller than exhaustive"
     )
+
+
+# Last, so every command registered above (and by the sub-modules imported at
+# the top) has its panel before the first `--help` renders.
+assign_panels(app)
 
 
 if __name__ == "__main__":  # pragma: no cover
