@@ -24,6 +24,7 @@ only against what was observed.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
@@ -540,6 +541,17 @@ class SourcePolicyGrade(Model):
 SOURCE_POLICY_FINDINGS: tuple[str, ...] = ("clarification_missing", "stale_source_used", "authoritative_source_missing")
 
 
+def _names_record(keys: Sequence[str], texts: Sequence[str]) -> bool:
+    """Whether any text names the record by one of its keys, as a whole token.
+
+    Bounded, not a substring test: a bare ``in`` let ``WL-1`` count as named
+    wherever ``WL-10`` appeared, crediting a run with a record it never cited.
+    """
+    patterns = [re.compile(rf"(?<![A-Za-z0-9_]){re.escape(key)}(?![A-Za-z0-9_])", re.IGNORECASE)
+                for key in keys if key]
+    return any(pattern.search(text) for pattern in patterns for text in texts)
+
+
 def _grade_source_policy(case: EvalCase, response: AgentResponse | None, after: Mapping[str, Mapping[str, Any]],
                          diff: StateDiff, spans: Sequence[Mapping[str, Any]],
                          questions: Sequence[Mapping[str, Any]]) -> SourcePolicyGrade | None:
@@ -552,9 +564,7 @@ def _grade_source_policy(case: EvalCase, response: AgentResponse | None, after: 
     said.extend(artifact.text for artifact in (response.artifacts if response is not None else ()))
     said.extend(cite for artifact in (response.artifacts if response is not None else ()) for cite in artifact.cites)
 
-    def names(keys: Sequence[str], texts: Sequence[str]) -> bool:
-        lowered = [text.lower() for text in texts]
-        return any(key.lower() in text for key in keys if key for text in lowered)
+    names = _names_record
 
     if policy.kind == "clarify_ambiguous_join":
         # Naming every candidate is the policy, in a question or in what the

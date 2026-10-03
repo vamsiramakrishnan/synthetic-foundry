@@ -149,3 +149,13 @@ def test_rows_without_a_source_defect_are_left_alone(corpus: EnterpriseCorpus, r
     doubled = {**case.row, "state_overrides": [*case.row["state_overrides"], *case.row["state_overrides"]]}
     with pytest.raises(ValueError, match="exactly one source defect"):
         source_policy_row(doubled, records)
+
+
+def test_a_key_is_named_only_as_a_whole_token() -> None:
+    from worldloom.evalrun.grading import _names_record
+
+    assert _names_record(["WL-1"], ["see wl-1 for the figure"])
+    assert _names_record(["WL-1"], ["(WL-1)."])
+    assert not _names_record(["WL-1"], ["see WL-10 for the figure"])
+    assert not _names_record(["WL-1"], ["XWL-1"])
+    assert not _names_record([""], ["anything"])
