@@ -210,7 +210,7 @@ def test_back_office_widens_the_axes_and_grounds_on_bound_record_kinds() -> None
     sorted((ROOT / "examples" / "enterprise-evals").glob("*.json")),
     ids=lambda p: p.stem,
 )
-def test_every_shipped_profile_plans_within_a_bound(profile_path, tmp_path) -> None:
+def test_every_shipped_profile_plans_within_a_bound(profile_path, tmp_path, cpu_budget) -> None:
     """No shipped profile could produce a queryset before the cover was bounded.
 
     The default and the shipped retail profile were both killed at fifteen
@@ -238,7 +238,7 @@ def test_every_shipped_profile_plans_within_a_bound(profile_path, tmp_path) -> N
     ])
     elapsed = time.process_time() - started
     assert result.exit_code == 0, result.output
-    assert elapsed < 120, elapsed
+    assert elapsed < 120 * cpu_budget, elapsed
     assert len(out.read_text(encoding="utf-8").splitlines()) == 40
     summary = json.loads(result.output)
     assert summary["selected"] == 40

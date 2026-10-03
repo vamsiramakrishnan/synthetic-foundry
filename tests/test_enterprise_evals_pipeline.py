@@ -351,7 +351,7 @@ def _narrowed_retail_profile(path: Path) -> Path:
     return path
 
 
-def test_plan_with_a_shipped_profile_and_a_limit_returns_in_seconds(tmp_path: Path) -> None:
+def test_plan_with_a_shipped_profile_and_a_limit_returns_in_seconds(tmp_path: Path, cpu_budget: float) -> None:
     """Killed at fifteen minutes with nothing written while the limit only
     cut the cover's output; under seven seconds once it capped the walk."""
     out = tmp_path / "plan.jsonl"
@@ -367,7 +367,7 @@ def test_plan_with_a_shipped_profile_and_a_limit_returns_in_seconds(tmp_path: Pa
     ])
     elapsed = time.process_time() - started
     assert result.exit_code == 0, result.output
-    assert elapsed < 60, elapsed
+    assert elapsed < 60 * cpu_budget, elapsed
     assert len(out.read_text(encoding="utf-8").splitlines()) == 40
     summary = json.loads(result.output)
     assert summary["selected"] == 40
