@@ -98,9 +98,11 @@ Determinism spine:
 ```bash
 pip install -e ".[dev]"            # add renderers as needed: ,xlsx,docx,pdf,pptx,polars
 pre-commit install                 # ruff-check + worldloom docs --check
-worldloom doctor                   # verifies the install; names exact fixes; --json for data
+worldloom doctor                   # verifies the install and agent setup; names exact fixes; --json for data
+worldloom guide                    # which commands to run, by what you are testing
+worldloom guide agent --json       # one goal's ordered commands, as data
 
-pytest -q                          # house gate (slow tests deselected via addopts)
+pytest -q -n auto                  # house gate, one worker per core (slow tests deselected via addopts)
 pytest tests/test_render.py -q     # one file; -k "name" for one test
 pytest -m slow -q                  # opt in to heavy builds (weekly in CI)
 ruff check .                       # lint gate (CI-blocking)
@@ -109,6 +111,12 @@ mypy                               # type gate (CI-blocking; new modules checked
 worldloom validate retail-close    # golden corpus must stay coherent (CI gate)
 worldloom docs --check             # generated CLI reference must be current
 ```
+
+`worldloom guide` maps what is being tested (retrieval, rendered documents,
+connector agents, native files, agent improvement, a specific company,
+authored prose, the SDK) to an ordered command sequence; its data lives in
+`src/worldloom/guide.py`, and `tests/test_guide.py` parses every command in it
+against the CLI, so a CLI change that breaks a sequence fails there.
 
 Corpus loop (`worldloom smoke` chains build, narrate, render, validate and
 evaluate on a tiny world, then enterprise cases and the reference agent, in
@@ -211,9 +219,12 @@ format.
 - Python ≥ 3.11 (floor); CI matrix 3.11/3.12/3.13. `uv run <cmd>` works for
   one-off commands in a checkout.
 - pip + hatchling; version single-sourced from `src/worldloom/__init__.py`.
-- Optional extras unlock features, and `worldloom doctor` names the missing pip
-  extra per format: `xlsx`, `docx`, `pdf`, `pptx`, `polars`, `mcp`,
-  `embeddings` (downloads weights, so it is never core), `all`, `dev`.
+- Optional extras unlock features: `xlsx`, `docx`, `pdf`, `pptx`, `polars`,
+  `mcp`, `visuals`, `embeddings` (downloads weights, so it is never core),
+  `all`, `dev`. `worldloom doctor` names the missing pip extra per format,
+  checks the agent setup (the `worldloom` on PATH is this install, the `mcp`
+  extra, every `.mcp.json` server command resolving), and reports
+  `embeddings` and `visuals` as optional (–, never a failure).
 - `tools/` scripts run as `python3 tools/<name>.py` (they sys.path-insert
   `src/`); stdlib-only, dev-only.
 - Site tooling is npm/Node (Astro 5 + Starlight), isolated to `site/`.
@@ -221,9 +232,14 @@ format.
 
 ## Testing & QA
 
-- pytest only (no xdist). `pytest -q` is the house gate; `addopts` deselects
-  `@pytest.mark.slow` (three heavy density builds) so the default run stays
-  fast.
+- pytest with pytest-xdist. `pytest -q -n auto` is the house gate (CI runs
+  it that way; plain `pytest -q` is the same suite serially and must pass
+  too); `addopts` deselects `@pytest.mark.slow` (three heavy density builds)
+  so the default run stays fast. Every test is parallel-safe: its own
+  `tmp_path`, env changes through `monkeypatch`, no writes to a fixed,
+  cwd-relative or home path. A test that genuinely cannot share a machine
+  gets `@pytest.mark.xdist_group` (and the runs `--dist loadgroup`) with a
+  comment saying why; it is never skipped.
 - Hypothesis properties in `tests/test_properties.py`: derandomized, deadline
   on, database disabled. Never weaken a property to pass it; nothing under
   `src/` may gain randomness.
@@ -237,7 +253,7 @@ format.
 - CLI test style: module-level `runner = CliRunner()`, assert
   `result.exit_code` with `result.output` in the assert message; negative
   validator tests corrupt one fact and expect the named violation.
-- Before committing: `pytest -q`, `ruff check .`, `mypy`,
+- Before committing: `pytest -q -n auto`, `ruff check .`, `mypy`,
   `worldloom validate retail-close`, `worldloom docs --check`. CI additionally
   byte-replays corpora, so anything nondeterministic fails there even when local
   tests pass.

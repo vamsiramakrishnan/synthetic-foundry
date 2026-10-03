@@ -7,6 +7,12 @@ state first, then validates artifacts and evaluation evidence against it.
 For a first run, use [the repository quickstart](../README.md#quickstart).
 For an enterprise dataset, define breadth and admission criteria before scaling.
 
+To see the commands before choosing a page, run `worldloom guide`. It lists
+the goals in [the README's table](../README.md#what-are-you-testing) with each
+one's first command; `worldloom guide <goal>` prints that goal's whole command
+sequence and the page to read next, and `--json` gives the same to an agent.
+The table below covers more paths than the guide's goals.
+
 ## Choose a path
 
 | Goal | Start here | Then read |

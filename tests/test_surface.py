@@ -11,7 +11,6 @@ byte what it was. And the register round-trips through its JSON.
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -215,13 +214,13 @@ def test_a_rules_bump_leaves_a_corpus_pinned_to_its_version_untouched(monkeypatc
     assert masterdata.check_request({"vendors": 3, "identifiers": 2})["identifiers"] == 2
 
 
-def test_a_world_opted_in_writes_identifiers_and_replays_them() -> None:
+def test_a_world_opted_in_writes_identifiers_and_replays_them(tmp_path: Path) -> None:
     from worldloom import World
     from worldloom.recipe import rebuild
 
     world = RetailWorld(seed=4242, master_data={"vendors": 6, "customers": 3, "identifiers": 1}).build()
     assert world.masterdata.vendors[0].phone
-    root = Path(tempfile.mkdtemp()) / "corpus"
+    root = tmp_path / "corpus"
     world.export(root)
     loaded = World.load(root)
     assert loaded.masterdata == world.masterdata
