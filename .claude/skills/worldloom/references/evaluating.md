@@ -298,23 +298,64 @@ existing abstention list presumes doesn't exist, check that list by hand.
 
 ## Scoring your own retrieval system
 
-The built-in retrievers are floors. A team with its own retrieval stack
-indexes the same passages they do, so its rankings join the same answer key:
+The built-in retrievers are floors. A team with its own retrieval stack grades
+it against the same answer key, by the same rules, in four steps: export the
+passages, index them, write a ranking per question, score the rankings.
 
 ```bash
 worldloom evals passages ./corpus -o passages.jsonl
 worldloom evals export ./corpus -o evals.jsonl
+worldloom evaluate ./corpus --predictions predictions.jsonl
+worldloom evaluate ./corpus --predictions predictions.jsonl -v --json
 ```
 
-`passages.jsonl` holds one line per passage, in index order, with sorted keys:
-`passage_id`, `artifact_id`, `artifact_type`, `title`, `heading`, `source`
-(the manifest path), `authority`, `created_at`, `fact_ids` and `text`. These
-are the units `index.passages()` yields, the ones `evaluate` and `search`
-rank, not a second chunking. Index `text`: it already carries the title and
-heading lines, exactly as the built-in retrievers see it. `authority` and
-`created_at` are the provenance the hard families reward reading. `fact_ids`
-is the grading key; use it to debug a ranking, not to rank. The bytes are
-deterministic, so the same corpus always exports the same file.
+**Index.** `passages.jsonl` holds one line per passage, in index order, with
+sorted keys: `passage_id`, `artifact_id`, `artifact_type`, `title`, `heading`,
+`source` (the manifest path), `authority`, `created_at`, `fact_ids` and
+`text`. These are the units `index.passages()` yields, the ones `evaluate`
+and `search` rank, not a second chunking. Index `text`: it already carries the
+title and heading lines, exactly as the built-in retrievers see it.
+`authority` and `created_at` are the provenance the hard families reward
+reading. `fact_ids` is the grading key; use it to debug a ranking, not to
+rank. The bytes are deterministic, so the same corpus always exports the same
+file.
+
+**Rank.** Ask each case's `question` from `evals.jsonl` and write one line
+per case, best first:
+
+```json
+{"id": "EVAL-0001", "passage_ids": ["ART-0002#1", "ART-0003#0"]}
+{"id": "EVAL-0032", "abstain": true}
+```
+
+A system that ranks whole documents writes `"artifact_ids"` instead, one
+granularity per file; each artifact is then graded as one unit carrying every
+fact its passages carry, at the artifact's timestamp and authority.
+`"abstain": true` declines the question. `"metadata"` is carried and read by
+nothing. Any other key is refused, because a typo such as `passage_id` would
+otherwise read as an empty ranking and pass every abstention case.
+
+**Score.** `--predictions` hands the rankings to `grade()` in `score.py`, the
+function the built-in retrievers are graded by: `_covers` for the coverage
+families, the unfiltered top hit for `temporal_state`, the top hit's
+authority for `authority_resolution`, the same per-family scorecard. Each
+ranking is cut at `-k` after repeats collapse to their first occurrence. A
+file carries no scores, so abstention is read from the line rather than a
+calibrated floor: an abstention case passes when the line abstains or ranks
+nothing, and an answerable case the line abstains on fails, as in `worldloom
+benchmark run`. A case with no line fails with `no prediction for this case`
+and is listed. Ids are checked before anything is graded: a case, passage or
+artifact id this corpus does not hold refuses the whole file
+(`predictions_unknown_ids`), because it means the index came from another
+corpus or an earlier build. A malformed line refuses as
+`predictions_unreadable`, naming the line.
+
+The scorecard is labelled with the file name, as `bm25` and `tfidf` label
+theirs. `--json` keeps the single-retriever shape (`retriever`, `k`,
+`overall`, `by_type`, `outcomes`) and adds `predictions`, `granularity` and
+`missing`. A file written from BM25's own top-k and its abstention verdicts
+reproduces `--retriever bm25` case for case; only the abstention detail
+differs, since there is no score to print.
 
 ## `worldloom stats`: what's in the corpus, not how hard it is
 

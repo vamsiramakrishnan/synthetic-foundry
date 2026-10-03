@@ -813,6 +813,9 @@ _REFUSALS: dict[str, str] = {
     "resume_invalid": "a completed world does not validate for resume",
     "scenario_profile_rejected": "the enterprise scenario profile names something this registry does not hold, or selects nothing",
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
+    # `worldloom evaluate --predictions`.
+    "predictions_unreadable": "the --predictions file cannot be read, or a line is not {id, passage_ids or artifact_ids, abstain}; data.line names it",
+    "predictions_unknown_ids": "the --predictions file names case, passage or artifact ids this corpus does not hold; data lists each",
     # `worldloom evalrun`.
     "corpus_unreadable": "the enterprise-evals directory cannot be read or is not one",
     "sources_insufficient": "a planned case needs source records the world cannot supply; the message names the connector, the entity and the counts",
@@ -5553,6 +5556,17 @@ def evaluate(
             "the embedding retriever with no model installed at all."
         ),
     ),
+    predictions: Path | None = typer.Option(
+        None, "--predictions",
+        help=(
+            "Grade your own system's rankings instead of a built-in retriever: "
+            'JSONL, one {"id", "passage_ids" or "artifact_ids" best first, '
+            '"abstain"} line per case. Same grading, -k and per-family '
+            "scorecard as --retriever; passage ids are the ones `worldloom evals "
+            "passages` exports. A case with no line fails and is listed; an id "
+            "this corpus does not hold refuses."
+        ),
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
     as_json: bool = typer.Option(
         False, "--json",
@@ -5575,10 +5589,14 @@ def evaluate(
     both of those are still *keyword* heuristics: a family the embedding
     retriever also fails is hard for a reason no ranking function fixes, and a
     family it walks past was a lexical trap rather than a difficult question.
+
+    `--predictions` grades a system this package never ran, by the same code:
+    index `worldloom evals passages`, rank each question, write the rankings.
     """
     import json as json_module
 
     from .evaluate import (
+        DEFAULT_RETRIEVER,
         LEXICAL_RETRIEVERS,
         RETRIEVERS,
         compare,
@@ -5592,6 +5610,21 @@ def evaluate(
     choices = sorted([*RETRIEVERS, "both", "all"])
     if retriever not in choices:
         raise typer.BadParameter(f"must be one of {choices}", param_hint="--retriever")
+
+    if predictions is not None:
+        if retriever != DEFAULT_RETRIEVER or vectors:
+            # Two answers to "whose ranking is graded": the file's, or a
+            # built-in one's. Picking either silently would print a scorecard
+            # for the ranking the caller did not mean.
+            _refuse(
+                "cannot_combine",
+                "[red]error:[/red] --predictions is the ranking being graded;"
+                " --retriever and --vectors choose a built-in one",
+                fix="run the built-in retriever as a separate `worldloom evaluate`",
+                flags=["--predictions", "--retriever" if retriever != DEFAULT_RETRIEVER else "--vectors"],
+            )
+        _evaluate_predictions(corpus, predictions, k=k, verbose=verbose, as_json=as_json)
+        return
 
     if vectors:
         # Bound for this invocation only, and by rebinding the registry entry
@@ -5706,11 +5739,84 @@ def evaluate(
     console.print(str(card))
 
     if verbose:
-        console.print("")
-        for outcome in card.outcomes:
-            mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
-            console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
-            console.print(f"      {outcome.detail}")
+        _print_outcomes(card)
+
+
+def _print_outcomes(card: Any) -> None:
+    """Every case of one scorecard, mark and detail, for `evaluate -v`."""
+    console.print("")
+    for outcome in card.outcomes:
+        mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
+        console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
+        # Escaped because a detail can quote ids from a predictions file, and
+        # rich reads a bracketed word as a style tag and drops it.
+        console.print(f"      {escape(outcome.detail)}")
+
+
+#: How many unanswered case ids the prose scorecard names before counting the
+#: rest. `--json` carries every one of them.
+_MISSING_NAMED = 20
+
+
+def _evaluate_predictions(corpus: str, path: Path, *, k: int, verbose: bool, as_json: bool) -> None:
+    """`evaluate --predictions`: grade a ranking another system wrote down.
+
+    The scorecard is `evaluate.score.grade()`'s, the one every built-in
+    retriever gets, labelled with the file's name the way `bm25` and `tfidf`
+    label theirs. The file is read and parsed before the corpus is loaded,
+    because a malformed line is the cheaper failure to report and needs no
+    corpus to find.
+    """
+    import json as json_module
+
+    from .evaluate.predictions import PredictionsError, parse, score_predictions
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        _refuse("predictions_unreadable", f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix="pass the path of a predictions JSONL file, UTF-8", path=str(path), line=0)
+    try:
+        parsed = parse(text)
+    except PredictionsError as exc:
+        _refuse(exc.code, f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix=exc.fix, path=str(path), **exc.data)
+
+    world = _compiled(_load(corpus), corpus)
+    try:
+        result = score_predictions(world, parsed, k=k, label=path.name)
+    except PredictionsError as exc:
+        _refuse(exc.code, f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix=exc.fix, path=str(path), **exc.data)
+    except ValueError as exc:
+        # `score()`'s empty-pool sentence, mapped where `benchmark run` maps it.
+        _refuse("no_passages", f"[red]error:[/red] {escape(str(exc))}")
+
+    card = result.card
+    if as_json:
+        # The single-retriever shape, so a harness that parses `--retriever
+        # bm25 --json` parses this unchanged, plus three additive keys: the
+        # file as given, the unit it ranked, and the cases it never answered.
+        typer.echo(json_module.dumps({
+            "retriever": card.retriever,
+            "k": card.k,
+            "predictions": str(path),
+            "granularity": result.granularity,
+            "missing": list(result.missing),
+            **_card_json(card),
+        }, indent=2))
+        return
+    console.print(f"[bold]predictions:[/bold] {escape(str(path))} ({result.granularity} ids)")
+    console.print(str(card))
+    if result.missing:
+        named = ", ".join(result.missing[:_MISSING_NAMED])
+        more = len(result.missing) - _MISSING_NAMED
+        console.print(
+            f"  {len(result.missing)} case(s) have no prediction and are scored as failures: {named}"
+            + (f", +{more} more (--json lists every one)" if more > 0 else "")
+        )
+    if verbose:
+        _print_outcomes(card)
 
 
 @app.command()

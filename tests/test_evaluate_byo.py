@@ -103,3 +103,323 @@ def test_a_corpus_with_nothing_to_compile_refuses(monkeypatch: pytest.MonkeyPatc
     result = runner.invoke(app, ["evals", "passages", "retail-close"])
     assert result.exit_code == 2
     assert json.loads(result.stderr)["refusal"] == "uncompilable"
+
+
+# ---------------------------------------------------------------------------
+# evaluate --predictions: a ranking from outside, graded by `score.grade()`
+# ---------------------------------------------------------------------------
+
+
+def _write(path: Path, rows: list[dict]) -> Path:
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return path
+
+
+def _evaluate(*args: str) -> dict:
+    result = runner.invoke(app, ["evaluate", *args, "--json"])
+    assert result.exit_code == 0, result.output
+    return json.loads(result.stdout)
+
+
+def _verdicts(payload: dict) -> list[tuple[str, str, bool]]:
+    return [(o["case_id"], o["type"], o["passed"]) for o in payload["outcomes"]]
+
+
+def _builtin_predictions(corpus: Path, retriever: str, k: int) -> list[dict]:
+    """A built-in retriever's own run, written down as a predictions file.
+
+    The ranking is the retriever's top-*k* and the abstain flag is the
+    verdict its calibrated floor reached, which is exactly what a file can
+    carry of a run: ids and a decision, no scores.
+    """
+    from worldloom.evaluate import RETRIEVERS, retrieve
+
+    world = World.load(corpus)
+    world = world if world.artifact_irs else world.compile()
+    pool = passages(world)
+    cases = list(world.evaluations)
+    index = RETRIEVERS[retriever]([p.text for p in pool])
+    rows = []
+    for case, retrieval in zip(cases, retrieve(index, pool, cases, k=k), strict=True):
+        row: dict = {"id": case.id, "passage_ids": [p.id for p in retrieval.found]}
+        if retrieval.abstained:
+            row["abstain"] = True
+        rows.append(row)
+    return rows
+
+
+@pytest.mark.parametrize(("retriever", "k"), [("bm25", 5), ("bm25", 1), ("tfidf", 5)])
+def test_a_builtin_retrievers_own_rankings_reproduce_its_scorecard(
+    corpus: Path, tmp_path: Path, retriever: str, k: int
+) -> None:
+    """A prediction is just another retriever's ranking.
+
+    Graded by the same `grade()`, the same ranking must land on the same
+    verdict for every case, and so on the same per-family scorecard. Only the
+    abstention cases' wording may differ: the built-in prints the score and
+    the floor it was compared with, and a file has no scores to print.
+    """
+    path = _write(tmp_path / f"{retriever}.jsonl", _builtin_predictions(corpus, retriever, k))
+    builtin = _evaluate(str(corpus), "--retriever", retriever, "-k", str(k))
+    graded = _evaluate(str(corpus), "--predictions", str(path), "-k", str(k))
+
+    assert _verdicts(graded) == _verdicts(builtin)
+    assert graded["by_type"] == builtin["by_type"]
+    assert graded["overall"] == builtin["overall"]
+    assert graded["k"] == builtin["k"] == k
+    for ours, theirs in zip(graded["outcomes"], builtin["outcomes"], strict=True):
+        if ours["type"] != "expected_abstention":
+            assert ours["detail"] == theirs["detail"], ours["case_id"]
+    # Guard against a vacuous match: the corpus must exercise both verdicts.
+    assert {passed for _, _, passed in _verdicts(builtin)} == {True, False}
+
+
+def _oracle(case: dict, records: list[dict]) -> list[str] | None:
+    """Passage ids a perfect retriever returns for *case*, read off the exports only.
+
+    Built the way a team would build one from `passages.jsonl` and
+    `evals.jsonl`: the carriers of the expected facts, ordered so the top hit
+    is the one each family grades — written by the cut-off and carrying every
+    fact for `temporal_state`, the most authoritative carrier for
+    `authority_resolution` — and then enough carriers to cover every fact.
+    ``None`` when no ranking can pass: a `temporal_state` case whose every
+    carrier was written after its cut-off.
+    """
+    from datetime import datetime
+
+    from worldloom.models import AUTHORITY_RANK, Authority
+
+    expected = set(case["expected_fact_ids"])
+    carriers = [r for r in records if expected & set(r["fact_ids"])]
+    if case["evaluation_type"] == "temporal_state" and case["temporal_cutoff"]:
+        cutoff = datetime.fromisoformat(case["temporal_cutoff"])
+        admissible = [r for r in carriers
+                      if datetime.fromisoformat(r["created_at"]) <= cutoff and expected <= set(r["fact_ids"])]
+        if not admissible:
+            return None
+        top = admissible[0]
+    elif case["evaluation_type"] == "authority_resolution":
+        top = max(carriers, key=lambda r: AUTHORITY_RANK[Authority(r["authority"])])
+    else:
+        top = max(carriers, key=lambda r: len(expected & set(r["fact_ids"])))
+    chosen, covered = [top], set(top["fact_ids"])
+    while not expected <= covered:
+        best = max(carriers, key=lambda r: len((expected - covered) & set(r["fact_ids"])))
+        chosen.append(best)
+        covered |= set(best["fact_ids"])
+    return [r["passage_id"] for r in chosen]
+
+
+def _cases(corpus: Path, tmp_path: Path) -> list[dict]:
+    path = tmp_path / "evals.jsonl"
+    result = runner.invoke(app, ["evals", "export", str(corpus), "-o", str(path)])
+    assert result.exit_code == 0, result.output
+    return _records(path)
+
+
+def _perfect(corpus: Path, exported: Path, tmp_path: Path, *, documents: bool) -> tuple[list[dict], list[str]]:
+    """The oracle's predictions file, and the cases no ranking can pass.
+
+    Abstention cases abstain. A case the oracle cannot satisfy still gets the
+    best ranking there is, its carriers, so the scorecard shows how it fails.
+    With *documents*, each passage id is lifted to its artifact id — repeats
+    left in on purpose: a document ranking derived from passage hits names an
+    artifact once per hit, and duplicates collapse before the cut at k.
+    """
+    records = _records(exported)
+    artifact_of = {r["passage_id"]: r["artifact_id"] for r in records}
+    rows, impossible = [], []
+    for case in _cases(corpus, tmp_path):
+        if case["expects_abstention"]:
+            rows.append({"id": case["id"], "abstain": True})
+            continue
+        ranked = _oracle(case, records)
+        if ranked is None:
+            impossible.append(case["id"])
+            ranked = [r["passage_id"] for r in records if set(case["expected_fact_ids"]) & set(r["fact_ids"])]
+        assert len(ranked) <= 5, case["id"]
+        if documents:
+            rows.append({"id": case["id"], "artifact_ids": [artifact_of[p] for p in ranked]})
+        else:
+            rows.append({"id": case["id"], "passage_ids": ranked})
+    return rows, impossible
+
+
+@pytest.mark.parametrize("documents", [False, True], ids=["passages", "artifacts"])
+def test_a_perfect_ranking_passes_everything_a_ranking_can(
+    corpus: Path, exported: Path, tmp_path: Path, documents: bool
+) -> None:
+    """Every answerable case a ranking can pass passes on the oracle's, and
+    every abstention case passes on an explicit abstain, at either
+    granularity: an artifact unit carries everything its passages carry, so
+    lifting a perfect passage ranking to its documents loses nothing.
+
+    One case on this corpus no ranking can pass, and the exception is pinned
+    rather than hidden. "What was the close status once the period was
+    finalised?" puts its cut-off at the finalisation, and the only passage
+    stating the status was written two days later, so the unfiltered top hit
+    is always after the cut-off. The scorecard still counts it reachable,
+    because reachability asks whether any passage carries the fact, not
+    whether one was written in time. A finding about the evaluation set, not
+    about this grading; a change that fixes it, or adds another, fails here.
+    """
+    rows, impossible = _perfect(corpus, exported, tmp_path, documents=documents)
+    payload = _evaluate(str(corpus), "--predictions", str(_write(tmp_path / "perfect.jsonl", rows)))
+
+    failed = {o["case_id"]: o for o in payload["outcomes"] if not o["passed"]}
+    assert sorted(failed) == sorted(impossible)
+    for outcome in failed.values():
+        assert outcome["type"] == "temporal_state"
+        assert outcome["detail"].startswith("top hit was written"), outcome
+    assert len(impossible) == 1
+    assert payload["overall"]["passed"] == payload["overall"]["total"] - len(impossible)
+    assert payload["granularity"] == ("artifact" if documents else "passage")
+    assert payload["missing"] == []
+
+
+def test_a_case_with_no_line_fails_and_is_listed(corpus: Path, tmp_path: Path) -> None:
+    """Missing is a failure, abstention cases included: silence the system
+    never chose must not score as the right answer to an unanswerable question."""
+    rows = _builtin_predictions(corpus, "bm25", 5)
+    scored = _evaluate(str(corpus))["outcomes"]
+    builtin = {o["case_id"]: o["passed"] for o in scored}
+    abstention = next(o["case_id"] for o in scored if o["type"] == "expected_abstention")
+    passing = [row["id"] for row in rows if builtin[row["id"]]][:2]
+    dropped = [abstention, *passing]
+    kept = [row for row in rows if row["id"] not in dropped]
+    path = _write(tmp_path / "partial.jsonl", kept)
+
+    payload = _evaluate(str(corpus), "--predictions", str(path))
+    order = [row["id"] for row in rows]
+    assert payload["missing"] == sorted(dropped, key=order.index)
+    outcomes = {o["case_id"]: o for o in payload["outcomes"]}
+    for case_id in dropped:
+        assert not outcomes[case_id]["passed"]
+        assert outcomes[case_id]["detail"] == "no prediction for this case"
+    assert payload["overall"]["passed"] == sum(builtin.values()) - len(passing)
+
+    # The contrast that makes the rule bite: ranking nothing on purpose *is*
+    # the right answer to an unanswerable question.
+    quiet = _write(tmp_path / "quiet.jsonl", [*kept, {"id": abstention, "passage_ids": []}])
+    chosen = next(o for o in _evaluate(str(corpus), "--predictions", str(quiet))["outcomes"]
+                  if o["case_id"] == abstention)
+    assert chosen["passed"] and chosen["detail"] == "returned nothing, as expected"
+
+    prose = runner.invoke(app, ["evaluate", str(corpus), "--predictions", str(path)])
+    assert prose.exit_code == 0, prose.output
+    flat = " ".join(prose.output.split())
+    assert "3 case(s) have no prediction and are scored as failures" in flat
+    assert all(case_id in flat for case_id in dropped)
+
+
+def test_the_scorecard_is_labelled_with_the_file(corpus: Path, tmp_path: Path) -> None:
+    path = _write(tmp_path / "my-rag.jsonl", _builtin_predictions(corpus, "bm25", 5))
+    payload = _evaluate(str(corpus), "--predictions", str(path))
+    assert payload["retriever"] == "my-rag.jsonl"
+    assert payload["predictions"] == str(path)
+    prose = runner.invoke(app, ["evaluate", str(corpus), "--predictions", str(path), "-v"])
+    assert prose.exit_code == 0, prose.output
+    flat = " ".join(prose.output.split())
+    assert "MY-RAG.JSONL retrieval @5" in flat
+    assert "predictions:" in flat and "(passage ids)" in flat
+    assert "no prediction for this case" not in flat
+
+
+def test_an_answerable_case_the_system_declines_fails(corpus: Path, tmp_path: Path) -> None:
+    """`benchmark run`'s rule: abstaining where the corpus holds the answer is
+    wrong whatever came back with it."""
+    rows = _builtin_predictions(corpus, "bm25", 5)
+    answerable = next(row for row in rows if "abstain" not in row)
+    answerable["abstain"] = True
+    payload = _evaluate(str(corpus), "--predictions", str(_write(tmp_path / "declines.jsonl", rows)))
+    outcome = next(o for o in payload["outcomes"] if o["case_id"] == answerable["id"])
+    assert not outcome["passed"]
+    assert outcome["detail"] == "abstained, but the corpus holds the answer"
+
+
+def test_duplicates_collapse_before_the_cut_at_k() -> None:
+    from worldloom.evaluate.predictions import parse
+
+    parsed = parse('{"id": "EVAL-0001", "passage_ids": ["A#0", "A#0", "B#1", "A#0"]}\n')
+    assert parsed.by_case["EVAL-0001"].ranked == ("A#0", "B#1")
+
+
+def test_a_line_separator_inside_a_string_is_not_a_record_boundary() -> None:
+    """JSONL records end at a newline. A writer that leaves non-ASCII
+    unescaped can put U+2028 inside a value, and `splitlines()` would cut
+    the record there and refuse a valid file."""
+    from worldloom.evaluate.predictions import parse
+
+    parsed = parse('{"id": "EVAL-0001", "abstain": true, "metadata": {"note": "a b"}}\r\n')
+    assert parsed.by_case["EVAL-0001"].abstain
+
+
+def _refusal(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> dict:
+    monkeypatch.setenv("WORLDLOOM_OUTPUT", "json")
+    result = runner.invoke(app, args)
+    assert result.exit_code == 2, result.output
+    envelope = json.loads(result.stderr)
+    assert envelope["fix"], envelope
+    return envelope
+
+
+@pytest.mark.parametrize(
+    ("content", "said", "line"),
+    [
+        ("not json\n", "not JSON", 1),
+        ("[1, 2]\n", "JSON object", 1),
+        ('{"passage_ids": []}\n', '"id"', 1),
+        ('{"id": "EVAL-0001", "passage_id": ["ART-0001#0"]}\n', "unknown key", 1),
+        ('{"id": "EVAL-0001", "passage_ids": "ART-0001#0"}\n', "list of non-empty strings", 1),
+        ('{"id": "EVAL-0001", "passage_ids": [], "artifact_ids": []}\n', "not both", 1),
+        ('{"id": "EVAL-0001", "abstain": "yes"}\n', '"abstain"', 1),
+        ('{"id": "EVAL-0001"}\n', "give a ranking", 1),
+        ('{"id": "EVAL-0001", "abstain": true}\n{"id": "EVAL-0001", "abstain": true}\n',
+         "already predicted on line 1", 2),
+        ('{"id": "EVAL-0001", "passage_ids": []}\n\n{"id": "EVAL-0002", "artifact_ids": []}\n',
+         "one granularity", 3),
+        ("\n", "holds no predictions", 0),
+    ],
+)
+def test_a_malformed_file_refuses_naming_the_line(
+    corpus: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, content: str, said: str, line: int
+) -> None:
+    path = tmp_path / "bad.jsonl"
+    path.write_text(content, encoding="utf-8")
+    envelope = _refusal(monkeypatch, ["evaluate", str(corpus), "--predictions", str(path)])
+    assert envelope["refusal"] == "predictions_unreadable"
+    assert said in envelope["message"]
+    assert envelope["data"]["line"] == line
+
+
+def test_an_unreadable_file_refuses(corpus: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    envelope = _refusal(monkeypatch, ["evaluate", str(corpus), "--predictions", str(tmp_path / "absent.jsonl")])
+    assert envelope["refusal"] == "predictions_unreadable"
+
+
+@pytest.mark.parametrize(
+    ("row", "field", "unknown"),
+    [
+        ({"id": "EVAL-9999", "abstain": True}, "unknown_case_ids", ["EVAL-9999"]),
+        ({"id": "EVAL-0001", "passage_ids": ["ART-0002#1", "ART-9999#0"]}, "unknown_ids", ["ART-9999#0"]),
+        # A passage id is not an artifact id: the granularity decides which
+        # ids exist, and a file that mixed them up joins nothing.
+        ({"id": "EVAL-0001", "artifact_ids": ["ART-0002#1"]}, "unknown_ids", ["ART-0002#1"]),
+    ],
+)
+def test_an_id_this_corpus_does_not_hold_refuses(
+    corpus: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, row: dict, field: str, unknown: list[str]
+) -> None:
+    path = _write(tmp_path / "stale.jsonl", [row])
+    envelope = _refusal(monkeypatch, ["evaluate", str(corpus), "--predictions", str(path)])
+    assert envelope["refusal"] == "predictions_unknown_ids"
+    assert envelope["data"][field] == unknown
+    assert "evals passages" in envelope["fix"]
+
+
+def test_predictions_and_a_builtin_retriever_cannot_both_be_graded(
+    corpus: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _write(tmp_path / "p.jsonl", [{"id": "EVAL-0001", "abstain": True}])
+    envelope = _refusal(monkeypatch, ["evaluate", str(corpus), "--predictions", str(path), "--retriever", "tfidf"])
+    assert envelope["refusal"] == "cannot_combine"
