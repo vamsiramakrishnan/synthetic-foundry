@@ -93,9 +93,16 @@ before applying its output limit.
 
 - Eight shapes are implemented. The external 42-shape catalogue was not
   supplied; completeness against it is unmeasured.
-- Ambiguous joins and stale sources are data perturbations, with no checked
-  clarification or authoritative-replacement policy. The grammar refuses
-  these combinations; legacy completion does not prove those policies.
+- Ambiguous joins and stale sources have one checked policy each, opt-in
+  through `cases_from_corpus(..., source_policy=True)` on legacy single-write
+  rows. An ambiguous join must name both candidates (in a clarifying question
+  or the output) and write nothing; a stale source must cite its materialised
+  authoritative replacement. Misses grade as `outcomes.clarification_missing`,
+  `outcomes.stale_source_used` or `outcomes.authoritative_source_missing`.
+  Not covered: the DAG grammar still refuses both kinds, so shaped cases
+  never carry them; default case sets keep the legacy write as gold; the
+  checks match record keys as substrings of the run's question, answer,
+  artifacts and writes, not their meaning; the CLI has no flag for it.
 - Operational observations prove local history and provenance integrity.
   They do not prove an unavailable synthesis ledger was replayed or that
   operational totals reconcile with the World's macro facts.

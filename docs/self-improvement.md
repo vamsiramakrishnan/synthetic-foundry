@@ -72,6 +72,9 @@ runs over different case sets produce clusters that can be compared.
 | `outcomes.ungrounded` | The artifact does not carry the evidence it must rest on |
 | `outcomes.answer_below_threshold` | The rated answer scored under `evalrun.answer_pass_score` |
 | `outcomes.answer_unrated` | The rater could not judge the answer |
+| `outcomes.clarification_missing` | Source-policy case: two records fit the join and the run did not name both, in a question or in its output |
+| `outcomes.stale_source_used` | Source-policy case: the run cited the stale record and not its authoritative replacement |
+| `outcomes.authoritative_source_missing` | Source-policy case: the run cited neither the stale record nor its replacement |
 | `error:<code>` | An error code from the closed sixteen-code taxonomy, reported only when the run hit more errors than the designed failures it honoured |
 | `assertion.fail` | The row's own assertion verdict failed and no other key explains it |
 | `run.errored` | The agent raised or the case could not be graded |

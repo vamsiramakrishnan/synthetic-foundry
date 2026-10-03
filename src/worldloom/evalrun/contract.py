@@ -30,7 +30,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from ..models import EvaluationType, Model
 
@@ -188,6 +188,25 @@ class AnswerOutcome(Model):
     expects_abstention: bool = False
 
 
+SourcePolicyKind = Literal["clarify_ambiguous_join", "authoritative_replacement"]
+
+
+class SourcePolicy(Model):
+    """What the run must do about a source defect (``evalrun.source_policy``).
+
+    Each candidate, stale record and replacement is listed by every key an
+    agent can see it under (vendor key, then internal id); naming any one of
+    them names the record.
+    """
+
+    kind: SourcePolicyKind
+    #: ``clarify_ambiguous_join``: the records that equally fit the join.
+    candidates: tuple[tuple[str, ...], ...] = ()
+    #: ``authoritative_replacement``: the stale record, and what replaced it.
+    stale: tuple[str, ...] = ()
+    authoritative: tuple[str, ...] = ()
+
+
 class OutcomeContract(Model):
     structured: tuple[StructuredOutcome, ...] = ()
     unstructured: UnstructuredOutcome | None = None
@@ -195,6 +214,16 @@ class OutcomeContract(Model):
     #: True when the correct run writes nothing: an adversarial request, or a
     #: designed failure that blocks every write and persists none.
     no_write: bool = False
+    #: Opt-in. Absent from the wire when unset, so a case set compiled
+    #: without source policies keeps its bytes.
+    source_policy: SourcePolicy | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_policy(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("source_policy") is None:
+            data.pop("source_policy", None)
+        return data
 
     def of_kind(self, kind: OutcomeKind) -> tuple[StructuredOutcome, ...]:
         return tuple(outcome for outcome in self.structured if outcome.kind == kind)
@@ -314,8 +343,16 @@ def case_from_row(
     if not text.strip():
         raise ValueError(f"row {row.get('id')!r} has no request text; a case needs a query")
     expected = row.get("expected_dag") or {}
-    nodes = tuple(_node_contract(node) for node in expected.get("nodes", ()))
-    edges = tuple((str(source), str(target)) for source, target in expected.get("edges", ()))
+    raw_nodes = list(expected.get("nodes", ()))
+    if row.get("source_policy"):
+        # A source policy gates the writes it forbids (``evalrun.source_policy``):
+        # offered as tools, absent from the plan. Only such rows read the flag,
+        # so every other row's plan is what it was.
+        raw_nodes = [node for node in raw_nodes if "gated" not in node.get("flags", ())]
+    nodes = tuple(_node_contract(node) for node in raw_nodes)
+    kept = {node.id for node in nodes}
+    edges = tuple((str(source), str(target)) for source, target in expected.get("edges", ())
+                  if not row.get("source_policy") or (str(source) in kept and str(target) in kept))
     known = {node.id for node in nodes}
     dangling = [edge for edge in edges if edge[0] not in known or edge[1] not in known]
     if dangling:
@@ -388,7 +425,12 @@ def case_from_row(
         if carries_evidence and any(outcome.kind == "create" for outcome in structured)
         else None
     )
-    outcomes = OutcomeContract(structured=structured, unstructured=unstructured, answer=answer, no_write=no_write)
+    policy = SourcePolicy.model_validate(row["source_policy"]) if row.get("source_policy") else None
+    if policy is not None and policy.kind == "clarify_ambiguous_join":
+        # Stop and ask is the whole gold: any write is a guess at the join.
+        no_write = True
+    outcomes = OutcomeContract(structured=structured, unstructured=unstructured, answer=answer, no_write=no_write,
+                               source_policy=policy)
     return EvalCase(
         id=str(row["id"]), query=text, persona=persona, principal=principal,
         dimensions=dict(dimensions or {}), plan=plan, trajectory=trajectory,
@@ -436,11 +478,15 @@ def read_case_set(directory: Any) -> tuple[tuple[EvalCase, ...], tuple[dict[str,
     return cases, runtime_records(records)
 
 
-def cases_from_corpus(corpus: Any, *, definitions: Mapping[str, Any] | None = None, principal: str = "agent") -> tuple[EvalCase, ...]:
+def cases_from_corpus(corpus: Any, *, definitions: Mapping[str, Any] | None = None, principal: str = "agent",
+                      source_policy: bool = False) -> tuple[EvalCase, ...]:
     """Compile an ``EnterpriseCorpus`` into cases, refusing any row the compiler refuses.
 
     A refusal is a finding, not a skipped row: a corpus that silently loses
     its unexecutable queries reports a pass rate over a set it never ran.
+    ``source_policy`` regrades each ``ambiguous_join`` and ``stale_source``
+    case under its checked policy (``evalrun.source_policy``); off, the
+    legacy gold and the case bytes are unchanged.
     """
 
     from ..enterprise_rows import compile_rows, runtime_records
@@ -465,6 +511,10 @@ def cases_from_corpus(corpus: Any, *, definitions: Mapping[str, Any] | None = No
             output_format=mutation.output_format or None,
             sections=artifact.sections if artifact is not None else (),
         ))
+    if source_policy:
+        from .source_policy import with_source_policies
+
+        return with_source_policies(cases, records)
     return tuple(cases)
 
 
@@ -540,6 +590,7 @@ __all__ = [
     "AnswerOutcome",
     "QuestionPoint",
     "AxisCoverage",
+    "SourcePolicy",
     "EvalCase",
     "FailurePoint",
     "NodeContract",

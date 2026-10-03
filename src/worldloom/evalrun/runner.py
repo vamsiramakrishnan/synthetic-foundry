@@ -203,7 +203,8 @@ def grade_run(
 
     plan = grade_plan(case, spans, response)
     trajectory = grade_trajectory(case, spans, safety=safety, refusals=refusals, questions=questions)
-    outcomes = grade_outcomes(case, before, after, response, definitions=definitions, rater=rater, spans=spans)
+    outcomes = grade_outcomes(case, before, after, response, definitions=definitions, rater=rater, spans=spans,
+                              questions=questions)
     # The stages (queries, plan nodes, output) refine the axes without
     # moving them: attached as breakdowns, off the score and the pass.
     plan, trajectory, outcomes = attach_stages(case, spans, before, after, response, plan, trajectory, outcomes,
