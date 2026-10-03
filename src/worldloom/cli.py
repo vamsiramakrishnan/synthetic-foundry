@@ -410,6 +410,9 @@ def enterprise_evals_build(
 ) -> None:
     """Plan, materialize, validate, prove, export, and optionally render a connector corpus.
 
+    A case whose sources the world cannot supply is refused before anything
+    is written, naming the connector, the entity, the counts and the cases.
+
     Before anything is written, every case is proved solvable
     (`worldloom evalrun prove`): its gold DAG replayed through the connector
     emulator under the vendor query engine. A corpus with an unsolvable case
@@ -453,7 +456,13 @@ def enterprise_evals_build(
         shard_count=shard_count,
         dag_shapes=resolve_shapes(dag_shape),
     )
-    corpus = materialize_corpus(world, queries)
+    try:
+        corpus = materialize_corpus(world, queries)
+    except ValueError as exc:
+        # Every materializer refusal names the connector, entity and counts;
+        # a traceback would bury that under the stack.
+        _refuse("sources_insufficient", f"[red]error:[/red] {escape(str(exc))}",
+                fix="supply operational projections or a scenario profile whose sources the world can ground")
     findings = validate_corpus(corpus)
     if findings:
         for finding in findings:
@@ -806,6 +815,7 @@ _REFUSALS: dict[str, str] = {
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
     # `worldloom evalrun`.
     "corpus_unreadable": "the enterprise-evals directory cannot be read or is not one",
+    "sources_insufficient": "a planned case needs source records the world cannot supply; the message names the connector, the entity and the counts",
     "cases_uncompilable": "the row compiler refused a query in the corpus; the message names the first reasons",
     "no_cases": "the corpus compiled to no cases, so there is nothing to run",
     "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",

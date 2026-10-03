@@ -25,11 +25,12 @@ worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exh
 worldloom enterprise-evals build examples/retail-close ./enterprise-corpus --exhaustive --limit 100 --dag-shape none
 ```
 
-A mapped source requires at least two records. The materializer supplies them
-unless the row filters its sources by a predicate or the corpus is built
-`strict_sources`, in which case a filler record would meet the count and not
-the claim, and the refusal names the connector, the entity, how many records
-are present and how many the row needs. All source reads
+A mapped source requires at least two records. The materializer never mints
+them: a filler record would meet the count and not the claim. Under
+`strict_sources`, the default, the refusal names the connector, the entity, how
+many records are present, how many the row needs and the query; the explicit
+`strict_sources=False` opt-out refuses the same shortfall as an
+`ungroundable_source` tripwire. All source reads
 are bound to fixture identities. A search intersects those identities with the
 authored field predicates. It does not search an unrelated connector pool.
 
