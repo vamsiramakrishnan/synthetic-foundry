@@ -174,6 +174,18 @@ FINDING_TARGETS: dict[str, FindingTarget] = {
     "outcomes.collateral": _NO_WRITE_TARGET,
     "outcomes.ungrounded": _GROUNDING_TARGET,
     "outcomes.answer_below_threshold": _GROUNDING_TARGET,
+    # Only source-policy cases (`evalrun.source_policy`) emit these; a legacy
+    # row with the same failure grades the write and cannot.
+    "outcomes.clarification_missing": _t("two records that equally fit the join, where the agent must name both "
+                                         "and write nothing",
+                                         where={"failure": ("ambiguous_join",),
+                                                "source_policy": ("clarify_ambiguous_join",)}),
+    "outcomes.stale_source_used": _t("a stale record beside the authoritative replacement it names",
+                                     where={"failure": ("stale_source",),
+                                            "source_policy": ("authoritative_replacement",)}),
+    "outcomes.authoritative_source_missing": _t("a stale record beside the authoritative replacement it names",
+                                                where={"failure": ("stale_source",),
+                                                       "source_policy": ("authoritative_replacement",)}),
     # -- errors the agent's own calls provoke ----------------------------------------------
     "error:validation_error": _SEARCH_TARGET,
     "error:schema_mismatch": _SEARCH_TARGET,
