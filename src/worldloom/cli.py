@@ -824,6 +824,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_connectors": "the --connectors value is not emulator or anvil",
     "unknown_harness_mode": "the --harness-mode value is not turns or sdk-program",
     "unknown_lever": "the --levers value names something other than agent and interface",
+    "unknown_curriculum": "the --curriculum value is not a curriculum the improve loop knows (failures)",
     "anvil_unavailable": "Anvil cannot serve the run: no Anvil CLI, an unreadable contract, or a contract its connector's mapping does not cover",
     # `worldloom contracts`.
     "contract_refused": "the contract lock does not read, a source's sha256 is not the locked one, Anvil refused the compile, or the mapping does not cover the bundle",

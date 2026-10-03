@@ -1126,6 +1126,9 @@ def improve_command(
     anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
     source_root: list[str] | None = typer.Option(None, "--source-root", help="CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it."),
     transfer_agent: str | None = typer.Option(None, "--transfer-agent", help="A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why."),
+    curriculum: str | None = typer.Option(None, "--curriculum", help="failures: between rounds, add training cases drawn from --curriculum-pool for the clusters the round's champion failed (by the declared finding-key mapping, weighted by cluster size), never a held-out case. Off by default: the training set stays fixed."),
+    curriculum_cases: int | None = typer.Option(None, "--curriculum-cases", min=1, help="With --curriculum: training cases each round adds (default 8)."),
+    curriculum_pool: Path | None = typer.Option(None, "--curriculum-pool", help="With --curriculum: the corpus or case set new cases are drawn from, such as an `evalrun corners` case set. Default: the cases of CORPUS that --limit left out."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
     surface: str | None = typer.Option(None, "--surface", help=_SURFACE_HELP),
 ) -> None:
@@ -1192,6 +1195,31 @@ def improve_command(
     if holdout_corpus is not None:
         held_loaded, held = _corpus_cases(holdout_corpus, None)
         held_records = list(held_loaded.connector_data.records)
+    pool: tuple[Any, ...] = ()
+    # `None` while the pool is CORPUS's own cases, which run over its records.
+    pool_records: list[Any] | None = None
+    if curriculum is None:
+        if curriculum_cases is not None or curriculum_pool is not None:
+            _refuse("missing_flag", "--curriculum-cases and --curriculum-pool need --curriculum failures")
+    else:
+        from .failure_curriculum import CURRICULUM_MODES, case_key
+
+        if curriculum not in CURRICULUM_MODES:
+            _refuse("unknown_curriculum", f"--curriculum takes one of {', '.join(CURRICULUM_MODES)}; got {curriculum!r}")
+        if value or parents == "archive" or qualification_policy is not None:
+            _refuse("cannot_combine", "--curriculum grows the training set, which --value's table, --parents "
+                    "archive's cluster means and a --qualification-policy's sealed experiment are each fixed over")
+        if curriculum_pool is None:
+            # The cases --limit left out: compiled from the same world, over the same records.
+            _, everything = _corpus_cases(corpus, None)
+            loaded_keys = {case_key(case) for case in cases}
+            pool = tuple(case for case in everything if case_key(case) not in loaded_keys)
+        else:
+            if "interface" in chosen_levers:
+                _refuse("cannot_combine", "--curriculum-pool serves its cases over their own records, which the "
+                        "interface lever's served bundles do not cover; draw from CORPUS (omit --curriculum-pool)")
+            pool_loaded, pool = _corpus_cases(curriculum_pool, None)
+            pool_records = list(pool_loaded.connector_data.records)
     qualification_options: dict[str, Any] = {}
     if qualification_policy is not None:
         from ..quality_cli import _document
@@ -1225,7 +1253,20 @@ def improve_command(
         held_subset = bool(subset) and all(suite_digest((case,)) in held_keys for case in subset)
         return held_records if held_subset else records
 
+    pool_keys = {suite_digest((case,)) for case in pool} if pool_records is not None else set()
+
     def run(subset: Any, agent: Any) -> Any:
+        if pool_keys and any(suite_digest((case,)) in pool_keys for case in subset):
+            # Curriculum cases from another corpus run over their own
+            # records, CORPUS's over CORPUS's: two worlds reuse external keys.
+            from .campaign import RecordGroups, run_grouped
+
+            assert pool_records is not None
+            drawn = [case.id for case in subset if suite_digest((case,)) in pool_keys]
+            mine = [case.id for case in subset if suite_digest((case,)) not in pool_keys]
+            groups = RecordGroups(groups=tuple(group for group in ((tuple(mine), tuple(records)),
+                                                                   (tuple(drawn), tuple(pool_records))) if group[0]))
+            return run_grouped(subset, groups, agent, rater=grader, concurrency=workers, principal=principal)
         key = suite_digest(subset)
         if key not in services:
             try:
@@ -1288,7 +1329,9 @@ def improve_command(
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
                          ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
                          repeats=repeats, brief=brief, reference_run=reference, candidates=candidates, screen_cases=screen_cases, finalists=finalists,
-                         parents=parents, round_budget=round_budget, **lever_options, **qualification_options)
+                         parents=parents, round_budget=round_budget, curriculum=curriculum,
+                         curriculum_pool=pool if curriculum is not None else None, curriculum_cases=curriculum_cases,
+                         **lever_options, **qualification_options)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
@@ -1312,6 +1355,12 @@ def improve_command(
                        f"{screen.cost} case-run(s); finalist(s): {', '.join(map(str, screen.finalists)) or 'none'}")
         if item.spent is not None:
             typer.echo(f"  spent {item.spent} case-run(s)")
+        if item.curriculum is not None:
+            drove = ", ".join(f"{target['key']} +{target['drawn']}" for target in item.curriculum["targets"]
+                              if target["drawn"])
+            typer.echo(f"  curriculum: +{item.curriculum['added']} training case(s) from round "
+                       f"{item.curriculum['source_round']}'s failures" + (f" ({drove})" if drove else "")
+                       + (f"; {item.curriculum['shortfall']} short" if item.curriculum["shortfall"] else ""))
         if item.interface is not None:
             transfer_state = item.interface.get("transfer") or {}
             if "skipped" in transfer_state:
