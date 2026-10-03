@@ -252,7 +252,7 @@ class VectorCache:
         document = json.loads(path.read_text(encoding="utf-8"))
         if document.get("key") != pin.key:
             return cls(path=path, pin=pin)
-        vectors = {
+        vectors: dict[str, np.ndarray] = {
             key: np.frombuffer(base64.b64decode(payload), dtype=np.int8)
             for key, payload in document.get("vectors", {}).items()
         }

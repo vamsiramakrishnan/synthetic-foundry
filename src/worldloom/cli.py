@@ -104,13 +104,17 @@ from .connector_serving_cli import serve_command
 from .corpus_scale_cli import scale_app
 from .dataset_cli import dataset_app
 from .enterprise_qualification_cli import qualify_command
+from .harness_dags_cli import harness_dags_command
 from .native_evals_cli import native_evals_app
 from .quality_cli import calibration_app, readers_app
+from .visuals_cli import visuals_app
 
 enterprise_evals_app.command("serve")(serve_command)
 enterprise_evals_app.command("qualify")(qualify_command)
+enterprise_evals_app.command("harness-dags")(harness_dags_command)
 app.add_typer(scale_app, name="corpus-scale")
 app.add_typer(native_evals_app, name="native-evals")
+app.add_typer(visuals_app, name="visuals")
 narrate_app.add_typer(readers_app, name="readers")
 evals_app.add_typer(calibration_app, name="calibration")
 evals_app.add_typer(dataset_app, name="dataset")
@@ -762,6 +766,8 @@ _REFUSALS: dict[str, str] = {
     "corpus_scale_rejected": "the source, scale plan, or physical files violate the corpus scale contract",
     "qualification_rejected": "the proposed experiment cannot establish independent held-out promotion evidence",
     "native_evals_rejected": "native discovery tasks, inputs, or replies violate the evaluation contract",
+    "visual_rejected": "visual source, provider output, or recorded image violates the visual contract",
+    "harness_dags_rejected": "harness DAG configuration or source records cannot support the requested evaluation",
     "fleet_error": "the fleet directory cannot be qualified or curated",
     "grader_drift": "the grader an improvement loop pinned changed mid-loop; data.changed names what moved",
     "history_too_short": "the corpus's history is too short for this decomposition",

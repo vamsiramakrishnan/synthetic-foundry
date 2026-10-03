@@ -8,12 +8,14 @@ catalogue is a small versioned set of examples of this public grammar.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterable, Mapping, Sequence
+from decimal import Context, Decimal, localcontext
 from functools import lru_cache
 from importlib.resources import files
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .models import Model
 
@@ -44,6 +46,14 @@ class ResultCondition(Model):
 class ResultIteration(Model):
     node: str
     limit: int = Field(default=100, ge=1, le=1000)
+    order: Literal["source", "any"] = "source"
+
+    @model_serializer(mode="wrap")
+    def _preserve_wire(self, handler: Any) -> Any:
+        data = handler(self)
+        if self.order == "source":
+            data.pop("order", None)
+        return data
 
 
 class EnterpriseDagNode(Model):
@@ -58,7 +68,7 @@ class EnterpriseDagNode(Model):
     bindings: dict[str, ResultReference] = Field(default_factory=dict)
     condition: ResultCondition | None = None
     for_each: ResultIteration | None = None
-    transform: Literal["collect", "project", "unique", "outline"] | None = None
+    transform: Literal["collect", "project", "unique", "outline", "aggregate"] | None = None
 
     @model_validator(mode="after")
     def _contract(self) -> EnterpriseDagNode:
@@ -67,7 +77,7 @@ class EnterpriseDagNode(Model):
             "search": {"search"},
             "verify": {"read", "get", "download", "readback", "cross_system"},
             "write": {"create", "draft", "send", "post", "upload", "update", "patch", "upsert", "reply", "forward", "comment", "transition", "delete", "move"},
-            "transform": {"collect", "project", "unique", "outline"},
+            "transform": {"collect", "project", "unique", "outline", "aggregate"},
         }
         if self.operation not in admitted[self.kind]:
             raise ValueError(f"{self.id}: {self.kind} cannot execute {self.operation!r}")
@@ -82,6 +92,8 @@ class EnterpriseDagNode(Model):
             raise ValueError(f"{self.id}: only evidence reads have a source_index")
         if self.for_each and self.kind not in {"read", "write", "verify"}:
             raise ValueError(f"{self.id}: for_each requires one record operation")
+        if self.for_each and self.for_each.order == "any" and self.kind != "read":
+            raise ValueError(f"{self.id}: unordered iteration is restricted to independent reads")
         if len(set(self.depends_on)) != len(self.depends_on):
             raise ValueError(f"{self.id}: duplicate dependency")
         for key, ref in self.bindings.items():
@@ -186,6 +198,8 @@ def transform_results(node: EnterpriseDagNode, outputs: Mapping[str, list[Any]],
     if sum(len(outputs.get(parent, ())) for parent in node.depends_on) > max_items:
         raise ValueError(f"result_budget_exceeded:{node.id}:{max_items}")
     values = [value for parent in node.depends_on for value in outputs.get(parent, ())]
+    if node.transform == "aggregate":
+        return [_aggregate_results(node, values)]
     if node.transform == "project":
         fields = tuple(node.arguments.get("fields", ()))
         if not fields:
@@ -220,6 +234,66 @@ def transform_results(node: EnterpriseDagNode, outputs: Mapping[str, list[Any]],
                 unique.append(value)
         return unique
     return values
+
+
+def _aggregate_results(node: EnterpriseDagNode, values: Sequence[Any]) -> dict[str, Any]:
+    """Aggregate delivered numeric values with an explicit path and closed operator set.
+
+    Decimal arithmetic avoids a binary float changing a financial answer. An
+    integral result remains an integer; a fractional result is a decimal
+    string, so serialisation cannot silently round the canonical result.
+    """
+    operation = node.arguments.get("aggregate", "sum")
+    if operation not in {"sum", "count", "min", "max"}:
+        raise ValueError(f"{node.id}: unsupported aggregate {operation!r}")
+    path = node.arguments.get("path", ())
+    if not isinstance(path, (list, tuple)) or any(not isinstance(key, str) or not key for key in path):
+        raise ValueError(f"{node.id}: aggregate path must contain field names")
+    if operation == "count":
+        if path:
+            raise ValueError(f"{node.id}: count does not take a numeric field path")
+        return {"value": len(values), "count": len(values)}
+    if not path or not values:
+        raise ValueError(f"{node.id}: numeric aggregate requires a path and nonempty inputs")
+    numbers: list[Decimal] = []
+    for value in values:
+        for key in path:
+            if not isinstance(value, Mapping) or key not in value:
+                raise ValueError(f"{node.id}: missing aggregate field {'.'.join(path)}")
+            value = value[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+            raise ValueError(f"{node.id}: aggregate requires numbers, not {type(value).__name__}")
+        if (isinstance(value, float) and not math.isfinite(value)) or (isinstance(value, Decimal) and not value.is_finite()):
+            raise ValueError(f"{node.id}: aggregate requires finite numbers")
+        numbers.append(Decimal(str(value)))
+    # The ambient Decimal context is caller-owned and commonly has only 28
+    # digits. Derive enough precision to retain every coefficient, including
+    # adding 1 to a 31-digit integer, independent of that context.
+    highest = max(value.adjusted() for value in numbers)
+    lowest = min(int(value.as_tuple().exponent) for value in numbers)
+    precision = highest - lowest + len(str(len(numbers))) + 2
+    if precision > 10000 or max(highest + 1, 1) + max(-lowest, 0) > 10000:
+        raise ValueError(f"{node.id}: aggregate exceeds the 10000-digit precision budget")
+    with localcontext(Context(prec=max(precision, 2), Emax=10000, Emin=-10000)):
+        result = sum(numbers, Decimal(0)) if operation == "sum" else min(numbers) if operation == "min" else max(numbers)
+        canonical: int | str = int(result) if result == result.to_integral_value() else format(result.normalize(), "f")
+    result_fields: dict[str, Any] = {"value": canonical, "count": len(numbers)}
+    evidence_path = node.arguments.get("evidence_path")
+    if evidence_path is not None:
+        if (not isinstance(evidence_path, (list, tuple)) or not evidence_path
+                or any(not isinstance(key, str) or not key for key in evidence_path)):
+            raise ValueError(f"{node.id}: evidence path must contain field names")
+        evidence: list[str] = []
+        for value in values:
+            for key in evidence_path:
+                if not isinstance(value, Mapping) or key not in value:
+                    raise ValueError(f"{node.id}: missing evidence field {'.'.join(evidence_path)}")
+                value = value[key]
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{node.id}: evidence identity must be a nonempty string")
+            evidence.append(value)
+        result_fields["evidence"] = sorted(evidence)
+    return result_fields
 
 
 def outline_document(values: Sequence[Any], sections: Sequence[str], fmt: str, *, note: str | None = None) -> str:

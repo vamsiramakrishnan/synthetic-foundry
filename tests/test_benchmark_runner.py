@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import venv
 from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
@@ -103,6 +105,26 @@ def reader(tmp_path: Path, **environment: str) -> CommandHarness:
     script = tmp_path / "workbook reader.py"
     script.write_text(_READER, encoding="utf-8")
     return CommandHarness((sys.executable, str(script)), environment=environment)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX virtual environments use interpreter symlinks")
+def test_command_keeps_the_selected_virtual_environment_after_staging(tmp_path: Path) -> None:
+    environment = tmp_path / "isolated-python"
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(environment)
+    executable = environment / "bin" / "python"
+    assert executable.is_symlink()
+    script = tmp_path / "prefix-worker.py"
+    script.write_text('''import json, sys
+assert sys.prefix == sys.argv[1], "staged process lost its selected virtual environment"
+request = json.load(sys.stdin)
+task = request["task"]
+print(json.dumps({"schema": "worldloom.native-harness-response/v1", "task_id": task["id"],
+    "execution_id": task["execution_id"], "submission": {"answers": [], "files": []}}))
+''', encoding="utf-8")
+    harness = CommandHarness((str(executable), str(script), str(environment)))
+    reply = harness.submit({"id": "venv-check", "execution_id": "venv-execution", "inputs": []}, {})
+    assert reply == NativeSubmission()
+    assert harness.identity["argv"][0] == str(executable)
 
 
 def test_real_reader_gets_only_public_task_bytes_and_exact_resume_makes_no_calls(

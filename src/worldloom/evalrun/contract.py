@@ -30,7 +30,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from ..models import EvaluationType, Model
 
@@ -212,6 +212,16 @@ class EvalCase(Model):
     trajectory: TrajectoryContract
     outcomes: OutcomeContract
     row: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _validate_controlled_retrieval(self) -> EvalCase:
+        # A malformed evaluator contract is a broken case, not a failure to
+        # be charged to the target after it has started spending calls.
+        if "controlled_retrieval" in self.row:
+            from .retrieval import RetrievalContract
+
+            RetrievalContract.model_validate(self.row["controlled_retrieval"])
+        return self
 
 
 def _node_contract(node: Mapping[str, Any]) -> NodeContract:

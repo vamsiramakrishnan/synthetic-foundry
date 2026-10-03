@@ -7,6 +7,12 @@ from ..native_query_planning import (
     NativeWorkloadPlan,
     plan_native_workload,
 )
+from .connector_sources import (
+    NativeConnectorBinding,
+    NativeConnectorProjection,
+    NativeConnectorSources,
+    project_native_sources,
+)
 from .core import (
     BENCHMARK_SCHEMA,
     PUBLIC_WORKLOAD_SCHEMA,
@@ -73,6 +79,7 @@ from .scenarios import (
     NativeScenarioProcess,
     build_native_scenarios,
 )
+from .tactics import NativeRealismMeasurements, NativeRealismProfile
 from .workflows import (
     NativeWorkflowInput,
     NativeWorkflowLineage,
@@ -108,7 +115,8 @@ def seam_contract() -> dict[str, object]:
             "CommandHarness", "CallableHarness", "BenchmarkRun", "NativePolicyAgent",
             "NativePartitionPlan", "NativePartitionBuild", "BenchmarkRequirements", "CoverageRequirement",
             "NativeScenarioDemand", "NativeScenarioBuild", "NativeWorkflowPlan", "NativeWorkflowRun",
-            "NativeCurriculum", "NativeCurriculumBuild"],
+            "NativeCurriculum", "NativeCurriculumBuild", "NativeRealismProfile", "NativeRealismMeasurements",
+            "NativeConnectorProjection", "NativeConnectorSources"],
     }
 
 
@@ -122,6 +130,8 @@ __all__ = ["BENCHMARK_SCHEMA", "PUBLIC_WORKLOAD_SCHEMA", "BenchmarkFile", "Bench
     "BenchmarkRequirements", "CoverageDimension", "CoverageRequirement", "RequirementCoverage",
     "measure_requirements", "requirement_deficits", "resolve_requirements", "task_formats",
     "NativeScenarioBuild", "NativeScenarioDemand", "NativeScenarioEpisode", "NativeScenarioProcess", "build_native_scenarios",
+    "NativeRealismProfile", "NativeRealismMeasurements",
+    "NativeConnectorBinding", "NativeConnectorProjection", "NativeConnectorSources", "project_native_sources",
     "CurriculumAblation", "CurriculumDemand", "CurriculumFailure", "CurriculumObservation", "NativeCurriculum",
     "NativeCurriculumBuild", "build_curriculum_training", "diagnose_benchmark", "load_training_run", "run_training_curriculum",
     "NativeWorkflowInput", "NativeWorkflowLineage", "NativeWorkflowPlan", "NativeWorkflowQualification", "NativeWorkflowRun",
