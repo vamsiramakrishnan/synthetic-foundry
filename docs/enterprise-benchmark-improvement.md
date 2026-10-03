@@ -85,6 +85,50 @@ puts 80% of the quantity in 10% of transaction rows. It records that assumption,
 uses exact integer arithmetic, and closes the total without retaining a vector
 of row weights. It does not claim to have fitted a customer's distribution.
 
+### Derive the obvious bindings
+
+For an authored program, `--reconcile auto` (SDK: `reconcile="auto"`) adds the
+bindings `derive_reconciliations` finds to the declared ones. Inspect them
+first:
+
+```bash
+worldloom corpus-scale reconcile ./company --program process.json --period 2026-03
+worldloom corpus-scale build ./company --program process.json --reconcile auto --reconcile-period 2026-03 --out ./large-corpus
+```
+
+A pair binds only when all of these hold:
+
+| Operational column name | Canonical fact kind | Shape |
+|---|---|---|
+| `revenue`, `sales`, `net_sales` | `financial.revenue.actual` | flow: may sum across ticks |
+| `gross_profit`, `margin` | `financial.gross_profit.actual` | flow: may sum across ticks |
+| `headcount`, `employees` | `org.headcount` | stock: non-temporal table only |
+
+- the column is an integer whose unit is the fact's unit scaled,
+  `<unit>*10^-<decimals>` (for example `AUD_thousands*10^-2` or
+  `employees*10^-0`);
+- the world holds exactly one current (not superseded, not latent)
+  company-level fact of that kind, for `--reconcile-period` when given;
+- the fact is representable at the column's precision.
+
+A program carries no calendar, so binding asserts that the program's whole run
+is the fact's period. Inventory has no pair: no generator mints an inventory
+fact. The shipped `retail` and `banking` mechanisms bind nothing, because their
+money is in `minor_currency`. Every pair that does not bind is reported as
+`unbound` with a reason such as
+`world has no current company-level org.headcount fact`, or
+`column unit 'minor_currency' is not AUD_thousands*10^-<decimals>`. A column
+named in a `--reconciliation` file keeps its declaration. Generation and
+verification then check derived bindings exactly as they check declared ones,
+and a table that does not sum to its fact fails with `canonical_total_mismatch`.
+
+Derivation stays opt-in. Making it the default would leave the existing tests
+and default `worldloom build` bytes unchanged, because corpus scale is outside
+that build. It would still change two existing behaviours: an authored program
+with a matching column would start asserting equality with the close, and
+`verify` of a corpus built before the change would fail with
+`invalid_scale_plan`, because its recorded plan has no derived bindings.
+
 ## Build discovery queries over business files
 
 New scale plans use the business native surface. It renders accepted prose,

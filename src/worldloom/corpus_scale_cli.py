@@ -95,6 +95,8 @@ def build_command(
     profile: Annotated[str, typer.Option("--profile", help="development, enterprise, stress, or a profile JSON path.")] = "enterprise",
     limits: Annotated[Path | None, typer.Option("--limits", help="Explicit synthesis resource budgets JSON.")] = None,
     reconciliation: Annotated[list[Path] | None, typer.Option("--reconciliation", help="FactReconciliation JSON for --program; repeat for each exact total.")] = None,
+    reconcile: Annotated[str, typer.Option("--reconcile", help="declared: only --reconciliation bindings. auto: also bind each operational measure to its company-level fact when both exist (see `corpus-scale reconcile`).")] = "declared",
+    reconcile_period: Annotated[str | None, typer.Option("--reconcile-period", help="Fact period the operational run covers, for --reconcile auto.")] = None,
     native_plan: Annotated[list[Path] | None, typer.Option("--native-plan", help="NativeCorpusPlan JSON; repeat to select file topology.")] = None,
     shard_rows: Annotated[int, typer.Option("--shard-rows", min=1, max=1_048_575, help="Maximum physical data rows per CSV shard.")] = 100_000,
     shard_bytes: Annotated[int, typer.Option("--shard-bytes", min=4096, max=536_870_912, help="Maximum bytes per CSV shard.")] = 33_554_432,
@@ -110,10 +112,36 @@ def build_command(
     try:
         world, simulator, selected, bindings = _inputs(corpus_path, program, limits, profile, fact, rows, reconciliation)
         plans = None if native_plan is None else tuple(NativeCorpusPlan.model_validate(_document(path)) for path in native_plan)
+        if reconcile not in ("declared", "auto"):
+            raise ValueError("--reconcile is declared or auto")
         plan = plan_corpus_scale(world, simulator, profile=selected, native_plans=plans, reconciliations=bindings,
+            reconcile="auto" if reconcile == "auto" else "declared", reconcile_period=reconcile_period,
             csv_shard_rows=shard_rows, csv_shard_bytes=shard_bytes,
             maximum_files=maximum_files, spreadsheets=spreadsheets)
         report = export_corpus_scale(world, plan, out, resume=resume)
+    except (ValueError, OSError) as error:
+        _reject(error)
+        return
+    _emit(report.model_dump(mode="json"))
+
+
+@scale_app.command("reconcile")
+def reconcile_command(
+    corpus_path: Annotated[str, typer.Argument(help="One company's source corpus.")],
+    program: Annotated[Path | None, typer.Option("--program", help="Versioned operational synthesis Program JSON.")] = None,
+    fact: Annotated[str | None, typer.Option("--fact", help="Canonical numeric fact to allocate into an exactly reconciling transaction ledger.")] = None,
+    rows: Annotated[int | None, typer.Option("--rows", min=1, help="Explicit transaction population for --fact.")] = None,
+    limits: Annotated[Path | None, typer.Option("--limits", help="Explicit synthesis resource budgets JSON.")] = None,
+    reconciliation: Annotated[list[Path] | None, typer.Option("--reconciliation", help="FactReconciliation JSON already declared; its column is not re-derived.")] = None,
+    period: Annotated[str | None, typer.Option("--period", help="Fact period the operational run covers.")] = None,
+) -> None:
+    """Show which measure-to-fact reconciliations `build --reconcile auto` binds, and why the rest do not."""
+    from .corpus_scale import derive_reconciliations
+    from .quality_cli import _emit
+
+    try:
+        world, simulator, _, bindings = _inputs(corpus_path, program, limits, "development", fact, rows, reconciliation)
+        report = derive_reconciliations(world, simulator.program, period=period, declared=bindings)
     except (ValueError, OSError) as error:
         _reject(error)
         return

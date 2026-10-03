@@ -316,12 +316,31 @@ worldloom corpus-scale build <CORPUS_PATH>
 | `--out`, `-o` | New destination; source corpus is unchanged. |
 | `--profile` | development, enterprise, stress, or a profile JSON path. |
 | `--program` | Versioned operational synthesis Program JSON. |
+| `--reconcile` | declared: only --reconciliation bindings. auto: also bind each operational measure to its company-level fact when both exist (see `corpus-scale reconcile`). |
+| `--reconcile-period` | Fact period the operational run covers, for --reconcile auto. |
 | `--reconciliation` | FactReconciliation JSON for --program; repeat for each exact total. |
 | `--resume` | Reuse a completed destination only after source reconstruction and verification. |
 | `--rows` | Explicit transaction population for --fact. |
 | `--shard-bytes` | Maximum bytes per CSV shard. |
 | `--shard-rows` | Maximum physical data rows per CSV shard. |
 | `--xlsx` | Also write typed workbooks from each relational shard. |
+
+### `worldloom corpus-scale reconcile`
+
+Show which measure-to-fact reconciliations `build --reconcile auto` binds, and why the rest do not.
+
+```
+worldloom corpus-scale reconcile <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--fact` | Canonical numeric fact to allocate into an exactly reconciling transaction ledger. |
+| `--limits` | Explicit synthesis resource budgets JSON. |
+| `--period` | Fact period the operational run covers. |
+| `--program` | Versioned operational synthesis Program JSON. |
+| `--reconciliation` | FactReconciliation JSON already declared; its column is not re-derived. |
+| `--rows` | Explicit transaction population for --fact. |
 
 ### `worldloom corpus-scale verify`
 
