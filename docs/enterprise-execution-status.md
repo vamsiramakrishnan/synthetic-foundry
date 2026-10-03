@@ -33,11 +33,25 @@ expansion and compatibility happen before the limit; this is not a paired
 comparison of legacy and grammar difficulty.
 
 Evidence validation now detects ungrounded placeholders and missing minimum
-cardinality. These counts are findings, not distinct queries. The hand-authored
-retail example does not supply every operational source demanded by the full
-shipped registry. It is unchanged, and the HTTP corpus loader correctly refuses
-an invalid corpus. Use a scenario with matching evidence or supply operational
-projections. `strict_sources` remains opt-in for materialization.
+cardinality. These counts are findings, not distinct queries, measured at the
+commit above. The hand-authored retail example does not supply every
+operational source demanded by the full shipped registry. It is unchanged, and
+the HTTP corpus loader correctly refuses an invalid corpus. Use a scenario with
+matching evidence or supply operational projections.
+
+Since then the planner plans only against the world's groundable inventory, and
+`strict_sources` is the default for materialization: a case the source corpus
+cannot answer is refused with `missing_source` or `insufficient_sources`,
+naming the connector, entity, counts and query, instead of being built.
+`enterprise-evals build` reports it as the `sources_insufficient` refusal.
+Re-measured on `examples/retail-close` with `plan_queries(strategy="exhaustive",
+limit=400)` and the default registry and profile, the first 400
+grounded queries materialize with zero evidence-validation findings under
+either setting; with `ground=False`, the first 400 are refused at
+`email:thread`, which the world never projects. `strict_sources=False` remains
+as an explicit opt-out in `materialize_corpus` and `EnterpriseEvalHarness`. It
+no longer mints filler records, so a short source pool is refused there too, as
+the `ungroundable_source` tripwire.
 
 For a positive end-to-end evidence check,
 `tests/test_enterprise_operational_execution.py` builds actual retail inventory
