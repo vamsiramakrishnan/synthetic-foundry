@@ -297,7 +297,9 @@ def test_optional_extras_report_and_never_fail(
     # environment installed the extra; absent by `None`, likewise.
     for name in ("model2vec", "huggingface_hub"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "PIL", None)
+    # `google.genai`, not `PIL`: python-pptx imports PIL too, so hiding PIL
+    # failed the pptx renderer check whenever pptx was not already imported.
+    monkeypatch.setitem(sys.modules, "google.genai", None)
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code == 0, result.output
     entries = _entries(result)

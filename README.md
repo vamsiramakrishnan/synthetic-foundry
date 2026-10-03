@@ -3,47 +3,36 @@
 **Build an enterprise corpus whose documents, records, and evaluation answers share the same facts.**
 
 Worldloom generates a company and its history, then renders that state into
-workbooks, documents, slides, PDFs, tickets, and knowledge pages. It also
-creates evaluation cases tied to the evidence in the corpus.
+workbooks, documents, slides, PDFs, tickets, and knowledge pages, with
+evaluation cases tied to the evidence in the corpus. Use it to test retrieval,
+document extraction, temporal questions, and agent workflows before you have a
+suitable enterprise dataset. A seed and recipe control the world; accepted
+generation ledgers make authored material replayable.
 
-Use it to test retrieval, document extraction, temporal questions, and agent
-workflows before you have a suitable enterprise dataset. A seed and recipe
-control the world; accepted generation ledgers make authored material replayable.
+Status: 0.1.0, unreleased; nothing is on PyPI yet, so every install below
+starts from this checkout. Repository, Python package and command: `worldloom`
+· Python 3.11+ · Apache-2.0. Normal builds and replay require no model service.
 
-Repository, Python package and command: `worldloom` ·
-Python 3.11+ · pre-release; no release is on PyPI yet · Apache-2.0
+## What are you testing?
+
+| What you are testing | Goal | First command | Read next |
+|---|---|---|---|
+| Retrieval and cited answers | `rag` | `worldloom evaluate` | [Evaluating retrieval](.claude/skills/worldloom/references/evaluating.md) |
+| Rendered DOCX, XLSX, PPTX and PDF files | `documents` | `worldloom render` | [Artifact compiler](docs/artifact-compiler.md) |
+| An agent working across MCP connectors | `agent` | `worldloom enterprise-evals build` | [Eval execution](docs/eval-execution.md) |
+| Byte-graded DOCX, PPTX and XLSX file tasks | `native` | `worldloom native-evals build` | [Native benchmarks](docs/native-benchmark-workflow.md) |
+| Improving an agent, judged on held-out cases | `improve` | `worldloom evalrun improve` | [Self-improvement](docs/self-improvement.md) |
+| One particular company, described and built | `company` | `worldloom pack spec` | [Company specification](docs/agents/company-specification.md) |
+| Prose from your own model, checked against facts | `narrate` | `worldloom narrate requests` | [Writing responses](docs/agents/writing-responses.md) |
+| Worlds composed in Python | `python` | `from worldloom import sdk` | [Python SDK](docs/sdk.md) |
+
+`worldloom guide` lists these goals in the terminal; `worldloom guide <goal>`
+prints that goal's commands in order, from building the corpus to the page to
+read next, and `--json` gives the same to an agent.
 
 [Quickstart](#quickstart) · [Design a corpus](docs/enterprise-corpus.md) ·
-[Python SDK](docs/sdk.md) · [Documentation site](https://vamsiramakrishnan.github.io/worldloom/)
-
-[Worldloom Studio](docs/studio.md) provides a local UI for company interviews,
-operating structure, use cases, generation runs and qualified evaluations.
-Start it with `worldloom studio serve`. Each company retains its own revisions
-and evidence; eval batches reuse that company rather than generate replacements.
-
-For document evaluations, select accepted company prose and prepare a native
-suite in **Documents & files**. Review its source coverage, then generate DOCX,
-PPTX and XLSX tasks for reading, comparison, updates and creation. The console,
-`worldloom studio next` and `Studio.workflow()` share the same readiness checks.
-Optional calibration measures target outcomes with independent held-out evidence.
-
-Status: 0.1.0, unreleased. Nothing is on PyPI yet, so every install below
-starts from this checkout. Normal builds and replay require no model service.
-Optional [Nano Banana visual generation](docs/visual-generation.md) uses an
-explicit provider and records its image bytes for offline replay.
-
-[Realism tactics](docs/native-realism-tactics.md) control line counts,
-concentration, exception prevalence, revision views and evidence presentation.
-[Controlled retrieval](docs/harness-controlled-retrieval.md) makes source
-availability deterministic so DAG evaluations measure the harness's queries,
-operations and recovery. Its CLI entry point is
-`worldloom enterprise-evals harness-dags`; existing `evalrun` commands execute
-and grade the generated cases.
-
-Use `worldloom visuals plan` to bind an infographic to canonical facts, then
-`worldloom visuals generate` to call Nano Banana or replay an existing PNG.
-`--offline` requires recorded bytes. Generated images remain unqualified
-visual evidence until their visible content is independently checked.
+[More capabilities](#more-capabilities) · [Documentation map](docs/README.md) ·
+[Documentation site](https://vamsiramakrishnan.github.io/worldloom/)
 
 ## Quickstart
 
@@ -122,6 +111,34 @@ Inspect the generated files alongside the facts and evaluation records.
 `validate` checks their relationships; `evaluate` measures retrieval against
 the included cases. A passing validator does not establish realism or strong
 retrieval performance. `status` identifies the next incomplete stage.
+
+## More capabilities
+
+- **Studio.** [Worldloom Studio](docs/studio.md) provides a local UI for company
+  interviews, operating structure, use cases, generation runs and qualified
+  evaluations. Start it with `worldloom studio serve`. Each company retains its
+  own revisions and evidence; eval batches reuse that company rather than
+  generate replacements. Its pages are shown [below](#the-studio-console).
+- **Document suites in Studio.** For document evaluations, select accepted
+  company prose and prepare a native suite in **Documents & files**. Review its
+  source coverage, then generate DOCX, PPTX and XLSX tasks for reading,
+  comparison, updates and creation. The console, `worldloom studio next` and
+  `Studio.workflow()` share the same readiness checks. Optional calibration
+  measures target outcomes with independent held-out evidence.
+- **Visuals.** Optional [Nano Banana visual generation](docs/visual-generation.md)
+  uses an explicit provider and records its image bytes for offline replay. Use
+  `worldloom visuals plan` to bind an infographic to canonical facts, then
+  `worldloom visuals generate` to call Nano Banana or replay an existing PNG.
+  `--offline` requires recorded bytes. Generated images remain unqualified
+  visual evidence until their visible content is independently checked.
+- **Realism tactics.** [Realism tactics](docs/native-realism-tactics.md) control
+  line counts, concentration, exception prevalence, revision views and evidence
+  presentation.
+- **Controlled retrieval.** [Controlled retrieval](docs/harness-controlled-retrieval.md)
+  makes source availability deterministic so DAG evaluations measure the
+  harness's queries, operations and recovery. Its CLI entry point is
+  `worldloom enterprise-evals harness-dags`; existing `evalrun` commands execute
+  and grade the generated cases.
 
 ## The Studio console
 

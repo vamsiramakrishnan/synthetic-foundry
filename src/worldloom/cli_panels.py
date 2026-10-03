@@ -18,7 +18,7 @@ from typer.core import TyperGroup
 
 #: Panels in display order, each with its commands in display order.
 PANELS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Start here", ("demo", "smoke", "status", "doctor", "version")),
+    ("Start here", ("guide", "demo", "smoke", "status", "doctor", "version")),
     ("Build and render", (
         "build", "render", "verify", "migrate", "formats", "archetypes", "workspace",
         "mosaic", "corpus-scale", "synth",

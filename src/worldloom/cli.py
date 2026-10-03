@@ -130,6 +130,45 @@ from .seams_cli import seams_command
 from .studio_cli import studio_app
 from .synthesis_cli import app as synthesis_app
 
+
+# Registered before every other command because typer lists commands in
+# registration order, and this is the one a new user should meet first in
+# `worldloom --help`: which of the fifty-odd others to run. The table itself is
+# data in `guide.py`, which `tests/test_guide.py` parses against this app.
+@app.command("guide")
+def guide(
+    goal: str | None = typer.Argument(
+        None, help="A goal from the table `worldloom guide` prints, such as rag or agent.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the goals and their command sequences as data.",
+    ),
+) -> None:
+    """Which commands to run, by what you are testing."""
+    from . import guide as guide_module
+
+    if goal is None:
+        if as_json:
+            typer.echo(json.dumps(guide_module.manifest(), indent=2, sort_keys=True))
+        else:
+            typer.echo(guide_module.overview_text())
+        return
+    chosen = guide_module.goal(goal)
+    if chosen is None:
+        known = [item.id for item in guide_module.GOALS]
+        _refuse(
+            "unknown_goal",
+            f"[red]error:[/red] unknown goal '{escape(goal)}'; expected one of {', '.join(known)}",
+            fix="run `worldloom guide` to list the goals and their first commands",
+            goal=goal, goals=known,
+        )
+    if as_json:
+        payload = {"schema": guide_module.GUIDE_SCHEMA, **chosen.as_dict()}
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        typer.echo(guide_module.goal_text(chosen))
+
+
 app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
 app.add_typer(studio_app, name="studio")
@@ -873,6 +912,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_episode": "--episode names no installed process",
     "unknown_eval_density": "--eval-density names no known tier",
     "unknown_facet": "no facet is registered under that name",
+    "unknown_goal": "the goal is not one `worldloom guide` lists",
     "unknown_landscape": "no landscape is registered under that name",
     "unknown_locale": "no locale is registered under that name",
     "unknown_messiness": "no messiness level is registered under that name",
@@ -7972,8 +8012,9 @@ _DOCTOR_EXTRAS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 #: What `doctor` names as the next command once every required check passes:
-#: the bundled corpus built, validated and exported, end to end.
-_DOCTOR_NEXT = "worldloom demo"
+#: the goal-to-commands map, since a healthy install's next question is which
+#: of the evaluation paths to take.
+_DOCTOR_NEXT = "worldloom guide"
 
 
 def _extra_hint(extra: str) -> str:
