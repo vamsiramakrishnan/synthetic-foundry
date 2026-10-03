@@ -1094,6 +1094,18 @@ worldloom evals export <CORPUS>
 | --- | --- |
 | `--out`, `-o` | Write JSONL here instead of stdout. |
 
+### `worldloom evals passages`
+
+Export the passages `evaluate` indexes as JSONL, for your own retriever to index.
+
+```
+worldloom evals passages <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write JSONL here instead of stdout. |
+
 ### `worldloom evaluate`
 
 Score one or more retrievers against the corpus's evaluation set.

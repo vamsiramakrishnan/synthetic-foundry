@@ -18,6 +18,7 @@ worldloom evaluate ./corpus -k 3
 worldloom evaluate ./corpus --retriever both
 worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 worldloom evals export ./corpus -o evals.jsonl
+worldloom evals passages ./corpus -o passages.jsonl
 worldloom stats ./corpus
 ```
 
@@ -30,6 +31,8 @@ default, unchanged), `tfidf`, `embedding`, `both` (the two lexical baselines)
 or `all`; see below. `worldloom evals export` writes the evaluation set as
 JSONL, one case per line, sorted keys: the format to hand to an external
 retrieval system you want to score against this same answer key.
+`worldloom evals passages` writes the passages that system should index; see
+"Scoring your own retrieval system" below.
 `worldloom stats` is `evaluate`'s sibling and answers a different question,
 "what does this corpus actually contain" rather than "is it hard to retrieve
 from"; see the section at the end of this file.
@@ -292,6 +295,26 @@ abstention case that names a source is no longer really an abstention case).
 It can't know that a *new* generator made an old question answerable in
 prose it doesn't parse. If you add a generator that models something the
 existing abstention list presumes doesn't exist, check that list by hand.
+
+## Scoring your own retrieval system
+
+The built-in retrievers are floors. A team with its own retrieval stack
+indexes the same passages they do, so its rankings join the same answer key:
+
+```bash
+worldloom evals passages ./corpus -o passages.jsonl
+worldloom evals export ./corpus -o evals.jsonl
+```
+
+`passages.jsonl` holds one line per passage, in index order, with sorted keys:
+`passage_id`, `artifact_id`, `artifact_type`, `title`, `heading`, `source`
+(the manifest path), `authority`, `created_at`, `fact_ids` and `text`. These
+are the units `index.passages()` yields, the ones `evaluate` and `search`
+rank, not a second chunking. Index `text`: it already carries the title and
+heading lines, exactly as the built-in retrievers see it. `authority` and
+`created_at` are the provenance the hard families reward reading. `fact_ids`
+is the grading key; use it to debug a ranking, not to rank. The bytes are
+deterministic, so the same corpus always exports the same file.
 
 ## `worldloom stats`: what's in the corpus, not how hard it is
 

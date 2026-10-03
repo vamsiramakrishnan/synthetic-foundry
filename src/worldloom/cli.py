@@ -5326,6 +5326,49 @@ def evals_export(
         console.print(f"[green]✓[/green] {len(lines)} case(s) written to [bold]{out}[/bold]")
 
 
+def _emit(payload: str, out: Path | None, summary: str) -> None:
+    """*payload* to *out*, or to stdout when no file was named.
+
+    The file is written with ``newline="\\n"`` for `corpus.write_jsonl`'s
+    reason: these exports are what an external index and an external harness
+    are built from, and a Windows checkout adding a CR to every line would
+    make one export two files depending on who ran it.
+    """
+    if out is None:
+        typer.echo(payload, nl=False)
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload, encoding="utf-8", newline="\n")
+    console.print(f"[green]✓[/green] {summary} written to [bold]{out}[/bold]")
+
+
+@evals_app.command("passages")
+def evals_passages(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write JSONL here instead of stdout."),
+) -> None:
+    """Export the passages `evaluate` indexes as JSONL, for your own retriever to index.
+
+    One line per passage, in index order, keys sorted: `passage_id`,
+    `artifact_id`, `artifact_type`, `title`, `heading`, `source`, `authority`,
+    `created_at`, `fact_ids` and `text`. `text` is exactly the string the
+    built-in retrievers rank, so a system that indexes it is compared like for
+    like; `passage_id` is what `evaluate --predictions` joins a ranking on.
+    The same passages `search` and `evaluate` read, not a second chunking.
+    """
+    from .evaluate.interchange import jsonl, passage_records
+
+    world = _compiled(_load(corpus), corpus)
+    records = passage_records(world)
+    if not records:
+        # The state `search` refuses for the same reason: an empty index
+        # file reads downstream as "indexed, nothing relevant", which every
+        # case would then fail for a reason that is not retrieval.
+        _refuse("no_passages", "[red]error:[/red] this corpus has no retrievable passages",
+                fix="narrate and render the corpus first", corpus=str(corpus))
+    _emit(jsonl(records), out, f"{len(records)} passage(s)")
+
+
 @evals_app.command("construct")
 def evals_construct(
     spec: Path = typer.Argument(..., help="An eval design (EvalSpec) as JSON."),
