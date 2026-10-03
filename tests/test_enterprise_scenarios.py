@@ -228,12 +228,15 @@ def test_every_shipped_profile_plans_within_a_bound(profile_path, tmp_path) -> N
     from worldloom.cli import app
 
     out = tmp_path / "plan.jsonl"
-    started = time.perf_counter()
+    # CPU seconds, for the reason the pipeline test gives: an unbounded walk
+    # is this process's CPU, and a wall clock under `pytest -n` also counts
+    # the neighbours sharing the core.
+    started = time.process_time()
     result = CliRunner().invoke(app, [
         "enterprise-evals", "plan", "examples/hospital", str(out),
         "--profile", str(profile_path), "--limit", "40",
     ])
-    elapsed = time.perf_counter() - started
+    elapsed = time.process_time() - started
     assert result.exit_code == 0, result.output
     assert elapsed < 120, elapsed
     assert len(out.read_text(encoding="utf-8").splitlines()) == 40

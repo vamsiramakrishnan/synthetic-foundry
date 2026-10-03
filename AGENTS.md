@@ -102,7 +102,7 @@ worldloom doctor                   # verifies the install and agent setup; names
 worldloom guide                    # which commands to run, by what you are testing
 worldloom guide agent --json       # one goal's ordered commands, as data
 
-pytest -q                          # house gate (slow tests deselected via addopts)
+pytest -q -n auto                  # house gate, one worker per core (slow tests deselected via addopts)
 pytest tests/test_render.py -q     # one file; -k "name" for one test
 pytest -m slow -q                  # opt in to heavy builds (weekly in CI)
 ruff check .                       # lint gate (CI-blocking)
@@ -232,9 +232,14 @@ format.
 
 ## Testing & QA
 
-- pytest only (no xdist). `pytest -q` is the house gate; `addopts` deselects
-  `@pytest.mark.slow` (three heavy density builds) so the default run stays
-  fast.
+- pytest with pytest-xdist. `pytest -q -n auto` is the house gate (CI runs
+  it that way; plain `pytest -q` is the same suite serially and must pass
+  too); `addopts` deselects `@pytest.mark.slow` (three heavy density builds)
+  so the default run stays fast. Every test is parallel-safe: its own
+  `tmp_path`, env changes through `monkeypatch`, no writes to a fixed,
+  cwd-relative or home path. A test that genuinely cannot share a machine
+  gets `@pytest.mark.xdist_group` (and the runs `--dist loadgroup`) with a
+  comment saying why; it is never skipped.
 - Hypothesis properties in `tests/test_properties.py`: derandomized, deadline
   on, database disabled. Never weaken a property to pass it; nothing under
   `src/` may gain randomness.
@@ -248,7 +253,7 @@ format.
 - CLI test style: module-level `runner = CliRunner()`, assert
   `result.exit_code` with `result.output` in the assert message; negative
   validator tests corrupt one fact and expect the named violation.
-- Before committing: `pytest -q`, `ruff check .`, `mypy`,
+- Before committing: `pytest -q -n auto`, `ruff check .`, `mypy`,
   `worldloom validate retail-close`, `worldloom docs --check`. CI additionally
   byte-replays corpora, so anything nondeterministic fails there even when local
   tests pass.
