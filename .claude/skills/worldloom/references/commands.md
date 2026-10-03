@@ -2162,6 +2162,16 @@ worldloom series <CORPUS>
 | `--kind` | Fact kind to read. Default: the longest series in the corpus. |
 | `--subject` | Entity id the series is about. Default: whichever has the most periods. |
 
+### `worldloom smoke`
+
+Run the whole pipeline on a tiny world, one line per stage, in seconds.
+
+| Option | Purpose |
+| --- | --- |
+| `--format`, `-f` | Render these formats (repeatable). Default: markdown and xlsx; pass `-f markdown` alone on an install without the xlsx extra. |
+| `--out`, `-o` | Directory to run the pipeline in; kept afterwards for inspection. Must be empty or absent. Omit to run in a temporary directory that is removed. |
+| `--seed`, `-s` | World seed for the tiny world. |
+
 ### `worldloom spaces`
 
 The build-configuration space: what a fleet could vary, and what one did.
