@@ -1,0 +1,106 @@
+{
+  "invalid/bad_cuj_id.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/bad_outcome_key.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/domain_cluster_without_cluster.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/inv10_histogram_mismatch.json": {
+    "valid": false,
+    "violation": "inv10"
+  },
+  "invalid/inv10_outcomes_mismatch.json": {
+    "valid": false,
+    "violation": "inv10"
+  },
+  "invalid/inv1_step_entity_not_declared.json": {
+    "valid": false,
+    "violation": "inv1"
+  },
+  "invalid/inv2_depends_on_later_step.json": {
+    "valid": false,
+    "violation": "inv2"
+  },
+  "invalid/inv3_slot_field_not_in_argument_fields.json": {
+    "valid": false,
+    "violation": "inv3"
+  },
+  "invalid/inv3_slot_step_not_in_cuj.json": {
+    "valid": false,
+    "violation": "inv3"
+  },
+  "invalid/inv4_failure_mode_step_not_in_cuj.json": {
+    "valid": false,
+    "violation": "inv4"
+  },
+  "invalid/inv5_phrasing_support_below_min.json": {
+    "valid": false,
+    "violation": "inv5"
+  },
+  "invalid/inv5_support_below_min.json": {
+    "valid": false,
+    "violation": "inv5"
+  },
+  "invalid/inv6_phrasing_with_text_policy_none.json": {
+    "valid": false,
+    "violation": "inv6"
+  },
+  "invalid/inv7_redaction_marker_in_template.json": {
+    "valid": false,
+    "violation": "inv7"
+  },
+  "invalid/inv8_id_mismatch.json": {
+    "valid": false,
+    "violation": "inv8"
+  },
+  "invalid/inv9_covered_share_mismatch.json": {
+    "valid": false,
+    "violation": "inv9"
+  },
+  "invalid/inv9_shares_do_not_sum.json": {
+    "valid": false,
+    "violation": "inv9"
+  },
+  "invalid/multi_turn_without_journey_outcomes.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/raw_text_field.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/step_tool_and_capability.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/tool_signature_without_connector_step.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/unknown_operation.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/wrong_schema_version.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "valid/example.json": {
+    "valid": true,
+    "violation": null
+  },
+  "valid/minimal.json": {
+    "valid": true,
+    "violation": null
+  },
+  "valid/no_phrasings.json": {
+    "valid": true,
+    "violation": null
+  }
+}

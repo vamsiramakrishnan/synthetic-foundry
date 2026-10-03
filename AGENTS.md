@@ -192,6 +192,7 @@ format.
 | `src/worldloom/validate.py` | Coherence gate; `register_domain_checks` |
 | `src/worldloom/eval_witnesses.py`, `eval_execution.py` | The eval drives generation: one executor per tactic kind, each a recipe verb; the emulator-backed reference executor |
 | `src/worldloom/providers.py` | The four extension seams (`PriorEstimator`, `SurfaceValueProvider`, `DetailSynthesizer`, `DomainImporter`) and the content-addressed `Receipt` every external execution leaves |
+| `src/worldloom/telemetry/` | Reads a `cuj-catalogue/1` file from the customer telemetry miner (counts and shapes, never text) into a world. One door, `load_catalogue`; three gates (version, shape, invariants); ten cross-checks the schema cannot express. Imports forwards only, calls no model: see `docs/extension-seams.md` |
 | `src/worldloom/calibrate.py`, `causal.py`, `surface.py`, `fidelity.py` | DP-calibrated physics (`build --priors`); causal models driving archive decay (`build --causal`, `causal.jsonl`); vendored checksum-valid identifiers; the fidelity vector: see `docs/extension-seams.md` |
 | `src/worldloom/narrative/prompts.py` | Versioned prompt registry |
 | `.claude/skills/worldloom/references/commands.md` | GENERATED CLI reference; regenerate with `worldloom docs`, never hand-edit |

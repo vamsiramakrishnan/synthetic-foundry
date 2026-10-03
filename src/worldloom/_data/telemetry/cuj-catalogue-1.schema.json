@@ -1,0 +1,490 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cloud-gtm/customer-telemetry-miner/schemas/cuj_catalogue.schema.json",
+  "title": "CUJ catalogue",
+  "description": "The handoff between customer-telemetry-miner and a synthetic-data generator (Worldloom). Describes the critical user journeys observed in one telemetry window as aggregates and templates. It carries no raw query text, no response text and no user identifiers. See docs/cuj-catalogue.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "catalogue_id",
+    "created_at",
+    "producer",
+    "source",
+    "privacy",
+    "connectors",
+    "cujs",
+    "coverage"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "cuj-catalogue/1",
+      "description": "Bumped on any breaking change. Consumers must refuse a version they do not know."
+    },
+    "catalogue_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "description": "Conventionally `<queryset_id>_<version>`."
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "version", "config_digest"],
+      "properties": {
+        "tool": { "const": "customer-telemetry-miner" },
+        "version": { "type": "string" },
+        "config_digest": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the CurationConfig used, so two catalogues from the same logs can be told apart."
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queryset_id", "queryset_version", "queryset_checksum", "window", "counts"],
+      "properties": {
+        "queryset_id": { "type": "string" },
+        "queryset_version": { "type": "string" },
+        "queryset_checksum": {
+          "$ref": "#/$defs/sha256",
+          "description": "QuerySet.checksum of the curated queryset this catalogue was derived from."
+        },
+        "surface": {
+          "type": "string",
+          "description": "Assistant product the logs came from, e.g. `gemini_enterprise`."
+        },
+        "window": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "string", "format": "date-time" },
+            "end": { "type": "string", "format": "date-time" }
+          }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["records_ingested", "records_curated", "sessions", "tool_calls"],
+          "properties": {
+            "records_ingested": { "$ref": "#/$defs/count" },
+            "records_curated": { "$ref": "#/$defs/count" },
+            "sessions": { "$ref": "#/$defs/count" },
+            "tool_calls": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_support", "text_policy", "pii_redaction"],
+      "properties": {
+        "min_support": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minimum distinct sessions for a CUJ or phrasing template to be emitted. Anything rarer is folded into coverage.suppressed_share."
+        },
+        "text_policy": {
+          "enum": ["templates", "none"],
+          "description": "`templates`: sanitized, slot-substituted phrasings may be emitted. `none`: every `phrasings` array must be empty."
+        },
+        "pii_redaction": {
+          "enum": ["regex", "regex+dlp"],
+          "description": "The sanitizer that ran before templating."
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "industry_hint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["industry", "basis"],
+      "description": "Weak evidence only. Telemetry says nothing about headcount, revenue or geography; the consumer must not treat this as a company spec.",
+      "properties": {
+        "industry": { "type": "string" },
+        "basis": { "enum": ["operator_supplied", "inferred_from_terms"] },
+        "evidence_terms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    },
+    "connectors": {
+      "type": "array",
+      "description": "Every business system the curated traffic touched, after aliasing tool prefixes to one key per system.",
+      "items": { "$ref": "#/$defs/connector" }
+    },
+    "excluded_tools": {
+      "type": "array",
+      "description": "Tools deliberately left out of every CUJ signature, with the reason. Present so exclusions are audited rather than silent.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "calls", "reason"],
+        "properties": {
+          "name": { "type": "string" },
+          "calls": { "$ref": "#/$defs/count" },
+          "reason": {
+            "enum": ["orchestration", "agent_introspection", "memory", "web_search", "unattributed"],
+            "description": "`orchestration`: load_skill, transfer_to_agent. `agent_introspection`: selfawareness_agent. `unattributed`: no connector prefix and no alias."
+          }
+        }
+      }
+    },
+    "cujs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/cuj" }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cujs_emitted", "covered_share", "suppressed_share", "unclassified_share"],
+      "description": "Shares are fractions of curated sessions and sum to 1 (within rounding).",
+      "properties": {
+        "cujs_emitted": { "$ref": "#/$defs/count" },
+        "covered_share": { "$ref": "#/$defs/share" },
+        "suppressed_share": {
+          "$ref": "#/$defs/share",
+          "description": "Traffic in CUJs below privacy.min_support."
+        },
+        "unclassified_share": {
+          "$ref": "#/$defs/share",
+          "description": "Traffic whose tool calls could not be mapped to a connector operation."
+        }
+      }
+    },
+    "review_notes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Things a human should look at before generating from this catalogue."
+    }
+  },
+
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "share": { "type": "number", "minimum": 0, "maximum": 1 },
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Lower snake case identifier."
+    },
+
+    "operation": {
+      "description": "Generic operation vocabulary. Identical to Worldloom's `enterprise_specs.Operation`, chosen because it is a plain CRUD+messaging set rather than because Worldloom owns it.",
+      "enum": [
+        "search", "list", "read", "create", "update", "patch", "upsert", "delete",
+        "move", "comment", "attach", "link", "draft", "send", "reply", "forward"
+      ]
+    },
+
+    "counts_by": {
+      "description": "A histogram. Keys are constrained where the schema uses it.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/count" }
+    },
+
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "observed_prefixes", "call_count", "entities", "tools"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key",
+          "description": "Normalised system name (`jira`, `confluence`, `drive`, `email`, `salesforce`). The consumer decides whether it matches a connector it can emulate; this file does not claim so."
+        },
+        "display_name": { "type": "string" },
+        "observed_prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string" },
+          "description": "Raw tool-name prefixes aliased to this key, e.g. `google_drive_agent`, `custom_mcp_custom_mcp_<n>_agent`."
+        },
+        "call_count": { "$ref": "#/$defs/count" },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "operations", "argument_fields", "calls"],
+            "properties": {
+              "name": { "$ref": "#/$defs/key" },
+              "operations": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "$ref": "#/$defs/operation" }
+              },
+              "argument_fields": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string" },
+                "description": "Argument NAMES seen on calls against this entity (`project_key`, `space_key`, `jql`). Never values."
+              },
+              "calls": { "$ref": "#/$defs/count" }
+            }
+          }
+        },
+        "tools": {
+          "type": "array",
+          "description": "How each raw tool was classified, so the mapping can be reviewed.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "entity", "operation", "calls", "classified_by"],
+            "properties": {
+              "name": { "type": "string" },
+              "entity": { "$ref": "#/$defs/key" },
+              "operation": { "$ref": "#/$defs/operation" },
+              "calls": { "$ref": "#/$defs/count" },
+              "classified_by": { "enum": ["rule", "alias", "manual", "default"] }
+            }
+          }
+        }
+      }
+    },
+
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "effect"],
+      "description": "One step of a CUJ. A tool step names connector/entity/operation; a model-only step (summarise, compare, draft prose) names only `capability`.",
+      "properties": {
+        "id": { "$ref": "#/$defs/key" },
+        "connector": { "$ref": "#/$defs/key" },
+        "entity": { "$ref": "#/$defs/key" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "capability": {
+          "enum": ["summarize", "extract", "classify", "compare", "reconcile", "transform", "generate", "answer"],
+          "description": "For a step with no tool call."
+        },
+        "effect": { "enum": ["read", "transform", "write", "verify"] },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/key" },
+          "description": "Earlier step ids whose output this step consumes. Inferred from order unless argument lineage was observed."
+        },
+        "argument_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "presence": {
+          "$ref": "#/$defs/share",
+          "description": "Fraction of this CUJ's sessions in which the step occurred. 1 = always; below 1 = optional."
+        }
+      },
+      "oneOf": [
+        { "required": ["connector", "entity", "operation"], "not": { "required": ["capability"] } },
+        { "required": ["capability"], "not": { "anyOf": [{ "required": ["connector"] }, { "required": ["operation"] }] } }
+      ]
+    },
+
+    "failure_mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "count"],
+      "properties": {
+        "mode": {
+          "enum": [
+            "connector_unavailable",
+            "capability_gap",
+            "permission_denied",
+            "not_found",
+            "wrong_entity",
+            "stale_version",
+            "clarification_loop",
+            "pending_confirmation",
+            "reformulation",
+            "abandoned",
+            "negative_feedback"
+          ],
+          "description": "Why sessions of this CUJ did not end cleanly. Each maps to a world condition the generator can construct; see docs/cuj-catalogue.md."
+        },
+        "count": { "$ref": "#/$defs/count" },
+        "step_id": {
+          "$ref": "#/$defs/key",
+          "description": "The step at which it occurred, when attributable."
+        },
+        "signal": {
+          "type": "string",
+          "description": "Which classifier produced it (e.g. `OutcomeClassifier.TOOL_FAILURE`, `user_feedback`)."
+        }
+      }
+    },
+
+    "phrasing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "slots", "support"],
+      "properties": {
+        "template": {
+          "type": "string",
+          "maxLength": 400,
+          "description": "Sanitized request text with every argument value replaced by `{slot}`. Must contain no redaction markers (`[EMAIL_REDACTED]` etc.): a template that still needed redaction is dropped, not emitted."
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "step_id", "field"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+              "step_id": { "$ref": "#/$defs/key" },
+              "field": { "type": "string", "description": "The argument name the value was bound to." }
+            }
+          }
+        },
+        "support": {
+          "$ref": "#/$defs/count",
+          "description": "Distinct sessions this template (after slotting) was observed in. Must be >= privacy.min_support."
+        }
+      }
+    },
+
+    "cuj": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "label", "label_source", "anchor", "kind", "steps",
+        "support", "outcomes", "hardness", "checks", "volatility", "domains", "failure_modes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^cuj_[0-9a-f]{12}$",
+          "description": "First 12 hex of SHA-256 over the canonical signature (steps' connector.entity.operation / capability, in order). Stable across runs, so a CUJ can be tracked between telemetry windows."
+        },
+        "label": { "type": "string", "description": "Human name, e.g. `Meeting notes to Jira epics`." },
+        "label_source": { "enum": ["rule", "llm", "manual"] },
+        "anchor": {
+          "enum": ["tool_signature", "domain_cluster"],
+          "description": "`tool_signature`: identified by its ordered business tool calls (the normal case). `domain_cluster`: answer-only traffic with no business tool call, identified by intent cluster instead."
+        },
+        "cluster": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cluster_id", "keywords"],
+          "description": "Required when anchor is `domain_cluster`.",
+          "properties": {
+            "cluster_id": { "type": "integer" },
+            "keywords": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "kind": { "enum": ["single_turn", "multi_turn"] },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/step" },
+          "description": "Ordered. May hold only capability steps when anchor is `domain_cluster`."
+        },
+        "support": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sessions", "queries", "share"],
+          "properties": {
+            "sessions": { "$ref": "#/$defs/count" },
+            "queries": { "$ref": "#/$defs/count" },
+            "share": {
+              "$ref": "#/$defs/share",
+              "description": "sessions / source.counts.sessions. The weight a generator should use to mirror real traffic."
+            }
+          }
+        },
+        "turns": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mean", "p50", "p90"],
+          "properties": {
+            "mean": { "type": "number", "minimum": 1 },
+            "p50": { "type": "integer", "minimum": 1 },
+            "p90": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "outcomes": {
+          "description": "Turn-level outcome counts (OutcomeClassifier).",
+          "allOf": [{ "$ref": "#/$defs/counts_by" }],
+          "propertyNames": {
+            "enum": ["SUCCESS", "TOOL_FAILURE", "CAPABILITY_GAP", "PENDING_CONFIRMATION", "CLARIFICATION_REQUEST", "NO_USER_REPLY", "UNKNOWN"]
+          }
+        },
+        "journey_outcomes": {
+          "description": "Session-level outcome counts (JourneySequenceMiner). Multi-turn only.",
+          "allOf": [{ "$ref": "#/$defs/counts_by" }],
+          "propertyNames": {
+            "enum": ["COMPLETED", "FRICTION_RESOLVED", "COMPLETED_UNSATISFIED", "ERROR_TERMINATED", "ABANDONED", "UNKNOWN"]
+          }
+        },
+        "hardness": {
+          "allOf": [{ "$ref": "#/$defs/counts_by" }],
+          "propertyNames": { "enum": ["HEAD_EASY", "MEDIUM", "HARD_FAILURE", "ADVERSARIAL_EDGE"] }
+        },
+        "checks": {
+          "description": "How curated rows of this CUJ should be graded (ReferenceAnnotator.assign_check tokens).",
+          "allOf": [{ "$ref": "#/$defs/counts_by" }],
+          "propertyNames": { "enum": ["answer", "trace", "rubric", "negative", "control"] }
+        },
+        "volatility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stable", "high"],
+          "properties": {
+            "stable": { "$ref": "#/$defs/count" },
+            "high": { "$ref": "#/$defs/count" },
+            "temporal_patterns": {
+              "allOf": [{ "$ref": "#/$defs/counts_by" }],
+              "propertyNames": { "enum": ["latest", "relative_window", "as_of_date", "count_now", "ranking"] },
+              "description": "What made a query volatile. `latest` asks for a revision chain; `as_of_date` for a point-in-time view."
+            }
+          }
+        },
+        "domains": {
+          "allOf": [{ "$ref": "#/$defs/counts_by" }],
+          "description": "IntentClusterer domain_category counts."
+        },
+        "domain_terms": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": { "type": "string" },
+          "description": "Business vocabulary seen at >= min_support (e.g. `replenishment`, `store ops`). Candidate pack vocabulary."
+        },
+        "failure_modes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/failure_mode" }
+        },
+        "phrasings": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/phrasing" }
+        },
+        "exemplar_hashes": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/sha256" },
+          "description": "CuratedQuery.original_hash of representative rows, so an operator inside the customer boundary can trace a CUJ back to its evidence. Hashes only."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "anchor": { "const": "domain_cluster" } } },
+          "then": { "required": ["cluster"] }
+        },
+        {
+          "if": { "properties": { "anchor": { "const": "tool_signature" } } },
+          "then": {
+            "properties": {
+              "steps": { "contains": { "required": ["connector"] } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "multi_turn" } } },
+          "then": { "required": ["turns", "journey_outcomes"] }
+        }
+      ]
+    }
+  }
+}
