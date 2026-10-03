@@ -1,0 +1,355 @@
+{
+  "agents": {
+    "lazy": {
+      "by_shape": {
+        "conditional": {
+          "cases": 8,
+          "means": {
+            "outcomes": 0.7708,
+            "overall": 0.4778,
+            "plan": 0.25,
+            "trajectory": 0.4125
+          },
+          "passed": 0
+        },
+        "deep_chain": {
+          "cases": 7,
+          "means": {
+            "outcomes": 0.8333,
+            "overall": 0.4992,
+            "plan": 0.25,
+            "trajectory": 0.4143
+          },
+          "passed": 0
+        },
+        "delete_chain": {
+          "cases": 4,
+          "means": {
+            "outcomes": 0.8333,
+            "overall": 0.4945,
+            "plan": 0.25,
+            "trajectory": 0.4
+          },
+          "passed": 0
+        },
+        "diamond": {
+          "cases": 7,
+          "means": {
+            "outcomes": 0.8333,
+            "overall": 0.4992,
+            "plan": 0.25,
+            "trajectory": 0.4143
+          },
+          "passed": 0
+        },
+        "fan_in": {
+          "cases": 7,
+          "means": {
+            "outcomes": 0.8333,
+            "overall": 0.4992,
+            "plan": 0.25,
+            "trajectory": 0.4143
+          },
+          "passed": 0
+        },
+        "fan_out": {
+          "cases": 1,
+          "means": {
+            "outcomes": 0.3333,
+            "overall": 0.3611,
+            "plan": 0.25,
+            "trajectory": 0.5
+          },
+          "passed": 0
+        },
+        "map_read": {
+          "cases": 7,
+          "means": {
+            "outcomes": 0.8333,
+            "overall": 0.4992,
+            "plan": 0.25,
+            "trajectory": 0.4143
+          },
+          "passed": 0
+        },
+        "write_chain": {
+          "cases": 7,
+          "means": {
+            "outcomes": 0.8333,
+            "overall": 0.4992,
+            "plan": 0.25,
+            "trajectory": 0.4143
+          },
+          "passed": 0
+        }
+      },
+      "cases": 48,
+      "collateral_cases": 0,
+      "errors": 0,
+      "means": {
+        "outcomes": 0.8125,
+        "overall": 0.4924,
+        "plan": 0.25,
+        "trajectory": 0.4146
+      },
+      "pass_rate": 0.0,
+      "passed": 0,
+      "structured_outcomes": {
+        "expected": 68,
+        "met": 47
+      },
+      "trajectory_match": {
+        "any_order": 0.0,
+        "exact": 0.0,
+        "in_order": 0.0
+      }
+    },
+    "reference": {
+      "by_shape": {
+        "conditional": {
+          "cases": 8,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 8
+        },
+        "deep_chain": {
+          "cases": 7,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 7
+        },
+        "delete_chain": {
+          "cases": 4,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 4
+        },
+        "diamond": {
+          "cases": 7,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 7
+        },
+        "fan_in": {
+          "cases": 7,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 7
+        },
+        "fan_out": {
+          "cases": 1,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 1
+        },
+        "map_read": {
+          "cases": 7,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 7
+        },
+        "write_chain": {
+          "cases": 7,
+          "means": {
+            "outcomes": 1.0,
+            "overall": 1.0,
+            "plan": 1.0,
+            "trajectory": 1.0
+          },
+          "passed": 7
+        }
+      },
+      "cases": 48,
+      "collateral_cases": 0,
+      "errors": 0,
+      "means": {
+        "outcomes": 1.0,
+        "overall": 1.0,
+        "plan": 1.0,
+        "trajectory": 1.0
+      },
+      "pass_rate": 1.0,
+      "passed": 48,
+      "structured_outcomes": {
+        "expected": 68,
+        "met": 68
+      },
+      "trajectory_match": {
+        "any_order": 1.0,
+        "exact": 1.0,
+        "in_order": 1.0
+      }
+    }
+  },
+  "case_set": {
+    "cases": 48,
+    "connector_records": 93,
+    "digest": "d04e4d529c910fe26bead98e422d8326",
+    "pinned": "d04e4d529c910fe26bead98e422d8326"
+  },
+  "command": "python tools/scoreboard.py --revision <revision>",
+  "commands": [
+    "worldloom build --seed 8128 --incident --narrate --out corpus",
+    "worldloom evaluate corpus --retriever both --json",
+    "worldloom enterprise-evals build corpus cases --exhaustive --limit 48 --dag-shape *",
+    "worldloom evalrun run cases --agent reference -o runs/reference",
+    "worldloom evalrun run cases --agent lazy -o runs/lazy"
+  ],
+  "corpus": {
+    "digest": "716d25308aecb2e1c4d687dc0a10107d",
+    "evals_digest": "888b0e25a0bf6d9c20522d897979fe1e"
+  },
+  "grader_digest": "981eda9a3e4824534d94b31659367596",
+  "parameters": {
+    "agents": [
+      "reference",
+      "lazy"
+    ],
+    "build": [
+      "--seed",
+      "8128",
+      "--incident",
+      "--narrate"
+    ],
+    "case_set": [
+      "--exhaustive",
+      "--limit",
+      "48",
+      "--dag-shape",
+      "*"
+    ],
+    "k": 5,
+    "retrievers": "both",
+    "seed": 8128
+  },
+  "retrieval": {
+    "bm25": {
+      "by_type": {
+        "authority_resolution": {
+          "passed": 0,
+          "rate": 0.0,
+          "total": 6
+        },
+        "causal_multi_hop": {
+          "passed": 2,
+          "rate": 0.6667,
+          "total": 3
+        },
+        "citation_required": {
+          "passed": 8,
+          "rate": 1.0,
+          "total": 8
+        },
+        "cross_artifact": {
+          "passed": 4,
+          "rate": 1.0,
+          "total": 4
+        },
+        "direct_lookup": {
+          "passed": 8,
+          "rate": 0.8889,
+          "total": 9
+        },
+        "expected_abstention": {
+          "passed": 0,
+          "rate": 0.0,
+          "total": 10
+        },
+        "numerical_comparison": {
+          "passed": 5,
+          "rate": 0.625,
+          "total": 8
+        },
+        "temporal_state": {
+          "passed": 0,
+          "rate": 0.0,
+          "total": 3
+        }
+      },
+      "overall": {
+        "passed": 27,
+        "rate": 0.5294,
+        "total": 51
+      }
+    },
+    "tfidf": {
+      "by_type": {
+        "authority_resolution": {
+          "passed": 0,
+          "rate": 0.0,
+          "total": 6
+        },
+        "causal_multi_hop": {
+          "passed": 2,
+          "rate": 0.6667,
+          "total": 3
+        },
+        "citation_required": {
+          "passed": 8,
+          "rate": 1.0,
+          "total": 8
+        },
+        "cross_artifact": {
+          "passed": 4,
+          "rate": 1.0,
+          "total": 4
+        },
+        "direct_lookup": {
+          "passed": 7,
+          "rate": 0.7778,
+          "total": 9
+        },
+        "expected_abstention": {
+          "passed": 0,
+          "rate": 0.0,
+          "total": 10
+        },
+        "numerical_comparison": {
+          "passed": 5,
+          "rate": 0.625,
+          "total": 8
+        },
+        "temporal_state": {
+          "passed": 0,
+          "rate": 0.0,
+          "total": 3
+        }
+      },
+      "overall": {
+        "passed": 26,
+        "rate": 0.5098,
+        "total": 51
+      }
+    }
+  },
+  "revision": "7f7052e81c2a4a45bc62da5cbe045a6d45cca02c",
+  "schema": "worldloom.release-scoreboard/v1"
+}

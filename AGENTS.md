@@ -85,7 +85,7 @@ Determinism spine:
 | `src/worldloom/{connectors,evals,pipeline}/` | The three library seams `worldloom seams` names: product-shaped connector emulation and trace grading; eval-first design → demands → candidates → proof; typed orchestration shared by SDK, CLI and skills |
 | `src/worldloom/{synthesis,process_bindings}/`, `pcf.py`, `onet.py`, `functions.py` | Operational relational synthesis (causal microdata, paired interventions); the process catalogue, keyed by APQC process id, compiled into company bindings; the PCF, O*NET and function tables it resolves against |
 | `tests/` | ~225 pytest files; scripted agent stand-ins (`scripted_composer.py`, `scripted_actor.py`, `scripted_agent.py`) |
-| `tools/` | Dev-only scripts (`sweep.py` determinism sweep, `measure_retrievers.py`, `outcome_selection.py`); stdlib-only, never imported from `src/` |
+| `tools/` | Dev-only scripts (`sweep.py` determinism sweep, `measure_retrievers.py`, `outcome_selection.py`, `scoreboard.py` the release scoreboard in `docs/measurements/`); stdlib-only, never imported from `src/` |
 | `docs/`, `docs/agents/` | Operator guides; 16 agent topic files |
 | `examples/` | `retail-close/` golden corpus (CI-validated and hand-authored; never regenerate or "fix" it), `grocery-close/` reference narration, `packs/`, `episodes/`, `artifact-types/` |
 | `evals/` | Checkout-only eval harnesses (enterprise_minimum, executive_narration, alphaevolve) |
