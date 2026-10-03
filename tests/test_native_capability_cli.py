@@ -7,6 +7,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -192,7 +193,9 @@ def test_build_role_option_and_sdk_exports_are_public() -> None:
     assert all(hasattr(sdk, name) for name in sdk.__all__)
     help_result = runner.invoke(app, ["native-evals", "build", "--help"])
     assert help_result.exit_code == 0, help_result.output
-    assert "--split-role" in help_result.output
+    # Under GITHUB_ACTIONS Rich styles each dash of an option name separately
+    # (`-` `-split` `-role`), even with NO_COLOR, so assert on unstyled text.
+    assert "--split-role" in click.unstyle(help_result.output)
     refused = runner.invoke(app, ["native-evals", "build", "source", "scale", "--plan", "plan.json",
         "--out", "output", "--split-role", "development"])
     assert refused.exit_code == 2 and "Invalid value" in refused.output
