@@ -826,6 +826,7 @@ _REFUSALS: dict[str, str] = {
     "evalrun_shard_invalid": "--shard is not i/n with 1 <= i <= n",
     "resume_mismatch": "--resume found a ledger for a different run; the message names each identity field that differs",
     "concurrency_refused": "the connector service does not admit the requested --concurrency",
+    "smoke_failed": "a `worldloom smoke` stage failed; data.stage names it and data.output is the tail of what it printed",
     "shards_unmergeable": "the shard directories are not one complete sharded run; the message names what differs or is missing",
     "results_unreadable": "an external harness's results file cannot be read",
     "case_set_unreadable": "the case set directory's cases or records cannot be read",
@@ -8026,6 +8027,75 @@ def doctor(
             exit_code=1,
             failed=failed,
         )
+
+
+@app.command()
+def smoke(
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Directory to run the pipeline in; kept afterwards for inspection. Must"
+             " be empty or absent. Omit to run in a temporary directory that is removed.",
+    ),
+    seed: int = typer.Option(8128, "--seed", "-s", help="World seed for the tiny world."),
+    formats: list[str] = typer.Option(
+        None, "--format", "-f",
+        help="Render these formats (repeatable). Default: markdown and xlsx; pass"
+             " `-f markdown` alone on an install without the xlsx extra.",
+    ),
+) -> None:
+    """Run the whole pipeline on a tiny world, one line per stage, in seconds.
+
+    Build, narrate through the agent handshake with the offline writer, render,
+    validate, score the retrieval baselines, generate enterprise eval cases, and
+    run the reference agent over them. Every stage is the real CLI command run
+    as its own process, on the previous stage's output. Exits non-zero at the
+    first stage that fails, naming it and printing the tail of what it said.
+    """
+    import tempfile
+    import time
+
+    from . import smoke as smoke_module
+
+    def report(outcome: Any) -> None:
+        console.print(
+            f"[green]✓[/green] {outcome.name:<17} {outcome.seconds:6.2f}s"
+            f"  [dim]{escape(outcome.detail)}[/dim]",
+            soft_wrap=True,
+        )
+
+    chosen = tuple(formats) if formats else smoke_module.DEFAULT_FORMATS
+    started = time.perf_counter()
+
+    def go(directory: Path) -> list[Any]:
+        try:
+            return smoke_module.run(directory, seed=seed, formats=chosen, on_stage=report)
+        except smoke_module.SmokeFailure as failure:
+            console.print(f"[red]✗[/red] {failure.stage:<17} {failure.seconds:6.2f}s")
+            # In JSON mode the tail rides in the envelope's data instead:
+            # stderr there is one machine-readable line, and the child's own
+            # output may itself hold an envelope a harness would match first.
+            if failure.output and os.environ.get("WORLDLOOM_OUTPUT") != "json":
+                err.print(escape(failure.output), soft_wrap=True)
+            _refuse(
+                "smoke_failed",
+                f"[red]error:[/red] smoke stage [bold]{escape(failure.stage)}[/bold]"
+                f" failed: {escape(failure.reason)}",
+                exit_code=1,
+                stage=failure.stage,
+                reason=failure.reason,
+                output=failure.output,
+            )
+
+    if out is None:
+        with tempfile.TemporaryDirectory(prefix="worldloom-smoke-") as scratch:
+            outcomes = go(Path(scratch) / "smoke")
+    else:
+        outcomes = go(out)
+    console.print(
+        f"[green]✓[/green] smoke passed: {len(outcomes)} stages in"
+        f" {time.perf_counter() - started:.1f}s"
+        + (f" [dim](kept in {escape(str(out))})[/dim]" if out is not None else "")
+    )
 
 
 @app.command()

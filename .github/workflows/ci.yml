@@ -106,6 +106,15 @@ jobs:
           pip install uv
           uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
 
+      # First, and in seconds: every stage chained on the previous stage's
+      # output (build, narrate through the handshake, render, validate,
+      # evaluate, enterprise cases, the reference agent). The steps below
+      # exercise each stage richly but separately; this is the one that
+      # crosses the seams between them, and it names the stage that broke
+      # before the full suite has spent its minutes.
+      - name: The whole pipeline runs end to end
+        run: worldloom smoke --out "${{ runner.temp }}/smoke"
+
       - name: Tests
         if: matrix.python-version != '3.12'
         run: pytest -q

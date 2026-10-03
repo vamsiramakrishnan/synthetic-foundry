@@ -110,9 +110,13 @@ worldloom validate retail-close    # golden corpus must stay coherent (CI gate)
 worldloom docs --check             # generated CLI reference must be current
 ```
 
-Corpus loop:
+Corpus loop (`worldloom smoke` chains build, narrate, render, validate and
+evaluate on a tiny world, then enterprise cases and the reference agent, in
+well under a minute; one timed line per stage, non-zero exit naming the first
+stage that fails):
 
 ```bash
+worldloom smoke --out ./smoke      # the whole pipeline, end to end, first
 worldloom build --seed 8128 --incident --out ./corpus
 worldloom narrate requests ./corpus -o requests.json
 worldloom narrate accept ./corpus --from responses.json --model-id <your-model>
