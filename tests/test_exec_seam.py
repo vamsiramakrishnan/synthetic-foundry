@@ -377,14 +377,14 @@ def test_a_sleeping_child_is_killed_at_the_timeout(
 def _expected_split(corpus: Path, *, k: int, limit: int | None = None) -> list[tuple[str, bool]]:
     """What the even/odd responder must score, case by case, computed from IDs.
 
-    Uses the same BM25 index and the same `_covers` the command reuses — the
-    point is not an independent reimplementation of coverage but that the
+    Uses the same BM25 index and shared grader as evaluate — the
+    point is not an independent reimplementation of grading but that the
     subprocess plumbing (payload out, ids back, abstention flag honoured)
     lands each case on exactly the grade its ids dictate.
     """
     from worldloom.evaluate.bm25 import Bm25
     from worldloom.evaluate.index import passages as index_passages
-    from worldloom.evaluate.score import _covers
+    from worldloom.evaluate.score import Retrieval, grade
 
     world = World.load(corpus)
     world = world if world.artifact_irs else world.compile()
@@ -394,18 +394,16 @@ def _expected_split(corpus: Path, *, k: int, limit: int | None = None) -> list[t
     if limit is not None:
         cases = cases[:limit]
 
-    expected = []
+    retrievals = []
     for position, case in enumerate(cases):
         offered = [pool[i] for i, _ in index.rank(case.question, limit=k)]
         if position % 2 == 0:
-            # Answered with everything offered: passes iff the top-k covers
-            # the expected facts and the case wanted an answer at all.
-            passed = (not case.expects_abstention) and _covers(offered, case)
+            retrievals.append(Retrieval(tuple(offered), False))
         else:
             # Abstained: passes iff abstention is what the case expects.
-            passed = case.expects_abstention
-        expected.append((case.id, passed))
-    return expected
+            retrievals.append(Retrieval((), True))
+    return [(outcome.case_id, outcome.passed)
+            for outcome in grade(pool, cases, retrievals, k=k).outcomes]
 
 
 def test_the_scorecard_splits_exactly_as_constructed(

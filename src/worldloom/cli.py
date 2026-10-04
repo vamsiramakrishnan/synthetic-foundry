@@ -6123,9 +6123,10 @@ def benchmark_run(
     Per case the child receives `{"question": ..., "passages": [{"passage_id",
     "text"}, ...]}`, the top-k from the same BM25 index `search` and
     `evaluate` rank with, and must print `{"answer_passage_ids": [...],
-    "abstain": bool}`. Scoring is id-based only, never text similarity: a case
-    passes when the returned passages carry the expected fact IDs and the
-    abstention flag matches the case's expectation. Grading answer *text*
+    "abstain": bool}`, IDs best first. The shared `evaluate` grader checks
+    the unfiltered top hit's time and facts for temporal cases, its authority
+    and expected fact for authority cases, and coverage for the other families.
+    Scoring is id-based only, never text similarity. Grading answer *text*
     would put a judge inside a benchmark whose whole point is mechanical
     ground truth, so there is deliberately no flag for it.
     """

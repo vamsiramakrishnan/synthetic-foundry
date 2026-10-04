@@ -134,9 +134,15 @@ any executable honouring JSON-on-stdin, JSON-on-stdout.
 same executable against the corpus's own evaluation set: per case the child
 receives the question plus the top-k passages from the same BM25 index
 `search` ranks with, and answers `{"answer_passage_ids": [...], "abstain":
-bool}`. Scoring is id-based only: a case passes when the returned passages
-carry the expected fact IDs and the abstention flag matches the case's
-expectation. Answer *text* is never graded; that would put a judge inside a
+bool}`, with IDs best first. The same `evaluate/score.py` grader handles
+`evaluate`, `evaluate --predictions` and this command. Temporal cases require
+the unfiltered returned top hit to carry every expected fact and be written
+at or before the cut-off. Authority cases require the top hit to carry an
+expected fact and match or beat the strongest carrier in the full corpus.
+Other answerable families grade fact coverage across the returned passages;
+explicit abstention fails them. A returned id that was not offered refuses
+the reply as `exec_unparseable`; it is never dropped to promote another hit.
+Answer *text* is never graded; that would put a judge inside a
 benchmark that exists to provide mechanical ground truth, and it is a design
 boundary, not a missing feature. Output is `evaluate`'s scorecard shape,
 labelled with the exec command, `--json` included.
