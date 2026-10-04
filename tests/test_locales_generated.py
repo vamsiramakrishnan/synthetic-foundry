@@ -33,14 +33,33 @@ GENERATED = (
 UNSERVED = ("TH", "VN")
 
 
+SHIPPED_INDUSTRIES = tuple(sorted(industry.load_catalogue()["industry_overlays"]))
+
+
 def test_every_country_the_shipped_industries_build_in_has_a_locale() -> None:
-    """The gap itself: no company is built somewhere it cannot be spelled."""
-    catalogue = industry.load_catalogue()
+    """The gap itself: no company is built somewhere it cannot be spelled.
+
+    Read off each industry's default company, which is the structure
+    `industry.project` builds in (the parametrized test below holds every
+    project to that), so the union is checked without deriving twelve whole
+    programmes in one test: that made this the slowest test in the suite and
+    the last one xdist could finish.
+    """
     unlocalised: set[str] = set()
-    for name in sorted(catalogue["industry_overlays"]):
-        spec = industry.project(name, "Probe Company")
-        unlocalised.update(industry.unlocalised(spec.structure.countries))
+    for name in SHIPPED_INDUSTRIES:
+        structure = industry.default_company(name, name="Probe Company")
+        unlocalised.update(industry.unlocalised(structure.countries))
     assert unlocalised == set(UNSERVED)
+
+
+@pytest.mark.parametrize("name", SHIPPED_INDUSTRIES)
+def test_a_shipped_industrys_project_builds_where_its_company_is(name: str) -> None:
+    """Each industry's project, one per case so they spread across workers:
+    it builds, it builds in its default company's countries (what the union
+    above reads), and nowhere but the two countries left unserved on purpose."""
+    spec = industry.project(name, "Probe Company")
+    assert spec.structure.countries == industry.default_company(name, name="Probe Company").countries
+    assert set(industry.unlocalised(spec.structure.countries)) <= set(UNSERVED)
 
 
 @pytest.mark.parametrize("name", GENERATED)

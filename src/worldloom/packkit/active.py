@@ -151,14 +151,15 @@ def template(key: str) -> str:
     # A locked key is never taken from an industry, even one that reached
     # force without a lint (a recipe's recorded body): the lock is a property
     # of the key, not only of what upload accepts.
-    chosen = None if key.startswith(LOCKED_PROMPT_PREFIXES) else industry().prompts.get(key)
+    spoken = industry()
+    chosen = None if key.startswith(LOCKED_PROMPT_PREFIXES) else spoken.prompts.get(key)
     if chosen is None:
         try:
             chosen = prompts.texts[key]
         except KeyError:
             raise KeyError(f"no prompt {key!r} in {pack.ref}; the shipped keys are listed by "
                            "`worldloom pack show prompts:default`") from None
-    return fill_terms(chosen, industry().terms)
+    return fill_terms(chosen, spoken.terms)
 
 
 def text(key: str, /, **values: Any) -> str:
