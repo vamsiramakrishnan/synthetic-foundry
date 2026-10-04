@@ -138,6 +138,11 @@ dev = [
     # Shards the suite across CI jobs by recorded durations (`.test_durations`);
     # like xdist it moves tests between machines and never changes what runs.
     "pytest-split>=0.10",
+    # `make check-fast` / `make test-changed`: opt-in, inert unless a run
+    # passes `--testmon`. It records which source lines each test executed
+    # (`.testmondata`, gitignored) and re-runs only the tests a change can
+    # reach. A local speed-up, never a gate: CI runs everything.
+    "pytest-testmon>=2.1",
 ]
 
 [project.scripts]

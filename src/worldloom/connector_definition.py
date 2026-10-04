@@ -736,7 +736,12 @@ def _pack_definition(name: str) -> ConnectorDefinition | None:
         body: ConnectorDefinition = held.body
         return body
     if name in REFERENCE_CONNECTORS:
-        if not any(origin == "root" for origin, _ in packkit.search_path()):
+        # A "root" entry on the search path is exactly a context root
+        # (`packkit.search_path`); asking for those directly skips building
+        # the whole path, which this did on every connector lookup.
+        from .packkit.sources import CONTEXT_ROOTS
+
+        if not CONTEXT_ROOTS.get():
             return None
         located = packkit.find("connector", name)
         if located is None or located.origin != "root":
@@ -749,10 +754,10 @@ def _pack_definition(name: str) -> ConnectorDefinition | None:
 
 @cache
 def _shipped_definition(name: str) -> ConnectorDefinition:
-    # Cached per name: the shipped JSON is package data and the model is
-    # frozen, so one parse serves the process. Planning re-parsed it ~50,000
-    # times for a 40-query plan, over half its CPU. Packs are resolved before
-    # this is reached, so a pack in force still wins.
+    # Package data, fixed for the life of the process, and the model is
+    # frozen and never mutated through, so one parse per connector serves
+    # every caller. Unmemoised, a programme or a foundry run re-parsed and
+    # re-validated the same JSON tens of thousands of times.
     resource = files("worldloom").joinpath(*_SHIPPED, f"{name}.json")
     return parse_connector_definition(resource.read_text(encoding="utf-8"))
 

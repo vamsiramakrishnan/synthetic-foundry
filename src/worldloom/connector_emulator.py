@@ -90,10 +90,38 @@ class _PendingSpan:
         )
 
 
+_ATOMIC = frozenset({str, int, float, bool, type(None)})
+
+
+def _copy_tree(value: Any) -> Any:
+    """``copy.deepcopy`` for the JSON-shaped trees a record holds, a lot faster.
+
+    Every emulator copies every record it is built over, and qualification
+    builds one per connector per query: the generic deepcopy (memo dict,
+    reducer lookup per node) was over half of a foundry run. Plain dicts,
+    lists and scalars are copied here; anything else still goes through
+    ``copy.deepcopy``, so a value of another type copies exactly as before.
+    Unlike deepcopy this does not preserve aliasing *within* one record
+    (one list reachable twice becomes two lists), which nothing reads: the
+    copy exists so no caller's record is mutated through the emulator, and
+    that holds either way.
+    """
+    kind = type(value)
+    # Leaves are tested inline rather than recursed into: most nodes are
+    # scalars, and a call per scalar was most of what this cost.
+    if kind is dict:
+        return {key: item if type(item) in _ATOMIC else _copy_tree(item) for key, item in value.items()}
+    if kind is list:
+        return [item if type(item) in _ATOMIC else _copy_tree(item) for item in value]
+    if kind in _ATOMIC:
+        return value
+    return copy.deepcopy(value)
+
+
 def _canonical_record(record: ConnectorRecord | Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(record, ConnectorRecord):
         return {
-            **copy.deepcopy(record.fields),
+            **_copy_tree(dict(record.fields)),
             "fid": record.id,
             "server": record.connector,
             "entity": record.entity,
@@ -112,7 +140,7 @@ def _canonical_record(record: ConnectorRecord | Mapping[str, Any]) -> dict[str, 
             "event_ids": list(record.event_ids),
             "source_artifact_ids": list(record.source_artifact_ids),
         }
-    return copy.deepcopy(dict(record))
+    return _copy_tree(dict(record))  # type: ignore[no-any-return]
 
 
 def _coerce_predicate(value: Predicate | Mapping[str, Any] | None, *, entity: str | None) -> Predicate:
@@ -230,7 +258,7 @@ class ConnectorEmulator:
         child = ConnectorEmulator.__new__(ConnectorEmulator)
         child.definition = self.definition
         child.server = self.server
-        child.records = copy.deepcopy(self.records)
+        child.records = _copy_tree(self.records)
         child.by_entity = defaultdict(list, {key: list(value) for key, value in self.by_entity.items()})
         child.by_ident = dict(self.by_ident)
         child.acl = copy.deepcopy(self.acl)

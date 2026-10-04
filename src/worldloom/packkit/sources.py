@@ -42,9 +42,9 @@ def user_root() -> Path:
 
 @lru_cache(maxsize=1)
 def builtin_root() -> Path:
-    # Cached: the shipped packs directory is package data and cannot move in a
-    # process, and resolving it through importlib.resources on every lookup
-    # cost planning ~4s of CPU per 50,000 connector lookups.
+    # The installed package's own directory: fixed for the process, and on
+    # every search path, so resolving it through importlib.resources each
+    # time was a measurable share of every pack and connector lookup.
     with as_file(files("worldloom").joinpath("_data", "packs")) as path:
         return Path(path)
 
