@@ -135,6 +135,11 @@ dev = [
     # it changes how tests are scheduled, never what they assert, and every
     # test must pass under it and without it.
     "pytest-xdist>=3.5",
+    # `make check-fast` / `make test-changed`: opt-in, inert unless a run
+    # passes `--testmon`. It records which source lines each test executed
+    # (`.testmondata`, gitignored) and re-runs only the tests a change can
+    # reach. A local speed-up, never a gate: CI runs everything.
+    "pytest-testmon>=2.1",
 ]
 
 [project.scripts]

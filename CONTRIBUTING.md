@@ -23,6 +23,16 @@ worldloom validate retail-close   # the reference corpus must stay coherent
 worldloom docs --check            # the docs still describe the CLI that exists
 ```
 
+`make check` runs the same five gates. While iterating, `make check-fast`
+runs ruff, mypy and only the tests your change can reach: pytest-testmon (in
+the `dev` extra) records which source lines each test executed in a local,
+gitignored `.testmondata`, so the first run costs a full suite and later runs
+select from it. It works under `-n auto`; it cannot see into a subprocess
+(the CLI and scoreboard tests), and a data file or prompt pack it did not
+trace can change a result without selecting the test. `make test-changed` is
+the test step alone; without testmon both fall back to `--lf --ff`. A fast
+loop is not a gate: run `make check` before pushing.
+
 `-n auto` is pytest-xdist (in the `dev` extra), and it is how CI runs the
 suite: serially it took the better part of an hour per leg. Plain `pytest -q`
 runs the same tests in one process and must pass too, so a test may not lean
