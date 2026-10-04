@@ -122,6 +122,19 @@ jobs:
       # verdict. A test that cannot share a machine with its neighbours gets
       # `xdist_group` and these runs get `--dist loadgroup`; it is never
       # skipped to make this green.
+      # Deterministic builds the tests share (tests/build_cache.py), keyed on
+      # the source tree so a change under src misses every entry. Not on the
+      # coverage leg: a warm cache skips the builders, so their lines would
+      # read as uncovered.
+      - name: Restore the test build cache
+        if: matrix.python-version != '3.12'
+        uses: actions/cache@v4
+        with:
+          path: .pytest_cache/worldloom-builds
+          key: wl-test-builds-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/worldloom/**', 'pyproject.toml') }}-${{ hashFiles('tests/**') }}
+          restore-keys: |
+            wl-test-builds-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/worldloom/**', 'pyproject.toml') }}-
+
       - name: Tests
         if: matrix.python-version != '3.12'
         run: pytest -q -n auto --splits 4 --group ${{ matrix.group }}
@@ -137,6 +150,7 @@ jobs:
         if: matrix.python-version == '3.12'
         env:
           COVERAGE_CORE: sysmon
+          WORLDLOOM_NO_BUILD_CACHE: "1"
           COVERAGE_FILE: .coverage.shard-${{ matrix.group }}
         run: |
           uv pip install --system pytest-cov
