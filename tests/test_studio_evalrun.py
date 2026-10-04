@@ -9,9 +9,11 @@ import subprocess
 import sys
 from pathlib import Path
 from threading import Thread
+from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+import build_cache
 import pytest
 from typer.testing import CliRunner
 
@@ -31,14 +33,24 @@ def _command(*parts: object) -> str:
 
 @pytest.fixture(scope="module")
 def compiled(tmp_path_factory: pytest.TempPathFactory) -> tuple[Studio, dict]:
-    studio = Studio(tmp_path_factory.mktemp("studio"))
+    # A compiled workspace is a pure function of the spec and the source
+    # tree, so the compile is reused across runs and workers (`build_cache`);
+    # the module gets its own copy of the workspace, and every evalrun job
+    # the tests grade still runs fresh against it.
     spec = preset()
     spec = spec.model_copy(update={"use_cases": (spec.use_cases[0].model_copy(update={"count": 4}),)})
-    project = studio.store.create(spec)
-    job = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="compile"))
-    assert run_job(studio, job["id"])
-    assert studio.store.job(job["id"])["status"] == "complete", studio.store.job(job["id"])
-    return studio, project
+
+    def build(root: Path) -> dict:
+        studio = Studio(root)
+        project = studio.store.create(spec)
+        job = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="compile"))
+        assert run_job(studio, job["id"])
+        assert studio.store.job(job["id"])["status"] == "complete", studio.store.job(job["id"])
+        return project
+
+    root = tmp_path_factory.mktemp("studio") / "workspace"
+    project = build_cache.cached_tree("studio-compiled", {"spec": spec.model_dump(mode="json")}, build, root)
+    return Studio(root), project
 
 
 def test_the_reference_run_grades_every_axis_and_seals_its_ledger(compiled: tuple[Studio, dict]) -> None:
@@ -237,12 +249,21 @@ def test_a_catalogue_project_compiles_its_own_evidence_and_grades_it(tmp_path_fa
 
     from worldloom import industry
 
-    studio = Studio(tmp_path_factory.mktemp("catalogue"))
-    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
-    project = studio.store.create(spec)
-    job = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="compile", batch_limit=1))
-    assert run_job(studio, job["id"])
-    compiled = studio.store.job(job["id"])
+    def build(root: Path) -> tuple[Any, dict, dict]:
+        studio = Studio(root)
+        spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+        project = studio.store.create(spec)
+        job = studio.store.enqueue(project["id"], project["revision"], RunOptions(operation="compile", batch_limit=1))
+        assert run_job(studio, job["id"])
+        return spec, project, studio.store.job(job["id"])
+
+    # The compile is a pure function of the project and the source tree, so
+    # it is reused across runs (`build_cache`); every assertion below reads
+    # the compiled workspace as before, and both graded runs stay fresh.
+    root = tmp_path_factory.mktemp("catalogue") / "workspace"
+    recipe = {"industry": "telecom", "name": "Ardent Telecom", "lobs": ["billing"], "batch_limit": 1}
+    spec, project, compiled = build_cache.cached_tree("studio-catalogue-compiled", recipe, build, root)
+    studio = Studio(root)
     assert compiled["status"] == "complete", compiled
     report = compiled["result"]["report"]
     assert report["accepted"] > 0 and report["companies"] == 1, report
