@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 import pytest
+import shared_builds
 
 from worldloom import industry, sor
 from worldloom.connector_definition import (
@@ -53,7 +54,7 @@ def test_every_product_the_catalogue_names_is_emulated_so_no_line_is_unsupported
     table = industry.emulated_systems()
     assert products <= set(table["products"])
     for name in ("banking", "retail", "telecom", "healthcare", "public_sector"):
-        summary = industry.programme(name).summary
+        summary = shared_builds.programme_summary(name)
         assert summary.unsupported_lines == ()
         assert all(item.startswith("channel:") for item in summary.unemulated), summary.unemulated
 
@@ -126,7 +127,7 @@ def test_a_frozen_company_build_reads_the_projections(tmp_path: Path) -> None:
     from worldloom.evals.company_dataset import FrozenCompanyBuilder
     from worldloom.studio.service import Studio
 
-    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    spec = shared_builds.industry_project("telecom", "Ardent Telecom", lobs=("billing",))
     world, _ = Studio(tmp_path).snapshot(spec)
     compiled = compile_company(spec.structure)  # type: ignore[arg-type]
     registry = sor.projections(compiled, world, periods=2)
@@ -219,7 +220,7 @@ def test_a_world_built_for_a_process_company_projects_its_records_and_evidence(t
     )
     from worldloom.studio.service import Studio
 
-    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    spec = shared_builds.industry_project("telecom", "Ardent Telecom", lobs=("billing",))
     world, _ = Studio(tmp_path).snapshot(spec)
     assert process_structure_of(world.recipe) == spec.structure
     # The world's units are the company's own, the declaration is one event,

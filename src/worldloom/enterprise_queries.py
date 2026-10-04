@@ -159,10 +159,12 @@ class CoverageReport(Model):
 
 
 def _subsets(row: Mapping[str, str], strength: int) -> set[tuple[tuple[str, str], ...]]:
-    return {
-        tuple((key, row[key]) for key in keys)
-        for keys in itertools.combinations(sorted(row), strength)
-    }
+    # Combinations of the key-sorted items are the same tuples as combinations
+    # of the sorted keys paired with their values (keys are unique, so the sort
+    # never compares a value), built in C instead of one generator per subset:
+    # this is the inner loop of the cover walk and of its exactness check.
+    items = sorted(row.items(), key=lambda item: item[0])
+    return set(itertools.combinations(items, strength))
 
 
 def _source_combinations(

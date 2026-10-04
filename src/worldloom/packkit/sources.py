@@ -24,6 +24,7 @@ import os
 from collections.abc import Iterator, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
@@ -39,7 +40,11 @@ def user_root() -> Path:
     return (Path(home) if home else Path.home() / ".worldloom") / "packs"
 
 
+@lru_cache(maxsize=1)
 def builtin_root() -> Path:
+    # The installed package's own directory: fixed for the process, and on
+    # every search path, so resolving it through importlib.resources each
+    # time was a measurable share of every pack and connector lookup.
     with as_file(files("worldloom").joinpath("_data", "packs")) as path:
         return Path(path)
 
