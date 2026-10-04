@@ -249,30 +249,21 @@ def _perfect(corpus: Path, exported: Path, tmp_path: Path, *, documents: bool) -
 def test_a_perfect_ranking_passes_everything_a_ranking_can(
     corpus: Path, exported: Path, tmp_path: Path, documents: bool
 ) -> None:
-    """Every answerable case a ranking can pass passes on the oracle's, and
+    """Every answerable case passes on the oracle's ranking, and
     every abstention case passes on an explicit abstain, at either
     granularity: an artifact unit carries everything its passages carry, so
     lifting a perfect passage ranking to its documents loses nothing.
 
-    One case on this corpus no ranking can pass, and the exception is pinned
-    rather than hidden. "What was the close status once the period was
-    finalised?" puts its cut-off at the finalisation, and the only passage
-    stating the status was written two days later, so the unfiltered top hit
-    is always after the cut-off. The scorecard still counts it reachable,
-    because reachability asks whether any passage carries the fact, not
-    whether one was written in time. A finding about the evaluation set, not
-    about this grading; a change that fixes it, or adds another, fails here.
+    No permanently impossible exception: the final-status temporal case's
+    cut-off must include its first publication, rather than only the event.
     """
     rows, impossible = _perfect(corpus, exported, tmp_path, documents=documents)
     payload = _evaluate(str(corpus), "--predictions", str(_write(tmp_path / "perfect.jsonl", rows)))
 
     failed = {o["case_id"]: o for o in payload["outcomes"] if not o["passed"]}
-    assert sorted(failed) == sorted(impossible)
-    for outcome in failed.values():
-        assert outcome["type"] == "temporal_state"
-        assert outcome["detail"].startswith("top hit was written"), outcome
-    assert len(impossible) == 1
-    assert payload["overall"]["passed"] == payload["overall"]["total"] - len(impossible)
+    assert impossible == []
+    assert failed == {}
+    assert payload["overall"]["passed"] == payload["overall"]["total"]
     assert payload["granularity"] == ("artifact" if documents else "passage")
     assert payload["missing"] == []
 
@@ -474,12 +465,10 @@ def test_ragas_rows_reference_the_passages_the_grading_credits(corpus: Path, exp
             if case.required_artifact_ids:
                 assert artifact_of[passage_id] in case.required_artifact_ids
 
-    # The only answerable rows with nothing to reference are the temporal
-    # cases no ranking can pass: every carrier written after the cut-off.
+    # Every answerable row has published evidence, including final status.
     empty = [row["id"] for row in rows
              if not row["reference_context_ids"] and not cases[row["id"]].expects_abstention]
-    assert [cases[i].evaluation_type.value for i in empty] == ["temporal_state"] * len(empty)
-    assert len(empty) == 1
+    assert empty == []
 
 
 def test_ragas_rows_are_byte_stable(corpus: Path, tmp_path: Path) -> None:

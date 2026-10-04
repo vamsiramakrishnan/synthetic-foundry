@@ -44,9 +44,10 @@ This scores **retrieval**, not generation. There is no judge model anywhere in
 test inside the measurement itself, and the score would stop being
 reproducible. Every case is graded by an objective, mechanical check against the
 manifest: did the retrieved passages between them carry the fact IDs the
-question needs (`_covers` in `score.py`), was the top hit written before the
-question's `temporal_cutoff`, did the top hit come from a passage whose
-authority rank matches or beats the best available source. The manifest is the
+question needs (`_covers` in `score.py`), does a temporal case's unfiltered
+top hit carry every expected fact and predate or equal `temporal_cutoff`,
+does an authority case's top hit carry an expected fact and match or beat
+the highest authority among all passages carrying an expected fact. The manifest is the
 answer key: which artifact carries which fact, when it was written
 (`created_at`), with what authority. It is built once by
 `src/worldloom/evaluate/index.py`, which turns each rendered artifact section
@@ -336,9 +337,10 @@ nothing. Any other key is refused, because a typo such as `passage_id` would
 otherwise read as an empty ranking and pass every abstention case.
 
 **Score.** `--predictions` hands the rankings to `grade()` in `score.py`, the
-function the built-in retrievers are graded by: `_covers` for the coverage
-families, the unfiltered top hit for `temporal_state`, the top hit's
-authority for `authority_resolution`, the same per-family scorecard. Each
+function the built-in retrievers and `benchmark run` are graded by: `_covers`
+for the coverage families, the unfiltered top hit's time and full fact
+coverage for `temporal_state`, the top hit's authority and an expected fact
+for `authority_resolution`, the same per-family scorecard. Each
 ranking is cut at `-k` after repeats collapse to their first occurrence. A
 file carries no scores, so abstention is read from the line rather than a
 calibrated floor: an abstention case passes when the line abstains or ranks
@@ -357,13 +359,20 @@ theirs. `--json` keeps the single-retriever shape (`retriever`, `k`,
 reproduces `--retriever bm25` case for case; only the abstention detail
 differs, since there is no score to print.
 
-One case on a `--seed 8128 --incident` corpus no ranking can pass: "What
-was the close status once the period was finalised?" puts its cut-off at the
-finalisation, and the only passage stating the status was written two days
-later. The scorecard still counts it reachable, because reachability asks
-whether any passage carries the fact, not whether one was written in time.
-`tests/test_evaluate_byo.py` pins it, so a perfect ranking scores every case
-but that one.
+The final-status temporal case (EVAL-0023 on the seed-8128 March incident
+corpus) uses the first report's publication as its cut-off, computed with
+the same `documents.written_at` as the manifest. Finalisation is an event;
+its status becomes retrievable when a report records it. It remains a
+temporal case with the same expected fact and id. A perfect ranking now
+passes every case in this corpus, at either passage or artifact granularity.
+
+Older stored corpora keep their original cut-offs. A temporal case is reported
+unreachable when no single indexed unit carries every expected fact by its
+cut-off, even if later evidence exists. It still fails and stays in the
+denominator; rebuild the corpus with this generator to obtain the recut case.
+`tests/test_retrieval_grading_parity.py` checks the rules and reachability
+through the baseline, passage predictions, artifact predictions and executable
+paths, including real CLI/subprocess runs.
 
 ### Standard formats
 

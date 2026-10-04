@@ -7,6 +7,39 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### Consistent temporal and authority retrieval grading
+
+**Generation**
+
+- Retail incident final-status temporal cases (EVAL-0023 on seed 8128,
+  March 2026) are cut at the first planned report's publication, computed by
+  the manifest's `documents.written_at`, rather than at the finalisation
+  event. This deliberately changes their cut-off and reasoning in generated
+  `evals.jsonl`; ids, expected facts, questions, document bytes and wire shapes
+  stay unchanged. Existing stored corpora are not rewritten; regenerate them
+  to obtain the recut case.
+
+**Evaluation**
+
+- `benchmark run` now uses `evaluate/score.py:grade`, as built-in retrieval
+  and `evaluate --predictions` do. A temporal top hit must carry every expected
+  fact and be written by the cut-off. An authority top hit must carry an
+  expected fact and match the strongest carrier's authority in the full pool.
+  Later or stronger second hits no longer rescue a failing top hit. The child
+  request/response and scorecard JSON shapes are unchanged.
+- An executable's unoffered passage ids now refuse as `exec_unparseable`,
+  instead of being silently dropped and potentially promoting a later hit.
+  Returned ids retain their order and duplicates collapse to the first entry.
+- Temporal reachability requires a single timely unit carrying every expected
+  fact. Old pre-publication cases fail with `reachable=False` in the SDK and
+  are reported as unanswerable in the prose scorecard, remaining in the score
+  denominator. Failed timely hits now explain that their expected facts are
+  missing.
+- Differential tests pin verdicts and reachability across built-in retrieval,
+  passage predictions, artifact predictions and executable grading, plus CLI
+  runs at k=1 and k=5. The perfect-ranking tests require every case to pass;
+  there is no EVAL-0023 exception.
+
 ### A guided CLI, bring-your-own retrieval scoring and identical bytes on Windows
 
 **Generation**

@@ -130,7 +130,7 @@ class Outcome:
     passed: bool
     detail: str
     reachable: bool = True
-    """Whether *any* passage in the pool carries the facts this case expects.
+    """Whether the pool contains evidence admissible under this family's rules.
 
     Not a grade — a statement about the corpus. A case whose evidence is in an
     artifact nobody has written yet cannot be passed by any retriever, so
@@ -139,8 +139,9 @@ class Outcome:
     print the same digit: `citation_required 0/3` in five worlds looked like a
     difficult family and was three cases citing prose that did not exist.
 
-    Abstention cases are always reachable: they expect no evidence, so there is
-    none to be missing.
+    Temporal cases need one passage carrying every expected fact, written by
+    the cut-off. Evidence published later cannot make an earlier question
+    reachable. Abstention cases are always reachable: they expect no evidence.
     """
 
 
@@ -165,7 +166,7 @@ class Scorecard:
         return {kind: (passed, total) for kind, (passed, total) in tally.items()}
 
     def unreachable_by_type(self) -> dict[EvaluationType, int]:
-        """``{type: cases whose evidence is in no passage at all}``.
+        """``{type: cases with no admissible evidence in the pool}``.
 
         Reported beside `by_type` rather than deducted from it, because the two
         are different claims and a reader deserves both: the score is what a
@@ -202,8 +203,8 @@ class Scorecard:
             # Said once, loudly, at the bottom: a score computed over cases that
             # cannot be passed is not a harder score, it is a smaller one.
             lines.append(
-                f"  {self.unreachable} case(s) cite evidence no passage carries —"
-                " narrate the corpus before reading these numbers as difficulty"
+                f"  {self.unreachable} case(s): no passage carries admissible evidence —"
+                " check narration and temporal cut-offs before reading these numbers as difficulty"
             )
         return "\n".join(lines)
 
@@ -336,8 +337,8 @@ def grade(
     """Grade one retrieval per case, *retrievals* aligned with *cases*.
 
     Every pass rule lives here and nowhere else: `score()` grades the
-    registered retrievers through it, and `evaluate --predictions` grades a
-    ranking written by a system this package never saw through the same call.
+    registered retrievers through it; `evaluate --predictions` and
+    `benchmark run` grade external rankings through the same call.
     *pool* is every unit a retrieval could have returned — passages, or one
     merged unit per artifact for a document-level ranking — because the
     authority and reachability readings ask what the whole pool carries, not
@@ -405,6 +406,8 @@ def grade(
                     f"top hit was written {top.created_at.isoformat()},"
                     f" after the cut-off {case.temporal_cutoff.isoformat()}"
                 )
+            elif not passed:
+                detail = "top hit predates the cut-off but misses the expected facts"
             else:
                 detail = "top hit predates the cut-off and carries the fact"
 
@@ -454,6 +457,19 @@ def grade(
         # arguing with itself.
         reachable = (passed or case.expects_abstention
                      or set(case.expected_fact_ids) <= carried_anywhere)
+        if not case.expects_abstention and case.evaluation_type is EvaluationType.TEMPORAL_STATE and case.temporal_cutoff:
+            # Union coverage is insufficient here: only a single, timely top
+            # hit can pass. Start with one expected fact's carriers instead of
+            # scanning the pool for every temporal case. This also reports an
+            # old corpus's pre-publication cut-off as unreachable, without
+            # rewriting the stored evaluation or relaxing its passing rule.
+            candidates = (passages_by_fact.get(case.expected_fact_ids[0], ())
+                          if case.expected_fact_ids else range(len(pool)))
+            reachable = any(
+                pool[position].created_at <= case.temporal_cutoff
+                and _covers([pool[position]], case)
+                for position in candidates
+            )
         card.outcomes.append(
             Outcome(case.id, case.evaluation_type, passed, detail, reachable))
 

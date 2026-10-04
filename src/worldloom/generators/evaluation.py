@@ -60,6 +60,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from ..documents import written_at
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationType
 from . import episode_text
@@ -901,11 +902,23 @@ class _Taxonomy:
                 reasoning="The final status supersedes this; asking earlier must not return it.",
                 sources=[note], distractors=[rca],
             )
+        # Finalisation is a business event, not publication of its evidence.
+        # The memo records the final status later; cutting at valid_from made
+        # this case impossible even for a retriever that knew every timestamp.
+        # Use the manifest's own date function, not a duplicated lag or a date
+        # chosen to favour a particular baseline. No carrier means the final
+        # answerability gate will discard the case, as it always has.
+        final_cutoff = min(
+            (written_at(intent, self._fact_index) for intent in self.intents
+             if final.id in intent.required_fact_ids),
+            default=final.valid_from,
+        )
         self.case(
             self.t("q.incident.status_at_finalised"),
             EvaluationType.TEMPORAL_STATE, final.text_value or "", [final.id],
-            cutoff=final.valid_from, difficulty="medium",
-            reasoning="The same question at a later cut-off, where the answer changed.",
+            cutoff=final_cutoff, difficulty="medium",
+            reasoning="The cut-off is the first report recording the final status, "
+                      "after finalisation; the earlier working status is superseded.",
             distractors=[note],
         )
 
