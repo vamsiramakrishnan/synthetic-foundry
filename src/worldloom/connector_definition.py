@@ -12,7 +12,7 @@ import json
 import math
 from collections.abc import Mapping
 from datetime import date, datetime
-from functools import lru_cache
+from functools import cache, lru_cache
 from importlib.resources import files
 from typing import Any, Literal
 
@@ -747,7 +747,12 @@ def _pack_definition(name: str) -> ConnectorDefinition | None:
     return resolved
 
 
+@cache
 def _shipped_definition(name: str) -> ConnectorDefinition:
+    # Cached per name: the shipped JSON is package data and the model is
+    # frozen, so one parse serves the process. Planning re-parsed it ~50,000
+    # times for a 40-query plan, over half its CPU. Packs are resolved before
+    # this is reached, so a pack in force still wins.
     resource = files("worldloom").joinpath(*_SHIPPED, f"{name}.json")
     return parse_connector_definition(resource.read_text(encoding="utf-8"))
 
