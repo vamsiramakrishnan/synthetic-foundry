@@ -500,11 +500,22 @@ def test_promptfoo_assertions_are_values_the_answer_states_and_the_corpus_prints
     result = runner.invoke(app, ["evals", "export", str(corpus), "--format", "promptfoo"])
     assert result.exit_code == 0, result.output
     tests = json.loads(result.stdout)
+    from worldloom.evaluate.index import passages as corpus_passages
+    from worldloom.evaluate.interchange import reference_passages
+
+    pool = corpus_passages(world)
 
     assert tests and isinstance(tests, list)
     narrowed = False
     for test in tests:
         case = cases[test["description"]]
+        # Passable from the passages exported as this case's reference
+        # contexts, not merely from some passage carrying the fact id.
+        context = "\n".join(p.text for p in reference_passages(case, pool))
+        for check in test["assert"]:
+            spelled = (check["value"].casefold() in context.casefold() if check["type"] == "icontains"
+                       else check["value"] in context)
+            assert spelled, (case.id, check)
         assert test["metadata"]["case_id"] == case.id
         assert test["vars"] == {"question": case.question}
         assert not case.expects_abstention
@@ -531,6 +542,24 @@ def test_promptfoo_assertions_are_values_the_answer_states_and_the_corpus_prints
     left_out = sorted(set(cases) - {test["description"] for test in tests})
     assert all(case_id in left_out for case_id, case in cases.items() if case.expects_abstention)
     assert f"{len(left_out)} case(s) left out" in " ".join(result.stderr.split())
+
+
+def test_promptfoo_drops_a_value_its_reference_passages_never_spell(
+    corpus: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fact can reach a passage by id without its value in the text; a check
+    on that value would fail a reader answering from exactly those passages."""
+    from worldloom.evaluate import interchange
+
+    world = World.load(corpus)
+    tests, _ = interchange.promptfoo_tests(world)
+    assert tests
+    import dataclasses
+
+    monkeypatch.setattr(interchange, "reference_passages",
+                        lambda case, pool: [dataclasses.replace(p, text="no figures here") for p in pool[:1]])
+    stripped, left_out = interchange.promptfoo_tests(world)
+    assert stripped == [] and sorted(left_out) == sorted(case.id for case in world.evaluations)
 
 
 def test_promptfoo_spells_a_figure_the_way_the_corpus_locale_does() -> None:

@@ -259,6 +259,13 @@ def assertions(case: EvaluationCase, facts: dict[str, CanonicalFact], locale: Lo
     return out
 
 
+def _spelled_in(check: dict[str, str], text: str) -> bool:
+    """Whether *text* would pass *check*, compared the way promptfoo compares."""
+    if check["type"] == "icontains":
+        return check["value"].casefold() in text.casefold()
+    return check["value"] in text
+
+
 def promptfoo_tests(world: World) -> tuple[list[dict[str, Any]], list[str]]:
     """promptfoo test cases, and the ids of the cases left out.
 
@@ -271,10 +278,18 @@ def promptfoo_tests(world: World) -> tuple[list[dict[str, Any]], list[str]]:
     """
     facts = {fact.id: fact for fact in world.facts}
     locale = corpus_locale(world)
+    pool = passages(world)
     tests: list[dict[str, Any]] = []
     left_out: list[str] = []
     for case in world.evaluations:
-        checks = assertions(case, facts, locale)
+        # Only values the case's reference passages actually spell. A fact can
+        # reach a passage through `section.fact_ids` or provenance without its
+        # value appearing in the text, and asserting it then fails a reader
+        # who answered from exactly the passages exported for it (found in
+        # review).
+        context = "\n".join(passage.text for passage in reference_passages(case, pool))
+        checks = [check for check in assertions(case, facts, locale)
+                  if _spelled_in(check, context)]
         if not checks:
             left_out.append(case.id)
             continue
