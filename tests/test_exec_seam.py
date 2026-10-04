@@ -34,6 +34,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -46,6 +47,12 @@ runner = CliRunner()
 def _flat(text: str) -> str:
     # Rich wraps to a width nothing in the test controls; see test_flag_reach.
     return " ".join(text.split())
+
+
+def _solid(text: str) -> str:
+    # `_flat` cannot rejoin a word Rich folded mid-token; this can, at the
+    # price of word boundaries, so it is for long single tokens like paths.
+    return "".join(text.split())
 
 
 def _cmd(*parts: object) -> str:
@@ -457,9 +464,19 @@ def test_the_prose_scorecard_is_labelled_with_the_command(
         "--exec", command,
     ])
     assert result.exit_code == 0, result.output
-    flat = _flat(result.output)
-    assert "exec:" in flat and "even_odd.py" in flat
-    assert "overall" in flat, "the scorecard shape is evaluate's"
+    # The command's paths are tokens as long as the tmp path, and Rich folds a
+    # token wider than the console mid-word, where `_flat` cannot rejoin it:
+    # under pytest-xdist the path gains a `popen-gwN/` segment, which split
+    # `even_odd.py` across lines and failed this test only in parallel runs.
+    # Widening the console is not reliable either: pytest imports readline,
+    # which exports COLUMNS (80 with no terminal) into the environment every
+    # xdist worker inherits, and Rich pins that width when `cli.console` is
+    # built at import, so `invoke(env=...)` never reaches it. The whole label is
+    # compared with whitespace removed, which holds the command character for
+    # character wherever the console folded it. Unstyled because FORCE_COLOR
+    # makes Rich highlight the path segments apart.
+    assert _solid(f"exec: {command}") in _solid(click.unstyle(result.output)), result.output
+    assert "overall" in _flat(result.output), "the scorecard shape is evaluate's"
 
 
 def test_a_malformed_answer_names_the_case_and_the_shape(

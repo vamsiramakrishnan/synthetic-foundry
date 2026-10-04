@@ -20,6 +20,7 @@ never pays for these.
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass
 
@@ -93,3 +94,21 @@ def native_surface() -> object:
 
     with serving_surface("native"):
         yield
+
+
+@pytest.fixture
+def cpu_budget() -> float:
+    """How many times a CPU-seconds bound stretches under a coverage tracer.
+
+    The coverage leg traces every line, which roughly triples the CPU a plan
+    burns: the shipped-profile plan read 71s against a 60s bound there, while
+    the defect such bounds guard (an uncapped walk) ran past fifteen minutes.
+    Stretching only when a tracer is active keeps the plain legs as tight as
+    before. Coverage traces through `sys.settrace` or, on 3.12+, through
+    `sys.monitoring`; either counts.
+    """
+    monitoring = getattr(sys, "monitoring", None)
+    traced = sys.gettrace() is not None or (
+        monitoring is not None and monitoring.get_tool(monitoring.COVERAGE_ID) is not None
+    )
+    return 3.0 if traced else 1.0

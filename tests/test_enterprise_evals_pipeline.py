@@ -351,18 +351,23 @@ def _narrowed_retail_profile(path: Path) -> Path:
     return path
 
 
-def test_plan_with_a_shipped_profile_and_a_limit_returns_in_seconds(tmp_path: Path) -> None:
+def test_plan_with_a_shipped_profile_and_a_limit_returns_in_seconds(tmp_path: Path, cpu_budget: float) -> None:
     """Killed at fifteen minutes with nothing written while the limit only
     cut the cover's output; under seven seconds once it capped the walk."""
     out = tmp_path / "plan.jsonl"
-    started = time.perf_counter()
+    # CPU seconds, not wall seconds: the defect was an uncapped walk, which is
+    # CPU this process burns, and the plan runs in-process on one thread. A
+    # wall clock also counted every neighbour competing for the core, and
+    # under `pytest -n 4` on a shared, loaded machine read 83s for a plan
+    # that took 22s run alone on the same machine.
+    started = time.process_time()
     result = RUNNER.invoke(app, [
         "enterprise-evals", "plan", "examples/hospital", str(out),
         "--profile", str(SHIPPED_RETAIL_PROFILE), "--limit", "40",
     ])
-    elapsed = time.perf_counter() - started
+    elapsed = time.process_time() - started
     assert result.exit_code == 0, result.output
-    assert elapsed < 60, elapsed
+    assert elapsed < 60 * cpu_budget, elapsed
     assert len(out.read_text(encoding="utf-8").splitlines()) == 40
     summary = json.loads(result.output)
     assert summary["selected"] == 40

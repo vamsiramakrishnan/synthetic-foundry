@@ -7,6 +7,50 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### A guided CLI, bring-your-own retrieval scoring and identical bytes on Windows
+
+**Generation**
+
+- XLSX packages rendered on Windows now match Linux byte for byte. openpyxl
+  stages worksheets in temp files and `ZipFile.write` copied their host mode
+  (`0o666` on Windows, `0o600` on POSIX) into each entry; `ooxml.normalise`
+  pins it. Linux and macOS bytes are unchanged. Windows XLSX bytes, and the
+  native task ids derived from their checksums, change to the Linux values.
+
+**Command line**
+
+- `worldloom --help` groups commands into workflow panels (start, build,
+  inspect, author, evaluate, integrate). `--version` and shell completion
+  (`--install-completion`) are available on the root command.
+- `worldloom guide [GOAL] [--json]` prints the ordered commands for a goal
+  (`rag`, `documents`, `agent`, `native`, `improve`, `company`, `narrate`,
+  `python`) and what each evaluation command is for. A test parses every
+  printed command against the CLI.
+- Refusals print a `fix:` line with the next command, from the site or from
+  defaults for 21 codes; the JSON envelope carries the same fix. Four codes
+  that crashed instead of refusing are registered. The bundled-corpus hint
+  lists only directories that load as corpora.
+- `worldloom doctor` checks the agent setup: `worldloom` on PATH is this
+  installation, the `mcp` extra, every `.mcp.json` server command, and the
+  optional `embeddings` and `visuals` extras, then names the next command.
+
+**Evaluation**
+
+- `worldloom evals passages` exports the passages the baselines rank, and
+  `worldloom evaluate --predictions FILE` grades an external system's ranked
+  passage or artifact ids with the baselines' scorer, k and scorecard.
+- `worldloom evals export --format ragas|promptfoo` writes the cases for those
+  harnesses; the default output is unchanged.
+
+**Development**
+
+- The suite runs under pytest-xdist (`pytest -q -n auto`) locally and in CI,
+  about 3.9x faster on four cores. Tests that wrote to the shared
+  `~/.worldloom` cache or outside pytest's temp directory, and timing checks
+  that measured wall clock under contention, were fixed.
+- README opens with a "What are you testing?" table; feature notes moved to
+  "More capabilities".
+
 ### Strict sources, a mutation-tested grader and a failure curriculum
 
 **Generation**

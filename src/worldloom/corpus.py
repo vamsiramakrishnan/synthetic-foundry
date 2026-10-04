@@ -212,15 +212,29 @@ def bundled_examples_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "examples"
 
 
+def bundled_corpora() -> list[str]:
+    """The bundled example names that load as a corpus, sorted.
+
+    Only directories holding a `world.json`, the one file `World.load` cannot
+    do without. `examples/` also ships packs, datasets, interviews, studio
+    projects and eval profiles beside the corpora, and naming those as
+    "bundled corpora" sent a reader to `worldloom validate packs`, which can
+    only fail.
+    """
+    root = bundled_examples_dir()
+    return sorted(path.name for path in root.glob("*") if (path / WORLD_FILE).is_file())
+
+
 def resolve_corpus(name_or_path: str) -> Path:
     """Resolve a corpus by bundled name or filesystem path."""
     candidate = Path(name_or_path)
     if candidate.is_dir():
         return candidate
+    # A bundled name resolves only to a bundled *corpus*, the same test the
+    # listing below uses, so a name the refusal does not offer cannot resolve.
     bundled = bundled_examples_dir() / name_or_path
-    if bundled.is_dir():
+    if (bundled / WORLD_FILE).is_file():
         return bundled
-    available = sorted(p.name for p in bundled_examples_dir().glob("*") if p.is_dir())
     raise CorpusError(
-        f"no corpus at {name_or_path!r}. Bundled corpora: {', '.join(available) or 'none'}"
+        f"no corpus at {name_or_path!r}. Bundled corpora: {', '.join(bundled_corpora()) or 'none'}"
     )

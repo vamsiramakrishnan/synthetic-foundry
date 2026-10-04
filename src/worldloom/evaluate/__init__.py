@@ -38,11 +38,16 @@ measurement. But the manifest already records which facts each artifact carries,
 who wrote it, when, and with what authority — so "did you surface a document
 carrying the fact this answer rests on" is objective, reproducible, and needs
 nothing but the corpus.
+
+**And a retriever this package never ran is graded the same way.**
+`interchange.py` exports the passages the built-in retrievers index;
+`predictions.py` reads back a ranking another system made of them and hands it
+to `score.grade()`, the function every built-in retriever is graded by.
 """
 
 from __future__ import annotations
 
-from . import embedding, phrasing
+from . import embedding, interchange, phrasing, predictions
 from .bm25 import Bm25
 from .embedding import Embedding, EmbeddingUnavailable, ModelPin, VectorCache
 from .index import Passage, document_texts, passages
@@ -53,12 +58,15 @@ from .score import (
     FamilyAgreement,
     FamilyDifficulty,
     Outcome,
+    Retrieval,
     RetrieverFactory,
     Scorecard,
     compare,
     difficulty_by_family,
+    grade,
     render_agreement,
     render_difficulty,
+    retrieve,
     score,
 )
 from .tfidf import TfIdf
@@ -84,8 +92,13 @@ __all__ = [
     "LEXICAL_RETRIEVERS",
     "DEFAULT_RETRIEVER",
     "score",
+    "retrieve",
+    "grade",
+    "Retrieval",
     "compare",
     "render_agreement",
     "embedding",
     "phrasing",
+    "predictions",
+    "interchange",
 ]

@@ -18,10 +18,16 @@ CI runs all of these blocking. Run them locally before pushing:
 ```bash
 ruff check                        # lint; config and rationale in pyproject.toml
 mypy                              # types; honest scope declared in pyproject.toml
-pytest -q                         # the full fast suite
+pytest -q -n auto                 # the full fast suite, one worker per core
 worldloom validate retail-close   # the reference corpus must stay coherent
 worldloom docs --check            # the docs still describe the CLI that exists
 ```
+
+`-n auto` is pytest-xdist (in the `dev` extra), and it is how CI runs the
+suite: serially it took the better part of an hour per leg. Plain `pytest -q`
+runs the same tests in one process and must pass too, so a test may not lean
+on another test's side effects, write to a fixed, cwd-relative or home path,
+or set an environment variable without `monkeypatch`.
 
 Byte-identity is the gate behind the gates: CI regenerates corpora from their
 ledgers and diffs them byte-for-byte, and the nightly sweep does the same
