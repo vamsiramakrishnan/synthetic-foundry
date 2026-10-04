@@ -14,6 +14,7 @@ from dataclasses import replace
 from importlib.resources import files
 
 import pytest
+import shared_builds
 
 from worldloom import domains, industry, locales
 
@@ -38,7 +39,7 @@ def test_every_country_the_shipped_industries_build_in_has_a_locale() -> None:
     catalogue = industry.load_catalogue()
     unlocalised: set[str] = set()
     for name in sorted(catalogue["industry_overlays"]):
-        spec = industry.project(name, "Probe Company")
+        spec = shared_builds.industry_project(name, "Probe Company")
         unlocalised.update(industry.unlocalised(spec.structure.countries))
     assert unlocalised == set(UNSERVED)
 

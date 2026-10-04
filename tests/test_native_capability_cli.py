@@ -7,6 +7,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import build_cache
 import click
 import pytest
 from typer.testing import CliRunner
@@ -46,19 +47,28 @@ class ScenarioProject:
 @pytest.fixture(scope="module")
 def project(tmp_path_factory: pytest.TempPathFactory) -> ScenarioProject:
     pytest.importorskip("docx")
-    root = tmp_path_factory.mktemp("native-capability-cli")
-    source = RetailWorld(seed=8128).build().export(root / "source")
-    demand, plan = root / "demand.json", root / "plan.json"
-    write_json(demand, NativeScenarioDemand(episodes=6, batch_id="cli-native-cases").model_dump(mode="json"))
-    write_json(plan, NativeWorkloadPlan(use_case_id="cli-native", objective="Read the business case evidence.",
-        formats=("docx",), operations=("read",), max_tasks=6, discovery_scope="artifact").model_dump(mode="json"))
-    result = ScenarioProject(source, demand, plan, root / "packages")
-    built = runner.invoke(app, result.arguments)
-    assert built.exit_code == 0, built.output
-    report = json.loads(built.output)
-    assert len(report["scenario_episodes"]) == 6
-    assert report["split_audit"]["isolated"]
-    return result
+
+    def build(root: Path) -> None:
+        root.mkdir()
+        source = RetailWorld(seed=8128).build().export(root / "source")
+        demand, plan = root / "demand.json", root / "plan.json"
+        write_json(demand, NativeScenarioDemand(episodes=6, batch_id="cli-native-cases").model_dump(mode="json"))
+        write_json(plan, NativeWorkloadPlan(use_case_id="cli-native", objective="Read the business case evidence.",
+            formats=("docx",), operations=("read",), max_tasks=6, discovery_scope="artifact").model_dump(mode="json"))
+        built = runner.invoke(app, ScenarioProject(source, demand, plan, root / "packages").arguments)
+        assert built.exit_code == 0, built.output
+        report = json.loads(built.output)
+        assert len(report["scenario_episodes"]) == 6
+        assert report["split_audit"]["isolated"]
+
+    # The generated packages are a pure function of this recipe and the
+    # source tree, so they are reused across runs and workers (`build_cache`;
+    # the assertions above run before an entry is published). The resume,
+    # inspect, improve and diagnose commands the tests drive all run fresh
+    # against this module's own copy.
+    root = tmp_path_factory.mktemp("native-capability-cli") / "project"
+    build_cache.cached_tree("native-capability-cli-project", {"seed": 8128, "episodes": 6}, build, root)
+    return ScenarioProject(root / "source", root / "demand.json", root / "plan.json", root / "packages")
 
 
 def _command(tmp_path: Path) -> tuple[str, Path]:

@@ -16,6 +16,12 @@ another's input. A test that needs an export must do it itself, into its own
 
 Fixtures are lazy, so the default ``pytest -q`` run (which deselects ``slow``)
 never pays for these.
+
+This file also wires ``build_cache`` (the content-keyed cache that lets a
+fixture reuse an expensive build across xdist workers and runs) to pytest:
+its ``--no-build-cache`` option and its location. The density worlds below do
+not go through it: the dense build carries a wall-clock guard, which a cached
+build would silently delete.
 """
 
 from __future__ import annotations
@@ -23,11 +29,33 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
+import build_cache
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
 from worldloom.archetypes import AUSTRALIAN_GROCERY
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--no-build-cache", action="store_true", default=False,
+        help=(
+            "Build every cached test fixture fresh instead of reusing a build keyed on the "
+            "source tree (tests/build_cache.py). Same as WORLDLOOM_NO_BUILD_CACHE=1."
+        ),
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    on = not (config.getoption("--no-build-cache") or build_cache.disabled_by_env())
+    root = build_cache.default_root(Path(str(config.rootpath)))
+    build_cache.configure(enabled=on, root=root)
+    # Only the controller (or a lone process) prunes: under xdist it runs
+    # before any worker exists, so no entry is being read while it goes.
+    if on and not hasattr(config, "workerinput"):
+        build_cache.prune(root)
 
 #: The two periods `test_density.py` documents: enough for the multi-period
 #: families to have a prior period to find, without paying for a third.

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 
+import build_cache
 import pytest
 
 from worldloom.evals import (
@@ -12,7 +14,7 @@ from worldloom.evals import (
     compile_dataset,
 )
 from worldloom.evals.company_dataset import load_dataset_plan
-from worldloom.evals.dataset import DatasetRefused, _files, verify_dataset
+from worldloom.evals.dataset import DatasetRefused, DatasetRun, _files, verify_dataset
 from worldloom.providers import digest
 from worldloom.studio import Studio, preset
 
@@ -27,10 +29,21 @@ def plan(count=36, **updates):
 
 @pytest.fixture(scope="module")
 def generated(tmp_path_factory):
-    root = tmp_path_factory.mktemp("company-dataset")
-    run = compile_dataset(plan(), root)
-    assert run.report.complete, run.report
-    return root, run
+    # The reference compile every test here reads; a pure function of the
+    # plan and the source tree, so reused across runs and workers
+    # (`build_cache`). The completeness assertion runs before an entry is
+    # published, so a cached entry certifies it. The pause/resume and
+    # tamper tests below still compile fresh into their own directories.
+    root = tmp_path_factory.mktemp("company-dataset") / "dataset"
+
+    def build(out):
+        run = compile_dataset(plan(), out)
+        assert run.report.complete, run.report
+        return run.report
+
+    recipe = {"plan": plan().model_dump(mode="json"), "workers": os.environ.get("WORLDLOOM_DATASET_WORKERS")}
+    report = build_cache.cached_tree("company-dataset", recipe, build, root)
+    return root, DatasetRun(directory=root, report=report)
 
 
 def test_many_batches_share_exact_world_and_case_isolation(generated):

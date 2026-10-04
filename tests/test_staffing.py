@@ -9,6 +9,7 @@ carries no employment for an industry.
 from __future__ import annotations
 
 import pytest
+import shared_builds
 
 from worldloom import industry, staffing
 
@@ -63,9 +64,9 @@ def test_an_industry_the_table_does_not_carry_gets_no_split() -> None:
 
 
 def test_a_programme_carries_the_measured_share_on_every_line() -> None:
-    derived = industry.programme("logistics")
-    assert derived.summary.staffing_release == staffing.release()
-    shares = {line.lob: line.workforce_share for line in derived.summary.lines}
+    summary = shared_builds.programme_summary("logistics")
+    assert summary.staffing_release == staffing.release()
+    shares = {line.lob: line.workforce_share for line in summary.lines}
     assert shares.get("warehouse", 0) > 0.3
     described = industry.describe("logistics")
     assert described["workforce"]["warehouse"] == shares["warehouse"]
