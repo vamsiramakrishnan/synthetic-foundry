@@ -13,16 +13,21 @@ Everything else here covers what one happy file cannot:
     connectors we have     │ one we do not is refused by name
     operations we support  │ one we do not is refused by name
     an alias that resolves │ it resolves without comment, not with a finding
+    today's field names    │ the fold table's fields still exist tomorrow
+                           │ a write still needs a concrete type (W3's job)
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from worldloom.connector_definition import load_connector_definition
 from worldloom.telemetry import (
     CONNECTOR_NOT_EMULATED,
     ENTITY_UNRESOLVED,
+    FOLDS,
     OPERATION_UNSUPPORTED,
     STEP_FOLDED,
     Severity,
@@ -268,6 +273,52 @@ def test_an_alias_resolves_without_a_finding() -> None:
 
     assert "alias_member_chosen" not in _codes(matched.report.findings)
     assert _step(_cuj_of(matched, NOTES_TO_EPICS), "create_epics").entity == "issue"
+
+
+# ---------------------------------------------------------------------------
+# Guards against Worldloom drifting underneath us.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("source", "target"), sorted(FOLDS.items()))
+def test_fold_fields_exist_in_the_live_definition(
+        source: tuple[str, str], target) -> None:
+    """Every field the fold table writes must still be a real field.
+
+    A fold whose target field has been renamed does not fail — it quietly
+    writes a field nothing reads, and the journey is built wrong. This is the
+    test that turns that into a loud failure. Fields live in two places: an
+    entity's ``required_on_create``, and the connector's ``query_fields``.
+    """
+    connector, entity = source
+    definition = load_connector_definition(connector)
+    assert entity not in definition.entities, (
+        f"{connector}.{entity} is now a real record type; it should not be "
+        "folded any more")
+
+    members = definition.entity_members(target.entity)
+    required = {field for member in members
+                for field in definition.entities[member].required_on_create}
+    assert target.field in required | set(definition.query_fields), (
+        f"{connector}.{entity} folds onto the field {target.field!r} of "
+        f"{target.entity!r}, which no longer exists")
+
+
+def test_a_write_still_needs_a_concrete_entity() -> None:
+    """Resolving the tool accepts an alias; calling it does not.
+
+    ``tool_for('issue', 'create')`` answers happily, which is why matching has
+    nothing to refuse. But ``create_issue`` declares ``entity`` without the
+    ``?`` that marks a parameter optional, so some later stage must still pick
+    epic, story or bug. That stage is W3's binding step. If this assertion
+    ever fails, Worldloom has relaxed the requirement and the deferred rule
+    can be dropped rather than written.
+    """
+    definition = load_connector_definition("jira")
+    create = definition.tool(definition.tool_for("issue", "create"))
+
+    assert create.params["entity"] == "string"
+    assert "issue" not in create.entities
 
 
 def _step(cuj, step_id: str):
