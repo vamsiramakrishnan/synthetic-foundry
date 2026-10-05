@@ -1,19 +1,18 @@
 """Matching a catalogue's vocabulary against the connectors Worldloom ships.
 
-The miner's example catalogue is the anchor: nine steps across three journeys.
-Eight of them Worldloom can build today. The ninth is a Jira *project* lookup,
-and Jira has no project record — the next commit folds it; here it is simply
-refused, which is the honest answer until then.
+The miner's example catalogue is the anchor: nine steps across three journeys,
+all of which Worldloom can build except one Jira project lookup, which folds.
+Those four counts are measured, not assumed, and they are the first test —
+break the alias lookup or the fold table and they move.
 
-Everything else covers what one file cannot:
+Everything else here covers what one happy file cannot:
 
     the example shows      │ these tests add
     ───────────────────────┼──────────────────────────────────────────────
+    a fold happening       │ the graph it leaves behind is correct
     connectors we have     │ one we do not is refused by name
-    entities we have       │ one we do not is refused by name
     operations we support  │ one we do not is refused by name
-    one fault at a time    │ a journey with two faults reports both
-    an alias that resolves │ it resolves with no finding at all
+    an alias that resolves │ it resolves without comment, not with a finding
 """
 
 from __future__ import annotations
@@ -25,6 +24,8 @@ from worldloom.telemetry import (
     CONNECTOR_NOT_EMULATED,
     ENTITY_UNRESOLVED,
     OPERATION_UNSUPPORTED,
+    STEP_FOLDED,
+    Severity,
     load_catalogue,
     match_catalogue,
     match_cuj,
@@ -34,7 +35,7 @@ EXAMPLE = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
            / "valid" / "example.json")
 
 #: The journey the design document works through: notes in Confluence become
-#: epics in Jira. It is the only one of the three that touches Jira.
+#: epics in Jira. It is the only one of the three that folds anything.
 NOTES_TO_EPICS = "cuj_9636dd61a048"
 
 
@@ -67,14 +68,16 @@ def _edit(cuj, step_id: str, **changes):
         for step in cuj.steps)})
 
 
+def _drop(cuj, step_id: str):
+    """A copy of *cuj* without one step."""
+    return cuj.model_copy(update={"steps": tuple(
+        step for step in cuj.steps if step.id != step_id)})
+
+
 def _replacing(catalogue, cuj):
     """A copy of *catalogue* with one journey swapped for *cuj*."""
     return catalogue.model_copy(update={"cujs": tuple(
         cuj if other.id == cuj.id else other for other in catalogue.cujs)})
-
-
-def _step(cuj, step_id: str):
-    return next(step for step in cuj.steps if step.id == step_id)
 
 
 # ---------------------------------------------------------------------------
@@ -82,33 +85,91 @@ def _step(cuj, step_id: str):
 # ---------------------------------------------------------------------------
 
 
-def test_the_example_catalogue_matches_except_the_project_lookup() -> None:
-    """Two of three journeys build; the one touching ``jira.project`` does not.
+def test_the_example_catalogue_matches_with_one_fold() -> None:
+    """Nine steps, three of them capability steps, one fold, nothing refused.
 
-    These counts come from running the three checks over the miner's own
-    example, and they are the regression guard for the whole module. They
-    change in the next commit, when folding gives ``jira.project`` somewhere
-    to go.
+    These numbers come from running the three checks over the miner's own
+    example. They are the regression guard for the whole module: any change
+    that breaks alias resolution, the fold table or capability pass-through
+    moves at least one of them.
     """
     matched = match_catalogue(_catalogue())
 
-    assert matched.refused == (NOTES_TO_EPICS,)
-    assert len(matched.cujs) == 2
-    assert _codes(matched.report.hard_findings) == [ENTITY_UNRESOLVED]
-    assert matched.report.hard_findings[0].detail["entity"] == "project"
+    assert matched.refused == ()
+    assert len(matched.cujs) == 3
+    assert matched.report.accepted
+    assert _codes(matched.report.findings) == [STEP_FOLDED]
 
-    # Nine steps in the file, across three journeys.
+    # Nine steps went in; the fold removed one.
     assert sum(len(cuj.steps) for cuj in _catalogue().cujs) == 9
+    assert sum(len(cuj.steps) for cuj in matched.cujs) == 8
 
 
 def test_capability_steps_pass_through_untouched() -> None:
     """A step that calls nothing has nothing to match against."""
-    journeys = [match_cuj(cuj)[0] for cuj in _catalogue().cujs]
-    capability_steps = [step for cuj in journeys if cuj is not None
-                        for step in cuj.steps if not step.is_tool_step]
+    matched = match_catalogue(_catalogue())
+    capability_steps = [step for cuj in matched.cujs for step in cuj.steps
+                        if not step.is_tool_step]
 
-    assert len(capability_steps) == 2
-    assert {step.capability for step in capability_steps} == {"answer", "generate"}
+    assert len(capability_steps) == 3
+    assert {step.capability for step in capability_steps} == {"generate", "answer"}
+
+
+# ---------------------------------------------------------------------------
+# The fold.
+# ---------------------------------------------------------------------------
+
+
+def test_folding_removes_the_step_and_rewires_what_depended_on_it() -> None:
+    """``find_project`` disappears; its value and its edges survive.
+
+    Before: ``create_epics`` depends on ``find_project`` and ``draft_epics``,
+    and ``find_project`` depends on nothing. After: the lookup is gone,
+    ``create_epics`` depends only on ``draft_epics``, and it carries the
+    ``project`` field the lookup used to supply.
+    """
+    before = _cuj(_catalogue(), NOTES_TO_EPICS)
+    assert {step.id for step in before.steps} >= {"find_project", "create_epics"}
+    assert set(_step(before, "create_epics").depends_on) == {
+        "find_project", "draft_epics"}
+    assert "project" not in _step(before, "create_epics").argument_fields
+
+    after, findings = match_cuj(before)
+
+    assert after is not None
+    assert "find_project" not in {step.id for step in after.steps}
+    assert _step(after, "create_epics").depends_on == ("draft_epics",)
+    assert "project" in _step(after, "create_epics").argument_fields
+    assert _codes(findings) == [STEP_FOLDED]
+    assert findings[0].severity is Severity.INFO
+    assert findings[0].detail["host_step_id"] == "create_epics"
+
+
+def test_folding_leaves_untouched_steps_identical() -> None:
+    """Only the deleted step and its host change. Nothing else is rewritten."""
+    before = _cuj(_catalogue(), NOTES_TO_EPICS)
+    after, _ = match_cuj(before)
+
+    assert after is not None
+    for step_id in ("find_notes", "read_notes", "draft_epics"):
+        assert _step(after, step_id) == _step(before, step_id)
+
+
+def test_a_fold_with_nowhere_to_put_the_value_is_unresolved() -> None:
+    """A lookup nothing consumes cannot fold, because the value has no home.
+
+    Deleting ``create_epics`` leaves ``find_project`` with no dependent step
+    on a Jira issue. Silently dropping the lookup would quietly shrink the
+    journey, so this is refused like any other unmatched entity.
+    """
+    stranded = _drop(_cuj(_catalogue(), NOTES_TO_EPICS), "create_epics")
+
+    matched, findings = match_cuj(stranded)
+
+    assert matched is None
+    assert _codes(findings) == [ENTITY_UNRESOLVED]
+    assert "nowhere to go" in findings[0].message
+    assert findings[0].detail["fold_target"] == "issue"
 
 
 # ---------------------------------------------------------------------------
@@ -117,27 +178,27 @@ def test_capability_steps_pass_through_untouched() -> None:
 
 
 def test_an_unknown_connector_is_refused_by_name() -> None:
-    """The design document's own picture of this case: ``acme_internal_tool``."""
+    """The catalogue's own picture of this case: ``acme_internal_tool``."""
     journey = _edit(_cuj(_catalogue(), NOTES_TO_EPICS), "find_notes",
                     connector="acme_internal_tool")
 
     matched, findings = match_cuj(journey)
 
     assert matched is None
-    assert CONNECTOR_NOT_EMULATED in _codes(findings)
+    assert _codes(findings) == [CONNECTOR_NOT_EMULATED]
     assert findings[0].detail["connector"] == "acme_internal_tool"
     assert findings[0].cuj_id == NOTES_TO_EPICS
 
 
-def test_an_unknown_entity_is_refused_by_name() -> None:
-    """Confluence has pages and spaces. It has no ``widget``."""
+def test_an_unknown_entity_with_no_fold_is_refused_by_name() -> None:
+    """Confluence has pages and spaces. It has no ``widget``, and no fold."""
     journey = _edit(_cuj(_catalogue(), NOTES_TO_EPICS), "find_notes",
                     entity="widget")
 
     matched, findings = match_cuj(journey)
 
     assert matched is None
-    assert findings[0].code == ENTITY_UNRESOLVED
+    assert _codes(findings) == [ENTITY_UNRESOLVED]
     assert findings[0].detail["entity"] == "widget"
 
 
@@ -149,7 +210,7 @@ def test_an_unsupported_operation_is_refused_by_name() -> None:
     matched, findings = match_cuj(journey)
 
     assert matched is None
-    assert findings[0].code == OPERATION_UNSUPPORTED
+    assert _codes(findings) == [OPERATION_UNSUPPORTED]
     assert findings[0].detail["operation"] == "delete"
 
 
@@ -162,24 +223,25 @@ def test_every_step_is_checked_before_anything_is_refused() -> None:
     """
     journey = _edit(_edit(_cuj(_catalogue(), NOTES_TO_EPICS),
                           "find_notes", connector="acme_internal_tool"),
-                    "read_notes", entity="widget")
+                    "create_epics", entity="widget")
 
     matched, findings = match_cuj(journey)
 
     assert matched is None
-    assert _codes(findings)[:2] == [CONNECTOR_NOT_EMULATED, ENTITY_UNRESOLVED]
+    assert _codes(findings) == [CONNECTOR_NOT_EMULATED, ENTITY_UNRESOLVED]
 
 
 def test_one_bad_journey_does_not_refuse_the_others() -> None:
     """A catalogue naming a connector we lack still yields the rest."""
     catalogue = _catalogue()
-    lookup = _cuj(catalogue, "cuj_3ac134e740af")
-    broken = _edit(lookup, "search", connector="acme_internal_tool")
+    broken = _edit(_cuj(catalogue, NOTES_TO_EPICS), "find_notes",
+                   connector="acme_internal_tool")
 
     matched = match_catalogue(_replacing(catalogue, broken))
 
-    assert set(matched.refused) == {NOTES_TO_EPICS, lookup.id}
-    assert len(matched.cujs) == 1
+    assert matched.refused == (NOTES_TO_EPICS,)
+    assert len(matched.cujs) == 2
+    assert NOTES_TO_EPICS not in {cuj.id for cuj in matched.cujs}
     assert not matched.report.accepted
 
 
@@ -193,8 +255,8 @@ def test_an_alias_resolves_without_a_finding() -> None:
 
     The design document proposed choosing a concrete member here and recording
     ``alias_member_chosen``. Matching does not need to: the lookup accepts the
-    alias on a write exactly as it does on a read. Choosing the concrete type
-    belongs with choosing every other argument value, which is W3.
+    alias. Choosing the concrete type belongs with choosing every other
+    argument value, which is W3.
     """
     definition = load_connector_definition("jira")
     assert "issue" not in definition.entities
@@ -202,8 +264,15 @@ def test_an_alias_resolves_without_a_finding() -> None:
         "epic", "story", "bug", "task", "subtask")
     assert definition.tool_for("issue", "create") == "create_issue"
 
-    journey = _cuj(_catalogue(), NOTES_TO_EPICS)
-    _, findings = match_cuj(journey)
+    matched = match_catalogue(_catalogue())
 
-    assert "alias_member_chosen" not in _codes(findings)
-    assert _step(journey, "create_epics").entity == "issue"
+    assert "alias_member_chosen" not in _codes(matched.report.findings)
+    assert _step(_cuj_of(matched, NOTES_TO_EPICS), "create_epics").entity == "issue"
+
+
+def _step(cuj, step_id: str):
+    return next(step for step in cuj.steps if step.id == step_id)
+
+
+def _cuj_of(matched, cuj_id: str):
+    return next(cuj for cuj in matched.cujs if cuj.id == cuj_id)
