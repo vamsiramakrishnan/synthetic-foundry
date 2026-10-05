@@ -35,8 +35,8 @@ the customer's catalogue is handed in, never opened here
     So one line in the codebase decides which customer file is read — the
     test suite today, ``telemetry_cli`` in W3. Worldloom's own connector
     definitions are a separate matter: they ship with this repository, carry
-    no customer content, and are read through ``connector_definition`` fresh
-    on each call, so they cannot go stale.
+    no customer content, and :mod:`.registry` reads them through
+    ``connector_definition`` fresh on each call, so they cannot go stale.
 
 Start at :func:`~.catalogue.load_catalogue`. It is the only door in.
 """
@@ -60,6 +60,14 @@ from .catalogue import (
     load_catalogue,
 )
 from .invariants import check, cuj_id, signature
+from .registry import (
+    CONNECTOR_NOT_EMULATED,
+    ENTITY_UNRESOLVED,
+    OPERATION_UNSUPPORTED,
+    MatchedCatalogue,
+    match_catalogue,
+    match_cuj,
+)
 from .report import (
     CatalogueRefused,
     Finding,
@@ -70,6 +78,9 @@ from .report import (
 )
 
 __all__ = [
+    "CONNECTOR_NOT_EMULATED",
+    "ENTITY_UNRESOLVED",
+    "OPERATION_UNSUPPORTED",
     "REJECTED",
     "SCHEMA_VERSION",
     "VERSION_UNKNOWN",
@@ -82,6 +93,7 @@ __all__ = [
     "FailureMode",
     "Finding",
     "ImportReport",
+    "MatchedCatalogue",
     "Operation",
     "Phrasing",
     "Privacy",
@@ -92,5 +104,7 @@ __all__ = [
     "hard",
     "info",
     "load_catalogue",
+    "match_catalogue",
+    "match_cuj",
     "signature",
 ]
