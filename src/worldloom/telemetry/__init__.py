@@ -30,10 +30,13 @@ no AI model is ever called
     the same world, today and in six months, which rules out asking a model
     anything.
 
-only the CLI touches the disk
-    Everything here takes bytes and returns values. That lands properly in W3
-    with ``telemetry_cli``; until then there is simply no file access to get
-    wrong.
+the customer's catalogue is handed in, never opened here
+    The caller supplies those bytes; nothing in this package chooses a path.
+    So one line in the codebase decides which customer file is read — the
+    test suite today, ``telemetry_cli`` in W3. Worldloom's own connector
+    definitions are a separate matter: they ship with this repository, carry
+    no customer content, and are read through ``connector_definition`` fresh
+    on each call, so they cannot go stale.
 
 Start at :func:`~.catalogue.load_catalogue`. It is the only door in.
 """
