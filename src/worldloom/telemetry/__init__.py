@@ -70,13 +70,18 @@ from .catalogue import (
 )
 from .compile import (
     ANSWER_ONLY_UNSUPPORTED,
+    CASES_BELOW_JOURNEYS,
     DEFAULT_AUDIENCE,
+    DEFAULT_CASES,
     DEFAULT_PERSONA,
     NO_WORLD_NEEDED,
+    Allocation,
+    CaseCounts,
     Group,
     SortedCatalogue,
     build_use_case,
     group_for,
+    share_counts,
     sort_catalogue,
 )
 from .invariants import check, cuj_id, signature
@@ -102,8 +107,10 @@ from .report import (
 
 __all__ = [
     "ANSWER_ONLY_UNSUPPORTED",
+    "CASES_BELOW_JOURNEYS",
     "CONNECTOR_NOT_EMULATED",
     "DEFAULT_AUDIENCE",
+    "DEFAULT_CASES",
     "DEFAULT_PERSONA",
     "ENTITY_UNRESOLVED",
     "FOLDS",
@@ -115,10 +122,12 @@ __all__ = [
     "SCHEMA_VERSION",
     "STEP_FOLDED",
     "VERSION_UNKNOWN",
+    "Allocation",
     "BindRule",
     "Binding",
     "BoundQuestion",
     "Capability",
+    "CaseCounts",
     "Catalogue",
     "CatalogueConnector",
     "CatalogueRefused",
@@ -149,6 +158,7 @@ __all__ = [
     "match_catalogue",
     "match_cuj",
     "seed_for",
+    "share_counts",
     "signature",
     "sort_catalogue",
 ]

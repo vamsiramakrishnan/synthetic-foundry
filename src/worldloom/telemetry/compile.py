@@ -54,7 +54,7 @@ from ..eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirem
 from ..models import Model
 from ..studio.models import UseCase
 from .binding import BindRule
-from .catalogue import Cuj
+from .catalogue import Catalogue, Cuj
 from .report import Finding, ImportReport, hard, info
 
 if TYPE_CHECKING:
@@ -409,3 +409,130 @@ def build_use_case(cuj: Cuj, question: BoundQuestion,
             id=cuj.id, capability=_capability(cuj.label), persona=persona,
             request_template=question.text, steps=_eval_steps(cuj),
             requirements=_requirements(cuj, bindings)))
+
+
+# --------------------------------------------------------------------------
+# Sharing out the question count.
+# --------------------------------------------------------------------------
+#
+# ``--cases N`` says how many questions the whole corpus gets. Each built
+# journey's share of real traffic says how to split them.
+#
+# Two rules in the design document (§5.6) cannot both hold, and nothing says
+# which wins:
+#
+#     A   the counts add up to exactly N
+#     B   every built journey gets at least 1
+#
+# Largest-remainder rounding satisfies A by construction. ``max(1, …)`` is
+# then applied on top, and raising a number never leaves a total alone — so
+# whenever a journey rounds down to zero, B breaks A. It is latent rather
+# than theoretical: a journey reaches zero exactly when its rescaled weight
+# is under ``1/N``, which at the default 200 means half a percent. The
+# sample's three journeys are nowhere near it; a customer with forty
+# journeys and a long tail hits it on the first run.
+#
+# This resolves it by satisfying B and then repaying A out of the largest
+# counts, one question at a time. Largest because it costs least
+# proportionally: 5 → 4 moves that journey by a fifth, while taking the same
+# question from a count of 2 moves that one by half.
+
+
+DEFAULT_CASES = 200
+"""``--cases`` default, from the design document."""
+
+CASES_BELOW_JOURNEYS = "cases_below_journeys"
+"""Fewer questions were asked for than there are journeys to ask them about.
+No arrangement gives every journey one, so this refuses rather than capping:
+capping would drop journeys silently, which is the one thing this importer
+is built not to do."""
+
+
+class Allocation(Model):
+    """One journey's share of the question budget."""
+
+    cuj_id: str
+    original_share: float
+    """``support.share`` as the catalogue reported it — of *all* traffic."""
+
+    rescaled_share: float
+    """Of the traffic we could actually build. Always larger."""
+
+    count: int
+    """Questions. May disagree with ``rescaled_share`` after the repayment
+    above, which is correct rather than a rounding fault."""
+
+
+class CaseCounts(Model):
+    """How ``--cases N`` was divided, and what it could not cover."""
+
+    allocations: tuple[Allocation, ...] = ()
+    total: int = 0
+    share_lost: float = 0.0
+    """Real traffic represented by no question at all, because its journey
+    was not built. Rescaling hides this by construction — the shares always
+    sum to 1 afterwards, whatever was dropped — so it is reported explicitly
+    or nobody would know to ask."""
+
+
+def _apportion(weights: dict[str, float], total: int) -> dict[str, int]:
+    """Largest remainder, then a floor of 1, then repay the difference.
+
+    Ties are broken by journey id throughout, so the same catalogue always
+    divides the same way.
+    """
+    exact = {key: total * weight for key, weight in weights.items()}
+    counts = {key: int(value) for key, value in exact.items()}
+
+    leftover = max(0, total - sum(counts.values()))
+    by_remainder = sorted(weights, key=lambda key: (-(exact[key] - counts[key]), key))
+    for key in by_remainder[:leftover]:
+        counts[key] += 1
+
+    deficit = sum(1 for value in counts.values() if value == 0)
+    for key, value in counts.items():
+        if value == 0:
+            counts[key] = 1
+    for _ in range(deficit):
+        # Some count exceeds 1: the total is now N + deficit, which is more
+        # than N, which is at least the number of journeys. Ties go to the
+        # lowest id because ``max`` keeps the first of equal keys.
+        donor = max(sorted(counts), key=lambda key: counts[key])
+        counts[donor] -= 1
+    return counts
+
+
+def share_counts(piles: SortedCatalogue, catalogue: Catalogue, *,
+                 cases: int = DEFAULT_CASES,
+                 ) -> tuple[CaseCounts, tuple[Finding, ...]]:
+    """Divide *cases* questions across the journeys that were built.
+
+    Weighted by each journey's share of real traffic, rescaled over only the
+    journeys that survived — the rest of the mix cannot be rebuilt, so it is
+    reported as lost rather than handed to whoever is left.
+    """
+    built = {cuj.id: cuj.support.share for cuj in piles.write}
+    lost = sum(cuj.support.share for cuj in catalogue.cujs
+               if cuj.id not in built)
+
+    if not built:
+        return CaseCounts(share_lost=lost), ()
+
+    if cases < len(built):
+        return CaseCounts(share_lost=lost), (hard(
+            CASES_BELOW_JOURNEYS,
+            f"--cases {cases} cannot cover {len(built)} journeys; every "
+            "journey must get at least one question, so ask for at least "
+            f"{len(built)}",
+            detail={"cases": str(cases), "journeys": str(len(built))}),)
+
+    weight = sum(built.values())
+    rescaled = {cuj_id: share / weight for cuj_id, share in built.items()}
+    counts = _apportion(rescaled, cases)
+
+    return CaseCounts(
+        allocations=tuple(
+            Allocation(cuj_id=cuj_id, original_share=built[cuj_id],
+                       rescaled_share=rescaled[cuj_id], count=counts[cuj_id])
+            for cuj_id in sorted(built)),
+        total=sum(counts.values()), share_lost=lost), ()

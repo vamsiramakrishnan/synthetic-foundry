@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from worldloom.enterprise_specs import builtin_registry
 from worldloom.providers import digest_bytes
 from worldloom.studio.models import ProjectSpec
@@ -30,7 +32,13 @@ from worldloom.telemetry import (
     sort_catalogue,
 )
 from worldloom.telemetry.binding import bind_question, fold_map
-from worldloom.telemetry.compile import build_use_case
+from worldloom.telemetry.compile import (
+    CASES_BELOW_JOURNEYS,
+    DEFAULT_CASES,
+    _apportion,
+    build_use_case,
+    share_counts,
+)
 
 EXAMPLE = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
            / "valid" / "example.json")
@@ -193,8 +201,8 @@ def test_a_journey_with_no_steps_at_all_is_no_world() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _built():
-    """The sample's one write journey, all the way to a ``UseCase``."""
+def _built_parts():
+    """The sample's one write journey, bound and ready to build."""
     data = EXAMPLE.read_bytes()
     catalogue, _ = load_catalogue(data)
     piles = sort_catalogue(match_catalogue(catalogue))
@@ -202,8 +210,14 @@ def _built():
     question, _ = bind_question(cuj, digest_bytes(data),
                                 folds=fold_map(piles.report))
     assert question is not None
+    return cuj, question, question.bindings
+
+
+def _built():
+    """The sample's one write journey, all the way to a ``UseCase``."""
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
     industry = catalogue.industry_hint.industry if catalogue.industry_hint else ""
-    return build_use_case(cuj, question, question.bindings, industry=industry)
+    return build_use_case(*_built_parts(), industry=industry)
 
 
 def test_the_write_journey_becomes_a_use_case_studio_accepts() -> None:
@@ -317,3 +331,116 @@ def test_activities_stay_empty_so_a_project_can_hold_the_case() -> None:
     assert case.activities == ()
     project = ProjectSpec(company=COMPANY, use_cases=(case,))
     assert project.use_cases[0].id == WRITES
+
+
+# ---------------------------------------------------------------------------
+# Sharing out the question count.
+# ---------------------------------------------------------------------------
+
+
+def _counts(cases: int = DEFAULT_CASES):
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
+    piles = sort_catalogue(match_catalogue(catalogue))
+    return share_counts(piles, catalogue, cases=cases)
+
+
+def test_the_sample_gives_every_question_to_its_one_write_journey() -> None:
+    counts, findings = _counts()
+
+    assert findings == ()
+    assert counts.total == DEFAULT_CASES
+    assert [a.cuj_id for a in counts.allocations] == [WRITES]
+    assert counts.allocations[0].count == 200
+
+
+def test_share_lost_reports_the_traffic_no_question_represents() -> None:
+    """Rescaling hides the loss by construction: the shares always sum to 1
+    afterwards, whatever was dropped. Two of the sample's three journeys are
+    not built, and that is half its traffic."""
+    counts, _ = _counts()
+
+    assert counts.share_lost == pytest.approx(0.323 + 0.188)
+    assert counts.allocations[0].original_share == pytest.approx(0.229)
+    assert counts.allocations[0].rescaled_share == pytest.approx(1.0)
+
+
+def test_the_counts_add_up_and_nobody_gets_zero() -> None:
+    """The design document asks for both, and the two can contradict.
+
+    Largest-remainder rounding alone gives a=5 b=3 c=2 d=0, summing to 10.
+    Raising d to 1 would make 11. The repayment takes that question back
+    from the largest count, which is the one it costs least.
+    """
+    weights = {"a": 0.44, "b": 0.31, "c": 0.24, "d": 0.01}
+
+    counts = _apportion(weights, 10)
+
+    assert counts == {"a": 4, "b": 3, "c": 2, "d": 1}
+    assert sum(counts.values()) == 10
+    assert min(counts.values()) >= 1
+
+
+def test_a_long_tail_still_adds_up_exactly() -> None:
+    """The case that actually bites: forty journeys, most under 1/N."""
+    weights = {f"cuj_{index:02d}": (0.6 if index == 0 else 0.4 / 39)
+               for index in range(40)}
+
+    counts = _apportion(weights, 200)
+
+    assert sum(counts.values()) == 200
+    assert min(counts.values()) >= 1
+    assert len(counts) == 40
+
+
+def test_asking_for_fewer_questions_than_journeys_is_refused() -> None:
+    """Capping would drop journeys with no finding, which is the one thing
+    this importer is built not to do."""
+    weights = {f"c{index}": 0.25 for index in range(4)}
+    assert sum(_apportion(weights, 4).values()) == 4
+
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
+    piles = sort_catalogue(match_catalogue(catalogue))
+    counts, findings = share_counts(piles, catalogue, cases=0)
+
+    assert counts.allocations == ()
+    assert findings[0].code == CASES_BELOW_JOURNEYS
+    assert findings[0].severity is Severity.HARD
+
+
+def test_no_journeys_built_is_not_this_functions_problem() -> None:
+    """Nothing to divide. Whether that should stop the run is the command
+    line's decision, so no finding is raised here."""
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
+    piles = sort_catalogue(match_catalogue(catalogue)).model_copy(
+        update={"write": ()})
+
+    counts, findings = share_counts(piles, catalogue)
+
+    assert findings == ()
+    assert counts.total == 0
+    assert counts.share_lost == pytest.approx(0.229 + 0.323 + 0.188)
+
+
+def test_ties_are_broken_by_journey_id_so_the_split_never_drifts() -> None:
+    """Four identical weights, three questions. Someone must miss out, and
+    it must be the same someone every run."""
+    weights = {"cuj_d": 0.25, "cuj_b": 0.25, "cuj_a": 0.25, "cuj_c": 0.25}
+
+    first = _apportion(weights, 7)
+    again = _apportion(dict(reversed(list(weights.items()))), 7)
+
+    assert first == again
+    assert sum(first.values()) == 7
+    # The extra three go to the lowest ids.
+    assert [key for key, value in sorted(first.items()) if value == 2] == [
+        "cuj_a", "cuj_b", "cuj_c"]
+
+
+def test_the_allocated_count_reaches_the_use_case() -> None:
+    """The split is only worth computing if the case carries it."""
+    counts, _ = _counts(cases=50)
+    case = _built()
+    allocated = next(a for a in counts.allocations if a.cuj_id == case.id)
+
+    assert build_use_case(
+        *_built_parts(), count=allocated.count).count == 50
