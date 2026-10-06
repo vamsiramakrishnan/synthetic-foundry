@@ -730,6 +730,20 @@ worldloom evalrun export <RUN>
 | `--out`, `-o` | JSONL file to write. |
 | `--split` | Keep only this dataset split (repeatable). Default: train, plus any case that carries no split. |
 
+### `worldloom evalrun flow`
+
+Write each case's expected DAG as an Anvil composite flow (anvil.compose-flow/v1).
+
+```
+worldloom evalrun flow <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the document instead of a summary. |
+| `--limit` |  |
+| `--out`, `-o` | Where to write the flows (worldloom.compose-flows/v1 JSON). |
+
 ### `worldloom evalrun frontier`
 
 Keep the cases the reference agent solves and the champion fails: the frontier.
