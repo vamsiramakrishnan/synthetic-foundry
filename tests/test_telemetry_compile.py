@@ -33,12 +33,11 @@ from worldloom.telemetry import (
     match_catalogue,
     sort_catalogue,
 )
-from worldloom.telemetry.binding import bind_question, fold_map
+from worldloom.telemetry.binding import bind_question, fold_map, prompt_template
 from worldloom.telemetry.compile import (
     CASES_BELOW_JOURNEYS,
     DEFAULT_CASES,
     DROPPED_FOR_CONFLICT,
-    PHRASING_DEFAULT_UNAVAILABLE,
     _apportion,
     build_use_case,
     check_with_studio,
@@ -216,7 +215,8 @@ def _built_parts():
     question, _ = bind_question(cuj, digest_bytes(data),
                                 folds=fold_map(piles.report))
     assert question is not None
-    return cuj, question, question.bindings
+    return cuj, prompt_template(question, company_name="Northwind Grocers"), \
+        question.bindings
 
 
 def _built():
@@ -583,18 +583,21 @@ def test_a_case_studio_refuses_alone_is_removed_with_studios_own_code() -> None:
     assert findings[0].cuj_id == "cuj_cccccccccccc"
 
 
-def test_a_write_journey_without_phrasings_is_refused_by_name() -> None:
-    """The built-in fallback is not implemented yet. Saying so is better than
-    a ``phrasing_default_used`` finding claiming a default that never came."""
+def test_a_write_journey_without_phrasings_borrows_a_built_in_template() -> None:
+    """No real wording survived, so the closest built-in workflow speaks for
+    it. The journey is still built — and the report says whose words those
+    are, so nobody mistakes them for the customer's."""
     payload = json.loads(EXAMPLE.read_text())
     next(cuj for cuj in payload["cujs"] if cuj["id"] == WRITES)["phrasings"] = []
 
     result = _imported(json.dumps(payload).encode())
-    codes = [finding.code for finding in result.report.findings]
+    defaults = [finding for finding in result.report.findings
+                if finding.code == "phrasing_default_used"]
 
-    assert result.project is None
-    assert PHRASING_DEFAULT_UNAVAILABLE in codes
-    assert "phrasing_default_used" not in codes
+    assert result.project is not None
+    assert len(defaults) == 1
+    assert defaults[0].severity is Severity.INFO
+    assert defaults[0].detail["workflow"] in builtin_registry().workflows
 
 
 def test_the_whole_budget_goes_to_whatever_survives() -> None:

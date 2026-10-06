@@ -77,7 +77,7 @@ options would silently fall through to free text.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..connector_definition import load_connector_definition
 from ..models import Model
@@ -468,3 +468,105 @@ def bind_question(cuj: Cuj, catalogue_digest: str, *,
         "closest built-in workflow instead of from real wording",
         cuj_id=cuj.id,
         detail={"phrasings": str(len(cuj.phrasings))}))
+
+
+# --------------------------------------------------------------------------
+# From a question to a template Worldloom can fill.
+# --------------------------------------------------------------------------
+#
+# The bound question is not the end of it. Worldloom generates every question
+# a case is worth from one template, by calling Python's ``str.format`` on it
+# with ten values of its own (``enterprise_queries._render``):
+#
+#     "For {company}: Create epics in ACTIONITEM ...{failure_instruction}"
+#          └ filled ┘                                └ filled per question ┘
+#
+# ``str.format`` reads every brace as a hole. So the design document asks for
+# four things, all done here:
+#
+#     escape braces in values     a value containing "{" would crash it
+#     append {failure_instruction} so designed failures reach the question
+#     prefix "For {company}: "    unless the text already names the company
+#     check it                    by filling it the way Worldloom will
+
+
+#: Exactly the keys ``enterprise_queries._render`` passes to ``str.format``.
+#: A template may use any of them and must use no others. A test renders a
+#: real template through ``_render`` itself, so if that function ever changes
+#: its keys this list fails loudly rather than drifting.
+RENDER_KEYS = ("period", "purpose", "company", "audience", "sources",
+               "action_instruction", "output_label", "destination",
+               "verification_instruction", "failure_instruction")
+
+
+def _escape(value: str) -> str:
+    """*value* as literal text inside a ``str.format`` template."""
+    return value.replace("{", "{{").replace("}", "}}")
+
+
+def check_template(template: str) -> str:
+    """*template*, unchanged, if Worldloom can fill it; ``ValueError`` if not.
+
+    Fills it with the same ten keys ``_render`` uses. A template that fails
+    here would fail for every generated question, in a later command, with
+    no catalogue in sight — so it fails here instead.
+    """
+    try:
+        template.format(**dict.fromkeys(RENDER_KEYS, ""))
+    except (KeyError, IndexError, ValueError) as error:
+        raise ValueError(f"template cannot be filled by Worldloom: {error!r}: "
+                         f"{template!r}") from error
+    return template
+
+
+def _finish(template: str, company_name: str) -> str:
+    """The two additions every template gets, then the check."""
+    names_company = "{company}" in template or (
+        bool(company_name) and company_name.casefold() in template.casefold())
+    if not names_company:
+        template = "For {company}: " + template
+    if "{failure_instruction}" not in template:
+        # The instruction carries its own leading space, so it is appended
+        # straight onto the last sentence — the same way _render's built-in
+        # templates end.
+        template = template + "{failure_instruction}"
+    return check_template(template)
+
+
+def prompt_template(question: BoundQuestion, *, company_name: str = "") -> str:
+    """The question as a template Worldloom's generator can fill.
+
+    Rebuilt from the catalogue's template and the chosen values, rather than
+    from ``question.text``, because the values must be escaped *before* they
+    go in: a value is literal text, while the rest of the template may hold
+    keys Worldloom fills later.
+    """
+    template = _escape(question.template)
+    for binding in question.bindings:
+        template = template.replace("{{" + binding.slot + "}}",
+                                    _escape(binding.value))
+    return _finish(template, company_name)
+
+
+def fallback_template(cuj: Cuj) -> tuple[str, str]:
+    """The closest built-in workflow's template, and that workflow's name.
+
+    For a journey with no usable phrasing. "Closest" is the one sharing the
+    most (connector, entity) pairs with the journey, ties broken by name. The
+    built-in templates are written in terms of ``{sources}`` and
+    ``{destination}``, which Worldloom fills from the journey's own roles, so
+    even a weak overlap produces a question about the right systems.
+    """
+    from ..enterprise_specs import builtin_registry
+
+    pairs = {(step.connector, step.entity) for step in cuj.steps
+             if step.connector and step.entity}
+
+    def overlap(workflow: Any) -> int:
+        roles = (*workflow.sources, *workflow.destinations)
+        return len(pairs & {(role.connector, entity)
+                            for role in roles for entity in role.entities})
+
+    workflows = builtin_registry().workflows
+    name = min(workflows, key=lambda key: (-overlap(workflows[key]), key))
+    return _finish(workflows[name].prompt_template, ""), name

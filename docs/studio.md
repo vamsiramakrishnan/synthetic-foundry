@@ -193,6 +193,34 @@ This is an offline mechanism check, not browser visual QA or a live target-agent
 evaluation. UI screenshots must be captured separately from a running Studio;
 do not represent generated mockups or populated test fixtures as live captures.
 
+## Start from real usage: a CUJ catalogue
+
+A customer's own assistant traffic can seed the use cases instead of an
+interview. The customer telemetry miner runs inside the customer's
+environment and hands over one `cuj-catalogue/1` file: which journeys people
+repeat, how often, through which tools. Counts and templates only, with no
+query text, user, tenant or argument value in it.
+
+```bash
+worldloom telemetry company-template cuj_catalogue.json --out company.json
+# fill in identity.company_name, then:
+worldloom telemetry import cuj_catalogue.json --company company.json --out ./imported
+worldloom studio init ./imported/project.json --workspace ./worldloom-workspace
+```
+
+`--company` is required. The catalogue says nothing about the company's
+name, size or geography, and the importer never invents them;
+`company-template` only suggests an archetype from the catalogue's industry
+hint. `import` writes `project.json`, `import-report.json`,
+`import-report.md` and `import-receipt.json`. It exits 0 when a project was
+written, and 3 when nothing could be built or `--strict` meets a hard finding.
+
+Only journeys that change something are built today. A journey of reads that
+ends in an answer is reported as `answer_only_unsupported`, and one that
+calls no tool as `no_world_needed`. The report's `share_lost` says how much
+real traffic that leaves unrepresented, so a corpus never looks more complete
+than it is.
+
 ## Resume a company workflow
 
 The workflow report is the common entry point for the console, CLI and SDK.

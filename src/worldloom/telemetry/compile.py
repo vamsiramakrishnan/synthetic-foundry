@@ -59,13 +59,20 @@ from ..studio.construction import (
     compile_project,
 )
 from ..studio.models import ProjectSpec, UseCase
-from .binding import PHRASING_DEFAULT_USED, BindRule, bind_question, fold_map
+from .binding import (
+    PHRASING_DEFAULT_USED,
+    BindRule,
+    bind_question,
+    fallback_template,
+    fold_map,
+    prompt_template,
+)
 from .catalogue import Catalogue, Cuj, load_catalogue
 from .registry import match_catalogue
 from .report import Finding, ImportReport, hard, info
 
 if TYPE_CHECKING:
-    from .binding import Binding, BoundQuestion
+    from .binding import Binding
     from .registry import MatchedCatalogue
 
 
@@ -368,7 +375,7 @@ def _process(cuj: Cuj) -> tuple[str, ProcessSpec | None]:
         event_kinds=best.event_kinds if best is not None else ("work",))
 
 
-def _workflow(cuj: Cuj, question: BoundQuestion,
+def _workflow(cuj: Cuj, prompt: str,
               bindings: tuple[Binding, ...], *, audience: str,
               ) -> tuple[WorkflowSpec, ProcessSpec | None]:
     sources, destinations = _roles(cuj, bindings)
@@ -377,12 +384,12 @@ def _workflow(cuj: Cuj, question: BoundQuestion,
         name=cuj.id, purpose=cuj.label, process=process,
         sources=sources, destinations=destinations,
         content_actions=_content_actions(cuj), audiences=(audience,),
-        prompt_template=question.text), invented
+        prompt_template=prompt), invented
 
 
-def _scenario(cuj: Cuj, question: BoundQuestion, bindings: tuple[Binding, ...],
+def _scenario(cuj: Cuj, prompt: str, bindings: tuple[Binding, ...],
               *, industry: str, audience: str) -> ScenarioProfile:
-    workflow, invented = _workflow(cuj, question, bindings, audience=audience)
+    workflow, invented = _workflow(cuj, prompt, bindings, audience=audience)
     return ScenarioProfile(
         name=cuj.id, industry=industry, company_description="",
         connectors=tuple(sorted({connector for connector, _ in _pairs(cuj)})),
@@ -390,14 +397,17 @@ def _scenario(cuj: Cuj, question: BoundQuestion, bindings: tuple[Binding, ...],
         additional_processes=(invented,) if invented is not None else ())
 
 
-def build_use_case(cuj: Cuj, question: BoundQuestion,
+def build_use_case(cuj: Cuj, prompt: str,
                    bindings: tuple[Binding, ...], *, industry: str = "",
                    persona: str = DEFAULT_PERSONA,
                    audience: str = DEFAULT_AUDIENCE,
                    count: int = 12) -> UseCase:
     """One write journey, as something ``worldloom studio init`` accepts.
 
-    *count* is how many questions this journey is worth.
+    *prompt* is a template Worldloom fills once per generated question — see
+    :func:`~.binding.prompt_template`. It goes into both the workflow and the
+    construction contract, because the design document asks for the same
+    text in each. *count* is how many questions this journey is worth.
 
     ``activities`` is left empty, against the design document's "step ids in
     order". It is not a list of steps. ``ProjectSpec`` checks every activity
@@ -410,11 +420,11 @@ def build_use_case(cuj: Cuj, question: BoundQuestion,
     """
     return UseCase(
         id=cuj.id, title=cuj.label, objective=_objective(cuj), count=count,
-        scenario=_scenario(cuj, question, bindings,
+        scenario=_scenario(cuj, prompt, bindings,
                            industry=industry, audience=audience),
         construction=EvalSpec(
             id=cuj.id, capability=_capability(cuj.label), persona=persona,
-            request_template=question.text, steps=_eval_steps(cuj),
+            request_template=prompt, steps=_eval_steps(cuj),
             requirements=_requirements(cuj, bindings)))
 
 
@@ -583,16 +593,25 @@ DROPPED_FOR_CONFLICT = "dropped_for_conflict"
 """A journey removed so the rest could share one world. Hard: real
 behaviour was lost, and a strict run should notice."""
 
-PHRASING_DEFAULT_UNAVAILABLE = "phrasing_default_unavailable"
-"""A write journey with no usable phrasing. The design document falls back
-to a built-in workflow's template, but those are ``str.format`` strings and
-need the same treatment as the rest of the question text, which is not done
-yet. Refused by name rather than built with a question nobody wrote."""
+class JourneyOutcome(Model):
+    """What became of one journey. One per journey in the catalogue, built or
+    not, so a report can account for every one of them."""
+
+    cuj_id: str
+    label: str
+    group: Group
+    share: float
+    """``support.share`` as the catalogue reported it."""
+    count: int = 0
+    """Questions it was given. Zero when it was not built."""
 
 
 class ImportResult(Model):
     """Everything one import produced: the project, the split, the receipt,
     and every finding along the way."""
+
+    catalogue_id: str
+    journeys: tuple[JourneyOutcome, ...] = ()
 
     project: ProjectSpec | None = None
     """``None`` when nothing could be built. Whether that stops the run is
@@ -747,23 +766,32 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
     industry = catalogue.industry_hint.industry if catalogue.industry_hint else ""
     findings: list[Finding] = list(piles.report.findings)
 
+    company_name = str((company.get("identity") or {}).get("company_name") or "")
     built: list[UseCase] = []
     for cuj in piles.write:
         question, bind_findings = bind_question(cuj, catalogue_digest,
                                                 folds=folds)
-        if question is None:
-            # ``bind_question`` reports that a default template will be used.
-            # It will not be, yet, so that finding would be untrue here.
+        if question is not None:
+            findings.extend(bind_findings)
+            prompt = prompt_template(question, company_name=company_name)
+            bindings = question.bindings
+        else:
+            # No real wording survived, so a built-in workflow's template
+            # stands in. The finding names which one, so a reader can see
+            # the question was not written by anyone at the customer.
+            prompt, workflow = fallback_template(cuj)
+            bindings = ()
             findings.extend(finding for finding in bind_findings
                             if finding.code != PHRASING_DEFAULT_USED)
-            findings.append(hard(
-                PHRASING_DEFAULT_UNAVAILABLE,
-                f"{cuj.id} has no usable phrasing, and the built-in fallback "
-                "the design document describes is not implemented yet",
-                cuj_id=cuj.id))
-            continue
-        findings.extend(bind_findings)
-        built.append(build_use_case(cuj, question, question.bindings,
+            findings.append(info(
+                PHRASING_DEFAULT_USED,
+                f"{cuj.id} has no usable phrasing, so its question comes from "
+                f"the built-in workflow {workflow!r} rather than from real "
+                "wording",
+                cuj_id=cuj.id,
+                detail={"workflow": workflow,
+                        "phrasings": str(len(cuj.phrasings))}))
+        built.append(build_use_case(cuj, prompt, bindings,
                                     industry=industry, persona=persona,
                                     audience=audience))
 
@@ -784,5 +812,17 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
                   for case in survivors if case.id in allotted)
     project = (ProjectSpec(company=company, use_cases=final)
                if final else None)
-    return ImportResult(project=project, counts=counts, receipt=receipt,
+    groups = {
+        **{cuj.id: Group.WRITE for cuj in piles.write},
+        **dict.fromkeys(piles.lookup, Group.LOOKUP),
+        **dict.fromkeys(piles.no_world, Group.NO_WORLD),
+        **dict.fromkeys(piles.blocked, Group.BLOCKED),
+    }
+    journeys = tuple(
+        JourneyOutcome(cuj_id=cuj.id, label=cuj.label, group=groups[cuj.id],
+                       share=cuj.support.share, count=allotted.get(cuj.id, 0)
+                       if cuj.id in kept else 0)
+        for cuj in sorted(catalogue.cujs, key=lambda cuj: cuj.id))
+    return ImportResult(catalogue_id=catalogue.catalogue_id, journeys=journeys,
+                        project=project, counts=counts, receipt=receipt,
                         report=ImportReport(findings=tuple(findings)))

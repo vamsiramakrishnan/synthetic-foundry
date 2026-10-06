@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from worldloom.providers import digest_bytes
 from worldloom.telemetry import (
     Severity,
@@ -29,12 +31,16 @@ from worldloom.telemetry import (
 from worldloom.telemetry.binding import (
     PHRASING_DEFAULT_USED,
     PHRASING_VARIANT_UNUSED,
+    RENDER_KEYS,
     BindRule,
     bind_question,
     bind_slot,
+    check_template,
+    fallback_template,
     fold_map,
     names_a_person,
     names_an_id,
+    prompt_template,
     seed_for,
 )
 
@@ -350,3 +356,102 @@ def test_a_journey_with_no_phrasings_asks_for_a_default_not_a_refusal() -> None:
     assert findings[0].code == PHRASING_DEFAULT_USED
     assert findings[0].severity is Severity.INFO
     assert findings[0].detail["phrasings"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# From a question to a template Worldloom fills.
+# ---------------------------------------------------------------------------
+
+
+COMPANY = {"engine": "retail", "identity": {"company_name": "Northwind Grocers"}}
+
+
+def _question():
+    piles = sort_catalogue(match_catalogue(_catalogue()))
+    journey = next(cuj for cuj in piles.write if cuj.id == WRITES)
+    question, _ = bind_question(journey, digest_bytes(_data()),
+                                folds=fold_map(piles.report))
+    assert question is not None
+    return question
+
+
+def test_the_template_names_the_company_and_carries_failures() -> None:
+    template = prompt_template(_question(), company_name="Northwind Grocers")
+
+    assert template.startswith("For {company}: Create epics in ")
+    assert template.endswith("{failure_instruction}")
+    assert template.count("{failure_instruction}") == 1
+
+
+def test_no_prefix_when_the_question_already_names_the_company() -> None:
+    question = _question()
+    named = question.model_copy(update={
+        "template": "Ask Northwind Grocers to " + question.template})
+
+    template = prompt_template(named, company_name="Northwind Grocers")
+
+    assert not template.startswith("For {company}")
+
+
+def test_a_brace_inside_a_value_is_escaped_not_read_as_a_hole() -> None:
+    """``str.format`` reads every brace as a hole. A value that happened to
+    contain one would crash every generated question, in a later command."""
+    question = _question()
+    braced = question.model_copy(update={"bindings": tuple(
+        binding.model_copy(update={"value": "{weird} ops"})
+        if binding.slot == "meeting_title" else binding
+        for binding in question.bindings)})
+
+    template = prompt_template(braced, company_name="Northwind Grocers")
+
+    assert "{{weird}} ops" in template
+    filled = template.format(**dict.fromkeys(RENDER_KEYS, ""))
+    assert "{weird} ops" in filled
+
+
+def test_a_template_with_an_unknown_key_is_refused_before_it_ships() -> None:
+    with pytest.raises(ValueError, match="cannot be filled"):
+        check_template("Prepare {something_render_never_passes}")
+
+
+def test_the_real_renderer_fills_what_the_importer_wrote() -> None:
+    """The design document says to check the result with ``_render``. The
+    importer itself checks with ``_render``'s ten keys, because calling the
+    real thing needs a built world. This test calls the real thing, so if
+    ``_render`` ever changes its keys, ``RENDER_KEYS`` is caught out."""
+    from worldloom.enterprise_queries import _render
+    from worldloom.enterprise_specs import builtin_registry
+    from worldloom.telemetry import import_catalogue
+    from worldloom.world import World
+
+    result = import_catalogue(_data(), COMPANY)
+    assert result.project is not None
+    scenario = result.project.use_cases[0].scenario
+    assert scenario is not None
+    workflow = scenario.additional_workflows[0]
+    row = {"workflow": workflow.name, "source_set": "confluence",
+           "source_entities": "confluence:page", "input_formats": "record",
+           "destination": "jira", "destination_entity": "issue",
+           "operation": "create", "output_format": "record",
+           "content_action": "generate", "audience": "team",
+           "topology": "chain", "failure": "stale_source",
+           "verification": "readback"}
+
+    text = _render(World.load("examples/retail-close"), workflow, row,
+                   builtin_registry())
+
+    assert "Create epics in ACTIONITEM" in text
+    assert "{" not in text
+    assert text.endswith("identify stale evidence.")
+
+
+def test_a_journey_without_phrasings_gets_the_closest_built_in_template() -> None:
+    journey = _cuj(WRITES)
+
+    template, workflow = fallback_template(journey)
+
+    assert workflow in {"change_assurance", "executive_digest",
+                        "incident_review", "customer_health"}
+    assert "{sources}" in template
+    assert template.endswith("{failure_instruction}")
+    check_template(template)
