@@ -38,7 +38,7 @@ returns the same journeys in labelled piles.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..enterprise_specs import (
     ContentAction,
@@ -52,9 +52,16 @@ from ..enterprise_specs import (
 )
 from ..eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
 from ..models import Model
-from ..studio.models import UseCase
-from .binding import BindRule
-from .catalogue import Catalogue, Cuj
+from ..providers import Receipt, digest_bytes
+from ..studio.construction import (
+    ConstructionIssue,
+    ConstructionPlan,
+    compile_project,
+)
+from ..studio.models import ProjectSpec, UseCase
+from .binding import PHRASING_DEFAULT_USED, BindRule, bind_question, fold_map
+from .catalogue import Catalogue, Cuj, load_catalogue
+from .registry import match_catalogue
 from .report import Finding, ImportReport, hard, info
 
 if TYPE_CHECKING:
@@ -536,3 +543,246 @@ def share_counts(piles: SortedCatalogue, catalogue: Catalogue, *,
                        rescaled_share=rescaled[cuj_id], count=counts[cuj_id])
             for cuj_id in sorted(built)),
         total=sum(counts.values()), share_lost=lost), ()
+
+
+# --------------------------------------------------------------------------
+# Studio's checks, run during import.
+# --------------------------------------------------------------------------
+#
+# ``worldloom studio run`` checks a project before building it. If the
+# importer did not run the same checks, a catalogue could import cleanly and
+# then fail later, in a different command, far from the file that caused it.
+# So the importer calls ``compile_project`` itself and copies every issue into
+# its own report.
+#
+# Two of Studio's checks matter here:
+#
+#     within one case    ambiguous_source_contract    same pair, different
+#                                                     selectors
+#     across all cases   conflicting_company_demands  one object demanded in
+#                                                     two exclusive states
+#
+# The first cannot fire on importer output: ``_requirements`` merges every
+# step touching a pair into one requirement. The second, today, cannot either.
+# Studio's conflict rule only compares demands that share an identity key —
+# ``id``, ``record_id`` and the like — and the importer never writes one,
+# because an id in a selector is an id in the question. The resolution below
+# exists because the design document requires it and because that will stop
+# being true the moment any binding rule pins a record.
+#
+# When it does fire, the clash has to be traced to two cases. That needs no
+# new bookkeeping: Studio prefixes every requirement and step id with its
+# case id before merging, and every demand carries those ids, so a demand
+# already says which case asked for it.
+
+
+CONFLICTING_COMPANY_DEMANDS = "conflicting_company_demands"
+"""Studio's own code for a cross-case clash."""
+
+DROPPED_FOR_CONFLICT = "dropped_for_conflict"
+"""A journey removed so the rest could share one world. Hard: real
+behaviour was lost, and a strict run should notice."""
+
+PHRASING_DEFAULT_UNAVAILABLE = "phrasing_default_unavailable"
+"""A write journey with no usable phrasing. The design document falls back
+to a built-in workflow's template, but those are ``str.format`` strings and
+need the same treatment as the rest of the question text, which is not done
+yet. Refused by name rather than built with a question nobody wrote."""
+
+
+class ImportResult(Model):
+    """Everything one import produced: the project, the split, the receipt,
+    and every finding along the way."""
+
+    project: ProjectSpec | None = None
+    """``None`` when nothing could be built. Whether that stops the run is
+    the command line's decision."""
+
+    counts: CaseCounts = CaseCounts()
+    receipt: Receipt
+    report: ImportReport = ImportReport()
+
+
+def _case_of(source_id: str) -> str:
+    """``cuj_9636dd61a048:jira.issue`` → ``cuj_9636dd61a048``."""
+    return source_id.split(":", 1)[0]
+
+
+def _studio_finding(issue: ConstructionIssue) -> Finding:
+    """One Studio issue, in the importer's vocabulary.
+
+    The code is kept exactly, so anyone who later sees the same code from
+    ``studio run`` recognises it.
+    """
+    where = issue.use_case_id or "the combined project"
+    make = hard if issue.hard else info
+    return make(issue.code, f"Studio, checking {where}: {issue.detail}",
+                cuj_id=issue.use_case_id,
+                detail={"requirement_id": issue.requirement_id,
+                        "detail": issue.detail})
+
+
+def _compile(company: dict[str, Any],
+             cases: tuple[UseCase, ...]) -> ConstructionPlan:
+    return compile_project(ProjectSpec(company=company, use_cases=cases))
+
+
+def _clashing_pair(company: dict[str, Any], cases: tuple[UseCase, ...],
+                   plan: ConstructionPlan) -> tuple[str, str] | None:
+    """The first pair of cases that cannot share a world, or ``None``.
+
+    Candidates come from the demands themselves. A clash is one object in two
+    states, so both cases must demand the same kind of record in the same
+    system; any pair that does not is skipped without asking Studio. Each
+    candidate is then confirmed by Studio itself, on just those two cases, so
+    the conflict rule is never reimplemented here.
+    """
+    touches: dict[tuple[str, str, str], set[str]] = {}
+    for construction in plan.use_cases:
+        for demand in construction.demands.demands:
+            connector = demand.selector.get("connector")
+            entity = demand.selector.get("entity")
+            if not demand.hard or not isinstance(connector, str) \
+                    or not isinstance(entity, str):
+                continue
+            for source in (*demand.source_requirement_ids,
+                           *demand.source_step_ids):
+                touches.setdefault((demand.kind.value, connector, entity),
+                                   set()).add(_case_of(source))
+
+    by_id = {case.id: case for case in cases}
+    candidates = sorted({tuple(sorted((left, right)))
+                         for owners in touches.values()
+                         for left in owners for right in owners
+                         if left < right})
+    for left, right in candidates:
+        pair = _compile(company, (by_id[left], by_id[right]))
+        if any(issue.code == CONFLICTING_COMPANY_DEMANDS
+               for issue in pair.findings):
+            return left, right
+    return None
+
+
+def check_with_studio(company: dict[str, Any], cases: tuple[UseCase, ...],
+                      shares: dict[str, float],
+                      ) -> tuple[tuple[UseCase, ...], tuple[Finding, ...]]:
+    """Run Studio's checks, and keep only the cases that can share one world.
+
+    A case Studio refuses on its own is removed, its issue explaining why.
+    When the cases clash with each other, the clashing pair is found and the
+    one with the smaller share of real traffic is dropped — the survivor
+    should be the behaviour more people actually did — then everything is
+    checked again. Ties drop the higher id, so the same catalogue always
+    loses the same case.
+
+    ``ProjectSpec`` raising here is not caught. The company has already been
+    validated by then, so a refusal means the importer built something
+    invalid, and that should be loud.
+    """
+    survivors = tuple(sorted(cases, key=lambda case: case.id))
+    findings: list[Finding] = []
+
+    while survivors:
+        plan = _compile(company, survivors)
+
+        refused = {issue.use_case_id for issue in plan.findings
+                   if issue.hard and issue.use_case_id}
+        if refused:
+            findings.extend(_studio_finding(issue) for issue in plan.findings
+                            if issue.use_case_id in refused)
+            survivors = tuple(case for case in survivors
+                              if case.id not in refused)
+            continue
+
+        clash = next((issue for issue in plan.findings
+                      if issue.code == CONFLICTING_COMPANY_DEMANDS), None)
+        if clash is None:
+            findings.extend(_studio_finding(issue) for issue in plan.findings)
+            break
+
+        pair = _clashing_pair(company, survivors, plan)
+        if pair is None:
+            # Studio says the set clashes, but no two cases clash alone. Its
+            # current rule is strictly pairwise, so this should not happen;
+            # if it ever does, stopping loudly beats guessing which to drop.
+            findings.append(_studio_finding(clash))
+            break
+
+        kept, dropped = sorted(pair, key=lambda case_id: (-shares[case_id],
+                                                          case_id))
+        findings.append(hard(
+            DROPPED_FOR_CONFLICT,
+            f"{dropped} cannot share a world with {kept}: {clash.detail}. "
+            f"{dropped} was dropped because fewer real sessions performed it "
+            f"(share {shares[dropped]} against {shares[kept]})",
+            cuj_id=dropped,
+            detail={"kept": kept, "dropped": dropped, "reason": clash.detail}))
+        survivors = tuple(case for case in survivors if case.id != dropped)
+
+    return survivors, tuple(findings)
+
+
+def import_catalogue(data: bytes, company: dict[str, Any], *,
+                     cases: int = DEFAULT_CASES,
+                     persona: str = DEFAULT_PERSONA,
+                     audience: str = DEFAULT_AUDIENCE) -> ImportResult:
+    """A catalogue's bytes in, a project ``worldloom studio init`` accepts out.
+
+    Every stage, in order::
+
+        load → match → sort → bind → build → Studio checks → share counts
+
+    Counts are shared *after* the Studio checks, not before. A journey
+    dropped for a conflict should not keep questions it can no longer
+    answer; sharing last means the survivors divide the whole budget and the
+    dropped journey's traffic shows up in ``share_lost``, where it belongs.
+
+    Raises ``CatalogueRefused`` exactly as ``load_catalogue`` does. Everything
+    after loading is reported as findings rather than raised.
+    """
+    catalogue, receipt = load_catalogue(data)
+    piles = sort_catalogue(match_catalogue(catalogue))
+    folds = fold_map(piles.report)
+    catalogue_digest = digest_bytes(data)
+    industry = catalogue.industry_hint.industry if catalogue.industry_hint else ""
+    findings: list[Finding] = list(piles.report.findings)
+
+    built: list[UseCase] = []
+    for cuj in piles.write:
+        question, bind_findings = bind_question(cuj, catalogue_digest,
+                                                folds=folds)
+        if question is None:
+            # ``bind_question`` reports that a default template will be used.
+            # It will not be, yet, so that finding would be untrue here.
+            findings.extend(finding for finding in bind_findings
+                            if finding.code != PHRASING_DEFAULT_USED)
+            findings.append(hard(
+                PHRASING_DEFAULT_UNAVAILABLE,
+                f"{cuj.id} has no usable phrasing, and the built-in fallback "
+                "the design document describes is not implemented yet",
+                cuj_id=cuj.id))
+            continue
+        findings.extend(bind_findings)
+        built.append(build_use_case(cuj, question, question.bindings,
+                                    industry=industry, persona=persona,
+                                    audience=audience))
+
+    shares = {cuj.id: cuj.support.share for cuj in piles.write}
+    survivors, studio_findings = check_with_studio(company, tuple(built), shares)
+    findings.extend(studio_findings)
+
+    kept = {case.id for case in survivors}
+    counts, count_findings = share_counts(
+        piles.model_copy(update={"write": tuple(
+            cuj for cuj in piles.write if cuj.id in kept)}),
+        catalogue, cases=cases)
+    findings.extend(count_findings)
+
+    allotted = {allocation.cuj_id: allocation.count
+                for allocation in counts.allocations}
+    final = tuple(case.model_copy(update={"count": allotted[case.id]})
+                  for case in survivors if case.id in allotted)
+    project = (ProjectSpec(company=company, use_cases=final)
+               if final else None)
+    return ImportResult(project=project, counts=counts, receipt=receipt,
+                        report=ImportReport(findings=tuple(findings)))

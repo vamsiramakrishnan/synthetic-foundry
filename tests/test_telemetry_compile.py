@@ -14,12 +14,14 @@ a capability step claiming to write.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from worldloom.enterprise_specs import builtin_registry
 from worldloom.providers import digest_bytes
+from worldloom.studio.construction import compile_project
 from worldloom.studio.models import ProjectSpec
 from worldloom.telemetry import (
     ANSWER_ONLY_UNSUPPORTED,
@@ -35,8 +37,12 @@ from worldloom.telemetry.binding import bind_question, fold_map
 from worldloom.telemetry.compile import (
     CASES_BELOW_JOURNEYS,
     DEFAULT_CASES,
+    DROPPED_FOR_CONFLICT,
+    PHRASING_DEFAULT_UNAVAILABLE,
     _apportion,
     build_use_case,
+    check_with_studio,
+    import_catalogue,
     share_counts,
 )
 
@@ -444,3 +450,155 @@ def test_the_allocated_count_reaches_the_use_case() -> None:
 
     assert build_use_case(
         *_built_parts(), count=allocated.count).count == 50
+
+
+# ---------------------------------------------------------------------------
+# Studio's checks, and the whole import.
+# ---------------------------------------------------------------------------
+
+
+def _imported(data: bytes | None = None, *, cases: int = DEFAULT_CASES):
+    return import_catalogue(data if data is not None else EXAMPLE.read_bytes(),
+                            COMPANY, cases=cases)
+
+
+def _pinned(case_id: str, status: str):
+    """The sample's case, renamed, with its Jira issue pinned to one record in
+    one state. Importer output never does this — it is the only way to make
+    Studio's cross-case conflict rule fire."""
+    result = _imported()
+    assert result.project is not None
+    base = result.project.use_cases[0]
+    assert base.construction is not None
+    requirements = tuple(
+        requirement.model_copy(update={"selector": {
+            **requirement.selector, "id": "OPS-1", "status": status}})
+        if requirement.id == "jira.issue" else requirement
+        for requirement in base.construction.requirements)
+    return base.model_copy(update={
+        "id": case_id,
+        "construction": base.construction.model_copy(update={
+            "id": case_id, "requirements": requirements})})
+
+
+def test_the_sample_imports_end_to_end() -> None:
+    result = _imported()
+
+    assert result.project is not None
+    assert [(case.id, case.count) for case in result.project.use_cases] == [
+        (WRITES, DEFAULT_CASES)]
+    assert result.counts.share_lost == pytest.approx(0.511)
+    assert [finding.code for finding in result.report.findings] == [
+        "step_folded", ANSWER_ONLY_UNSUPPORTED, NO_WORLD_NEEDED]
+
+
+def test_studio_accepts_what_the_importer_built() -> None:
+    """The reason this stage exists: ``studio run`` must never find a problem
+    the import could have reported."""
+    result = _imported()
+    assert result.project is not None
+
+    plan = compile_project(result.project)
+
+    assert plan.accepted
+    assert plan.findings == ()
+
+
+def test_importer_output_cannot_trigger_studios_conflict_rule() -> None:
+    """Studio only compares demands that share an identity key, and the
+    importer never writes one — an id in a selector would be an id in the
+    question. So the drop-the-smaller-share path below is unreachable from a
+    real catalogue today.
+
+    If this fails, a binding rule has started pinning records, and that path
+    has just become live. Check it was meant to.
+    """
+    result = _imported()
+    assert result.project is not None
+    identity_keys = {"id", "entity_id", "record_id", "artifact_id", "object_id"}
+
+    for case in result.project.use_cases:
+        assert case.construction is not None
+        for requirement in case.construction.requirements:
+            assert not identity_keys & requirement.selector.keys()
+
+
+def test_a_clash_drops_the_journey_fewer_people_performed() -> None:
+    small, large = "cuj_aaaaaaaaaaaa", "cuj_bbbbbbbbbbbb"
+
+    kept, findings = check_with_studio(
+        COMPANY, (_pinned(small, "done"), _pinned(large, "open")),
+        {small: 0.10, large: 0.30})
+
+    assert [case.id for case in kept] == [large]
+    assert [finding.code for finding in findings] == [DROPPED_FOR_CONFLICT]
+    assert findings[0].severity is Severity.HARD
+    assert findings[0].detail == {
+        "kept": large, "dropped": small,
+        "reason": findings[0].detail["reason"]}
+    assert "OPS-1" in findings[0].detail["reason"]
+
+
+def test_a_tie_drops_the_higher_id_so_the_result_never_drifts() -> None:
+    low, high = "cuj_aaaaaaaaaaaa", "cuj_bbbbbbbbbbbb"
+
+    kept, _ = check_with_studio(
+        COMPANY, (_pinned(high, "open"), _pinned(low, "done")),
+        {low: 0.20, high: 0.20})
+
+    assert [case.id for case in kept] == [low]
+
+
+def test_a_case_outside_the_clash_survives_it() -> None:
+    """Only the clashing pair is touched."""
+    result = _imported()
+    assert result.project is not None
+    bystander = result.project.use_cases[0]
+
+    kept, findings = check_with_studio(
+        COMPANY,
+        (_pinned("cuj_aaaaaaaaaaaa", "done"), _pinned("cuj_bbbbbbbbbbbb", "open"),
+         bystander),
+        {"cuj_aaaaaaaaaaaa": 0.1, "cuj_bbbbbbbbbbbb": 0.3, WRITES: 0.229})
+
+    assert {case.id for case in kept} == {"cuj_bbbbbbbbbbbb", WRITES}
+    assert [finding.cuj_id for finding in findings] == ["cuj_aaaaaaaaaaaa"]
+
+
+def test_a_case_studio_refuses_alone_is_removed_with_studios_own_code() -> None:
+    """Studio's code is kept exactly, so it reads the same here as it would
+    from ``studio run``."""
+    result = _imported()
+    assert result.project is not None
+    broken = result.project.use_cases[0].model_copy(update={
+        "id": "cuj_cccccccccccc", "construction": None})
+
+    kept, findings = check_with_studio(
+        COMPANY, (result.project.use_cases[0], broken),
+        {WRITES: 0.229, "cuj_cccccccccccc": 0.5})
+
+    assert [case.id for case in kept] == [WRITES]
+    assert [finding.code for finding in findings] == [
+        "construction_contract_missing"]
+    assert findings[0].cuj_id == "cuj_cccccccccccc"
+
+
+def test_a_write_journey_without_phrasings_is_refused_by_name() -> None:
+    """The built-in fallback is not implemented yet. Saying so is better than
+    a ``phrasing_default_used`` finding claiming a default that never came."""
+    payload = json.loads(EXAMPLE.read_text())
+    next(cuj for cuj in payload["cujs"] if cuj["id"] == WRITES)["phrasings"] = []
+
+    result = _imported(json.dumps(payload).encode())
+    codes = [finding.code for finding in result.report.findings]
+
+    assert result.project is None
+    assert PHRASING_DEFAULT_UNAVAILABLE in codes
+    assert "phrasing_default_used" not in codes
+
+
+def test_the_whole_budget_goes_to_whatever_survives() -> None:
+    result = _imported(cases=37)
+
+    assert result.project is not None
+    assert sum(case.count for case in result.project.use_cases) == 37

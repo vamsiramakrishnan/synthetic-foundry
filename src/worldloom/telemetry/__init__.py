@@ -38,7 +38,9 @@ the customer's catalogue is handed in, never opened here
     no customer content, and :mod:`.registry` reads them through
     ``connector_definition`` fresh on each call, so they cannot go stale.
 
-Start at :func:`~.catalogue.load_catalogue`. It is the only door in.
+Start at :func:`~.compile.import_catalogue`, which runs every stage. It
+reads bytes through :func:`~.catalogue.load_catalogue`, still the only way
+a catalogue gets in.
 """
 
 from __future__ import annotations
@@ -71,16 +73,22 @@ from .catalogue import (
 from .compile import (
     ANSWER_ONLY_UNSUPPORTED,
     CASES_BELOW_JOURNEYS,
+    CONFLICTING_COMPANY_DEMANDS,
     DEFAULT_AUDIENCE,
     DEFAULT_CASES,
     DEFAULT_PERSONA,
+    DROPPED_FOR_CONFLICT,
     NO_WORLD_NEEDED,
+    PHRASING_DEFAULT_UNAVAILABLE,
     Allocation,
     CaseCounts,
     Group,
+    ImportResult,
     SortedCatalogue,
     build_use_case,
+    check_with_studio,
     group_for,
+    import_catalogue,
     share_counts,
     sort_catalogue,
 )
@@ -108,14 +116,17 @@ from .report import (
 __all__ = [
     "ANSWER_ONLY_UNSUPPORTED",
     "CASES_BELOW_JOURNEYS",
+    "CONFLICTING_COMPANY_DEMANDS",
     "CONNECTOR_NOT_EMULATED",
     "DEFAULT_AUDIENCE",
     "DEFAULT_CASES",
     "DEFAULT_PERSONA",
+    "DROPPED_FOR_CONFLICT",
     "ENTITY_UNRESOLVED",
     "FOLDS",
     "NO_WORLD_NEEDED",
     "OPERATION_UNSUPPORTED",
+    "PHRASING_DEFAULT_UNAVAILABLE",
     "PHRASING_DEFAULT_USED",
     "PHRASING_VARIANT_UNUSED",
     "REJECTED",
@@ -138,6 +149,7 @@ __all__ = [
     "FoldTarget",
     "Group",
     "ImportReport",
+    "ImportResult",
     "MatchedCatalogue",
     "Operation",
     "Phrasing",
@@ -148,11 +160,13 @@ __all__ = [
     "bind_question",
     "bind_slot",
     "build_use_case",
+    "check_with_studio",
     "check",
     "cuj_id",
     "fold_map",
     "group_for",
     "hard",
+    "import_catalogue",
     "info",
     "load_catalogue",
     "match_catalogue",
