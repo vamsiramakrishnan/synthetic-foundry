@@ -21,6 +21,7 @@ worldloom evalrun run ./cases -o ./runs/reference   # 2. the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py"   # 3. the agent under test
 worldloom evalrun compare ./runs/reference ./runs/mine                       # 4. what moved, per axis
 worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py"  # 5. querying alone
+worldloom evalrun flow ./cases -o flows.json        # 5b. gold DAGs as Anvil composite flows
 worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300   # a hero use case: organise my drive
 ```
 
@@ -83,7 +84,7 @@ worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300
    flow or plan (`anvil.compose-flow/v1` / `anvil.compose-plan/v1`, from
    `anvil connectors compose`'s `Flow`). It is read through the shipped Anvil
    mappings and graded as the tools it names. In the other direction,
-   `evalrun flow ./cases -o flows.json` writes every gold DAG as a composite
+   `worldloom evalrun flow ./cases -o flows.json` writes every gold DAG as a composite
    flow, which `python -m anvil_compose plan|validate|run` reads. Nodes that no
    mapping serves are listed under `unmapped` and never guessed.
 
