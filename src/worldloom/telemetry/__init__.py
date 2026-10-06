@@ -43,6 +43,15 @@ Start at :func:`~.catalogue.load_catalogue`. It is the only door in.
 
 from __future__ import annotations
 
+from .binding import (
+    Binding,
+    BindRule,
+    BoundQuestion,
+    bind_question,
+    bind_slot,
+    fold_map,
+    seed_for,
+)
 from .catalogue import (
     REJECTED,
     SCHEMA_VERSION,
@@ -95,10 +104,15 @@ __all__ = [
     "FOLDS",
     "NO_WORLD_NEEDED",
     "OPERATION_UNSUPPORTED",
+    "PHRASING_DEFAULT_USED",
+    "PHRASING_VARIANT_UNUSED",
     "REJECTED",
     "SCHEMA_VERSION",
     "STEP_FOLDED",
     "VERSION_UNKNOWN",
+    "BindRule",
+    "Binding",
+    "BoundQuestion",
     "Capability",
     "Catalogue",
     "CatalogueConnector",
@@ -117,14 +131,18 @@ __all__ = [
     "Severity",
     "SortedCatalogue",
     "Step",
+    "bind_question",
+    "bind_slot",
     "check",
     "cuj_id",
+    "fold_map",
     "group_for",
     "hard",
     "info",
     "load_catalogue",
     "match_catalogue",
     "match_cuj",
+    "seed_for",
     "signature",
     "sort_catalogue",
 ]
