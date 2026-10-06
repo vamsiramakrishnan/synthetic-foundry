@@ -59,6 +59,14 @@ from .catalogue import (
     Step,
     load_catalogue,
 )
+from .compile import (
+    ANSWER_ONLY_UNSUPPORTED,
+    NO_WORLD_NEEDED,
+    Group,
+    SortedCatalogue,
+    group_for,
+    sort_catalogue,
+)
 from .invariants import check, cuj_id, signature
 from .registry import (
     CONNECTOR_NOT_EMULATED,
@@ -81,9 +89,11 @@ from .report import (
 )
 
 __all__ = [
+    "ANSWER_ONLY_UNSUPPORTED",
     "CONNECTOR_NOT_EMULATED",
     "ENTITY_UNRESOLVED",
     "FOLDS",
+    "NO_WORLD_NEEDED",
     "OPERATION_UNSUPPORTED",
     "REJECTED",
     "SCHEMA_VERSION",
@@ -98,19 +108,23 @@ __all__ = [
     "FailureMode",
     "Finding",
     "FoldTarget",
+    "Group",
     "ImportReport",
     "MatchedCatalogue",
     "Operation",
     "Phrasing",
     "Privacy",
     "Severity",
+    "SortedCatalogue",
     "Step",
     "check",
     "cuj_id",
+    "group_for",
     "hard",
     "info",
     "load_catalogue",
     "match_catalogue",
     "match_cuj",
     "signature",
+    "sort_catalogue",
 ]
