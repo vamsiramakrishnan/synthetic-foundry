@@ -70,9 +70,12 @@ from .catalogue import (
 )
 from .compile import (
     ANSWER_ONLY_UNSUPPORTED,
+    DEFAULT_AUDIENCE,
+    DEFAULT_PERSONA,
     NO_WORLD_NEEDED,
     Group,
     SortedCatalogue,
+    build_use_case,
     group_for,
     sort_catalogue,
 )
@@ -100,6 +103,8 @@ from .report import (
 __all__ = [
     "ANSWER_ONLY_UNSUPPORTED",
     "CONNECTOR_NOT_EMULATED",
+    "DEFAULT_AUDIENCE",
+    "DEFAULT_PERSONA",
     "ENTITY_UNRESOLVED",
     "FOLDS",
     "NO_WORLD_NEEDED",
@@ -133,6 +138,7 @@ __all__ = [
     "Step",
     "bind_question",
     "bind_slot",
+    "build_use_case",
     "check",
     "cuj_id",
     "fold_map",

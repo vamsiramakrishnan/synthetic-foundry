@@ -177,6 +177,13 @@ class Binding(Model):
     source: str = ""
     """Where a closed list came from, when one did."""
 
+    connector: str = ""
+    entity: str = ""
+    field: str = ""
+    """The step this value belongs to, *after* following any fold. The caller
+    needs it to put the value in the right construction requirement — the
+    question and the world have to agree on what exists."""
+
 
 class BoundQuestion(Model):
     """A phrasing with every hole filled."""
@@ -366,29 +373,32 @@ def bind_slot(slot: Slot, cuj: Cuj, catalogue_digest: str, *,
     entity = step.entity if step is not None and step.entity else ""
     seed = seed_for(catalogue_digest, cuj.id, connector, entity, field)
 
+    where = {"connector": connector, "entity": entity, "field": field}
+
     if names_an_id(field):
         return Binding(slot=slot.name, value=_reference(slot, step),
-                       rule=BindRule.REFERENCE)
+                       rule=BindRule.REFERENCE, **where)
 
     if names_a_person(field):
         return Binding(slot=slot.name, value=_person_phrase(field),
-                       rule=BindRule.PERSON)
+                       rule=BindRule.PERSON, **where)
 
     if connector and entity:
         found = _closed_list(connector, entity, field)
         if found is not None:
             options, source = found
             return Binding(slot=slot.name, value=_pick(options, seed),
-                           rule=BindRule.OPTION, source=source)
+                           rule=BindRule.OPTION, source=source, **where)
 
     if names_a_container(slot.name) or names_a_container(field):
         terms = cuj.domain_terms or (_FALLBACK_KEY,)
         term = _pick(_container_terms(terms), seed)
         return Binding(slot=slot.name, value=_as_key(term), rule=BindRule.KEY,
-                       source=f"derived from {term!r}")
+                       source=f"derived from {term!r}", **where)
 
     terms = cuj.domain_terms or (_FALLBACK_TEXT,)
-    return Binding(slot=slot.name, value=_pick(terms, seed), rule=BindRule.TEXT)
+    return Binding(slot=slot.name, value=_pick(terms, seed),
+                   rule=BindRule.TEXT, **where)
 
 
 # --------------------------------------------------------------------------
