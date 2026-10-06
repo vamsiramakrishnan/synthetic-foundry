@@ -429,6 +429,30 @@ in common have no delta and no verdict, and the summary's trajectory rates
 (exact, in-order, any-order, mean calls) are absent rather than zero where no
 trajectory was observed.
 
+### Anvil composite flows
+
+Anvil composes several connectors into one SDK whose `Flow` is a DAG of
+operation calls (`anvil connectors compose`, Anvil ADR-0031). A planner may
+answer with that flow (`anvil.compose-flow/v1`) or with the plan Anvil derives
+from it (`anvil.compose-plan/v1`), bare or under `plan`. `parse_plan` reads
+either one through the shipped Anvil mappings
+(`_data/connectors/anvil/<connector>.json`). Each operation becomes the tool
+the mapping serves it with, and dependencies come from `depends_on`, or from a
+flow's `$ref` inputs, `for_each`, `when` and `after`. The DAG is then graded
+exactly as a native plan. An operation that no mapping knows stays
+`<connector>.<operation>` and is graded as an unmatched node.
+
+`evalrun flow ./cases -o flows.json` writes the other direction: every case's
+expected DAG as a composite flow (`worldloom.compose-flows/v1`, keyed by case
+id). Each tool node becomes a step on the operation that serves its tool, with
+the gold payload as its arguments by wire name. The edges, with transforms
+compressed out, become `after`, and writes are confirmed. Tool nodes that no
+mapping serves are listed under `unmapped`. Required inputs the payload does
+not give (values a real run reads from an earlier result) are listed under a
+step's `needs`. The flow is a reference statement of the gold plan, readable
+by `python -m anvil_compose plan|validate`. It is not a replayable script.
+`worldloom.evalrun.compose` holds both translations.
+
 ## Driving it from another harness
 
 Transports, each carrying only what the agent may know. An installed `codex`

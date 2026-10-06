@@ -667,6 +667,41 @@ def plan_command(
     _print_summary(summary, json_output)
 
 
+@app.command("flow")
+def flow_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set written by `worldloom industry programme`."),
+    out: Path = typer.Option(..., "--out", "-o", help="Where to write the flows (worldloom.compose-flows/v1 JSON)."),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    json_output: bool = typer.Option(False, "--json", help="Print the document instead of a summary."),
+) -> None:
+    """Write each case's expected DAG as an Anvil composite flow (anvil.compose-flow/v1).
+
+    The flow names Anvil operations through the shipped Anvil mappings, so
+    `python -m anvil_compose plan|validate|run` reads it against a composite
+    (`anvil connectors compose`). The reverse also holds: a planner may
+    answer `evalrun plan` with a composite flow or plan and is graded as if
+    it had named the tools. Tool nodes no mapping serves are listed under
+    `unmapped`; required inputs the gold payload does not give, under `needs`.
+    """
+    from ..cli import _refuse
+    from .compose import flows_document
+
+    _, cases = _corpus_cases(corpus, limit)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    document = flows_document(cases)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    if json_output:
+        typer.echo(json.dumps(document, indent=2))
+        return
+    flows = document["flows"].values()
+    complete = sum(1 for flow in flows if not flow.get("unmapped"))
+    steps = sum(len(flow["steps"]) for flow in flows)
+    typer.echo(f"wrote {out}: {len(document['flows'])} flow(s), {steps} step(s); "
+               f"{complete} case(s) map every tool node to an Anvil operation")
+
+
 @app.command("summarize")
 def summarize_command(
     run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
