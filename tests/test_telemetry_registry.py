@@ -1,10 +1,12 @@
 """Matching a catalogue's vocabulary against the connectors Worldloom ships.
 
-The miner's example catalogue is the anchor: three journeys. Two match. The
-third — notes in Confluence become epics in Jira — searches for a Jira
-*project*, and Jira models no project record. It is refused, and the refusal
-says exactly what Worldloom would need: a ``jira.project`` entity offering
-``search``, wanted by 22 sessions, 22.9% of traffic.
+The miner's example catalogue is the anchor: three journeys, all of which
+match exactly as recorded. One of them — notes in Confluence become epics in
+Jira — searches for a Jira *project*. Jira did not model projects until this
+catalogue's refusal named the gap (``jira.project`` · search · 22.9% of
+traffic); ``project`` was then added the way ``sprint`` already was, and the
+journey matches unchanged. The gap-report tests now use ``jira.user``, which
+Jira still does not model.
 
 Nothing here rewrites a journey. A matched journey comes back byte for byte
 as the customer recorded it, and still passes every invariant W1 checks; a
@@ -12,14 +14,14 @@ journey that cannot be matched is refused whole.
 
     the example shows      │ these tests add
     ───────────────────────┼──────────────────────────────────────────────
-    one missing entity     │ the gap report groups and ranks by traffic
+    nothing missing        │ the gap report groups and ranks by traffic
     journeys that match    │ they come back unchanged, invariants intact
     connectors we have     │ one we do not is refused by name
     operations we support  │ one we do not, and an ambiguous one, by name
     one fault at a time    │ a journey with two faults reports both
     an alias that resolves │ it resolves with no finding at all
-    today's definitions    │ loaded once per run, and the day jira.project
-                           │ arrives, a test says so
+    today's definitions    │ loaded once per run; project is modelled, and
+                           │ the day user arrives, a test says so
 """
 
 from __future__ import annotations
@@ -93,27 +95,38 @@ def _replacing(catalogue, *cujs):
 # ---------------------------------------------------------------------------
 
 
-def test_the_example_matches_two_journeys_and_refuses_the_project_lookup() -> None:
+def test_the_example_matches_every_journey_exactly_as_recorded() -> None:
+    """Including the project lookup, now that Jira models projects."""
     matched = match_catalogue(_catalogue())
 
-    assert {cuj.id for cuj in matched.cujs} == {LOOKUP, DRAFTING}
-    assert matched.refused == (NOTES_TO_EPICS,)
-    assert _codes(matched.report.findings) == [ENTITY_UNRESOLVED]
-    finding = matched.report.findings[0]
-    assert finding.detail == {"step_id": "find_project", "connector": "jira",
-                              "entity": "project", "operation": "search"}
-    assert "Add it to the jira connector definition" in finding.message
+    assert [cuj.id for cuj in matched.cujs] == [NOTES_TO_EPICS, LOOKUP, DRAFTING]
+    assert matched.refused == ()
+    assert matched.report.findings == ()
+    assert matched.missing == ()
+
+
+def _needs_jira_users(cuj, step_id: str):
+    """*cuj* with one step searching Jira users, which Jira does not model."""
+    return _edit(cuj, step_id, connector="jira", entity="user",
+                 operation="search")
 
 
 def test_the_refusal_says_exactly_what_worldloom_would_need() -> None:
-    """A to-do list for the connector definitions, weighted by real usage."""
-    matched = match_catalogue(_catalogue())
+    """A to-do list for the connector definitions, weighted by real usage.
+    This is how ``jira.project`` was found and added."""
+    catalogue = _catalogue()
+    users = _needs_jira_users(_cuj(catalogue, NOTES_TO_EPICS), "find_project")
 
+    matched = match_catalogue(_replacing(catalogue, users))
+
+    assert matched.refused == (NOTES_TO_EPICS,)
+    finding = matched.report.findings[0]
+    assert finding.code == ENTITY_UNRESOLVED
+    assert "Add it to the jira connector definition" in finding.message
     assert len(matched.missing) == 1
     gap = matched.missing[0]
-    assert gap.name == "jira.project"
-    assert gap.kind == "entity"
-    assert gap.operations == ("search",)
+    assert (gap.name, gap.kind, gap.operations) == ("jira.user", "entity",
+                                                    ("search",))
     assert gap.cuj_ids == (NOTES_TO_EPICS,)
     assert gap.sessions == 22
     assert gap.share == pytest.approx(0.229)
@@ -157,12 +170,12 @@ def test_capability_steps_pass_through_untouched() -> None:
 def test_the_gap_report_groups_journeys_and_sums_their_traffic() -> None:
     """Two journeys needing the same entity are one line, worth both."""
     catalogue = _catalogue()
-    also_projects = _edit(_cuj(catalogue, LOOKUP), "search",
-                          connector="jira", entity="project")
+    matched = match_catalogue(_replacing(
+        catalogue,
+        _needs_jira_users(_cuj(catalogue, NOTES_TO_EPICS), "find_project"),
+        _needs_jira_users(_cuj(catalogue, LOOKUP), "search")))
 
-    matched = match_catalogue(_replacing(catalogue, also_projects))
-
-    assert [gap.name for gap in matched.missing] == ["jira.project"]
+    assert [gap.name for gap in matched.missing] == ["jira.user"]
     gap = matched.missing[0]
     assert gap.cuj_ids == (LOOKUP, NOTES_TO_EPICS)
     assert gap.sessions == 22 + 31
@@ -171,14 +184,14 @@ def test_the_gap_report_groups_journeys_and_sums_their_traffic() -> None:
 
 def test_the_gap_report_puts_the_most_used_gap_first() -> None:
     catalogue = _catalogue()
-    no_such_system = _edit(_cuj(catalogue, LOOKUP), "search",
-                           connector="acme_internal_tool")
-
-    matched = match_catalogue(_replacing(catalogue, no_such_system))
+    matched = match_catalogue(_replacing(
+        catalogue,
+        _edit(_cuj(catalogue, LOOKUP), "search", connector="acme_internal_tool"),
+        _needs_jira_users(_cuj(catalogue, NOTES_TO_EPICS), "find_project")))
 
     assert [(gap.kind, gap.name) for gap in matched.missing] == [
         ("connector", "acme_internal_tool"),   # 32.3% of traffic
-        ("entity", "jira.project")]            # 22.9%
+        ("entity", "jira.user")]               # 22.9%
 
 
 def test_an_ambiguous_operation_is_not_a_gap() -> None:
@@ -287,8 +300,8 @@ def test_one_bad_journey_does_not_refuse_the_others() -> None:
 
     matched = match_catalogue(_replacing(catalogue, broken))
 
-    assert set(matched.refused) == {NOTES_TO_EPICS, LOOKUP}
-    assert [cuj.id for cuj in matched.cujs] == [DRAFTING]
+    assert matched.refused == (LOOKUP,)
+    assert [cuj.id for cuj in matched.cujs] == [NOTES_TO_EPICS, DRAFTING]
     assert not matched.report.accepted
 
 
@@ -340,14 +353,27 @@ def test_each_connector_definition_is_loaded_once_per_run(
     assert sorted(loads) == ["confluence", "jira"]
 
 
-def test_jira_does_not_model_projects_yet() -> None:
-    """The day this fails, ``jira.project`` has been added, the example's
-    notes-to-epics journey matches exactly as recorded, and the tests above
-    that expect it refused should be updated to expect it built."""
+def test_jira_models_projects_the_way_it_models_sprints() -> None:
+    """Added because a real catalogue's refusal named it. A container, like
+    ``sprint``: issues live in a project, and "which project?" is answered by
+    looking one up — which is exactly what the journey's first step does."""
+    definition = load_connector_definition("jira")
+    project = definition.entities["project"]
+
+    assert project.kind == definition.entities["sprint"].kind == "container"
+    assert definition.tool_for("project", "search") == "search_projects"
+    assert definition.tool_for("project", "read") == "get_project"
+
+
+def test_jira_does_not_model_users_or_issue_types_yet() -> None:
+    """The review suggested these too. No catalogue has asked for them yet,
+    so they wait for one to — the catalogue drives what is added. The day
+    this fails, update the gap-report tests above, which lean on ``user``."""
     definition = load_connector_definition("jira")
 
-    assert "project" not in definition.entities
-    assert "project" not in definition.entity_aliases
+    for entity in ("user", "issue_type"):
+        assert entity not in definition.entities
+        assert entity not in definition.entity_aliases
 
 
 def test_a_write_still_needs_a_concrete_entity() -> None:
