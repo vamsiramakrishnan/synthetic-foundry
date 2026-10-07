@@ -35,7 +35,7 @@ from worldloom.telemetry import (
     sort_catalogue,
 )
 from worldloom.telemetry.binding import bind_question, fold_map, prompt_template
-from worldloom.telemetry.catalogue import Hardness
+from worldloom.telemetry.catalogue import FailureMode, Hardness
 from worldloom.telemetry.compile import (
     ARGUMENT_FIELD_UNKNOWN,
     CASES_BELOW_JOURNEYS,
@@ -44,6 +44,7 @@ from worldloom.telemetry.compile import (
     _apportion,
     build_use_case,
     check_with_studio,
+    coverage_failures,
     import_catalogue,
     record_shapes,
     share_counts,
@@ -752,7 +753,8 @@ def test_the_write_journey_produces_exactly_the_reviewed_use_case() -> None:
     differs from §7 only where a decision was made: ``issue`` rather than
     ``epic``, the seeded ``ACTIONITEM`` rather than the illustrative
     ``STOREOPS``, §5.5's prefix and suffix on the question, requirement ids
-    named for their pair, and no failure modes yet (W5).
+    named for their pair, and ``stale_source`` among the designed failures —
+    §5.7's table adds it for the time pattern ``latest``, which §7 omits.
 
     A change here is a change to every imported corpus. If it is intended,
     review the diff, then regenerate with
@@ -773,3 +775,78 @@ def test_importing_twice_gives_identical_bytes() -> None:
     first, second = _imported(), _imported()
 
     assert first.model_dump_json() == second.model_dump_json()
+
+
+# ---------------------------------------------------------------------------
+# Designed failures, from the journey's own failure modes (§5.7, coverage rows).
+# ---------------------------------------------------------------------------
+
+
+def _journey():
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
+    return next(cuj for cuj in catalogue.cujs if cuj.id == WRITES)
+
+
+def _with_modes(cuj, *modes: str, latest: int = 0):
+    return cuj.model_copy(update={
+        "failure_modes": tuple(
+            FailureMode(mode=mode, count=3) for mode in modes),
+        "volatility": cuj.volatility.model_copy(update={
+            "temporal_patterns": {"latest": latest} if latest else {}})})
+
+
+def test_the_sample_rotates_only_the_failures_its_users_hit() -> None:
+    """``wrong_entity`` across Confluence and Jira gives ``ambiguous_join``;
+    the time pattern ``latest`` gives ``stale_source``. The default list
+    would have added four failures nobody saw.
+
+    The design document's §7 example shows only ``none, ambiguous_join``. Its
+    own table says ``latest`` is "same as stale_version", which the example
+    leaves out; the table is the rule.
+    """
+    assert coverage_failures(_journey()) == ("none", "stale_source",
+                                             "ambiguous_join")
+
+
+def test_no_failure_modes_means_no_designed_failures() -> None:
+    assert coverage_failures(_with_modes(_journey())) == ("none",)
+
+
+def test_permission_denied_maps_to_itself() -> None:
+    assert coverage_failures(_with_modes(_journey(), "permission_denied")) == (
+        "none", "permission_denied")
+
+
+def test_stale_version_adds_version_conflict_only_when_records_are_updated() -> None:
+    creates = _with_modes(_journey(), "stale_version")
+    updates = creates.model_copy(update={"steps": tuple(
+        step.model_copy(update={"operation": "update"})
+        if step.id == "create_epics" else step for step in creates.steps)})
+
+    assert coverage_failures(creates) == ("none", "stale_source")
+    assert coverage_failures(updates) == ("none", "stale_source",
+                                          "version_conflict")
+
+
+def test_wrong_entity_needs_two_connectors_to_be_a_join() -> None:
+    one_system = _with_modes(_journey(), "wrong_entity").model_copy(update={
+        "steps": tuple(step for step in _journey().steps
+                       if step.connector in (None, "jira"))})
+
+    assert coverage_failures(one_system) == ("none",)
+
+
+def test_a_failure_worldloom_cannot_render_yet_is_left_out() -> None:
+    """``connector_unavailable`` needs core change C2. Checked by feature —
+    whether ``_render`` has a sentence for it — so this test changes the day
+    C2 lands, without a version number anywhere."""
+    assert coverage_failures(_with_modes(_journey(), "connector_unavailable")) \
+        == ("none",)
+
+
+def test_the_built_case_carries_the_mapped_failures() -> None:
+    case = _built()
+    assert case.scenario is not None
+
+    assert case.scenario.coverage.failures == ("none", "stale_source",
+                                               "ambiguous_join")

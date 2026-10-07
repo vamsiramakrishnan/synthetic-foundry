@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from ..connector_definition import load_connector_definition
 from ..enterprise_specs import (
     ContentAction,
+    CoverageProfile,
     DestinationRole,
     Operation,
     ProcessSpec,
@@ -75,7 +76,14 @@ from .binding import (
     fold_map,
     prompt_template,
 )
-from .catalogue import Catalogue, Cuj, Hardness, load_catalogue
+from .catalogue import (
+    Catalogue,
+    Cuj,
+    FailureModeKind,
+    Hardness,
+    TemporalPattern,
+    load_catalogue,
+)
 from .registry import match_catalogue
 from .report import Finding, ImportReport, hard, info
 
@@ -480,6 +488,72 @@ def record_shapes(cuj: Cuj) -> tuple[EvalShape, tuple[Finding, ...]]:
     return EvalShape(records=tuple(shapes)), tuple(findings)
 
 
+#: Write operations that change a record already there, rather than make one.
+_UPDATES = frozenset({"update", "patch", "upsert"})
+
+
+def _renderable(failure: str) -> bool:
+    """Whether Worldloom can put *failure* into a question.
+
+    The design document asks for support to be checked by feature, not by
+    version, so the importer works before and after core changes land. The
+    feature that matters is the sentence ``_render`` appends for the failure:
+    without one, every question carrying it would fail to render.
+    """
+    from ..packkit import template
+
+    try:
+        template(f"enterprise.failure.{failure}")
+    except KeyError:
+        return False
+    return True
+
+
+def coverage_failures(cuj: Cuj) -> tuple[str, ...]:
+    """The designed failures the journey's questions rotate through.
+
+    ``"none"`` plus only the failures this journey actually showed, mapped by
+    the coverage rows of §5.7:
+
+        permission_denied        → permission_denied
+        stale_version, or the    → stale_source, plus version_conflict when
+          time pattern "latest"     the journey updates records
+        wrong_entity, across     → ambiguous_join
+          two connectors
+        connector_unavailable    → connector_unavailable, once Worldloom can
+                                    render it (core change C2)
+
+    The default list would rotate six failures through every question,
+    whatever the customer's users actually hit. Worldloom rotates evenly, so
+    even this list over-represents: a failure seen in 6% of rows reaches half
+    of them. The design document accepts that, and W8's fidelity report
+    measures the gap.
+
+    The other rows of §5.7 — adversarial markers, trajectory rules, phrasing
+    variants, difficulty adjustments, and the ``failure_mode_unconstructable``
+    finding for anything that cannot be built — are W5.
+    """
+    kinds = {mode.mode for mode in cuj.failure_modes}
+    connectors = {step.connector for step in cuj.steps if step.connector}
+    updates = any(step.effect == "write" and str(step.operation) in _UPDATES
+                  for step in cuj.steps)
+    stale = (FailureModeKind.STALE_VERSION in kinds
+             or cuj.volatility.temporal_patterns.get(TemporalPattern.LATEST, 0) > 0)
+
+    wanted: list[str] = []
+    if FailureModeKind.PERMISSION_DENIED in kinds:
+        wanted.append("permission_denied")
+    if stale:
+        wanted.append("stale_source")
+        if updates:
+            wanted.append("version_conflict")
+    if FailureModeKind.WRONG_ENTITY in kinds and len(connectors) >= 2:
+        wanted.append("ambiguous_join")
+    if FailureModeKind.CONNECTOR_UNAVAILABLE in kinds:
+        wanted.append("connector_unavailable")
+    return ("none", *(failure for failure in wanted if _renderable(failure)))
+
+
 def _content_actions(cuj: Cuj) -> tuple[ContentAction, ...]:
     """The model-only work the journey does, in step order.
 
@@ -544,7 +618,8 @@ def _scenario(cuj: Cuj, prompt: str, sources: tuple[SourceRole, ...],
         name=cuj.id, industry=industry, company_description="",
         connectors=tuple(sorted({connector for connector, _ in _pairs(cuj)})),
         additional_workflows=(workflow,),
-        additional_processes=(invented,) if invented is not None else ())
+        additional_processes=(invented,) if invented is not None else (),
+        coverage=CoverageProfile(failures=coverage_failures(cuj)))
 
 
 def build_use_case(cuj: Cuj, prompt: str,

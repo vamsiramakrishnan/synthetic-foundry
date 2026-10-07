@@ -189,12 +189,8 @@
       ],
       "failures": [
         "none",
-        "ambiguous_join",
-        "missing_stable_id",
-        "permission_denied",
-        "partial_write",
         "stale_source",
-        "version_conflict"
+        "ambiguous_join"
       ],
       "max_candidates": 10000000,
       "name": "enterprise-default",
