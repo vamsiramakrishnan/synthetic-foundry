@@ -158,6 +158,58 @@ the closest real record against the real set's own leave-one-out baseline. Per
 slice: the univariate block again. A single number would reward whichever
 dimension is cheapest to move.
 
+## Telemetry: the CUJ catalogue
+
+The seams above take a proposal about *physics*: a range, a value, a row. The
+CUJ catalogue takes a proposal about *what to build in the first place*.
+
+A separate tool, the customer telemetry miner, runs inside a customer's own
+environment, reads their assistant's conversation logs, and writes one file: an
+inventory of the journeys their people actually repeat. Which tasks recur, how
+often, through which connectors, in what order, and how they tend to end.
+`worldloom.telemetry` reads that file.
+
+What crosses the boundary is counts, shapes and templates. No query text, no
+reply text, no user id, no tenant id, no argument value. Only argument *names*,
+and evidence referenced by hash that nobody outside the customer's environment
+can resolve. That is the whole reason the two tools are separate programs
+rather than one.
+
+```
+customer's environment   │   anywhere
+─────────────────────────┼──────────────────────────────────────
+  logs ─▶ miner ─▶ cuj_catalogue.json ─▶ telemetry ─▶ a world
+                         │  counts, shapes,
+                         │  templates. no text.
+```
+
+`load_catalogue(data: bytes)` is the only way in, and it checks three things in
+order: the version, then the shape, then ten invariants. The order is load
+bearing, because the invariants add up shares and resolve step ids, and neither
+means anything until the shape check says those are numbers and strings. So a
+badly shaped file reports `schema` and nothing else.
+
+The ten invariants are the part a JSON Schema cannot do. A schema checks that a
+field is a number between 0 and 1; it cannot check that fifty such numbers sum
+to the one in the header, that a step reaches a connector the file declared, or
+that a journey's id really is the hash of its own steps. Both sides run the same
+ten, under the same names `inv1` … `inv10`, so when the producer and the
+consumer disagree about a file they can at least name the disagreement
+identically. All ten run on every file: a catalogue with four problems reports
+four, because finding them one rebuild at a time is how a day disappears.
+
+This is not a `Protocol`. There is exactly one catalogue format and one producer
+of it, so there is nothing for an implementor to vary, and a seam with one
+implementation is a layer of indirection with a docstring. What it does share
+with the seams above is the discipline that matters: it is **asked once and
+replayed forever**, and it leaves a `Receipt` recording which bytes it read by
+digest, never the bytes.
+
+Determinism holds the usual way and for the usual reason: the same catalogue
+must give the same world today and in six months, so there is no clock, no
+randomness, and no model call anywhere in the package. An import is a
+translation, not a judgement.
+
 ## What is deliberately not here
 
 - **A live Faker dependency**, for the replay reason above.

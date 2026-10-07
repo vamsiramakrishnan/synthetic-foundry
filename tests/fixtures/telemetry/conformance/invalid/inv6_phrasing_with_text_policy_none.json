@@ -1,0 +1,198 @@
+{
+  "schema_version": "cuj-catalogue/1",
+  "catalogue_id": "retail_example_2026.09",
+  "created_at": "2026-09-24T00:00:00Z",
+  "producer": {
+    "tool": "customer-telemetry-miner",
+    "version": "0.2.0",
+    "config_digest": "b79606fb3afea5bd1609ed40b622142f1c98125abcfe89a76a661b0e8e343910"
+  },
+  "source": {
+    "queryset_id": "retail_example",
+    "queryset_version": "2026.09",
+    "queryset_checksum": "4a7926947568b14f56a61d594bf7551ceaa7efa75bf2e2348babb9a8dd59e820",
+    "surface": "gemini_enterprise",
+    "window": { "start": "2026-08-11T00:00:00Z", "end": "2026-08-14T00:00:00Z" },
+    "counts": { "records_ingested": 362, "records_curated": 188, "sessions": 96, "tool_calls": 612 }
+  },
+  "privacy": {
+    "min_support": 3,
+    "text_policy": "none",
+    "pii_redaction": "regex",
+    "notes": "Illustrative values only; not derived from any customer."
+  },
+  "industry_hint": {
+    "industry": "grocery retail",
+    "basis": "operator_supplied",
+    "evidence_terms": ["store ops", "replenishment", "supplier"]
+  },
+  "connectors": [
+    {
+      "key": "confluence",
+      "display_name": "Confluence",
+      "observed_prefixes": ["confluence_agent"],
+      "call_count": 144,
+      "entities": [
+        { "name": "space", "operations": ["list", "read"], "argument_fields": ["space_key"], "calls": 41 },
+        { "name": "page", "operations": ["create", "read", "search"], "argument_fields": ["queries", "space_key", "page_id", "title"], "calls": 103 }
+      ],
+      "tools": [
+        { "name": "confluence_agent__multi_query_search_page_tool", "entity": "page", "operation": "search", "calls": 58, "classified_by": "rule" },
+        { "name": "confluence_agent__get_page", "entity": "page", "operation": "read", "calls": 16, "classified_by": "rule" },
+        { "name": "confluence_agent__create_page", "entity": "page", "operation": "create", "calls": 29, "classified_by": "rule" },
+        { "name": "confluence_agent__list_spaces", "entity": "space", "operation": "list", "calls": 30, "classified_by": "rule" },
+        { "name": "confluence_agent__get_space", "entity": "space", "operation": "read", "calls": 11, "classified_by": "rule" }
+      ]
+    },
+    {
+      "key": "jira",
+      "display_name": "Jira",
+      "observed_prefixes": ["jira_agent"],
+      "call_count": 184,
+      "entities": [
+        { "name": "project", "operations": ["list", "read", "search"], "argument_fields": ["query", "project_key"], "calls": 64 },
+        { "name": "issue", "operations": ["create", "list", "search"], "argument_fields": ["project_key", "issue_type", "summary", "description", "jql"], "calls": 58 },
+        { "name": "user", "operations": ["search"], "argument_fields": ["query"], "calls": 38 },
+        { "name": "issue_type", "operations": ["list"], "argument_fields": ["project_key"], "calls": 24 }
+      ],
+      "tools": [
+        { "name": "jira_agent__search_projects", "entity": "project", "operation": "search", "calls": 45, "classified_by": "rule" },
+        { "name": "jira_agent__list_projects", "entity": "project", "operation": "list", "calls": 16, "classified_by": "rule" },
+        { "name": "jira_agent__get_project", "entity": "project", "operation": "read", "calls": 3, "classified_by": "rule" },
+        { "name": "jira_agent__create_issue", "entity": "issue", "operation": "create", "calls": 44, "classified_by": "rule" },
+        { "name": "jira_agent__search_issues", "entity": "issue", "operation": "search", "calls": 11, "classified_by": "rule" },
+        { "name": "jira_agent__list_issues", "entity": "issue", "operation": "list", "calls": 3, "classified_by": "rule" },
+        { "name": "jira_agent__search_active_users", "entity": "user", "operation": "search", "calls": 38, "classified_by": "rule" },
+        { "name": "jira_agent__list_issue_types", "entity": "issue_type", "operation": "list", "calls": 24, "classified_by": "rule" }
+      ]
+    },
+    {
+      "key": "salesforce",
+      "display_name": "Salesforce",
+      "observed_prefixes": ["custom_mcp_custom_mcp_0000000000000000000_agent"],
+      "call_count": 14,
+      "entities": [
+        { "name": "record", "operations": ["read", "search"], "argument_fields": ["query", "object_name"], "calls": 14 }
+      ],
+      "tools": [
+        { "name": "custom_mcp_custom_mcp_0000000000000000000_agent__soqlQuery", "entity": "record", "operation": "search", "calls": 7, "classified_by": "alias" },
+        { "name": "custom_mcp_custom_mcp_0000000000000000000_agent__find", "entity": "record", "operation": "search", "calls": 4, "classified_by": "alias" },
+        { "name": "custom_mcp_custom_mcp_0000000000000000000_agent__getObjectSchema", "entity": "record", "operation": "read", "calls": 3, "classified_by": "manual" }
+      ]
+    }
+  ],
+  "excluded_tools": [
+    { "name": "load_skill", "calls": 92, "reason": "orchestration" },
+    { "name": "transfer_to_agent", "calls": 47, "reason": "orchestration" },
+    { "name": "selfawareness_agent", "calls": 9, "reason": "agent_introspection" },
+    { "name": "google_search_tool", "calls": 6, "reason": "web_search" },
+    { "name": "generate_memories", "calls": 5, "reason": "memory" }
+  ],
+  "cujs": [
+    {
+      "id": "cuj_9636dd61a048",
+      "label": "Meeting notes to Jira epics",
+      "label_source": "manual",
+      "anchor": "tool_signature",
+      "kind": "multi_turn",
+      "steps": [
+        { "id": "find_notes", "connector": "confluence", "entity": "page", "operation": "search", "effect": "read", "argument_fields": ["queries"], "presence": 1.0 },
+        { "id": "read_notes", "connector": "confluence", "entity": "page", "operation": "read", "effect": "read", "depends_on": ["find_notes"], "argument_fields": ["page_id"], "presence": 0.8 },
+        { "id": "find_project", "connector": "jira", "entity": "project", "operation": "search", "effect": "read", "argument_fields": ["query"], "presence": 0.9 },
+        { "id": "draft_epics", "capability": "generate", "effect": "transform", "depends_on": ["read_notes"], "presence": 1.0 },
+        { "id": "create_epics", "connector": "jira", "entity": "issue", "operation": "create", "effect": "write", "depends_on": ["find_project", "draft_epics"], "argument_fields": ["project_key", "issue_type", "summary", "description"], "presence": 0.7 }
+      ],
+      "support": { "sessions": 22, "queries": 71, "share": 0.229 },
+      "turns": { "mean": 3.2, "p50": 3, "p90": 6 },
+      "outcomes": { "SUCCESS": 44, "TOOL_FAILURE": 9, "PENDING_CONFIRMATION": 12, "CLARIFICATION_REQUEST": 6 },
+      "journey_outcomes": { "COMPLETED": 13, "ERROR_TERMINATED": 6, "FRICTION_RESOLVED": 3 },
+      "hardness": { "MEDIUM": 38, "HARD_FAILURE": 27, "HEAD_EASY": 6 },
+      "checks": { "trace": 44, "rubric": 21, "negative": 9 },
+      "volatility": { "stable": 66, "high": 5, "temporal_patterns": { "latest": 5 } },
+      "domains": { "TOOL_USE": 49, "SUMMARIZATION": 14, "CONVERSATIONAL": 8 },
+      "domain_terms": ["epic", "sprint", "store ops", "action items"],
+      "failure_modes": [
+        { "mode": "pending_confirmation", "count": 12, "step_id": "create_epics", "signal": "OutcomeClassifier.PENDING_CONFIRMATION" },
+        { "mode": "connector_unavailable", "count": 9, "step_id": "find_project", "signal": "OutcomeClassifier.TOOL_FAILURE" },
+        { "mode": "wrong_entity", "count": 4, "step_id": "find_project", "signal": "reformulation_after_tool_result" },
+        { "mode": "clarification_loop", "count": 6, "signal": "OutcomeClassifier.CLARIFICATION_REQUEST" }
+      ],
+      "phrasings": [
+        {
+          "template": "Create epics in {project} from the action items in the {meeting_title} notes",
+          "slots": [
+            { "name": "project", "step_id": "find_project", "field": "query" },
+            { "name": "meeting_title", "step_id": "find_notes", "field": "queries" }
+          ],
+          "support": 7
+        }
+      ],
+      "exemplar_hashes": [
+        "1eeffe64ffed560e873c2329ca0da9aa4357d412ff6eea74cefbaa8d841ba44e",
+        "eef70f4158cde69e1d7f9da732a78575689ca0d42fd5fe21de01c0b441cd21ce"
+      ]
+    },
+    {
+      "id": "cuj_3ac134e740af",
+      "label": "Look up a policy or process page",
+      "label_source": "rule",
+      "anchor": "tool_signature",
+      "kind": "single_turn",
+      "steps": [
+        { "id": "search", "connector": "confluence", "entity": "page", "operation": "search", "effect": "read", "argument_fields": ["queries"], "presence": 1.0 },
+        { "id": "read", "connector": "confluence", "entity": "page", "operation": "read", "effect": "read", "depends_on": ["search"], "argument_fields": ["page_id"], "presence": 0.4 },
+        { "id": "answer", "capability": "answer", "effect": "transform", "depends_on": ["search"], "presence": 1.0 }
+      ],
+      "support": { "sessions": 31, "queries": 38, "share": 0.323 },
+      "outcomes": { "SUCCESS": 30, "CAPABILITY_GAP": 5, "TOOL_FAILURE": 3 },
+      "hardness": { "HEAD_EASY": 12, "MEDIUM": 18, "HARD_FAILURE": 8 },
+      "checks": { "answer": 21, "rubric": 14, "negative": 3 },
+      "volatility": { "stable": 29, "high": 9, "temporal_patterns": { "latest": 6, "relative_window": 3 } },
+      "domains": { "FACTUAL_LOOKUP": 30, "MULTI_STEP_REASONING": 8 },
+      "domain_terms": ["replenishment", "leave policy", "supplier onboarding"],
+      "failure_modes": [
+        { "mode": "not_found", "count": 5, "step_id": "search", "signal": "OutcomeClassifier.CAPABILITY_GAP" },
+        { "mode": "stale_version", "count": 3, "step_id": "read", "signal": "negative_feedback_on_latest_query" },
+        { "mode": "connector_unavailable", "count": 3, "step_id": "search", "signal": "OutcomeClassifier.TOOL_FAILURE" }
+      ],
+      "phrasings": [
+        {
+          "template": "What is the latest {topic} process for stores?",
+          "slots": [{ "name": "topic", "step_id": "search", "field": "queries" }],
+          "support": 5
+        }
+      ],
+      "exemplar_hashes": ["85f3e42f5b0ad7de20001877f6a4d7e8c5708451b8d57e1ccf43f0a2122af34f"]
+    },
+    {
+      "id": "cuj_80e0d9ce1f1b",
+      "label": "Drafting help with no source system",
+      "label_source": "rule",
+      "anchor": "domain_cluster",
+      "cluster": { "cluster_id": 4, "keywords": ["rewrite", "email", "summary", "tone"] },
+      "kind": "single_turn",
+      "steps": [
+        { "id": "answer", "capability": "generate", "effect": "transform", "presence": 1.0 }
+      ],
+      "support": { "sessions": 18, "queries": 24, "share": 0.188 },
+      "outcomes": { "SUCCESS": 24 },
+      "hardness": { "HEAD_EASY": 15, "MEDIUM": 9 },
+      "checks": { "rubric": 24 },
+      "volatility": { "stable": 24, "high": 0 },
+      "domains": { "CREATIVE_WRITING": 16, "SUMMARIZATION": 8 },
+      "failure_modes": [],
+      "phrasings": [],
+      "exemplar_hashes": ["e5eab6f8698f74559767399c65dab8bdeb8acf4364dea0e573c4a21534284f95"]
+    }
+  ],
+  "coverage": {
+    "cujs_emitted": 3,
+    "covered_share": 0.74,
+    "suppressed_share": 0.19,
+    "unclassified_share": 0.07
+  },
+  "review_notes": [
+    "salesforce: prefix custom_mcp_custom_mcp_0000000000000000000_agent aliased to salesforce because its tools issue SOQL; confirm with the customer.",
+    "salesforce: getObjectSchema classified manually as record.read."
+  ]
+}
