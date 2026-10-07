@@ -75,6 +75,7 @@ from .catalogue import (
 )
 from .compile import (
     ANSWER_ONLY_UNSUPPORTED,
+    ARGUMENT_FIELD_UNKNOWN,
     CASES_BELOW_JOURNEYS,
     CONFLICTING_COMPANY_DEMANDS,
     DEFAULT_AUDIENCE,
@@ -92,6 +93,7 @@ from .compile import (
     check_with_studio,
     group_for,
     import_catalogue,
+    record_shapes,
     share_counts,
     sort_catalogue,
 )
@@ -118,6 +120,7 @@ from .report import (
 
 __all__ = [
     "ANSWER_ONLY_UNSUPPORTED",
+    "ARGUMENT_FIELD_UNKNOWN",
     "CASES_BELOW_JOURNEYS",
     "CONFLICTING_COMPANY_DEMANDS",
     "CONNECTOR_NOT_EMULATED",
@@ -178,6 +181,7 @@ __all__ = [
     "match_catalogue",
     "match_cuj",
     "prompt_template",
+    "record_shapes",
     "seed_for",
     "share_counts",
     "signature",

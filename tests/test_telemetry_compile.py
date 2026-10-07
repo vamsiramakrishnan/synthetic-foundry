@@ -15,6 +15,7 @@ a capability step claiming to write.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -34,7 +35,9 @@ from worldloom.telemetry import (
     sort_catalogue,
 )
 from worldloom.telemetry.binding import bind_question, fold_map, prompt_template
+from worldloom.telemetry.catalogue import Hardness
 from worldloom.telemetry.compile import (
+    ARGUMENT_FIELD_UNKNOWN,
     CASES_BELOW_JOURNEYS,
     DEFAULT_CASES,
     DROPPED_FOR_CONFLICT,
@@ -42,6 +45,7 @@ from worldloom.telemetry.compile import (
     build_use_case,
     check_with_studio,
     import_catalogue,
+    record_shapes,
     share_counts,
 )
 
@@ -207,23 +211,25 @@ def test_a_journey_with_no_steps_at_all_is_no_world() -> None:
 
 
 def _built_parts():
-    """The sample's one write journey, bound and ready to build."""
+    """The sample's one write journey, bound and ready to build, plus W2's
+    record of the lookup it folded away."""
     data = EXAMPLE.read_bytes()
     catalogue, _ = load_catalogue(data)
     piles = sort_catalogue(match_catalogue(catalogue))
     cuj = piles.write[0]
-    question, _ = bind_question(cuj, digest_bytes(data),
-                                folds=fold_map(piles.report))
+    folds = fold_map(piles.report)
+    question, _ = bind_question(cuj, digest_bytes(data), folds=folds)
     assert question is not None
-    return cuj, prompt_template(question, company_name="Northwind Grocers"), \
-        question.bindings
+    return (cuj, prompt_template(question, company_name="Northwind Grocers"),
+            question.bindings), folds
 
 
 def _built():
     """The sample's one write journey, all the way to a ``UseCase``."""
     catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
     industry = catalogue.industry_hint.industry if catalogue.industry_hint else ""
-    return build_use_case(*_built_parts(), industry=industry)
+    parts, folds = _built_parts()
+    return build_use_case(*parts, industry=industry, folds=folds)
 
 
 def test_the_write_journey_becomes_a_use_case_studio_accepts() -> None:
@@ -283,9 +289,123 @@ def test_reads_become_sources_and_writes_become_destinations() -> None:
     assert case.scenario is not None
     workflow = case.scenario.additional_workflows[0]
 
-    assert [role.connector for role in workflow.sources] == ["confluence"]
+    assert [(role.connector, role.required_fields)
+            for role in workflow.sources] == [
+        ("confluence", ("title",)), ("jira", ("project",))]
     assert [role.connector for role in workflow.destinations] == ["jira"]
     assert workflow.destinations[0].entities == ("issue",)
+
+
+def test_a_folded_lookup_still_counts_as_a_read() -> None:
+    """W2 deleted ``find_project``, but people did look the project up.
+
+    So Jira stays a source, and the world must hold issues in that project
+    for an agent that checks before it creates. Without the fold record,
+    the same journey loses both — which is why the builder takes it.
+    """
+    parts, folds = _built_parts()
+
+    with_folds = build_use_case(*parts, folds=folds)
+    without = build_use_case(*parts)
+
+    assert with_folds.construction is not None
+    assert without.construction is not None
+    assert "jira.issue" in {r.id for r in with_folds.construction.requirements}
+    assert "jira.issue" not in {r.id for r in without.construction.requirements}
+
+
+def test_a_search_phrase_is_pinned_as_the_title_of_what_was_searched_for() -> None:
+    """The question says "store ops notes", so a page titled "store ops" must
+    exist. The world builder mints it, plus a near miss on the title."""
+    case = _built()
+    assert case.construction is not None
+    page = next(r for r in case.construction.requirements
+                if r.id == "confluence.page")
+
+    assert page.selector["title"] == "store ops"
+    assert "store ops" in case.construction.request_template
+
+
+def test_written_free_text_is_not_pinned() -> None:
+    """Text the agent writes into a record is its output, not the world's
+    starting state. Only reads are pinned."""
+    case = _built()
+    assert case.construction is not None
+    issue = next(r for r in case.construction.requirements
+                 if r.id == "jira.issue")
+
+    assert set(issue.selector) == {"connector", "entity", "project"}
+
+
+def test_a_journey_that_only_writes_still_builds() -> None:
+    """A single "create an issue" reads nothing. ``WorkflowSpec`` refuses a
+    workflow with no source and ``EvalSpec`` one with no requirement, so
+    before this the import crashed instead of reporting anything. The
+    written pair stands in as what must exist beforehand."""
+    parts, _ = _built_parts()
+    cuj, prompt, _ = parts
+    write_only = cuj.model_copy(update={"steps": tuple(
+        step.model_copy(update={"depends_on": ()})
+        for step in cuj.steps if step.id == "create_epics")})
+
+    case = build_use_case(write_only, prompt, ())
+
+    assert case.construction is not None
+    assert case.scenario is not None
+    assert [(r.id, r.selector) for r in case.construction.requirements] == [
+        ("jira.issue", {"connector": "jira", "entity": "issue"})]
+    workflow = case.scenario.additional_workflows[0]
+    assert [role.connector for role in workflow.sources] == ["jira"]
+    assert compile_project(ProjectSpec(company=COMPANY,
+                                       use_cases=(case,))).accepted
+
+
+def test_difficulty_follows_the_hardness_tally_and_ties_go_harder() -> None:
+    parts, folds = _built_parts()
+    cuj = parts[0]
+    assert build_use_case(*parts, folds=folds).construction.difficulty == "medium"
+
+    tied = cuj.model_copy(update={"hardness": {
+        Hardness.HEAD_EASY: 5, Hardness.HARD_FAILURE: 3,
+        Hardness.ADVERSARIAL_EDGE: 2}})
+
+    assert build_use_case(tied, *parts[1:]).construction.difficulty == "hard"
+
+
+def test_candidate_count_is_one_as_studio_does() -> None:
+    case = _built()
+    assert case.construction is not None
+
+    assert case.construction.candidate_count == 1
+
+
+def test_arguments_the_definition_does_not_know_are_reported() -> None:
+    """Shipped connectors carry no field manifests, and ``queries`` is how a
+    page was asked for, not a field it has. So no shape, and a note each."""
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
+    cuj = next(c for c in catalogue.cujs if c.id == WRITES)
+
+    shape, findings = record_shapes(cuj)
+
+    assert shape.records == ()
+    assert {(f.detail["step_id"], f.detail["field"]) for f in findings} == {
+        ("find_notes", "queries"), ("read_notes", "page_id"),
+        ("find_project", "query")}
+    assert all(f.severity is Severity.INFO for f in findings)
+
+
+def test_a_known_argument_asks_for_a_record_shape() -> None:
+    """``title`` is a Confluence query field, so the definition knows it."""
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
+    cuj = next(c for c in catalogue.cujs if c.id == WRITES)
+    titled = cuj.model_copy(update={"steps": tuple(
+        step.model_copy(update={"argument_fields": ("title",)})
+        if step.id == "find_notes" else step for step in cuj.steps)})
+
+    shape, _ = record_shapes(titled)
+
+    assert [(r.connector, r.entity, r.minimum_populated_fields)
+            for r in shape.records] == [("confluence", "page", 1)]
 
 
 def test_a_process_is_invented_when_no_built_in_covers_every_pair() -> None:
@@ -449,7 +569,7 @@ def test_the_allocated_count_reaches_the_use_case() -> None:
     allocated = next(a for a in counts.allocations if a.cuj_id == case.id)
 
     assert build_use_case(
-        *_built_parts(), count=allocated.count).count == 50
+        *_built_parts()[0], count=allocated.count).count == 50
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +609,8 @@ def test_the_sample_imports_end_to_end() -> None:
         (WRITES, DEFAULT_CASES)]
     assert result.counts.share_lost == pytest.approx(0.511)
     assert [finding.code for finding in result.report.findings] == [
-        "step_folded", ANSWER_ONLY_UNSUPPORTED, NO_WORLD_NEEDED]
+        "step_folded", ANSWER_ONLY_UNSUPPORTED, NO_WORLD_NEEDED,
+        ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN]
 
 
 def test_studio_accepts_what_the_importer_built() -> None:
@@ -605,3 +726,50 @@ def test_the_whole_budget_goes_to_whatever_survives() -> None:
 
     assert result.project is not None
     assert sum(case.count for case in result.project.use_cases) == 37
+
+
+# ---------------------------------------------------------------------------
+# The design document's §8 tests 3 and 8.
+# ---------------------------------------------------------------------------
+
+
+GOLDEN = (Path(__file__).parent / "fixtures" / "telemetry" / "golden"
+          / "cuj_9636dd61a048.json")
+
+
+def _golden_text() -> str:
+    result = _imported()
+    assert result.project is not None
+    case = result.project.use_cases[0]
+    return json.dumps(case.model_dump(mode="json"), indent=2, sort_keys=True,
+                      ensure_ascii=False) + "\n"
+
+
+def test_the_write_journey_produces_exactly_the_reviewed_use_case() -> None:
+    """§8 test 3: compared as a golden JSON file, byte for byte.
+
+    The file is our output, reviewed against the design document's §7. It
+    differs from §7 only where a decision was made: ``issue`` rather than
+    ``epic``, the seeded ``ACTIONITEM`` rather than the illustrative
+    ``STOREOPS``, §5.5's prefix and suffix on the question, requirement ids
+    named for their pair, and no failure modes yet (W5).
+
+    A change here is a change to every imported corpus. If it is intended,
+    review the diff, then regenerate with
+    ``WORLDLOOM_UPDATE_GOLDEN=1 pytest tests/test_telemetry_compile.py``.
+    """
+    actual = _golden_text()
+    if os.environ.get("WORLDLOOM_UPDATE_GOLDEN") == "1":
+        GOLDEN.write_text(actual, encoding="utf-8")
+
+    assert actual == GOLDEN.read_text(encoding="utf-8"), (
+        "the imported use case no longer matches the reviewed golden file; "
+        "see this test's docstring")
+
+
+def test_importing_twice_gives_identical_bytes() -> None:
+    """§8 test 8. Nothing may depend on the clock, the machine, or the order a
+    dictionary happened to be built in."""
+    first, second = _imported(), _imported()
+
+    assert first.model_dump_json() == second.model_dump_json()

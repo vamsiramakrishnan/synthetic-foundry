@@ -38,8 +38,9 @@ returns the same journeys in labelled piles.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
+from ..connector_definition import load_connector_definition
 from ..enterprise_specs import (
     ContentAction,
     DestinationRole,
@@ -50,7 +51,14 @@ from ..enterprise_specs import (
     WorkflowSpec,
     builtin_registry,
 )
-from ..eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from ..eval_design import (
+    EvalShape,
+    EvalSpec,
+    EvalStepSpec,
+    RecordShapeRequirement,
+    RequirementKind,
+    WorldRequirement,
+)
 from ..models import Model
 from ..providers import Receipt, digest_bytes
 from ..studio.construction import (
@@ -67,11 +75,13 @@ from .binding import (
     fold_map,
     prompt_template,
 )
-from .catalogue import Catalogue, Cuj, load_catalogue
+from .catalogue import Catalogue, Cuj, Hardness, load_catalogue
 from .registry import match_catalogue
 from .report import Finding, ImportReport, hard, info
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from .binding import Binding
     from .registry import MatchedCatalogue
 
@@ -215,10 +225,24 @@ _CONTENT_ACTIONS = {
     "transform": ContentAction.TRANSFORM,
 }
 
-#: Values worth pinning in the world. An option or a derived container name
-#: identifies something that must exist. Free text is a search phrase, and a
-#: person is chosen by the world after it is built, so neither belongs here.
-_SELECTOR_RULES = (BindRule.OPTION, BindRule.KEY)
+#: Argument names that hold what a person typed into a search. A value bound
+#: to one of these, on a step that reads, names the record the search was
+#: for — so it becomes that record's ``title`` in the world. ``title`` is not
+#: a guess: it is the text field the world builder itself gives every
+#: witness record it mints (``eval_witnesses``), and the field the design
+#: document's worked example pins ("store ops").
+_SEARCH_WORDS = frozenset({"query", "queries", "q", "search", "keyword",
+                           "keywords", "term", "terms", "text"})
+
+#: The hardness tiers the catalogue counts, as ``EvalSpec`` difficulties.
+_DIFFICULTY = {Hardness.HEAD_EASY: "easy", Hardness.MEDIUM: "medium",
+               Hardness.HARD_FAILURE: "hard", Hardness.ADVERSARIAL_EDGE: "hard"}
+_HARDER = ("easy", "medium", "hard")
+
+ARGUMENT_FIELD_UNKNOWN = "argument_field_unknown"
+"""A read step used an argument the connector definition does not describe,
+so no record shape can be asked for it. Info: nothing is wrong with the
+journey, and with today's shipped connectors this is the common case."""
 
 
 def _capability(label: str) -> str:
@@ -238,6 +262,21 @@ def _objective(cuj: Cuj) -> str:
     """
     return (f"Reproduce telemetry CUJ {cuj.id} ({cuj.label}): "
             f"{cuj.support.sessions} sessions, share {cuj.support.share}.")
+
+
+def _difficulty(cuj: Cuj) -> Literal["easy", "medium", "hard"]:
+    """The most common hardness tier; a tie goes to the harder one (§5.4).
+
+    Counted per difficulty, not per raw tier, because two tiers both mean
+    hard: 10 ``HARD_FAILURE`` and 10 ``ADVERSARIAL_EDGE`` are 20 hard rows.
+    """
+    counts = dict.fromkeys(_HARDER, 0)
+    for tier, count in cuj.hardness.items():
+        counts[_DIFFICULTY[tier]] += count
+    if not any(counts.values()):
+        return "medium"
+    chosen = max(_HARDER, key=lambda level: (counts[level], _HARDER.index(level)))
+    return cast("Literal['easy', 'medium', 'hard']", chosen)
 
 
 def _eval_steps(cuj: Cuj) -> tuple[EvalStepSpec, ...]:
@@ -270,65 +309,175 @@ def _pairs(cuj: Cuj) -> tuple[tuple[str, str], ...]:
     return tuple(seen)
 
 
-def _requirements(cuj: Cuj,
-                  bindings: tuple[Binding, ...]) -> tuple[WorldRequirement, ...]:
-    """What the world must contain: one requirement per pair, not per step.
+def _reads(cuj: Cuj, folds: Mapping[str, tuple[str, str]],
+           ) -> dict[tuple[str, str], set[str]]:
+    """Every pair the journey reads, with how, in first-use order.
 
-    Per *pair* because Studio rejects a case whose requirements for one
-    ``(connector, entity)`` disagree about their selectors
-    (``ambiguous_source_contract``). Three steps touching Jira issues are one
-    demand on the world, with their fields merged, not three demands that
-    happen to agree.
+    A folded lookup counts as a read of the pair it folded into. W2 deleted
+    the step, but people did look the project up before creating the epics,
+    and an agent that does the same must find something there. Leaving it
+    out would let the world hold no issues in that project at all, so a
+    careful agent checking first would find nothing and be marked down for
+    the care. This is how the design document's worked example lists it.
+    """
+    reads: dict[tuple[str, str], set[str]] = {}
+    for step in cuj.steps:
+        if step.connector and step.entity and step.operation \
+                and step.effect != "write":
+            reads.setdefault((step.connector, step.entity), set()).add(
+                str(step.operation))
+    hosts = {step.id: step for step in cuj.steps}
+    for host_id, _ in folds.values():
+        host = hosts.get(host_id)
+        if host is not None and host.connector and host.entity:
+            reads.setdefault((host.connector, host.entity), set()).add("search")
+    return reads
+
+
+def _writes(cuj: Cuj) -> dict[tuple[str, str], set[str]]:
+    writes: dict[tuple[str, str], set[str]] = {}
+    for step in cuj.steps:
+        if step.connector and step.entity and step.operation \
+                and step.effect == "write":
+            writes.setdefault((step.connector, step.entity), set()).add(
+                str(step.operation))
+    return writes
+
+
+def _searched_for(field: str) -> bool:
+    return any(word in _SEARCH_WORDS for word in field.casefold().split("_"))
+
+
+def _selectors(reads: Mapping[tuple[str, str], set[str]],
+               bindings: tuple[Binding, ...],
+               ) -> dict[tuple[str, str], dict[str, str | int | bool]]:
+    """What each read pair's record must look like, for the world to answer
+    the question that was written.
+
+    The question names values; the world has to hold them. Three kinds are
+    pinned:
+
+        an option          the connector's own declared value
+        a container        the key-shaped name, "ACTIONITEM"
+        a search phrase    the title of what was searched for, "store ops"
+
+    A person is left out — the world chooses one after it is built — and so
+    is free text written *into* a record, which is the agent's output, not
+    the world's starting state. The world builder mints matching records
+    plus one near miss per pinned field, so every pinned value exists and
+    has look-alikes.
     """
     selectors: dict[tuple[str, str], dict[str, str | int | bool]] = {
-        pair: {"connector": pair[0], "entity": pair[1]} for pair in _pairs(cuj)}
+        pair: {"connector": pair[0], "entity": pair[1]} for pair in reads}
     for binding in bindings:
-        pair = (binding.connector, binding.entity)
-        if binding.rule in _SELECTOR_RULES and pair in selectors:
-            selectors[pair][binding.field] = binding.value
+        selector = selectors.get((binding.connector, binding.entity))
+        if selector is None:
+            continue
+        if binding.rule in (BindRule.OPTION, BindRule.KEY):
+            selector[binding.field] = binding.value
+        elif binding.rule is BindRule.TEXT and _searched_for(binding.field):
+            selector["title"] = binding.value
+    return selectors
+
+
+def _requirements(reads: Mapping[tuple[str, str], set[str]],
+                  selectors: Mapping[tuple[str, str],
+                                     dict[str, str | int | bool]],
+                  ) -> tuple[WorldRequirement, ...]:
+    """One hard requirement per pair that is *read* — not per step, and not
+    per pair written (§5.4).
+
+    Per pair because Studio rejects a case whose requirements for one
+    ``(connector, entity)`` disagree about their selectors
+    (``ambiguous_source_contract``). Read pairs only because a requirement
+    says what must exist *before* the agent starts; a record the agent is
+    about to create is its output.
+    """
     return tuple(
         WorldRequirement(id=f"{connector}.{entity}",
                          kind=RequirementKind.CONNECTOR,
                          selector=selectors[(connector, entity)])
-        for connector, entity in _pairs(cuj))
+        for connector, entity in reads)
 
 
-def _roles(cuj: Cuj, bindings: tuple[Binding, ...],
+def _roles(reads: Mapping[tuple[str, str], set[str]],
+           writes: Mapping[tuple[str, str], set[str]],
+           selectors: Mapping[tuple[str, str], dict[str, str | int | bool]],
            ) -> tuple[tuple[SourceRole, ...], tuple[DestinationRole, ...]]:
     """Read pairs become sources, write pairs become destinations.
 
-    A pair read *and* written is both. The workflow describes what the agent
-    has to touch, and a step that reads an issue before updating it needs the
-    issue findable as well as writable.
+    A source's ``required_fields`` are its selector's pinned fields, as the
+    design document asks: the fields a record must carry for the agent to
+    find the one the question means. A pair read *and* written is both.
     """
-    reads: dict[tuple[str, str], set[str]] = {}
-    writes: dict[tuple[str, str], set[str]] = {}
-    for step in cuj.steps:
-        if not (step.connector and step.entity and step.operation):
-            continue
-        side = writes if step.effect == "write" else reads
-        side.setdefault((step.connector, step.entity), set()).add(
-            str(step.operation))
-
-    selector_fields: dict[tuple[str, str], list[str]] = {}
-    for binding in bindings:
-        if binding.rule in _SELECTOR_RULES and binding.field:
-            selector_fields.setdefault(
-                (binding.connector, binding.entity), []).append(binding.field)
+    def operations(names: set[str]) -> tuple[Operation, ...]:
+        return tuple(sorted(Operation(name) for name in names))
 
     sources = tuple(
         SourceRole(connector=connector, entities=(entity,),
-                   operations=tuple(sorted(Operation(name)
-                                           for name in sorted(operations))),
-                   required_fields=tuple(
-                       sorted(selector_fields.get((connector, entity), []))))
-        for (connector, entity), operations in sorted(reads.items()))
+                   operations=operations(names),
+                   required_fields=tuple(sorted(
+                       key for key in selectors[(connector, entity)]
+                       if key not in ("connector", "entity"))))
+        for (connector, entity), names in sorted(reads.items()))
     destinations = tuple(
         DestinationRole(connector=connector, entities=(entity,),
-                        operations=tuple(sorted(Operation(name)
-                                                for name in sorted(operations))))
-        for (connector, entity), operations in sorted(writes.items()))
+                        operations=operations(names))
+        for (connector, entity), names in sorted(writes.items()))
     return sources, destinations
+
+
+def _knows(connector: str, entity: str, field: str) -> bool:
+    """Whether the connector definition describes *field* on *entity*: a
+    field manifest, a query field, or a field required on create."""
+    try:
+        definition = load_connector_definition(connector)
+        if definition.resolve_field(entity, field) is not None:
+            return True
+        members = definition.entity_members(entity)
+    except (KeyError, ValueError):
+        return False
+    if field in definition.query_fields:
+        return True
+    return any(field in definition.entities[member].required_on_create
+               for member in members)
+
+
+def record_shapes(cuj: Cuj) -> tuple[EvalShape, tuple[Finding, ...]]:
+    """A record shape per read step whose arguments the definition knows.
+
+    Each asks that the record the step reads carries at least as many
+    populated fields as the step's known arguments — the design document
+    names the rule but not its numbers, and that is the least it can mean.
+    Every argument the definition does not describe is reported instead.
+    With today's shipped connectors that is nearly all of them: they carry
+    no field manifests, and a search argument like ``queries`` names how a
+    record was asked for, not a field it has.
+    """
+    shapes: list[RecordShapeRequirement] = []
+    findings: list[Finding] = []
+    for step in cuj.steps:
+        if not (step.connector and step.entity) or step.effect == "write":
+            continue
+        known = [field for field in step.argument_fields
+                 if _knows(step.connector, step.entity, field)]
+        for field in step.argument_fields:
+            if field not in known:
+                findings.append(info(
+                    ARGUMENT_FIELD_UNKNOWN,
+                    f"step {step.id!r} passed {field!r} to "
+                    f"{step.connector}.{step.entity}, which the connector "
+                    "definition does not describe; no record shape asked "
+                    "for it",
+                    cuj_id=cuj.id,
+                    detail={"step_id": step.id, "field": field,
+                            "connector": step.connector,
+                            "entity": step.entity}))
+        if known:
+            shapes.append(RecordShapeRequirement(
+                connector=step.connector, entity=step.entity,
+                minimum_populated_fields=len(known)))
+    return EvalShape(records=tuple(shapes)), tuple(findings)
 
 
 def _content_actions(cuj: Cuj) -> tuple[ContentAction, ...]:
@@ -375,10 +524,9 @@ def _process(cuj: Cuj) -> tuple[str, ProcessSpec | None]:
         event_kinds=best.event_kinds if best is not None else ("work",))
 
 
-def _workflow(cuj: Cuj, prompt: str,
-              bindings: tuple[Binding, ...], *, audience: str,
+def _workflow(cuj: Cuj, prompt: str, sources: tuple[SourceRole, ...],
+              destinations: tuple[DestinationRole, ...], *, audience: str,
               ) -> tuple[WorkflowSpec, ProcessSpec | None]:
-    sources, destinations = _roles(cuj, bindings)
     process, invented = _process(cuj)
     return WorkflowSpec(
         name=cuj.id, purpose=cuj.label, process=process,
@@ -387,9 +535,11 @@ def _workflow(cuj: Cuj, prompt: str,
         prompt_template=prompt), invented
 
 
-def _scenario(cuj: Cuj, prompt: str, bindings: tuple[Binding, ...],
-              *, industry: str, audience: str) -> ScenarioProfile:
-    workflow, invented = _workflow(cuj, prompt, bindings, audience=audience)
+def _scenario(cuj: Cuj, prompt: str, sources: tuple[SourceRole, ...],
+              destinations: tuple[DestinationRole, ...], *, industry: str,
+              audience: str) -> ScenarioProfile:
+    workflow, invented = _workflow(cuj, prompt, sources, destinations,
+                                   audience=audience)
     return ScenarioProfile(
         name=cuj.id, industry=industry, company_description="",
         connectors=tuple(sorted({connector for connector, _ in _pairs(cuj)})),
@@ -401,6 +551,8 @@ def build_use_case(cuj: Cuj, prompt: str,
                    bindings: tuple[Binding, ...], *, industry: str = "",
                    persona: str = DEFAULT_PERSONA,
                    audience: str = DEFAULT_AUDIENCE,
+                   folds: Mapping[str, tuple[str, str]] | None = None,
+                   shape: EvalShape | None = None,
                    count: int = 12) -> UseCase:
     """One write journey, as something ``worldloom studio init`` accepts.
 
@@ -408,6 +560,11 @@ def build_use_case(cuj: Cuj, prompt: str,
     :func:`~.binding.prompt_template`. It goes into both the workflow and the
     construction contract, because the design document asks for the same
     text in each. *count* is how many questions this journey is worth.
+    *folds* is W2's record of which lookups it folded and where, from
+    :func:`~.binding.fold_map`; *shape* comes from :func:`record_shapes`.
+
+    ``candidate_count`` is 1 and ``difficulty`` comes from the journey's
+    hardness tally, both as §5.4 asks.
 
     ``activities`` is left empty, against the design document's "step ids in
     order". It is not a list of steps. ``ProjectSpec`` checks every activity
@@ -418,14 +575,26 @@ def build_use_case(cuj: Cuj, prompt: str,
     thing, a slot in the company's process catalogue, and the catalogue
     cannot say which one a journey belongs to.
     """
+    writes = _writes(cuj)
+    # A journey that only writes reads nothing, and both ``WorkflowSpec`` (no
+    # source) and ``EvalSpec`` (no requirement) refuse that outright — so a
+    # single "create an issue" would crash the import rather than report
+    # anything. Its written pairs stand in as what must exist beforehand,
+    # which is true anyway: Worldloom mints a pre-existing record for every
+    # write step, so updates and duplicates can be graded.
+    reads = _reads(cuj, folds or {}) or {pair: {"read"} for pair in writes}
+    selectors = _selectors(reads, bindings)
+    sources, destinations = _roles(reads, writes, selectors)
     return UseCase(
         id=cuj.id, title=cuj.label, objective=_objective(cuj), count=count,
-        scenario=_scenario(cuj, prompt, bindings,
+        scenario=_scenario(cuj, prompt, sources, destinations,
                            industry=industry, audience=audience),
         construction=EvalSpec(
             id=cuj.id, capability=_capability(cuj.label), persona=persona,
             request_template=prompt, steps=_eval_steps(cuj),
-            requirements=_requirements(cuj, bindings)))
+            requirements=_requirements(reads, selectors),
+            shape=shape or EvalShape(), difficulty=_difficulty(cuj),
+            candidate_count=1))
 
 
 # --------------------------------------------------------------------------
@@ -791,9 +960,12 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
                 cuj_id=cuj.id,
                 detail={"workflow": workflow,
                         "phrasings": str(len(cuj.phrasings))}))
+        shape, shape_findings = record_shapes(cuj)
+        findings.extend(shape_findings)
         built.append(build_use_case(cuj, prompt, bindings,
                                     industry=industry, persona=persona,
-                                    audience=audience))
+                                    audience=audience, folds=folds,
+                                    shape=shape))
 
     shares = {cuj.id: cuj.support.share for cuj in piles.write}
     survivors, studio_findings = check_with_studio(company, tuple(built), shares)

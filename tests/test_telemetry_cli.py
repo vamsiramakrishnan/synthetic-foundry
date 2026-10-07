@@ -33,6 +33,9 @@ INVALID = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
 
 WRITES = "cuj_9636dd61a048"
 
+#: Module-level, as §8 test 9 asks, so every test drives the same runner.
+RUNNER = CliRunner()
+
 
 @pytest.fixture
 def company(tmp_path: Path) -> Path:
@@ -43,7 +46,7 @@ def company(tmp_path: Path) -> Path:
 
 
 def _run(*args: str | Path) -> object:
-    return CliRunner().invoke(app, ["telemetry", *map(str, args)])
+    return RUNNER.invoke(app, ["telemetry", *map(str, args)])
 
 
 def _import(out: Path, company: Path, *extra: str | Path):
@@ -74,7 +77,7 @@ def test_studio_init_accepts_what_import_wrote(tmp_path: Path,
     out = tmp_path / "out"
     assert _import(out, company).exit_code == 0
 
-    created = CliRunner().invoke(app, [
+    created = RUNNER.invoke(app, [
         "studio", "init", str(out / "project.json"),
         "-w", str(tmp_path / "workspace")])
 
@@ -279,3 +282,15 @@ def test_company_template_refuses_to_overwrite(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "already exists" in result.output
+
+
+def test_two_imports_write_identical_files(tmp_path: Path, company: Path) -> None:
+    """§8 test 8, at the level a person sees: the same catalogue and company
+    give the same four files, byte for byte, wherever they are written."""
+    first, second = tmp_path / "first", tmp_path / "second"
+    assert _import(first, company).exit_code == 0
+    assert _import(second, company).exit_code == 0
+
+    for name in ("project.json", "import-report.json", "import-report.md",
+                 "import-receipt.json"):
+        assert (first / name).read_bytes() == (second / name).read_bytes(), name
