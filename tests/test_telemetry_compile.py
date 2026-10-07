@@ -20,21 +20,24 @@ from pathlib import Path
 
 import pytest
 
-from worldloom.enterprise_specs import builtin_registry
+from worldloom.enterprise_specs import apply_scenario_profile, builtin_registry
 from worldloom.providers import digest_bytes
 from worldloom.studio.construction import compile_project
 from worldloom.studio.models import ProjectSpec
 from worldloom.telemetry import (
     ANSWER_ONLY_UNSUPPORTED,
     NO_WORLD_NEEDED,
+    Catalogue,
     Group,
     Severity,
+    cuj_id,
     group_for,
     load_catalogue,
     match_catalogue,
+    plannable,
     sort_catalogue,
 )
-from worldloom.telemetry.binding import bind_question, fold_map, prompt_template
+from worldloom.telemetry.binding import bind_question, prompt_template
 from worldloom.telemetry.catalogue import FailureMode, Hardness
 from worldloom.telemetry.compile import (
     ARGUMENT_FIELD_UNKNOWN,
@@ -101,14 +104,17 @@ def test_every_journey_lands_in_exactly_one_pile() -> None:
 
 
 def test_w2s_findings_are_carried_forward_not_replaced() -> None:
-    """Sorting adds to the report; it does not start a new one.
+    """Sorting adds to the report; it does not start a new one. A journey W2
+    refused must still be explained after sorting, in W2's own words."""
+    catalogue = _catalogue()
+    users = catalogue.cujs[0].model_copy(update={"steps": tuple(
+        step.model_copy(update={"entity": "user"})
+        if step.id == "find_project" else step
+        for step in catalogue.cujs[0].steps)})
+    piles = sort_catalogue(match_catalogue(catalogue.model_copy(
+        update={"cujs": (users, *catalogue.cujs[1:])})))
 
-    The fold from W2 must still be visible after sorting, or a reader of the
-    final report loses the fact that a step was removed.
-    """
-    piles = _sorted()
-
-    assert "step_folded" in _codes(piles.report.findings)
+    assert "entity_unresolved" in _codes(piles.report.findings)
 
 
 # ---------------------------------------------------------------------------
@@ -212,25 +218,22 @@ def test_a_journey_with_no_steps_at_all_is_no_world() -> None:
 
 
 def _built_parts():
-    """The sample's one write journey, bound and ready to build, plus W2's
-    record of the lookup it folded away."""
+    """The sample's one write journey, bound and ready to build."""
     data = EXAMPLE.read_bytes()
     catalogue, _ = load_catalogue(data)
     piles = sort_catalogue(match_catalogue(catalogue))
     cuj = piles.write[0]
-    folds = fold_map(piles.report)
-    question, _ = bind_question(cuj, digest_bytes(data), folds=folds)
+    question, _ = bind_question(cuj, digest_bytes(data))
     assert question is not None
     return (cuj, prompt_template(question, company_name="Northwind Grocers"),
-            question.bindings), folds
+            question.bindings)
 
 
 def _built():
     """The sample's one write journey, all the way to a ``UseCase``."""
     catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
     industry = catalogue.industry_hint.industry if catalogue.industry_hint else ""
-    parts, folds = _built_parts()
-    return build_use_case(*parts, industry=industry, folds=folds)
+    return build_use_case(*_built_parts(), industry=industry)
 
 
 def test_the_write_journey_becomes_a_use_case_studio_accepts() -> None:
@@ -257,8 +260,8 @@ def test_the_question_and_the_world_agree_on_every_value() -> None:
     selectors = {requirement.id: requirement.selector
                  for requirement in case.construction.requirements}
 
-    assert selectors["jira.issue"]["project"] == "ACTIONITEM"
-    assert "ACTIONITEM" in case.construction.request_template
+    assert selectors["jira.project"]["title"] == "STOREOPS"
+    assert "STOREOPS" in case.construction.request_template
 
 
 def test_there_is_one_requirement_per_pair_not_per_step() -> None:
@@ -268,10 +271,11 @@ def test_there_is_one_requirement_per_pair_not_per_step() -> None:
     assert case.construction is not None
     ids = [requirement.id for requirement in case.construction.requirements]
 
-    assert ids == ["confluence.page", "jira.issue"]
+    assert ids == ["confluence.page", "jira.project"]
     assert len(ids) == len(set(ids))
-    # Three steps touch those two pairs.
-    assert len([s for s in case.construction.steps if s.connector]) == 3
+    # Two steps read Confluence pages; they are one requirement.
+    assert len([s for s in case.construction.steps
+                if s.connector == "confluence"]) == 2
 
 
 def test_a_capability_step_becomes_a_transform_with_no_connector() -> None:
@@ -291,28 +295,55 @@ def test_reads_become_sources_and_writes_become_destinations() -> None:
     workflow = case.scenario.additional_workflows[0]
 
     assert [(role.connector, role.required_fields)
-            for role in workflow.sources] == [
-        ("confluence", ("title",)), ("jira", ("project",))]
+            for role in workflow.sources] == [("confluence", ("title",))]
     assert [role.connector for role in workflow.destinations] == ["jira"]
     assert workflow.destinations[0].entities == ("issue",)
 
 
-def test_a_folded_lookup_still_counts_as_a_read() -> None:
-    """W2 deleted ``find_project``, but people did look the project up.
+def test_a_lookup_is_a_read_even_when_no_workflow_role_can_name_it() -> None:
+    """``jira.project`` is something the emulator serves but Studio's planner
+    cannot name in a workflow role — Jira's catalog knows only ``issue``. The
+    lookup still gets a construction requirement, so the world holds the
+    project an agent checks for before it creates anything."""
+    case = _built()
+    assert case.construction is not None
+    assert case.scenario is not None
+    workflow = case.scenario.additional_workflows[0]
 
-    So Jira stays a source, and the world must hold issues in that project
-    for an agent that checks before it creates. Without the fold record,
-    the same journey loses both — which is why the builder takes it.
-    """
-    parts, folds = _built_parts()
+    assert "jira.project" in {r.id for r in case.construction.requirements}
+    assert not plannable("jira", "project")
+    assert ("jira", ("project",)) not in {
+        (role.connector, role.entities) for role in workflow.sources}
 
-    with_folds = build_use_case(*parts, folds=folds)
-    without = build_use_case(*parts)
 
-    assert with_folds.construction is not None
-    assert without.construction is not None
-    assert "jira.issue" in {r.id for r in with_folds.construction.requirements}
-    assert "jira.issue" not in {r.id for r in without.construction.requirements}
+def test_only_this_journeys_workflow_is_in_its_scenario() -> None:
+    """An empty ``workflows`` means *all* of them to ``apply_scenario_profile``,
+    which carried the built-in incident_review and change_assurance into
+    every imported case, generating questions no customer asked."""
+    case = _built()
+    assert case.scenario is not None
+
+    selected = apply_scenario_profile(builtin_registry(), case.scenario)
+
+    assert list(selected.workflows) == [WRITES]
+
+
+def test_a_journey_writing_only_where_the_planner_cannot_reach_is_refused() -> None:
+    """A workflow needs a destination Studio can name. Refused by name, not
+    built into a scenario Studio would then reject."""
+    payload = json.loads(EXAMPLE.read_text())
+    journey = next(cuj for cuj in payload["cujs"] if cuj["id"] == WRITES)
+    create = next(s for s in journey["steps"] if s["id"] == "create_epics")
+    create["entity"], create["argument_fields"] = "sprint", []
+    payload["connectors"][1]["entities"].append(
+        {"name": "sprint", "operations": ["create"], "calls": 1})
+    # The id is a hash of the steps (inv8), so it is recomputed after the edit.
+    journey["id"] = cuj_id(_cuj(Catalogue.model_validate(payload), WRITES))
+
+    result = _imported(json.dumps(payload).encode())
+
+    assert result.project is None
+    assert "write_not_plannable" in [f.code for f in result.report.findings]
 
 
 def test_a_search_phrase_is_pinned_as_the_title_of_what_was_searched_for() -> None:
@@ -332,10 +363,7 @@ def test_written_free_text_is_not_pinned() -> None:
     starting state. Only reads are pinned."""
     case = _built()
     assert case.construction is not None
-    issue = next(r for r in case.construction.requirements
-                 if r.id == "jira.issue")
-
-    assert set(issue.selector) == {"connector", "entity", "project"}
+    assert "jira.issue" not in {r.id for r in case.construction.requirements}
 
 
 def test_a_journey_that_only_writes_still_builds() -> None:
@@ -343,7 +371,7 @@ def test_a_journey_that_only_writes_still_builds() -> None:
     workflow with no source and ``EvalSpec`` one with no requirement, so
     before this the import crashed instead of reporting anything. The
     written pair stands in as what must exist beforehand."""
-    parts, _ = _built_parts()
+    parts = _built_parts()
     cuj, prompt, _ = parts
     write_only = cuj.model_copy(update={"steps": tuple(
         step.model_copy(update={"depends_on": ()})
@@ -362,9 +390,9 @@ def test_a_journey_that_only_writes_still_builds() -> None:
 
 
 def test_difficulty_follows_the_hardness_tally_and_ties_go_harder() -> None:
-    parts, folds = _built_parts()
+    parts = _built_parts()
     cuj = parts[0]
-    assert build_use_case(*parts, folds=folds).construction.difficulty == "medium"
+    assert build_use_case(*parts).construction.difficulty == "medium"
 
     tied = cuj.model_copy(update={"hardness": {
         Hardness.HEAD_EASY: 5, Hardness.HARD_FAILURE: 3,
@@ -436,12 +464,14 @@ def test_the_objective_carries_counts_and_no_customer_text() -> None:
         "epics): 22 sessions, share 0.229.")
 
 
-def test_the_steps_left_after_folding_are_the_construction_steps() -> None:
+def test_the_construction_steps_are_the_journey_as_recorded() -> None:
+    """All five, including the project lookup, which W2 no longer removes."""
     case = _built()
     assert case.construction is not None
 
     assert [step.id for step in case.construction.steps] == [
-        "find_notes", "read_notes", "draft_epics", "create_epics"]
+        "find_notes", "read_notes", "find_project", "draft_epics",
+        "create_epics"]
 
 
 def test_activities_stay_empty_so_a_project_can_hold_the_case() -> None:
@@ -570,7 +600,7 @@ def test_the_allocated_count_reaches_the_use_case() -> None:
     allocated = next(a for a in counts.allocations if a.cuj_id == case.id)
 
     assert build_use_case(
-        *_built_parts()[0], count=allocated.count).count == 50
+        *_built_parts(), count=allocated.count).count == 50
 
 
 # ---------------------------------------------------------------------------
@@ -594,7 +624,7 @@ def _pinned(case_id: str, status: str):
     requirements = tuple(
         requirement.model_copy(update={"selector": {
             **requirement.selector, "id": "OPS-1", "status": status}})
-        if requirement.id == "jira.issue" else requirement
+        if requirement.id == "jira.project" else requirement
         for requirement in base.construction.requirements)
     return base.model_copy(update={
         "id": case_id,
@@ -610,8 +640,8 @@ def test_the_sample_imports_end_to_end() -> None:
         (WRITES, DEFAULT_CASES)]
     assert result.counts.share_lost == pytest.approx(0.511)
     assert [finding.code for finding in result.report.findings] == [
-        "step_folded", ANSWER_ONLY_UNSUPPORTED, NO_WORLD_NEEDED,
-        ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN]
+        ANSWER_ONLY_UNSUPPORTED, NO_WORLD_NEEDED,
+        ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN]
 
 
 def test_studio_accepts_what_the_importer_built() -> None:

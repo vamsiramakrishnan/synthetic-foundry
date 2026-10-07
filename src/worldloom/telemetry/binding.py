@@ -56,22 +56,12 @@ the first exists when a connector pack supplies richer data::
     workflow states    entity.workflow.states           status
     name heuristics    the four rules above             always available
 
-Folds
------
+Slots always point at real steps
+--------------------------------
 
-A slot can point at a step that no longer exists, because W2 folds lookup
-steps away and ``inv3`` only guaranteed the slot was valid in the file as
-delivered. The fold is not lost, though: its ``step_folded`` finding records
-where the value went, so the slot is followed to the step that took it::
-
-    slot  (find_project, "query")
-            │  step_folded: find_project → create_epics, field "project"
-            ▼
-    bind  (create_epics, "project")
-
-:func:`fold_map` builds that redirection from a report. Without it a folded
-slot would bind against no connector at all, and a field with declared
-options would silently fall through to free text.
+W2 matches a journey exactly as recorded or refuses it; it never removes a
+step. So a slot's step exists, as ``inv3`` promised when the file was read,
+and binding never has to redirect one.
 """
 
 from __future__ import annotations
@@ -82,11 +72,9 @@ from typing import TYPE_CHECKING, Any
 from ..connector_definition import load_connector_definition
 from ..models import Model
 from ..providers import digest
-from .registry import STEP_FOLDED
-from .report import Finding, ImportReport, info
+from .report import Finding, info
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
 
     from ..connector_definition import ConnectorDefinition
     from .catalogue import Cuj, Phrasing, Slot, Step
@@ -332,20 +320,6 @@ def _step_for(cuj: Cuj, step_id: str) -> Step | None:
     return next((step for step in cuj.steps if step.id == step_id), None)
 
 
-def fold_map(report: ImportReport) -> dict[str, tuple[str, str]]:
-    """Where each folded step's value went: ``step_id → (host step, field)``.
-
-    Read back out of W2's ``step_folded`` findings, which recorded it. A slot
-    aimed at a folded step is followed here rather than treated as dangling,
-    so it still binds against a real connector and entity.
-    """
-    return {finding.detail["step_id"]:
-            (finding.detail["host_step_id"], finding.detail["field"])
-            for finding in report.findings
-            if finding.code == STEP_FOLDED
-            and {"step_id", "host_step_id", "field"} <= finding.detail.keys()}
-
-
 def _reference(slot: Slot, step: Step | None) -> str:
     """What to say instead of writing an id: "the page", "the issue".
 
@@ -358,8 +332,7 @@ def _reference(slot: Slot, step: Step | None) -> str:
     return f"the {noun.replace('_', ' ')}" if noun else "the record"
 
 
-def bind_slot(slot: Slot, cuj: Cuj, catalogue_digest: str, *,
-              folds: Mapping[str, tuple[str, str]] | None = None) -> Binding:
+def bind_slot(slot: Slot, cuj: Cuj, catalogue_digest: str) -> Binding:
     """A value for one hole. Never ``None``: every hole gets something.
 
     An id is the interesting case. It is never written, because a question
@@ -367,8 +340,8 @@ def bind_slot(slot: Slot, cuj: Cuj, catalogue_digest: str, *,
     is still *referred to*, so the question survives and the search stays
     worth doing.
     """
-    step_id, field = (folds or {}).get(slot.step_id, (slot.step_id, slot.field))
-    step = _step_for(cuj, step_id)
+    field = slot.field
+    step = _step_for(cuj, slot.step_id)
     connector = step.connector if step is not None and step.connector else ""
     entity = step.entity if step is not None and step.entity else ""
     seed = seed_for(catalogue_digest, cuj.id, connector, entity, field)
@@ -412,8 +385,7 @@ def _ordered(phrasings: tuple[Phrasing, ...]) -> list[Phrasing]:
     return sorted(phrasings, key=lambda p: (-p.support, p.template))
 
 
-def bind_question(cuj: Cuj, catalogue_digest: str, *,
-                  folds: Mapping[str, tuple[str, str]] | None = None,
+def bind_question(cuj: Cuj, catalogue_digest: str,
                   ) -> tuple[BoundQuestion | None, tuple[Finding, ...]]:
     """Fill the most-used phrasing that can be filled completely.
 
@@ -441,7 +413,7 @@ def bind_question(cuj: Cuj, catalogue_digest: str, *,
                         "support": str(phrasing.support)}))
             continue
 
-        bindings = tuple(bind_slot(slot, cuj, catalogue_digest, folds=folds)
+        bindings = tuple(bind_slot(slot, cuj, catalogue_digest)
                          for slot in phrasing.slots)
         text = phrasing.template
         for binding in bindings:

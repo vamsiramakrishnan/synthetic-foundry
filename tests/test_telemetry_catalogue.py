@@ -26,9 +26,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from worldloom.telemetry import (
+    Catalogue,
     CatalogueRefused,
+    check,
     cuj_id,
     load_catalogue,
     signature,
@@ -44,6 +47,17 @@ SCHEMA = (Path(__file__).parent.parent / "src" / "worldloom" / "_data"
 #: pin is here to make that a failing test rather than a silent divergence
 #: discovered weeks later by a rejected catalogue.
 SCHEMA_SHA256 = "53bf25f8c2f316a2bdd289ea01e40b8548bc8b7f8afda51758b1a24355e42506"
+
+#: SHA-256 of the conformance suite's answer sheet, ``EXPECTED.json``, from the
+#: same M1 handover. Pinned for the same reason: a verdict changed locally
+#: would make the suite agree with us instead of with the miner.
+#:
+#: Both pins catch *local* edits, not the miner moving on. The source miner
+#: commit was not recorded at handover, and the miner has since added
+#: ``invalid/key_trailing_newline.json`` (910c896), so this copy is 26 of its
+#: 27 files. Re-vendoring needs the miner's files, and should record the
+#: commit they came from.
+EXPECTED_SHA256 = "a8a491bc16ee935d598b08d5489f901c1e9036395567da33b4122f9e11cac04d"
 
 EXPECTED: dict[str, dict[str, Any]] = json.loads(
     (CONFORMANCE / "EXPECTED.json").read_text())
@@ -102,9 +116,17 @@ def test_version_mismatch_refuses_under_worldloom_s_own_code() -> None:
     assert raised.value.report.violation == "schema"
 
 
-def test_schema_copy_still_matches_the_miner_s() -> None:
-    """Our vendored schema is byte-identical to the one the models mirror."""
+def test_the_vendored_schema_and_answer_sheet_are_unchanged_since_m1() -> None:
+    """Our copies are byte-identical to what the miner handed over in M1.
+
+    The old name, "still matches the miner's", promised more than this checks:
+    it compares our copy with a digest of itself, so it catches local edits
+    and nothing else. Whether the miner has moved on is a separate question,
+    and today the answer is yes — see ``EXPECTED_SHA256``.
+    """
     assert hashlib.sha256(SCHEMA.read_bytes()).hexdigest() == SCHEMA_SHA256
+    assert hashlib.sha256((CONFORMANCE / "EXPECTED.json").read_bytes()
+                          ).hexdigest() == EXPECTED_SHA256
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +262,7 @@ def test_receipt_records_which_bytes_were_read(name: str) -> None:
     data = (CONFORMANCE / name).read_bytes()
     _, receipt = load_catalogue(data)
 
-    assert receipt.backend == "customer-telemetry-miner"
+    assert receipt.producer == "customer-telemetry-miner"
     assert receipt.source_digest == hashlib.sha256(data).hexdigest()[:32]
 
     _, other = load_catalogue(data + b"\n")
@@ -332,3 +354,113 @@ def test_invariants_are_not_run_on_a_badly_shaped_file() -> None:
     with pytest.raises(CatalogueRefused) as raised:
         load_catalogue(json.dumps(payload).encode("utf-8"))
     assert {f.code for f in raised.value.report.hard_findings} == {"schema"}
+
+
+@pytest.mark.parametrize("name", VALID)
+def test_the_receipt_names_the_catalogue_and_its_privacy_settings(
+        name: str) -> None:
+    """Proper fields, not text in ``notes`` for every later reader to parse.
+    The privacy settings are what the world was built under, so they travel
+    with it."""
+    catalogue, receipt = load_catalogue((CONFORMANCE / name).read_bytes())
+
+    assert receipt.schema_version == "cuj-catalogue/1"
+    assert receipt.catalogue_id == catalogue.catalogue_id
+    assert (receipt.min_support, receipt.text_policy, receipt.pii_redaction) == (
+        catalogue.privacy.min_support, catalogue.privacy.text_policy,
+        catalogue.privacy.pii_redaction)
+
+
+# ---------------------------------------------------------------------------
+# Files the miner rejects must be rejected here too (review on #74).
+# ---------------------------------------------------------------------------
+
+
+def _example() -> dict[str, Any]:
+    return _load_json("valid/example.json")
+
+
+def _refused_as_schema(payload: dict[str, Any] | bytes) -> str:
+    data = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+    with pytest.raises(CatalogueRefused) as raised:
+        load_catalogue(data)
+    assert raised.value.report.violation == "schema"
+    return " ".join(f.message for f in raised.value.report.hard_findings)
+
+
+@pytest.mark.parametrize(("where", "value"), [
+    ("count", "5"), ("share", "0.5"), ("cluster_id", True), ("count", True)])
+def test_a_string_or_boolean_is_not_a_number(where: str, value: object) -> None:
+    """pydantic's lax mode coerced these, and the bool reached inv8's hash as
+    ``cluster:1``. The schema and the miner refuse all of them."""
+    payload = _example()
+    if where == "count":
+        payload["connectors"][0]["entities"][0]["calls"] = value
+    elif where == "share":
+        payload["cujs"][0]["support"]["share"] = value
+    else:
+        cluster = next(c for c in payload["cujs"] if "cluster" in c)
+        cluster["cluster"]["cluster_id"] = value
+
+    assert "not a string or a boolean" in _refused_as_schema(payload)
+
+
+def test_a_whole_float_still_counts_as_an_integer() -> None:
+    """JSON Schema calls ``5.0`` an integer. Full strict mode would not."""
+    payload = _example()
+    payload["connectors"][0]["entities"][0]["calls"] = float(
+        payload["connectors"][0]["entities"][0]["calls"])
+
+    load_catalogue(json.dumps(payload).encode())
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity", "1e400"])
+def test_a_number_json_does_not_have_is_refused(token: str) -> None:
+    """Python reads all four; JSON has none of them. A NaN share would pass
+    every comparison inv9 makes."""
+    text = EXAMPLE_TEXT().replace('"share": 0.229', f'"share": {token}', 1)
+    assert token in text
+
+    assert "not valid JSON" in _refused_as_schema(text.encode())
+
+
+def test_infinity_cannot_satisfy_a_lower_bound() -> None:
+    """``ge=1`` alone lets inf through, since inf >= 1. Checked on the model
+    directly, because the loader now stops inf before it gets this far."""
+    payload = _example()
+    turns = next(c for c in payload["cujs"] if "turns" in c)
+    turns["turns"]["mean"] = float("inf")
+
+    with pytest.raises(ValidationError):
+        Catalogue.model_validate(payload)
+
+
+def test_inv9_does_not_pass_a_nan_sum() -> None:
+    """``abs(nan - 1) > tolerance`` is False. The guard keeps inv9 true on its
+    own, whatever reaches it."""
+    catalogue, _ = load_catalogue(json.dumps(_example()).encode())
+    broken = catalogue.model_copy(update={"coverage": catalogue.coverage.model_copy(
+        update={"covered_share": float("nan")})})
+
+    assert "inv9" in [finding.code for finding in check(broken)]
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("created_at", "2026-09-24T00:00:00"),   # no offset
+    ("created_at", 1758672000),              # unix seconds
+    ("window.start", "2026-08-11T00:00:00"),
+])
+def test_a_timestamp_must_say_which_time_zone_it_is_in(field: str,
+                                                       value: object) -> None:
+    """``date-time`` means RFC 3339 with an offset."""
+    payload = _example()
+    if field == "created_at":
+        payload["created_at"] = value
+    else:
+        payload["source"]["window"]["start"] = value
+
+    _refused_as_schema(payload)
+
+
+def EXAMPLE_TEXT() -> str:
+    return (CONFORMANCE / "valid" / "example.json").read_text()

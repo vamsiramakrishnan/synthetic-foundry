@@ -61,7 +61,7 @@ from ..eval_design import (
     WorldRequirement,
 )
 from ..models import Model
-from ..providers import Receipt, digest_bytes
+from ..providers import digest_bytes
 from ..studio.construction import (
     ConstructionIssue,
     ConstructionPlan,
@@ -73,11 +73,11 @@ from .binding import (
     BindRule,
     bind_question,
     fallback_template,
-    fold_map,
     prompt_template,
 )
 from .catalogue import (
     Catalogue,
+    CatalogueReceipt,
     Cuj,
     FailureModeKind,
     Hardness,
@@ -317,28 +317,17 @@ def _pairs(cuj: Cuj) -> tuple[tuple[str, str], ...]:
     return tuple(seen)
 
 
-def _reads(cuj: Cuj, folds: Mapping[str, tuple[str, str]],
-           ) -> dict[tuple[str, str], set[str]]:
-    """Every pair the journey reads, with how, in first-use order.
-
-    A folded lookup counts as a read of the pair it folded into. W2 deleted
-    the step, but people did look the project up before creating the epics,
-    and an agent that does the same must find something there. Leaving it
-    out would let the world hold no issues in that project at all, so a
-    careful agent checking first would find nothing and be marked down for
-    the care. This is how the design document's worked example lists it.
-    """
+def _reads(cuj: Cuj) -> dict[tuple[str, str], set[str]]:
+    """Every pair the journey reads, with how, in first-use order. A lookup
+    is a read like any other: the notes-to-epics journey searches Jira for
+    the project before it creates anything, so the world must hold that
+    project for an agent that checks first."""
     reads: dict[tuple[str, str], set[str]] = {}
     for step in cuj.steps:
         if step.connector and step.entity and step.operation \
                 and step.effect != "write":
             reads.setdefault((step.connector, step.entity), set()).add(
                 str(step.operation))
-    hosts = {step.id: step for step in cuj.steps}
-    for host_id, _ in folds.values():
-        host = hosts.get(host_id)
-        if host is not None and host.connector and host.entity:
-            reads.setdefault((host.connector, host.entity), set()).add("search")
     return reads
 
 
@@ -367,7 +356,8 @@ def _selectors(reads: Mapping[tuple[str, str], set[str]],
 
         an option          the connector's own declared value
         a container        the key-shaped name, "ACTIONITEM"
-        a search phrase    the title of what was searched for, "store ops"
+        a search phrase    the title of what was searched for, "store ops";
+                           a container name typed into a search lands here
 
     A person is left out — the world chooses one after it is built — and so
     is free text written *into* a record, which is the agent's output, not
@@ -381,10 +371,14 @@ def _selectors(reads: Mapping[tuple[str, str], set[str]],
         selector = selectors.get((binding.connector, binding.entity))
         if selector is None:
             continue
-        if binding.rule in (BindRule.OPTION, BindRule.KEY):
-            selector[binding.field] = binding.value
-        elif binding.rule is BindRule.TEXT and _searched_for(binding.field):
+        if _searched_for(binding.field) and binding.rule in (BindRule.TEXT,
+                                                             BindRule.KEY):
+            # What someone typed into a search names the record they wanted,
+            # whichever rule chose the value: "store ops" for a page,
+            # "ACTIONITEM" for a project.
             selector["title"] = binding.value
+        elif binding.rule in (BindRule.OPTION, BindRule.KEY):
+            selector[binding.field] = binding.value
     return selectors
 
 
@@ -408,18 +402,40 @@ def _requirements(reads: Mapping[tuple[str, str], set[str]],
         for connector, entity in reads)
 
 
+def plannable(connector: str, entity: str) -> bool:
+    """Whether Studio's planner can name *entity* in a workflow role.
+
+    A connector declares two vocabularies. Its ``entities`` are what the
+    emulator serves — Jira's sprint and project among them. Its ``catalog``
+    is what the planner and the connector dataset speak — for Jira, only
+    ``issue``. Studio refuses a workflow role outside the second, so roles
+    are drawn from it, checked against the very registry Studio uses. Every
+    read still gets a construction requirement either way, so the world
+    holds the project an agent looks up even though no role names it.
+    """
+    spec = builtin_registry().connectors.get(connector)
+    return spec is not None and any(item.name == entity for item in spec.entities)
+
+
 def _roles(reads: Mapping[tuple[str, str], set[str]],
            writes: Mapping[tuple[str, str], set[str]],
            selectors: Mapping[tuple[str, str], dict[str, str | int | bool]],
            ) -> tuple[tuple[SourceRole, ...], tuple[DestinationRole, ...]]:
-    """Read pairs become sources, write pairs become destinations.
+    """Read pairs become sources, write pairs become destinations, for the
+    pairs the planner can name (:func:`plannable`).
 
     A source's ``required_fields`` are its selector's pinned fields, as the
     design document asks: the fields a record must carry for the agent to
     find the one the question means. A pair read *and* written is both.
+    When no read pair is plannable, the written pairs stand in as sources,
+    as they do when a journey reads nothing at all.
     """
     def operations(names: set[str]) -> tuple[Operation, ...]:
         return tuple(sorted(Operation(name) for name in names))
+
+    writes = {pair: names for pair, names in writes.items() if plannable(*pair)}
+    reads = ({pair: names for pair, names in reads.items() if plannable(*pair)}
+             or {pair: {"read"} for pair in writes})
 
     sources = tuple(
         SourceRole(connector=connector, entities=(entity,),
@@ -614,9 +630,15 @@ def _scenario(cuj: Cuj, prompt: str, sources: tuple[SourceRole, ...],
               audience: str) -> ScenarioProfile:
     workflow, invented = _workflow(cuj, prompt, sources, destinations,
                                    audience=audience)
+    # ``workflows`` names ours explicitly. The design document says to leave
+    # it empty so that only ``additional_workflows`` is used, but
+    # ``apply_scenario_profile`` reads an empty list as *every* workflow: the
+    # built-in incident_review and change_assurance then ride along, and the
+    # case generates questions no customer asked.
     return ScenarioProfile(
         name=cuj.id, industry=industry, company_description="",
         connectors=tuple(sorted({connector for connector, _ in _pairs(cuj)})),
+        workflows=(workflow.name,),
         additional_workflows=(workflow,),
         additional_processes=(invented,) if invented is not None else (),
         coverage=CoverageProfile(failures=coverage_failures(cuj)))
@@ -626,7 +648,6 @@ def build_use_case(cuj: Cuj, prompt: str,
                    bindings: tuple[Binding, ...], *, industry: str = "",
                    persona: str = DEFAULT_PERSONA,
                    audience: str = DEFAULT_AUDIENCE,
-                   folds: Mapping[str, tuple[str, str]] | None = None,
                    shape: EvalShape | None = None,
                    count: int = 12) -> UseCase:
     """One write journey, as something ``worldloom studio init`` accepts.
@@ -635,8 +656,7 @@ def build_use_case(cuj: Cuj, prompt: str,
     :func:`~.binding.prompt_template`. It goes into both the workflow and the
     construction contract, because the design document asks for the same
     text in each. *count* is how many questions this journey is worth.
-    *folds* is W2's record of which lookups it folded and where, from
-    :func:`~.binding.fold_map`; *shape* comes from :func:`record_shapes`.
+    *shape* comes from :func:`record_shapes`.
 
     ``candidate_count`` is 1 and ``difficulty`` comes from the journey's
     hardness tally, both as §5.4 asks.
@@ -657,7 +677,7 @@ def build_use_case(cuj: Cuj, prompt: str,
     # anything. Its written pairs stand in as what must exist beforehand,
     # which is true anyway: Worldloom mints a pre-existing record for every
     # write step, so updates and duplicates can be graded.
-    reads = _reads(cuj, folds or {}) or {pair: {"read"} for pair in writes}
+    reads = _reads(cuj) or {pair: {"read"} for pair in writes}
     selectors = _selectors(reads, bindings)
     sources, destinations = _roles(reads, writes, selectors)
     return UseCase(
@@ -833,6 +853,12 @@ def share_counts(piles: SortedCatalogue, catalogue: Catalogue, *,
 CONFLICTING_COMPANY_DEMANDS = "conflicting_company_demands"
 """Studio's own code for a cross-case clash."""
 
+WRITE_NOT_PLANNABLE = "write_not_plannable"
+"""Every write in the journey targets a record type outside the connector's
+catalog, which is all Studio's planner can name, so no workflow can carry it.
+Hard: the journey is real and is not built. The fix is in the connector
+definition's catalog, not in the catalogue."""
+
 DROPPED_FOR_CONFLICT = "dropped_for_conflict"
 """A journey removed so the rest could share one world. Hard: real
 behaviour was lost, and a strict run should notice."""
@@ -862,7 +888,7 @@ class ImportResult(Model):
     the command line's decision."""
 
     counts: CaseCounts = CaseCounts()
-    receipt: Receipt
+    receipt: CatalogueReceipt
     report: ImportReport = ImportReport()
 
 
@@ -1005,7 +1031,6 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
     """
     catalogue, receipt = load_catalogue(data)
     piles = sort_catalogue(match_catalogue(catalogue))
-    folds = fold_map(piles.report)
     catalogue_digest = digest_bytes(data)
     industry = catalogue.industry_hint.industry if catalogue.industry_hint else ""
     findings: list[Finding] = list(piles.report.findings)
@@ -1013,8 +1038,18 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
     company_name = str((company.get("identity") or {}).get("company_name") or "")
     built: list[UseCase] = []
     for cuj in piles.write:
-        question, bind_findings = bind_question(cuj, catalogue_digest,
-                                                folds=folds)
+        targets = sorted(_writes(cuj))
+        if not any(plannable(*pair) for pair in targets):
+            findings.append(hard(
+                WRITE_NOT_PLANNABLE,
+                f"{cuj.id} writes only to "
+                f"{', '.join(f'{c}.{e}' for c, e in targets)}, which Studio's "
+                "planner cannot name in a workflow: add it to the connector "
+                "definition's catalog to build this journey",
+                cuj_id=cuj.id,
+                detail={"targets": ",".join(f"{c}.{e}" for c, e in targets)}))
+            continue
+        question, bind_findings = bind_question(cuj, catalogue_digest)
         if question is not None:
             findings.extend(bind_findings)
             prompt = prompt_template(question, company_name=company_name)
@@ -1039,8 +1074,7 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
         findings.extend(shape_findings)
         built.append(build_use_case(cuj, prompt, bindings,
                                     industry=industry, persona=persona,
-                                    audience=audience, folds=folds,
-                                    shape=shape))
+                                    audience=audience, shape=shape))
 
     shares = {cuj.id: cuj.support.share for cuj in piles.write}
     survivors, studio_findings = check_with_studio(company, tuple(built), shares)

@@ -37,7 +37,6 @@ from worldloom.telemetry.binding import (
     bind_slot,
     check_template,
     fallback_template,
-    fold_map,
     names_a_person,
     names_an_id,
     prompt_template,
@@ -61,7 +60,7 @@ def _catalogue():
 
 
 def _cuj(cuj_id: str):
-    """The journey as W3 sees it: matched, and with folds applied."""
+    """The journey as W3 sees it: matched, exactly as recorded."""
     piles = sort_catalogue(match_catalogue(_catalogue()))
     found = next((cuj for cuj in piles.write if cuj.id == cuj_id), None)
     if found is not None:
@@ -134,49 +133,18 @@ def test_the_write_journey_produces_a_question_with_no_holes_left() -> None:
         "project", "meeting_title"}
 
 
-def test_a_slot_whose_step_was_folded_is_followed_to_where_the_value_went() -> None:
-    """``find_project`` is gone by now, but its value is not lost.
+def test_the_project_slot_binds_to_the_lookup_step_that_used_it() -> None:
+    """W2 no longer removes ``find_project``, so the slot's step exists, as
+    inv3 promised, and the value is chosen for that step's own search."""
+    journey = _cuj(WRITES)
+    assert "find_project" in {step.id for step in journey.steps}
 
-    W2 recorded where it went. Following that redirection is what keeps the
-    slot bound against a real connector and entity — without it the slot
-    would resolve to nothing, and a field with declared options would
-    silently fall through to free text.
-    """
-    piles = sort_catalogue(match_catalogue(_catalogue()))
-    journey = next(cuj for cuj in piles.write if cuj.id == WRITES)
-    folds = fold_map(piles.report)
-
-    assert "find_project" not in {step.id for step in journey.steps}
-    assert folds["find_project"] == ("create_epics", "project")
-
-    question, _ = bind_question(journey, digest_bytes(_data()), folds=folds)
+    question, _ = bind_question(journey, digest_bytes(_data()))
 
     assert question is not None
-    assert any(binding.slot == "project" for binding in question.bindings)
-
-
-def test_following_a_fold_is_what_makes_a_closed_list_reachable() -> None:
-    """Not cosmetic. A dangling slot resolves to no connector at all, so a
-    field with declared options falls through to invented free text. Followed
-    to its host, the same field finds the connector's real values.
-
-    Shown with ``status``, which Jira declares states for. The sample's real
-    fold targets ``project``, which has no closed list, so it cannot show the
-    difference.
-    """
-    piles = sort_catalogue(match_catalogue(_catalogue()))
-    journey = next(cuj for cuj in piles.write if cuj.id == WRITES)
-    slot = journey.phrasings[0].slots[0].model_copy(update={
-        "name": "state", "step_id": "find_project", "field": "query"})
-    digest = digest_bytes(_data())
-
-    dangling = bind_slot(slot, journey, digest)
-    followed = bind_slot(slot, journey, digest,
-                         folds={"find_project": ("create_epics", "status")})
-
-    assert dangling.rule is BindRule.TEXT
-    assert followed.rule is BindRule.OPTION
-    assert followed.value in {"todo", "open", "review", "done", "blocked"}
+    project = next(b for b in question.bindings if b.slot == "project")
+    assert (project.connector, project.entity, project.field) == (
+        "jira", "project", "query")
 
 
 # ---------------------------------------------------------------------------
@@ -369,8 +337,7 @@ COMPANY = {"engine": "retail", "identity": {"company_name": "Northwind Grocers"}
 def _question():
     piles = sort_catalogue(match_catalogue(_catalogue()))
     journey = next(cuj for cuj in piles.write if cuj.id == WRITES)
-    question, _ = bind_question(journey, digest_bytes(_data()),
-                                folds=fold_map(piles.report))
+    question, _ = bind_question(journey, digest_bytes(_data()))
     assert question is not None
     return question
 
@@ -440,7 +407,7 @@ def test_the_real_renderer_fills_what_the_importer_wrote() -> None:
     text = _render(World.load("examples/retail-close"), workflow, row,
                    builtin_registry())
 
-    assert "Create epics in ACTIONITEM" in text
+    assert "Create epics in STOREOPS" in text
     assert "{" not in text
     assert text.endswith("identify stale evidence.")
 
