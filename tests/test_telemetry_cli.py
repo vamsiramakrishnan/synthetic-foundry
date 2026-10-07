@@ -294,3 +294,106 @@ def test_two_imports_write_identical_files(tmp_path: Path, company: Path) -> Non
     for name in ("project.json", "import-report.json", "import-report.md",
                  "import-receipt.json"):
         assert (first / name).read_bytes() == (second / name).read_bytes(), name
+
+
+# ---------------------------------------------------------------------------
+# Refusals, by code. §8 test 9 asks for each to be exercised, not just
+# registered, so these read the JSON envelope a harness would match on.
+# ---------------------------------------------------------------------------
+
+
+def _refusal(*args: str | Path) -> tuple[int, dict]:
+    """Run a telemetry command in JSON-envelope mode; the exit code and the
+    refusal envelope it printed."""
+    result = RUNNER.invoke(app, ["telemetry", *map(str, args)],
+                           env={"WORLDLOOM_OUTPUT": "json"})
+    lines = [line for line in result.output.splitlines()
+             if line.startswith('{"refusal"')]
+    assert lines, f"no refusal envelope in output:\n{result.output}"
+    return result.exit_code, json.loads(lines[-1])
+
+
+def _company_file(tmp_path: Path, **fields: object) -> Path:
+    path = tmp_path / "company.json"
+    path.write_text(json.dumps({
+        "engine": "retail", "identity": {"company_name": "Northwind Grocers"},
+        **fields}))
+    return path
+
+
+def test_a_catalogue_of_another_version_is_refused_under_worldloom_s_code(
+        tmp_path: Path, company: Path) -> None:
+    """The finding inside says ``schema`` — the miner's word — and the
+    refusal says ``catalogue_version_unknown`` — Worldloom's. Two
+    vocabularies, as W1 set up, and the command must keep both."""
+    payload = json.loads(EXAMPLE.read_text())
+    payload["schema_version"] = "cuj-catalogue/2"
+    catalogue = tmp_path / "v2.json"
+    catalogue.write_text(json.dumps(payload))
+
+    code, envelope = _refusal("import", catalogue, "--company", company,
+                              "--out", tmp_path / "out")
+
+    assert code == 2, envelope
+    assert envelope["refusal"] == "catalogue_version_unknown"
+    assert [f["code"] for f in envelope["data"]["findings"]] == ["schema"]
+    assert not (tmp_path / "out").exists()
+
+
+def test_an_unreadable_catalogue_is_refused(tmp_path: Path,
+                                            company: Path) -> None:
+    code, envelope = _refusal("import", tmp_path / "missing.json",
+                              "--company", company, "--out", tmp_path / "out")
+
+    assert code == 2, envelope
+    assert envelope["refusal"] == "catalogue_rejected"
+    assert "cannot read catalogue" in envelope["message"]
+
+
+def test_a_company_asking_for_what_worldloom_cannot_build_is_refused(
+        tmp_path: Path) -> None:
+    """A named competitor with its own market share is something Worldloom
+    cannot model. Building anyway would quietly drop it, so the person who
+    wrote the company file is asked to say that is acceptable."""
+    rivalled = _company_file(tmp_path, rivals=["Coles"])
+
+    code, envelope = _refusal("import", EXAMPLE, "--company", rivalled,
+                              "--out", tmp_path / "out")
+
+    assert code == 2, envelope
+    assert envelope["refusal"] == "company_unmet"
+    assert len(envelope["data"]["unmet"]) == 1
+    assert "Coles" in envelope["data"]["unmet"][0]
+    assert not (tmp_path / "out").exists()
+
+
+def test_acknowledge_unmet_builds_and_records_what_was_accepted(
+        tmp_path: Path) -> None:
+    """The acknowledgement is written into the project, so ``studio init``
+    and anyone reading it later can see what was knowingly left out."""
+    rivalled = _company_file(tmp_path, rivals=["Coles"])
+    out = tmp_path / "out"
+
+    result = RUNNER.invoke(app, [
+        "telemetry", "import", str(EXAMPLE), "--company", str(rivalled),
+        "--out", str(out), "--acknowledge-unmet"])
+    project = ProjectSpec.model_validate_json((out / "project.json").read_text())
+
+    assert result.exit_code == 0, result.output
+    assert len(project.acknowledged_unmet) == 1
+    assert "Coles" in project.acknowledged_unmet[0]
+
+
+def test_a_company_that_contradicts_itself_is_refused_by_its_rule(
+        tmp_path: Path) -> None:
+    """The refusal code is the conflict's own rule when the CLI registers
+    it, as every other command in this CLI does — not a new synonym."""
+    contradictory = _company_file(tmp_path, archetype="grocer")
+
+    code, envelope = _refusal("import", EXAMPLE, "--company", contradictory,
+                              "--out", tmp_path / "out")
+
+    assert code == 2, envelope
+    assert envelope["refusal"] == "unknown_archetype"
+    assert [c["rule"] for c in envelope["data"]["conflicts"]] == [
+        "unknown_archetype"]
