@@ -29,14 +29,21 @@ wrong, so they say out loud which schema clause each one mirrors.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import math
 from enum import StrEnum
 from typing import Annotated, Literal, TypeVar
 
-from pydantic import AfterValidator, Field, ValidationError, model_validator
+from pydantic import (
+    AfterValidator,
+    AwareDatetime,
+    BeforeValidator,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
 from ..models import Model
-from ..providers import Receipt, digest, digest_bytes
+from ..providers import digest, digest_bytes
 from .report import CatalogueRefused, ImportReport, hard
 
 #: The one version this importer understands. Anything else is refused rather
@@ -65,8 +72,37 @@ Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 """A full hex digest. The catalogue carries these in place of the text they
 stand for, which is the whole privacy argument in one type."""
 
-Count = Annotated[int, Field(ge=0)]
-Share = Annotated[float, Field(ge=0.0, le=1.0)]
+def _json_number(value: object) -> object:
+    """Mirrors JSON Schema's ``number`` and ``integer``: a JSON number, and
+    nothing that merely converts to one.
+
+    pydantic's lax mode turns ``"5"`` into 5 and ``true`` into 1, where the
+    schema — and the miner — refuse both. ``bool`` has to be named because it
+    is a subclass of ``int`` in Python. Full ``strict=True`` would go too far
+    the other way: JSON Schema counts ``0.0`` as an integer, and so must we.
+    """
+    if isinstance(value, (bool, str)):
+        raise ValueError("must be a JSON number, not a string or a boolean")
+    return value
+
+
+JsonNumber = BeforeValidator(_json_number)
+
+
+def _timestamp_text(value: object) -> object:
+    """Mirrors ``"format": "date-time"``: RFC 3339 text. pydantic would also
+    read a unix integer as a timestamp, which the schema does not."""
+    if not isinstance(value, str):
+        raise ValueError("must be an RFC 3339 date-time string")
+    return value
+
+
+#: RFC 3339 with an offset, as ``date-time`` means. A naive timestamp says
+#: nothing about which day it fell on, so it is refused rather than guessed.
+Timestamp = Annotated[AwareDatetime, BeforeValidator(_timestamp_text)]
+
+Count = Annotated[int, JsonNumber, Field(ge=0)]
+Share = Annotated[float, JsonNumber, Field(ge=0.0, le=1.0, allow_inf_nan=False)]
 Key = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*$")]
 """Lower snake case. Connector names, entity names and step ids are all keys."""
 
@@ -186,8 +222,8 @@ class Producer(Model):
 
 
 class Window(Model):
-    start: datetime
-    end: datetime
+    start: Timestamp
+    end: Timestamp
 
 
 class SourceCounts(Model):
@@ -211,7 +247,7 @@ class Privacy(Model):
     """The settings the miner ran under. Worldloom re-checks them rather than
     trusting them: ``inv5`` and ``inv6`` hold the file to its own promises."""
 
-    min_support: Annotated[int, Field(ge=1)]
+    min_support: Annotated[int, JsonNumber, Field(ge=1)]
     """Fewest distinct sessions a journey or phrasing needs to be emitted at
     all. Below this, traffic is folded into ``coverage.suppressed_share``."""
     text_policy: Literal["templates", "none"]
@@ -368,16 +404,18 @@ class Support(Model):
 
 
 class Turns(Model):
-    mean: Annotated[float, Field(ge=1)]
-    p50: Annotated[int, Field(ge=1)]
-    p90: Annotated[int, Field(ge=1)]
+    mean: Annotated[float, JsonNumber, Field(ge=1, allow_inf_nan=False)]
+    """``ge=1`` alone lets infinity through, since inf >= 1."""
+    p50: Annotated[int, JsonNumber, Field(ge=1)]
+    p90: Annotated[int, JsonNumber, Field(ge=1)]
 
 
 class Cluster(Model):
     """The intent cluster an answer-only journey was identified by, when there
     were no tool calls to identify it with."""
 
-    cluster_id: int
+    cluster_id: Annotated[int, JsonNumber]
+    """``true`` used to coerce to 1 and reach the inv8 hash as ``cluster:1``."""
     keywords: tuple[str, ...]
 
 
@@ -497,7 +535,7 @@ class Catalogue(Model):
 
     schema_version: Literal["cuj-catalogue/1"]
     catalogue_id: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_.-]*$")]
-    created_at: datetime
+    created_at: Timestamp
     producer: Producer
     source: Source
     privacy: Privacy
@@ -509,7 +547,7 @@ class Catalogue(Model):
     review_notes: tuple[str, ...] = ()
 
 
-def load_catalogue(data: bytes) -> tuple[Catalogue, Receipt]:
+def load_catalogue(data: bytes) -> tuple[Catalogue, CatalogueReceipt]:
     """Read catalogue bytes, or refuse them with every reason found.
 
     Three gates, in this order and no other: version, then shape, then
@@ -526,9 +564,14 @@ def load_catalogue(data: bytes) -> tuple[Catalogue, Receipt]:
 
     # Gate 0: is it JSON at all? Reported as 'schema', since a file that is not
     # JSON has failed the shape contract in the most basic way available.
+    # Python's parser is laxer than JSON: it reads NaN, Infinity and -Infinity,
+    # and reads 1e400 as inf. None of those is a JSON number, and a NaN share
+    # slips through every comparison inv9 makes, so all four are refused here
+    # — the same hole the miner closed on its side (b6c96c1).
     try:
-        payload = json.loads(data)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        payload = json.loads(data, parse_constant=_no_constant,
+                             parse_float=_finite_float)
+    except (UnicodeDecodeError, ValueError) as exc:
         raise CatalogueRefused(REJECTED, ImportReport(findings=(
             hard("schema", f"not valid JSON: {exc}"),))) from exc
     if not isinstance(payload, dict):
@@ -568,19 +611,67 @@ def load_catalogue(data: bytes) -> tuple[Catalogue, Receipt]:
     return catalogue, _receipt(data, catalogue)
 
 
-def _receipt(data: bytes, catalogue: Catalogue) -> Receipt:
-    """Record what was read, as digests.
+def _no_constant(name: str) -> float:
+    """``json.loads`` hook for ``NaN``, ``Infinity`` and ``-Infinity``."""
+    raise ValueError(f"{name} is not a JSON number")
+
+
+def _finite_float(text: str) -> float:
+    """``json.loads`` hook for every number with a fraction or an exponent.
+    Refuses one too large to be finite, which Python would read as inf."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"{text} is too large to be a finite number")
+    return value
+
+
+class CatalogueReceipt(Model):
+    """What was read, and under which privacy settings, as digests and names.
 
     A receipt exists so a world can be traced back to its evidence without
-    carrying any of it. Everything here is either a hash or a name the miner
-    chose for the batch — no query, no reply, no field value.
+    carrying any of it. Everything here is a hash or a name the miner chose
+    for the batch — no query, no reply, no field value.
+
+    Its own type, not the generic ``providers.Receipt``. That one has nowhere
+    to put the privacy settings the world was built under — its ``privacy``
+    is a differential-privacy receipt, which needs an epsilon this catalogue
+    does not have — and the catalogue's id would otherwise ride in free-text
+    ``notes`` for every later reader to parse back out.
     """
-    return Receipt(
-        backend="customer-telemetry-miner",
-        backend_version=catalogue.producer.version,
-        operation="load_catalogue",
-        configuration_digest=catalogue.producer.config_digest,
+
+    schema_version: Literal["cuj-catalogue/1"]
+    catalogue_id: str
+    producer: Literal["customer-telemetry-miner"]
+    producer_version: str
+    config_digest: Sha256
+    """Of the miner's config, as the catalogue declares it."""
+    source_digest: str
+    """Of the exact bytes read."""
+    accepted_digest: str
+    """Of the catalogue as parsed, so two byte-different files that mean the
+    same thing are recognisably the same."""
+    min_support: int
+    text_policy: Literal["templates", "none"]
+    pii_redaction: Literal["regex", "regex+dlp"]
+
+    @property
+    def key(self) -> str:
+        """The content address, over every field. The ledger-key discipline
+        ``providers.Receipt`` follows: change any input and the key changes,
+        so a replay that finds a different key knows the evidence differs."""
+        return digest(self.model_dump(mode="json"))
+
+
+def _receipt(data: bytes, catalogue: Catalogue) -> CatalogueReceipt:
+    return CatalogueReceipt(
+        schema_version=catalogue.schema_version,
+        catalogue_id=catalogue.catalogue_id,
+        producer=catalogue.producer.tool,
+        producer_version=catalogue.producer.version,
+        config_digest=catalogue.producer.config_digest,
         source_digest=digest_bytes(data),
         accepted_digest=digest(catalogue.model_dump(mode="json")),
-        notes=f"{catalogue.schema_version} {catalogue.catalogue_id}",
+        min_support=catalogue.privacy.min_support,
+        text_policy=catalogue.privacy.text_policy,
+        pii_redaction=catalogue.privacy.pii_redaction,
     )

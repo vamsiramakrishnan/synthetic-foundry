@@ -21,6 +21,7 @@ finding them one rebuild at a time is how a day disappears.
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
@@ -321,7 +322,10 @@ def inv9_shares_add_up(catalogue: Catalogue) -> Iterator[Finding]:
     coverage = catalogue.coverage
     total = (coverage.covered_share + coverage.suppressed_share
              + coverage.unclassified_share)
-    if abs(total - 1.0) > SHARE_TOLERANCE:
+    # NaN compares false with everything, so ``abs(nan - 1) > tolerance`` is
+    # False and the sum would pass. The loader refuses NaN before this runs;
+    # the guard keeps this rule true on its own, for any caller.
+    if not math.isfinite(total) or abs(total - 1.0) > SHARE_TOLERANCE:
         yield hard(
             "inv9",
             f"coverage shares sum to {total:.4f}, not 1 "
