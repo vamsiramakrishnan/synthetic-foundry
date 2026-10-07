@@ -5,57 +5,68 @@ vocabulary: connector keys, entity names and operation names exactly as their
 tool calls spelled them. Worldloom knows what it can *fake*. These are two
 vocabularies, and this module introduces them.
 
-Three questions per step, asked in order, each with its own refusal::
+Four questions per step, asked in order, each with its own refusal::
 
     jira . issue . create
       │      │       │
-      │      │       └─ operation_unsupported   the record type lacks that op
-      │      └───────── entity_unresolved       no record type, alias or fold
+      │      │       ├─ operation_unsupported   no record type behind the name
+      │      │       │                          offers that operation
+      │      │       └─ operation_ambiguous     an alias's members disagree on
+      │      │                                  which tool performs it
+      │      └───────── entity_unresolved       no record type, by name or alias
       └──────────────── connector_not_emulated  Worldloom has no such system
 
-An entity is tried three ways: its exact name, an alias (Jira's ``issue``
-stands for epic, story, bug, task and subtask), then :data:`FOLDS`.
+An entity is tried two ways: its exact name, then an alias — Jira's ``issue``
+is not a record type at all, it stands for epic, story, bug, task and subtask.
 
-A fold is the one thing here that *rewrites* a journey rather than asking a
-question about it. Real people look up things Worldloom does not model as
-records — a Jira project is not a record, it is a field on an issue. Rather
-than refuse the journey, the lookup step is deleted and its value survives as
-a field on the step that consumed it::
+A journey is matched exactly as the customer recorded it, or refused. It is
+never rewritten to fit what Worldloom models today. An earlier version folded
+a lookup of something Worldloom did not model — a Jira project — into a field
+on a later step. That broke the catalogue's own invariants (a phrasing slot
+and two failure modes were left pointing at a deleted step, and the journey's
+id no longer hashed from its steps), and it quietly lost the failures the
+customer had recorded against that lookup: "picked the wrong project" is
+exactly the case a test should cover.
 
-    BEFORE                            AFTER
-    search jira project       ──▶     (gone)
-    create jira issue                 create jira issue, now also carrying
-      depends_on find_project           the field "project"
+So instead of reshaping the journey, matching says what Worldloom would need
+to import it properly. :attr:`MatchedCatalogue.missing` lists every missing
+connector, entity and operation, with the journeys that need it and their
+share of real traffic, largest first::
 
-Anything that depended on the deleted step inherits what *it* depended on, so
-the graph stays connected. Every fold leaves an ``info`` finding behind.
+    jira.project   entity   search   cuj_9636dd61a048   22 sessions, 22.9%
 
-:data:`FOLDS` is hand-reviewed data and is deliberately incomplete. A pair
-that is neither known nor folded is refused loudly, by name; the table grows
-one reviewed entry at a time. That asymmetry is the whole point — a missing
-entry costs a message, a wrong entry silently rewrites someone's journey into
-a different one.
+That list is a to-do list for the connector definitions, prioritised by real
+usage. Adding the entity — the way Jira already models ``sprint`` — makes the
+journey match unchanged.
 
-This module reads Worldloom's own shipped connector definitions, fresh on
-every call, so a renamed entity cannot go unnoticed. It never opens the
-customer's catalogue; those bytes arrive already parsed.
+Refusal is per journey: one journey needing a missing entity does not stop the
+others. ``worldloom telemetry import --strict`` turns any refusal into a
+refused import.
+
+This module reads Worldloom's own shipped connector definitions, once per
+:func:`match_catalogue` call, so every journey in a run is matched against the
+same definitions and a renamed entity cannot go unnoticed between runs. It
+never opens the customer's catalogue; those bytes arrive already parsed.
 """
 
 from __future__ import annotations
 
-from types import MappingProxyType
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Literal
 
 from ..connector_definition import is_reference_connector, load_connector_definition
 from ..models import Model
-from .catalogue import Cuj, Step
-from .report import Finding, ImportReport, Severity, hard, info
+from .catalogue import Cuj
+from .report import Finding, ImportReport, hard
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
-
     from ..connector_definition import ConnectorDefinition
     from .catalogue import Catalogue
+
+    #: Connector definitions already loaded in this run, ``None`` for a
+    #: connector Worldloom does not have.
+    Definitions = dict[str, ConnectorDefinition | None]
+
+    Gap = Literal["connector", "entity", "operation"]
 
 
 # --------------------------------------------------------------------------
@@ -66,42 +77,16 @@ CONNECTOR_NOT_EMULATED = "connector_not_emulated"
 """Worldloom has no connector of that name, shipped or packaged."""
 
 ENTITY_UNRESOLVED = "entity_unresolved"
-"""The connector exists but has no such record type, by name, alias or fold."""
+"""The connector exists but has no such record type, by name or alias."""
 
 OPERATION_UNSUPPORTED = "operation_unsupported"
-"""The record type exists but does not offer that operation."""
+"""The record type exists but none of what it stands for offers that
+operation."""
 
-STEP_FOLDED = "step_folded"
-"""A lookup step was removed and its value moved onto a later step."""
-
-
-# --------------------------------------------------------------------------
-# The fold table.
-# --------------------------------------------------------------------------
-
-
-class FoldTarget(NamedTuple):
-    """Where a folded lookup's value goes: an entity, and a field on it."""
-
-    entity: str
-    field: str
-
-
-FOLDS: Mapping[tuple[str, str], FoldTarget] = MappingProxyType({
-    # All three are the same situation: people really do search Jira for these,
-    # and Jira's emulator models none of them as a record. Each is a field on
-    # an issue instead. ``project`` and ``issuetype`` are in the entity's
-    # ``required_on_create``; ``assignee`` is a connector-level query field.
-    # ``test_fold_fields_exist_in_the_live_definition`` holds all three to that.
-    ("jira", "project"): FoldTarget("issue", "project"),
-    ("jira", "issue_type"): FoldTarget("issue", "issuetype"),
-    ("jira", "user"): FoldTarget("issue", "assignee"),
-})
-"""Lookups Worldloom does not model as records, and the field each becomes.
-
-Hand-reviewed, and incomplete on purpose. See the module docstring for why a
-missing entry is the cheap mistake and a wrong one is the expensive mistake.
-"""
+OPERATION_AMBIGUOUS = "operation_ambiguous"
+"""An alias whose members map the operation to different tools, so there is
+no single tool to call. A fault in the connector definition, not a gap in it,
+which is why it is not reported as unsupported."""
 
 
 # --------------------------------------------------------------------------
@@ -109,19 +94,43 @@ missing entry is the cheap mistake and a wrong one is the expensive mistake.
 # --------------------------------------------------------------------------
 
 
+class MissingCapability(Model):
+    """One thing Worldloom would need before some journeys can be imported."""
+
+    kind: Literal["connector", "entity", "operation"]
+    connector: str
+    entity: str = ""
+    operations: tuple[str, ...] = ()
+    """The operations the journeys asked of it."""
+
+    cuj_ids: tuple[str, ...] = ()
+    """Every journey refused for want of this."""
+
+    sessions: int = 0
+    share: float = 0.0
+    """Of real traffic, summed over those journeys. What to add first."""
+
+    @property
+    def name(self) -> str:
+        return ".".join(part for part in (self.connector, self.entity) if part)
+
+
 class MatchedCatalogue(Model):
-    """Which journeys Worldloom can build, and what it had to say about them."""
+    """Which journeys Worldloom can build, and what it would need for the rest."""
 
     cujs: tuple[Cuj, ...] = ()
-    """Buildable journeys, with every fold already applied. These are the
-    graphs W3 builds from, so nothing in them still needs removing."""
+    """The journeys that matched, exactly as the catalogue recorded them."""
 
     refused: tuple[str, ...] = ()
-    """Ids of the journeys that were not built. One hard finding each, at
-    least, explains why."""
+    """Ids of the journeys that did not. One hard finding each, at least,
+    explains why."""
+
+    missing: tuple[MissingCapability, ...] = ()
+    """What Worldloom would need to import the refused journeys, largest
+    share of traffic first."""
 
     report: ImportReport = ImportReport()
-    """Every finding, refusals and folds alike, in the order produced."""
+    """Every finding, in the order produced."""
 
 
 # --------------------------------------------------------------------------
@@ -129,115 +138,89 @@ class MatchedCatalogue(Model):
 # --------------------------------------------------------------------------
 
 
-def _definition(connector: str) -> ConnectorDefinition | None:
-    """The live definition for *connector*, or ``None`` if there is no such
-    connector. Read fresh every time: a hard-coded list would go stale, and
-    going stale here means silently matching against a Worldloom that has
-    moved on."""
-    if not is_reference_connector(connector):
-        return None
-    try:
-        return load_connector_definition(connector)
-    except ValueError:  # pragma: no cover - is_reference_connector just said yes
-        return None
+def _definition(connector: str, loaded: Definitions) -> ConnectorDefinition | None:
+    """The definition for *connector*, loaded at most once per run.
 
-
-def _known_entity(definition: ConnectorDefinition, entity: str) -> bool:
-    """Whether *entity* names a record type, directly or through an alias."""
-    try:
-        definition.entity_members(entity)
-    except KeyError:
-        return False
-    return True
-
-
-def _hosts(step: Step, connector: str, target: FoldTarget) -> bool:
-    """Whether *step* is the right place to put a folded value.
-
-    It must be a tool step on the same connector, aimed at the fold's target
-    entity — either by the same name, or as one of the concrete types that
-    name stands for, so a step creating an ``epic`` can host a fold targeting
-    ``issue``.
+    Once per run rather than once per step: every journey in one import is
+    then matched against the same definitions, and a catalogue of forty
+    journeys does not read the same file forty times.
     """
-    if step.connector != connector or step.entity is None:
-        return False
-    if step.entity == target.entity:
-        return True
-    definition = _definition(connector)
-    if definition is None:  # pragma: no cover - the caller already loaded it
-        return False
+    if connector not in loaded:
+        loaded[connector] = (load_connector_definition(connector)
+                             if is_reference_connector(connector) else None)
+    return loaded[connector]
+
+
+def _members(definition: ConnectorDefinition, entity: str) -> tuple[str, ...]:
+    """The record types *entity* names, directly or through an alias; empty
+    when it names none."""
     try:
-        return definition.entity_matches(target.entity, step.entity)
+        return definition.entity_members(entity)
     except KeyError:
-        return False
+        return ()
 
 
-# --------------------------------------------------------------------------
-# Folding.
-# --------------------------------------------------------------------------
+def _tools(definition: ConnectorDefinition, members: tuple[str, ...],
+           operation: str) -> set[str]:
+    """Every tool the members map *operation* to. One is a match; none is
+    unsupported; more than one is ambiguous. ``tool_for`` raises the same
+    ``KeyError`` for the last two, so they are told apart here."""
+    return {definition.entities[member].ops[operation]
+            for member in members
+            if operation in definition.entities[member].ops}
 
 
-def _rewire(depends_on: Sequence[str], dropped: str,
-            inherited: Sequence[str]) -> tuple[str, ...]:
-    """*depends_on* with *dropped* removed and its own dependencies put in its
-    place, order preserved and no duplicates — ``Step.depends_on`` is unique."""
-    kept = [dep for dep in depends_on if dep != dropped]
-    kept.extend(dep for dep in inherited if dep not in kept)
-    return tuple(kept)
-
-
-def _with_field(fields: Sequence[str], added: str) -> tuple[str, ...]:
-    """*fields* plus *added*, unless it is already there."""
-    return tuple(fields) if added in fields else (*fields, added)
-
-
-def _apply_fold(cuj_id: str, steps: tuple[Step, ...], folded: Step,
-                target: FoldTarget) -> tuple[tuple[Step, ...], tuple[Finding, ...]]:
-    """Delete *folded* and move its value onto the step that consumed it.
-
-    The value has to land somewhere. If nothing downstream can hold it, the
-    fold cannot happen and the pair is simply unresolved — reported with the
-    same code as any other unmatched entity, because that is what it is.
-    """
-    assert folded.connector is not None
-    host = next((step for step in steps
-                 if folded.id in step.depends_on
-                 and _hosts(step, folded.connector, target)), None)
-    if host is None:
-        return steps, (hard(
-            ENTITY_UNRESOLVED,
-            f"{folded.connector} has no record type {folded.entity!r}; it "
-            f"folds into {target.entity!r}.{target.field}, but no later step "
-            f"in this journey uses {target.entity!r}, so the value has "
-            "nowhere to go",
-            cuj_id=cuj_id,
-            detail={"step_id": folded.id, "connector": folded.connector,
-                    "entity": str(folded.entity), "fold_target": target.entity}),)
-
-    rebuilt: list[Step] = []
-    for step in steps:
-        if step.id == folded.id:
+def _step_findings(cuj: Cuj, loaded: Definitions) -> list[Finding]:
+    findings: list[Finding] = []
+    for step in cuj.steps:
+        # A capability step calls nothing, so there is nothing to match. The
+        # three-way test narrows the optional fields for the checker too.
+        if step.connector is None or step.entity is None or step.operation is None:
             continue
-        if folded.id in step.depends_on:
-            step = step.model_copy(update={
-                "depends_on": _rewire(step.depends_on, folded.id,
-                                      folded.depends_on)})
-        if step.id == host.id:
-            step = step.model_copy(update={
-                "argument_fields": _with_field(step.argument_fields,
-                                               target.field)})
-        rebuilt.append(step)
+        where = {"step_id": step.id, "connector": step.connector}
 
-    return tuple(rebuilt), (info(
-        STEP_FOLDED,
-        f"step {folded.id!r} looked up {folded.connector}.{folded.entity}, "
-        f"which Worldloom models as the field {target.field!r} on "
-        f"{target.entity!r}; the step was removed and the field added to "
-        f"step {host.id!r}",
-        cuj_id=cuj_id,
-        detail={"step_id": folded.id, "host_step_id": host.id,
-                "connector": folded.connector, "entity": str(folded.entity),
-                "field": target.field}),)
+        definition = _definition(step.connector, loaded)
+        if definition is None:
+            findings.append(hard(
+                CONNECTOR_NOT_EMULATED,
+                f"Worldloom has no connector named {step.connector!r}, so "
+                f"step {step.id!r} cannot be built",
+                cuj_id=cuj.id, detail={**where, "operation": step.operation}))
+            continue
+
+        members = _members(definition, step.entity)
+        if not members:
+            findings.append(hard(
+                ENTITY_UNRESOLVED,
+                f"{step.connector} has no record type {step.entity!r}, by name "
+                f"or alias, so step {step.id!r} cannot be built. Add it to the "
+                f"{step.connector} connector definition to import this journey",
+                cuj_id=cuj.id,
+                detail={**where, "entity": step.entity,
+                        "operation": step.operation}))
+            continue
+
+        tools = _tools(definition, members, step.operation)
+        if len(tools) > 1:
+            findings.append(hard(
+                OPERATION_AMBIGUOUS,
+                f"{step.connector}.{step.entity} stands for {', '.join(members)}, "
+                f"which map {step.operation!r} to different tools "
+                f"({', '.join(sorted(tools))}); step {step.id!r} has no single "
+                "tool to call",
+                cuj_id=cuj.id,
+                detail={**where, "entity": step.entity,
+                        "operation": step.operation,
+                        "tools": ",".join(sorted(tools))}))
+        elif not tools:
+            findings.append(hard(
+                OPERATION_UNSUPPORTED,
+                f"{step.connector}.{step.entity} does not support "
+                f"{step.operation!r}, so step {step.id!r} cannot be built",
+                cuj_id=cuj.id,
+                detail={**where, "entity": step.entity,
+                        "operation": step.operation}))
+    return findings
 
 
 # --------------------------------------------------------------------------
@@ -245,85 +228,55 @@ def _apply_fold(cuj_id: str, steps: tuple[Step, ...], folded: Step,
 # --------------------------------------------------------------------------
 
 
-def match_cuj(cuj: Cuj) -> tuple[Cuj | None, tuple[Finding, ...]]:
-    """Check one journey against Worldloom, folding what can be folded.
+def match_cuj(cuj: Cuj, *, definitions: Definitions | None = None,
+              ) -> tuple[Cuj | None, tuple[Finding, ...]]:
+    """Check one journey against Worldloom.
 
-    Returns the journey to build and every finding, or ``None`` and the
-    reasons it was refused. Every step is checked before anything is rewritten,
-    so a journey with two problems reports both rather than stopping at the
-    first — the same courtesy ``load_catalogue`` extends in W1.
+    Returns the journey unchanged and no findings, or ``None`` and every
+    reason it was refused. Every step is checked before the journey is
+    refused, so a journey with two problems reports both — the same courtesy
+    ``load_catalogue`` extends in W1.
+
+    *definitions* carries connector definitions between journeys of one run;
+    :func:`match_catalogue` passes one in.
     """
-    findings: list[Finding] = []
-    folds: list[tuple[Step, FoldTarget]] = []
+    findings = _step_findings(cuj, {} if definitions is None else definitions)
+    return (None, tuple(findings)) if findings else (cuj, ())
 
-    for step in cuj.steps:
-        # A capability step calls nothing, so there is nothing to match. The
-        # three-way test narrows the optional fields for the checker too.
-        if step.connector is None or step.entity is None or step.operation is None:
+
+def _missing(catalogue: Catalogue,
+             findings: list[Finding]) -> tuple[MissingCapability, ...]:
+    """Every refusal, grouped by what Worldloom would need to add.
+
+    An ambiguous operation is not here: the record type and the operation
+    both exist, and what needs fixing is the definition's mapping, not a
+    gap in what it covers.
+    """
+    kinds: dict[str, Gap] = {CONNECTOR_NOT_EMULATED: "connector",
+                             ENTITY_UNRESOLVED: "entity",
+                             OPERATION_UNSUPPORTED: "operation"}
+    support = {cuj.id: cuj.support for cuj in catalogue.cujs}
+    grouped: dict[tuple[Gap, str, str], tuple[set[str], set[str]]] = {}
+    for finding in findings:
+        kind = kinds.get(finding.code)
+        if kind is None:
             continue
+        entity = "" if kind == "connector" else finding.detail.get("entity", "")
+        operations, journeys = grouped.setdefault(
+            (kind, finding.detail["connector"], entity), (set(), set()))
+        operations.add(finding.detail.get("operation", ""))
+        journeys.add(finding.cuj_id)
 
-        definition = _definition(step.connector)
-        if definition is None:
-            findings.append(hard(
-                CONNECTOR_NOT_EMULATED,
-                f"Worldloom has no connector named {step.connector!r}, so "
-                f"step {step.id!r} cannot be built",
-                cuj_id=cuj.id,
-                detail={"step_id": step.id, "connector": step.connector}))
-            continue
-
-        if not _known_entity(definition, step.entity):
-            target = FOLDS.get((step.connector, step.entity))
-            if target is None:
-                findings.append(hard(
-                    ENTITY_UNRESOLVED,
-                    f"{step.connector} has no record type {step.entity!r}, by "
-                    f"name or alias, and no fold is defined for it; step "
-                    f"{step.id!r} cannot be built",
-                    cuj_id=cuj.id,
-                    detail={"step_id": step.id, "connector": step.connector,
-                            "entity": step.entity}))
-            else:
-                folds.append((step, target))
-            # Either way the operation cannot be checked: there is no record
-            # type to check it against.
-            continue
-
-        try:
-            definition.tool_for(step.entity, step.operation)
-        except KeyError as error:
-            findings.append(hard(
-                OPERATION_UNSUPPORTED,
-                f"{step.connector}.{step.entity} does not support "
-                f"{step.operation!r}, so step {step.id!r} cannot be built",
-                cuj_id=cuj.id,
-                detail={"step_id": step.id, "connector": step.connector,
-                        "entity": step.entity, "operation": step.operation,
-                        "reason": str(error)}))
-
-    if any(finding.severity is Severity.HARD for finding in findings):
-        return None, tuple(findings)
-
-    steps = cuj.steps
-    for folded, target in folds:
-        steps, fold_findings = _apply_fold(cuj.id, steps, folded, target)
-        findings.extend(fold_findings)
-    if any(finding.severity is Severity.HARD for finding in findings):
-        return None, tuple(findings)
-
-    # ``Cuj`` validates that a tool_signature journey has at least one tool
-    # step. Folding is the only thing that can take the last one away, and
-    # ``model_copy`` does not re-run validators, so the check is made here
-    # rather than discovered as an exception later.
-    if cuj.anchor == "tool_signature" and not any(s.is_tool_step for s in steps):
-        return None, (*findings, hard(
-            ENTITY_UNRESOLVED,
-            f"every tool step in {cuj.id} folded away, leaving a journey "
-            "identified by a tool signature it no longer has",
-            cuj_id=cuj.id))
-
-    matched = cuj if steps == cuj.steps else cuj.model_copy(update={"steps": steps})
-    return matched, tuple(findings)
+    missing = [
+        MissingCapability(
+            kind=kind, connector=connector, entity=entity,
+            operations=tuple(sorted(op for op in operations if op)),
+            cuj_ids=tuple(sorted(journeys)),
+            sessions=sum(support[cuj_id].sessions for cuj_id in journeys),
+            share=round(sum(support[cuj_id].share for cuj_id in journeys), 6))
+        for (kind, connector, entity), (operations, journeys) in grouped.items()]
+    return tuple(sorted(missing, key=lambda item: (-item.share, item.name,
+                                                   item.kind)))
 
 
 def match_catalogue(catalogue: Catalogue) -> MatchedCatalogue:
@@ -331,14 +284,16 @@ def match_catalogue(catalogue: Catalogue) -> MatchedCatalogue:
 
     One journey's refusal does not stop the others: a catalogue naming a
     connector we do not have should still yield the journeys that only use
-    connectors we do.
+    connectors we do. What the refused ones would need is collected into
+    :attr:`MatchedCatalogue.missing`.
     """
+    loaded: Definitions = {}
     built: list[Cuj] = []
     refused: list[str] = []
     findings: list[Finding] = []
 
     for cuj in catalogue.cujs:
-        matched, cuj_findings = match_cuj(cuj)
+        matched, cuj_findings = match_cuj(cuj, definitions=loaded)
         findings.extend(cuj_findings)
         if matched is None:
             refused.append(cuj.id)
@@ -346,4 +301,5 @@ def match_catalogue(catalogue: Catalogue) -> MatchedCatalogue:
             built.append(matched)
 
     return MatchedCatalogue(cujs=tuple(built), refused=tuple(refused),
+                            missing=_missing(catalogue, findings),
                             report=ImportReport(findings=tuple(findings)))
