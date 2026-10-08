@@ -1,0 +1,206 @@
+{
+  "activities": [],
+  "construction": {
+    "candidate_count": 1,
+    "capability": "meeting-notes-to-jira-epics",
+    "difficulty": "medium",
+    "id": "cuj_9636dd61a048",
+    "persona": "employee",
+    "request_template": "For {company}: Create epics in STOREOPS from the action items in the store ops notes{failure_instruction}",
+    "requirements": [
+      {
+        "hard": true,
+        "id": "confluence.page",
+        "kind": "connector",
+        "minimum": 1,
+        "selector": {
+          "connector": "confluence",
+          "entity": "page",
+          "title": "store ops"
+        }
+      },
+      {
+        "hard": true,
+        "id": "jira.project",
+        "kind": "connector",
+        "minimum": 1,
+        "selector": {
+          "connector": "jira",
+          "entity": "project",
+          "title": "STOREOPS"
+        }
+      }
+    ],
+    "shape": {
+      "artifacts": [],
+      "records": [],
+      "threads": []
+    },
+    "steps": [
+      {
+        "capability": "search",
+        "connector": "confluence",
+        "depends_on": [],
+        "effect": "read",
+        "entity": "page",
+        "id": "find_notes",
+        "operation": "search"
+      },
+      {
+        "capability": "read",
+        "connector": "confluence",
+        "depends_on": [
+          "find_notes"
+        ],
+        "effect": "read",
+        "entity": "page",
+        "id": "read_notes",
+        "operation": "read"
+      },
+      {
+        "capability": "search",
+        "connector": "jira",
+        "depends_on": [],
+        "effect": "read",
+        "entity": "project",
+        "id": "find_project",
+        "operation": "search"
+      },
+      {
+        "capability": "generate",
+        "connector": null,
+        "depends_on": [
+          "read_notes"
+        ],
+        "effect": "transform",
+        "entity": null,
+        "id": "draft_epics",
+        "operation": null
+      },
+      {
+        "capability": "create",
+        "connector": "jira",
+        "depends_on": [
+          "find_project",
+          "draft_epics"
+        ],
+        "effect": "write",
+        "entity": "issue",
+        "id": "create_epics",
+        "operation": "create"
+      }
+    ]
+  },
+  "count": 200,
+  "dag_shapes": [
+    "*"
+  ],
+  "id": "cuj_9636dd61a048",
+  "incident_rule": null,
+  "lob": "",
+  "objective": "Reproduce telemetry CUJ cuj_9636dd61a048 (Meeting notes to Jira epics): 22 sessions, share 0.229.",
+  "owner": "",
+  "scenario": {
+    "additional_connectors": [],
+    "additional_processes": [
+      {
+        "connector_entities": {
+          "confluence": "page",
+          "jira": "issue"
+        },
+        "event_kinds": [
+          "task",
+          "milestone",
+          "work"
+        ],
+        "fields": {},
+        "name": "cuj_9636dd61a048",
+        "status_map": {}
+      }
+    ],
+    "additional_workflows": [
+      {
+        "audiences": [
+          "team"
+        ],
+        "content_actions": [
+          "generate"
+        ],
+        "destinations": [
+          {
+            "connector": "jira",
+            "entities": [
+              "issue"
+            ],
+            "formats": [],
+            "operations": [
+              "create"
+            ],
+            "target_state": null,
+            "target_state_field": "state"
+          }
+        ],
+        "name": "cuj_9636dd61a048",
+        "process": "cuj_9636dd61a048",
+        "prompt_template": "For {company}: Create epics in STOREOPS from the action items in the store ops notes{failure_instruction}",
+        "purpose": "Meeting notes to Jira epics",
+        "sources": [
+          {
+            "connector": "confluence",
+            "entities": [
+              "page"
+            ],
+            "minimum": 1,
+            "operations": [
+              "read",
+              "search"
+            ],
+            "required_fields": [
+              "title"
+            ]
+          }
+        ],
+        "topologies": [
+          "chain",
+          "fan_in",
+          "fan_out",
+          "diamond"
+        ],
+        "verification": [
+          "readback",
+          "cross_system"
+        ]
+      }
+    ],
+    "company_description": "",
+    "connectors": [
+      "confluence",
+      "jira"
+    ],
+    "coverage": {
+      "connector_counts": [
+        1,
+        2,
+        4,
+        6
+      ],
+      "failures": [
+        "none",
+        "stale_source",
+        "ambiguous_join"
+      ],
+      "max_candidates": 10000000,
+      "name": "enterprise-default",
+      "strengths": 2
+    },
+    "industry": "grocery retail",
+    "name": "cuj_9636dd61a048",
+    "vocabulary": {},
+    "workflows": [
+      "cuj_9636dd61a048"
+    ]
+  },
+  "simulation": null,
+  "title": "Meeting notes to Jira epics",
+  "where": {}
+}

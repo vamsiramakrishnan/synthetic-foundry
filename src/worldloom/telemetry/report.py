@@ -2,8 +2,8 @@
 
 A finding is the unit of honesty: nothing the importer cannot build is ever
 dropped silently, so every refusal and every judgement call leaves one of these
-behind. ``hard`` means the thing was not built; ``info`` means it was, but a
-choice was made that a reader should see.
+behind. ``hard`` means something was lost that should not have been; ``info``
+means nothing is wrong and a reader should still be told.
 
 Two code vocabularies meet here, and they are deliberately not merged:
 
@@ -38,14 +38,22 @@ _SCHEMA_CODE = "schema"
 
 
 class Severity(StrEnum):
-    """Whether the thing in question was built."""
+    """Whether anything was lost.
+
+    Not whether something was built. Those two came apart in W3: a journey
+    that calls no business tool needs no world to run against, so it is not
+    built and nothing at all is missing. Severity answers the question
+    ``accepted`` and ``--strict`` actually ask — should this stop a run?
+    """
 
     HARD = "hard"
-    """Not built. The catalogue, the journey or the failure mode was refused."""
+    """Something real was lost. The catalogue, the journey or the failure mode
+    was refused, and a strict run should fail rather than ship a corpus
+    quietly missing it."""
 
     INFO = "info"
-    """Built, but a choice was made worth showing — an alias picked, a step
-    folded, a default used."""
+    """Nothing is wrong, and a reader should still be told — an alias picked,
+    a step folded, a default used, or a journey that needed no world."""
 
 
 class Finding(Model):

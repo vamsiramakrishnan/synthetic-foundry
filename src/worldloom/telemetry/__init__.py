@@ -38,11 +38,24 @@ the customer's catalogue is handed in, never opened here
     no customer content, and :mod:`.registry` reads them through
     ``connector_definition`` fresh on each call, so they cannot go stale.
 
-Start at :func:`~.catalogue.load_catalogue`. It is the only door in.
+Start at :func:`~.compile.import_catalogue`, which runs every stage. It
+reads bytes through :func:`~.catalogue.load_catalogue`, still the only way
+a catalogue gets in.
 """
 
 from __future__ import annotations
 
+from .binding import (
+    Binding,
+    BindRule,
+    BoundQuestion,
+    bind_question,
+    bind_slot,
+    check_template,
+    fallback_template,
+    prompt_template,
+    seed_for,
+)
 from .catalogue import (
     REJECTED,
     SCHEMA_VERSION,
@@ -59,6 +72,33 @@ from .catalogue import (
     Privacy,
     Step,
     load_catalogue,
+)
+from .compile import (
+    ANSWER_ONLY_UNSUPPORTED,
+    ARGUMENT_FIELD_UNKNOWN,
+    CASES_BELOW_JOURNEYS,
+    CONFLICTING_COMPANY_DEMANDS,
+    DEFAULT_AUDIENCE,
+    DEFAULT_CASES,
+    DEFAULT_PERSONA,
+    DROPPED_FOR_CONFLICT,
+    NO_WORLD_NEEDED,
+    WRITE_NOT_PLANNABLE,
+    Allocation,
+    CaseCounts,
+    Group,
+    ImportResult,
+    JourneyOutcome,
+    SortedCatalogue,
+    build_use_case,
+    check_with_studio,
+    coverage_failures,
+    group_for,
+    import_catalogue,
+    plannable,
+    record_shapes,
+    share_counts,
+    sort_catalogue,
 )
 from .invariants import check, cuj_id, signature
 from .registry import (
@@ -81,14 +121,32 @@ from .report import (
 )
 
 __all__ = [
+    "ANSWER_ONLY_UNSUPPORTED",
+    "ARGUMENT_FIELD_UNKNOWN",
+    "CASES_BELOW_JOURNEYS",
+    "CONFLICTING_COMPANY_DEMANDS",
     "CONNECTOR_NOT_EMULATED",
+    "DEFAULT_AUDIENCE",
+    "DEFAULT_CASES",
+    "DEFAULT_PERSONA",
+    "DROPPED_FOR_CONFLICT",
     "ENTITY_UNRESOLVED",
+    "NO_WORLD_NEEDED",
     "OPERATION_AMBIGUOUS",
     "OPERATION_UNSUPPORTED",
+    "PHRASING_DEFAULT_USED",
+    "PHRASING_VARIANT_UNUSED",
+    "RENDER_KEYS",
     "REJECTED",
     "SCHEMA_VERSION",
     "VERSION_UNKNOWN",
+    "WRITE_NOT_PLANNABLE",
+    "Allocation",
+    "BindRule",
+    "Binding",
+    "BoundQuestion",
     "Capability",
+    "CaseCounts",
     "Catalogue",
     "CatalogueConnector",
     "CatalogueReceipt",
@@ -97,20 +155,39 @@ __all__ = [
     "Cuj",
     "FailureMode",
     "Finding",
+    "Group",
     "ImportReport",
+    "ImportResult",
+    "JourneyOutcome",
     "MatchedCatalogue",
     "MissingCapability",
     "Operation",
     "Phrasing",
     "Privacy",
     "Severity",
+    "SortedCatalogue",
     "Step",
+    "bind_question",
+    "bind_slot",
+    "build_use_case",
+    "check_with_studio",
+    "coverage_failures",
     "check",
+    "check_template",
     "cuj_id",
+    "fallback_template",
+    "group_for",
     "hard",
+    "import_catalogue",
     "info",
     "load_catalogue",
     "match_catalogue",
     "match_cuj",
+    "plannable",
+    "prompt_template",
+    "record_shapes",
+    "seed_for",
+    "share_counts",
     "signature",
+    "sort_catalogue",
 ]
