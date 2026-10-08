@@ -31,13 +31,14 @@ exactly the case a test should cover.
 So instead of reshaping the journey, matching says what Worldloom would need
 to import it properly. :attr:`MatchedCatalogue.missing` lists every missing
 connector, entity and operation, with the journeys that need it and their
-share of real traffic, largest first::
+share of real traffic, largest first. On the miner's sample, before Jira
+modelled projects::
 
     jira.project   entity   search   cuj_9636dd61a048   22 sessions, 22.9%
 
 That list is a to-do list for the connector definitions, prioritised by real
-usage. Adding the entity — the way Jira already models ``sprint`` — makes the
-journey match unchanged.
+usage. ``project`` was then added the way Jira already models ``sprint``, and
+the journey matches unchanged.
 
 Refusal is per journey: one journey needing a missing entity does not stop the
 others. ``worldloom telemetry import --strict`` turns any refusal into a
