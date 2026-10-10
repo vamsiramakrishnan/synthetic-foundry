@@ -128,7 +128,7 @@ jobs:
       # read as uncovered.
       - name: Restore the test build cache
         if: matrix.python-version != '3.12'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .pytest_cache/worldloom-builds
           key: wl-test-builds-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/worldloom/**', 'pyproject.toml') }}-${{ hashFiles('tests/**') }}
