@@ -35,7 +35,6 @@ from typing import Annotated, Literal, TypeVar
 
 from pydantic import (
     AfterValidator,
-    AwareDatetime,
     BeforeValidator,
     Field,
     ValidationError,
@@ -89,17 +88,15 @@ def _json_number(value: object) -> object:
 JsonNumber = BeforeValidator(_json_number)
 
 
-def _timestamp_text(value: object) -> object:
-    """Mirrors ``"format": "date-time"``: RFC 3339 text. pydantic would also
-    read a unix integer as a timestamp, which the schema does not."""
-    if not isinstance(value, str):
-        raise ValueError("must be an RFC 3339 date-time string")
-    return value
-
-
-#: RFC 3339 with an offset, as ``date-time`` means. A naive timestamp says
-#: nothing about which day it fell on, so it is refused rather than guessed.
-Timestamp = Annotated[AwareDatetime, BeforeValidator(_timestamp_text)]
+#: The schema declares these as ``"type": "string", "format": "date-time"``.
+#: The type is enforced — a number is refused — but the format is not, because
+#: the miner treats ``format`` as annotation only: its validator accepts
+#: ``"2026-09-24T00:00:00"`` with no offset. Enforcing RFC 3339 here alone
+#: would refuse files the miner accepts, which is the one disagreement the
+#: shared contract exists to prevent. If the miner starts enforcing it, with
+#: a conformance file to say so, this tightens with it. Nothing in the
+#: importer reads these as dates, so text loses nothing.
+Timestamp = Annotated[str, Field(strict=True)]
 
 Count = Annotated[int, JsonNumber, Field(ge=0)]
 Share = Annotated[float, JsonNumber, Field(ge=0.0, le=1.0, allow_inf_nan=False)]

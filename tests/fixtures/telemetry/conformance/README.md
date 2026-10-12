@@ -43,6 +43,7 @@ These fail the schema:
 | `tool_signature_without_connector_step.json` | `no_phrasings.json` | A `tool_signature` CUJ has only a capability step. Its id is recomputed to match. |
 | `raw_text_field.json` | `no_phrasings.json` | A CUJ carries a `raw_text` field, which the schema does not allow. |
 | `bad_cuj_id.json` | `no_phrasings.json` | A CUJ id uses upper-case hex, so it fails the id pattern. |
+| `key_trailing_newline.json` | `no_phrasings.json` | A connector key is `"confluence\n"`. Python's `$` accepts the trailing newline, but JSON Schema's ECMA-262 `$` does not, so it fails the key pattern. |
 | `wrong_schema_version.json` | `minimal.json` | `schema_version` is `cuj-catalogue/2`. |
 
 These pass the schema but break one invariant, named by the file's prefix:
@@ -76,6 +77,17 @@ must give:
 ```
 
 `violation` is one of the shared codes `schema` and `inv1` to `inv10`. When
-adding a file, add its entry here too.
+adding a file, add its entry here too; a test fails if a file has no entry.
+
+## Running the miner's checker
+
+```sh
+python3 tools/validate_cuj_catalogue.py conformance/invalid/inv2_depends_on_later_step.json
+# inv2: $.cujs[0].steps[1]: depends on 'create_issue', which is not an earlier step
+```
+
+It prints one `code: message` line per problem and exits 1 if there are any.
+`tests/test_validate_cuj_catalogue.py` checks every file here against
+`EXPECTED.json`.
 
 Every value is invented. Never add customer data to these files.

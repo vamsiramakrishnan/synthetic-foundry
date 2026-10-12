@@ -67,6 +67,10 @@
     "valid": false,
     "violation": "inv9"
   },
+  "invalid/key_trailing_newline.json": {
+    "valid": false,
+    "violation": "schema"
+  },
   "invalid/multi_turn_without_journey_outcomes.json": {
     "valid": false,
     "violation": "schema"
