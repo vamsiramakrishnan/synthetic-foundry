@@ -1,9 +1,9 @@
 """The CUJ catalogue importer, held to the contract the miner also builds to.
 
-The centre of this file is the conformance suite: 26 catalogues shipped by the
+The centre of this file is the conformance suite: 27 catalogues shipped by the
 miner, each with a recorded verdict, run against Worldloom's reader. Both sides
 of a handoff can agree a format and still disagree about files, so the format
-is not the contract — these 26 files and their verdicts are.
+is not the contract — these 27 files and their verdicts are.
 
 Everything after the suite covers what it cannot. The suite is thorough about
 *which* rule a file breaks, and silent about four other things:
@@ -41,23 +41,24 @@ CONFORMANCE = Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
 SCHEMA = (Path(__file__).parent.parent / "src" / "worldloom" / "_data"
           / "telemetry" / "cuj-catalogue-1.schema.json")
 
-#: SHA-256 of the miner's ``cuj_catalogue.schema.json`` as handed over in M1
-#: (2026-10-01). The models in ``telemetry.catalogue`` are a transcription of
-#: that exact file, so if it changes the transcription must be re-derived. The
-#: pin is here to make that a failing test rather than a silent divergence
-#: discovered weeks later by a rejected catalogue.
+#: Where the vendored schema and conformance suite came from: the miner's
+#: ``main`` at this commit (customer-telemetry-miner #8). Re-vendor from a newer
+#: commit by copying ``schemas/`` and ``conformance/`` and updating all three
+#: lines below together.
+MINER_COMMIT = "bb5254496019"
+
+#: SHA-256 of the miner's ``cuj_catalogue.schema.json`` at ``MINER_COMMIT``. The
+#: models in ``telemetry.catalogue`` are a transcription of that exact file, so
+#: if it changes the transcription must be re-derived. The pin makes that a
+#: failing test rather than a silent divergence found weeks later. Unchanged
+#: since the M1 handover.
 SCHEMA_SHA256 = "53bf25f8c2f316a2bdd289ea01e40b8548bc8b7f8afda51758b1a24355e42506"
 
-#: SHA-256 of the conformance suite's answer sheet, ``EXPECTED.json``, from the
-#: same M1 handover. Pinned for the same reason: a verdict changed locally
-#: would make the suite agree with us instead of with the miner.
-#:
-#: Both pins catch *local* edits, not the miner moving on. The source miner
-#: commit was not recorded at handover, and the miner has since added
-#: ``invalid/key_trailing_newline.json`` (910c896), so this copy is 26 of its
-#: 27 files. Re-vendoring needs the miner's files, and should record the
-#: commit they came from.
-EXPECTED_SHA256 = "a8a491bc16ee935d598b08d5489f901c1e9036395567da33b4122f9e11cac04d"
+#: SHA-256 of the conformance suite's answer sheet, ``EXPECTED.json``, at
+#: ``MINER_COMMIT``: 27 files, including ``invalid/key_trailing_newline.json``.
+#: Pinned so a verdict changed locally cannot make the suite agree with us
+#: instead of with the miner.
+EXPECTED_SHA256 = "78bda095457afde07a2c57d1bfb9d98985b968b49033e50fb00b413c2929e064"
 
 EXPECTED: dict[str, dict[str, Any]] = json.loads(
     (CONFORMANCE / "EXPECTED.json").read_text())
@@ -116,13 +117,13 @@ def test_version_mismatch_refuses_under_worldloom_s_own_code() -> None:
     assert raised.value.report.violation == "schema"
 
 
-def test_the_vendored_schema_and_answer_sheet_are_unchanged_since_m1() -> None:
-    """Our copies are byte-identical to what the miner handed over in M1.
+def test_the_vendored_files_are_the_miners_at_the_recorded_commit() -> None:
+    """Our schema and answer sheet are byte-identical to the miner's at
+    ``MINER_COMMIT``.
 
-    The old name, "still matches the miner's", promised more than this checks:
-    it compares our copy with a digest of itself, so it catches local edits
-    and nothing else. Whether the miner has moved on is a separate question,
-    and today the answer is yes — see ``EXPECTED_SHA256``.
+    This compares our copies with digests recorded when they were vendored, so
+    it catches local edits. It cannot notice the miner moving on; that is what
+    recording the commit is for — compare it with the miner's ``main``.
     """
     assert hashlib.sha256(SCHEMA.read_bytes()).hexdigest() == SCHEMA_SHA256
     assert hashlib.sha256((CONFORMANCE / "EXPECTED.json").read_bytes()
@@ -380,12 +381,25 @@ def _example() -> dict[str, Any]:
     return _load_json("valid/example.json")
 
 
-def _refused_as_schema(payload: dict[str, Any] | bytes) -> str:
+def _example_text() -> str:
+    return (CONFORMANCE / "valid" / "example.json").read_text()
+
+
+def _refused_as_schema(payload: dict[str, Any] | bytes, *, at: str | None = None) -> str:
+    """Refused at the shape gate; with *at*, refused for that field.
+
+    Without *at* this would pass on any schema failure, including one the
+    edit did not cause, so every test that edits a field names it.
+    """
     data = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
     with pytest.raises(CatalogueRefused) as raised:
         load_catalogue(data)
     assert raised.value.report.violation == "schema"
-    return " ".join(f.message for f in raised.value.report.hard_findings)
+    messages = [f.message for f in raised.value.report.hard_findings]
+    if at is not None:
+        assert [m for m in messages if m.startswith(f"{at}:")], (
+            f"no finding for {at!r}; got {messages}")
+    return " ".join(messages)
 
 
 @pytest.mark.parametrize(("where", "value"), [
@@ -396,13 +410,16 @@ def test_a_string_or_boolean_is_not_a_number(where: str, value: object) -> None:
     payload = _example()
     if where == "count":
         payload["connectors"][0]["entities"][0]["calls"] = value
+        at = "connectors.0.entities.0.calls"
     elif where == "share":
         payload["cujs"][0]["support"]["share"] = value
+        at = "cujs.0.support.share"
     else:
-        cluster = next(c for c in payload["cujs"] if "cluster" in c)
-        cluster["cluster"]["cluster_id"] = value
+        index = next(i for i, c in enumerate(payload["cujs"]) if "cluster" in c)
+        payload["cujs"][index]["cluster"]["cluster_id"] = value
+        at = f"cujs.{index}.cluster.cluster_id"
 
-    assert "not a string or a boolean" in _refused_as_schema(payload)
+    assert "not a string or a boolean" in _refused_as_schema(payload, at=at)
 
 
 def test_a_whole_float_still_counts_as_an_integer() -> None:
@@ -418,7 +435,7 @@ def test_a_whole_float_still_counts_as_an_integer() -> None:
 def test_a_number_json_does_not_have_is_refused(token: str) -> None:
     """Python reads all four; JSON has none of them. A NaN share would pass
     every comparison inv9 makes."""
-    text = EXAMPLE_TEXT().replace('"share": 0.229', f'"share": {token}', 1)
+    text = _example_text().replace('"share": 0.229', f'"share": {token}', 1)
     assert token in text
 
     assert "not valid JSON" in _refused_as_schema(text.encode())
@@ -445,22 +462,27 @@ def test_inv9_does_not_pass_a_nan_sum() -> None:
     assert "inv9" in [finding.code for finding in check(broken)]
 
 
-@pytest.mark.parametrize(("field", "value"), [
-    ("created_at", "2026-09-24T00:00:00"),   # no offset
-    ("created_at", 1758672000),              # unix seconds
-    ("window.start", "2026-08-11T00:00:00"),
-])
-def test_a_timestamp_must_say_which_time_zone_it_is_in(field: str,
-                                                       value: object) -> None:
-    """``date-time`` means RFC 3339 with an offset."""
+def test_a_timestamp_without_a_time_zone_is_accepted_as_the_miner_does() -> None:
+    """The miner treats ``format: date-time`` as annotation only, so this file
+    passes there. Refusing it here would break the one rule the shared
+    contract exists for: both checkers agree, file for file."""
+    payload = _example()
+    payload["created_at"] = "2026-09-24T00:00:00"
+    payload["source"]["window"]["start"] = "2026-08-11T00:00:00"
+
+    load_catalogue(json.dumps(payload).encode())
+
+
+@pytest.mark.parametrize("field", ["created_at", "window.start"])
+def test_a_timestamp_must_still_be_text(field: str) -> None:
+    """``"type": "string"`` is enforced on both sides, so a unix number is
+    refused, at the field that carries it."""
     payload = _example()
     if field == "created_at":
-        payload["created_at"] = value
+        payload["created_at"] = 1758672000
+        at = "created_at"
     else:
-        payload["source"]["window"]["start"] = value
+        payload["source"]["window"]["start"] = 1754870400
+        at = "source.window.start"
 
-    _refused_as_schema(payload)
-
-
-def EXAMPLE_TEXT() -> str:
-    return (CONFORMANCE / "valid" / "example.json").read_text()
+    _refused_as_schema(payload, at=at)
