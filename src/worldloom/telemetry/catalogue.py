@@ -407,12 +407,24 @@ class Turns(Model):
     p90: Annotated[int, JsonNumber, Field(ge=1)]
 
 
-class Cluster(Model):
-    """The intent cluster an answer-only journey was identified by, when there
-    were no tool calls to identify it with."""
+AnchorTerm = Annotated[str, Field(pattern=r"^[a-z]{3,}$")]
+"""Lower-case ASCII letters only, as the miner's term filter gives, so every
+producer sorts and hashes them alike."""
 
-    cluster_id: Annotated[int, JsonNumber]
-    """``true`` used to coerce to 1 and reach the inv8 hash as ``cluster:1``."""
+
+class Cluster(Model):
+    """The topic an answer-only journey was identified by, when there were no
+    tool calls to identify it with."""
+
+    cluster_id: Annotated[int, JsonNumber] | None = None
+    """This run's clustering index. It changes between runs, so it is not part
+    of the id. ``true`` used to coerce to 1, so it is still checked as a
+    number."""
+    domain: Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$")]
+    """The cluster's domain category, such as ``CREATIVE_WRITING``."""
+    anchor_terms: Annotated[tuple[AnchorTerm, ...], Unique, Field(max_length=3)]
+    """Up to three topic words, each also in ``keywords``. With ``domain``,
+    these are what the id is hashed from (``inv8``)."""
     keywords: tuple[str, ...]
 
 
@@ -437,9 +449,10 @@ class Cuj(Model):
     """One critical user journey: a task people repeat, as ordered steps."""
 
     id: Annotated[str, Field(pattern=r"^cuj_[0-9a-f]{12}$")]
-    """First 12 hex of a SHA-256 over the journey's step signature. Recomputed
-    and checked by ``inv8``, so the same journey keeps the same id between
-    telemetry windows and can be tracked over time."""
+    """First 12 hex of a SHA-256 over the journey's signature: its steps, or
+    for an answer-only journey its cluster's domain and anchor terms.
+    Recomputed and checked by ``inv8``, so the same journey keeps the same id
+    between telemetry windows and can be tracked over time."""
     label: str
     label_source: Literal["rule", "llm", "manual"]
     anchor: Literal["tool_signature", "domain_cluster"]
