@@ -2286,7 +2286,7 @@ worldloom telemetry import <CATALOGUE>
 | `--overwrite` | Replace files a previous import wrote. |
 | `--persona` | Who asks. The catalogue cannot say. |
 | `--seed` | The company's seed in project.json. |
-| `--strict` | Exit 3 on any hard finding, and write no project. |
+| `--strict` | Strict (the default): exit 3 on any hard finding, and write no project. --no-strict writes the project from the journeys that could be built. |
 
 ### `worldloom topology`
 

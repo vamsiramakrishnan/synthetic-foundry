@@ -15,9 +15,15 @@ customer file is read.
         DIR/import-receipt.json   digests only, so a run can be proved later
 
 Exit codes: 0 when a project was written. 3 when nothing could be built, or
-when ``--strict`` was given and any hard finding exists. Refusals of the
-inputs themselves — an unreadable catalogue, a missing company — exit 2, like
-every other refusal in this CLI.
+when any hard finding exists: imports are strict by default, so a gap is
+fixed rather than shipped as a quietly smaller corpus, and the report says
+what to fix. ``--no-strict`` writes the project from the journeys that could
+be built. Refusals of the inputs themselves — an unreadable catalogue, a
+missing company — exit 2, like every other refusal in this CLI.
+
+A lookup journey is a hard finding until core change C3, so a catalogue
+containing one is refused by default until then. That is accepted: strict
+means every loss is seen.
 
 Imports stay inside the commands. ``cli.py`` loads this module at start-up,
 and the start-up budget is a standing concern there.
@@ -225,7 +231,10 @@ def import_command(
     audience: Annotated[str, typer.Option(
         "--audience", help="Who the output is for.")] = "team",
     strict: Annotated[bool, typer.Option(
-        "--strict", help="Exit 3 on any hard finding, and write no project.")] = False,
+        "--strict/--no-strict",
+        help="Strict (the default): exit 3 on any hard finding, and write no "
+             "project. --no-strict writes the project from the journeys that "
+             "could be built.")] = True,
     overwrite: Annotated[bool, typer.Option(
         "--overwrite", help="Replace files a previous import wrote.")] = False,
     acknowledge_unmet: Annotated[bool, typer.Option(
@@ -282,8 +291,10 @@ def import_command(
     if strict and hard:
         codes = sorted({finding.code for finding in hard})
         _refuse("strict_findings",
-                f"[red]error:[/red] --strict: {_count(len(hard), 'hard finding')} "
-                f"({', '.join(codes)}); no project written. See {out / REPORT_MD}",
+                f"[red]error:[/red] {_count(len(hard), 'hard finding')} "
+                f"({', '.join(codes)}); no project written. See {out / REPORT_MD}. "
+                "Fix them, or pass --no-strict to build the journeys that can "
+                "be built",
                 exit_code=3, codes=codes, report=str(out / REPORT_JSON))
 
     if json_output:

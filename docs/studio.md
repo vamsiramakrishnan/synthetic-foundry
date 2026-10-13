@@ -212,12 +212,15 @@ worldloom studio init ./imported/project.json --workspace ./worldloom-workspace
 name, size or geography, and the importer never invents them;
 `company-template` only suggests an archetype from the catalogue's industry
 hint. `import` writes `project.json`, `import-report.json`,
-`import-report.md` and `import-receipt.json`. It exits 0 when a project was
-written, and 3 when nothing could be built or `--strict` meets a hard finding.
+`import-report.md` and `import-receipt.json`. Imports are strict by
+default: any hard finding exits 3 and writes no project, and the report says
+what to fix. `--no-strict` writes the project from the journeys that could be
+built, and exits 0.
 
 Only journeys that change something are built today. A journey of reads that
-ends in an answer is reported as `answer_only_unsupported`, and one that
-calls no tool as `no_world_needed`. The report's `share_lost` says how much
+ends in an answer is reported as `answer_only_unsupported`, a hard finding,
+so a catalogue containing one needs `--no-strict` until answer-only journeys
+are supported; one that calls no tool is reported as `no_world_needed`. The report's `share_lost` says how much
 real traffic that leaves unrepresented, so a corpus never looks more complete
 than it is.
 

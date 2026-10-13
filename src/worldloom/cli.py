@@ -736,7 +736,7 @@ _REFUSALS: dict[str, str] = {
     "catalogue_uncompilable": "no journey in a CUJ catalogue could be built; the import report says why for each",
     "company_required": "telemetry import needs a company file naming identity.company_name; the importer never invents one",
     "company_unmet": "the company file asks for things Worldloom cannot build; pass --acknowledge-unmet to build without them",
-    "strict_findings": "--strict refused an import with hard findings; no project was written, the import report lists them",
+    "strict_findings": "an import had hard findings, and imports are strict by default; no project was written, the import report lists them, --no-strict builds the rest",
     "interview_refused": "a world interview answer, transcript or realisation was refused; data.findings names each rule",
     "interview_incomplete": "the world interview stopped before every question was settled; the directory resumes it",
     "dataset_incomplete": "dataset quotas, diversity or split obligations remain; the run can be inspected or resumed",

@@ -8,7 +8,7 @@ that matters most — whether ``studio init`` accepts what ``import`` wrote.
     the functions prove       │ these tests add
     ──────────────────────────┼──────────────────────────────────────────
     a project is buildable    │ studio init actually accepts the file
-    findings are right        │ --strict turns hard findings into exit 3
+    findings are right        │ a hard finding exits 3 by default
     the company is used       │ a missing company is refused, never guessed
     one import works          │ a second does not silently overwrite it
 """
@@ -50,7 +50,15 @@ def _run(*args: str | Path) -> object:
 
 
 def _import(out: Path, company: Path, *extra: str | Path):
+    """A plain import, strict as the command defaults."""
     return _run("import", EXAMPLE, "--company", company, "--out", out, *extra)
+
+
+def _build(out: Path, company: Path, *extra: str | Path):
+    """An import that writes the project from what can be built. The sample's
+    lookup journey is a hard finding, so a plain import refuses it, and the
+    tests about what a project contains need ``--no-strict``."""
+    return _import(out, company, "--no-strict", *extra)
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +70,7 @@ def test_import_writes_four_files_and_exits_zero(tmp_path: Path,
                                                  company: Path) -> None:
     out = tmp_path / "out"
 
-    result = _import(out, company)
+    result = _build(out, company)
 
     assert result.exit_code == 0, result.output
     assert sorted(path.name for path in out.iterdir()) == [
@@ -75,7 +83,7 @@ def test_studio_init_accepts_what_import_wrote(tmp_path: Path,
                                                company: Path) -> None:
     """The point of the whole wave, end to end through both commands."""
     out = tmp_path / "out"
-    assert _import(out, company).exit_code == 0
+    assert _build(out, company).exit_code == 0
 
     created = RUNNER.invoke(app, [
         "studio", "init", str(out / "project.json"),
@@ -88,7 +96,7 @@ def test_studio_init_accepts_what_import_wrote(tmp_path: Path,
 def test_the_report_accounts_for_every_journey(tmp_path: Path,
                                                company: Path) -> None:
     out = tmp_path / "out"
-    _import(out, company)
+    _build(out, company)
 
     report = json.loads((out / "import-report.json").read_text())
 
@@ -105,7 +113,7 @@ def test_the_report_accounts_for_every_journey(tmp_path: Path,
 def test_the_readable_report_says_what_was_lost_and_what_was_assumed(
         tmp_path: Path, company: Path) -> None:
     out = tmp_path / "out"
-    _import(out, company)
+    _build(out, company)
 
     text = (out / "import-report.md").read_text()
 
@@ -117,7 +125,7 @@ def test_the_readable_report_says_what_was_lost_and_what_was_assumed(
 def test_the_options_reach_the_project(tmp_path: Path, company: Path) -> None:
     out = tmp_path / "out"
 
-    _import(out, company, "--cases", "40", "--seed", "7",
+    _build(out, company, "--cases", "40", "--seed", "7",
             "--persona", "analyst")
     project = ProjectSpec.model_validate_json((out / "project.json").read_text())
 
@@ -128,7 +136,7 @@ def test_the_options_reach_the_project(tmp_path: Path, company: Path) -> None:
 
 
 def test_json_prints_the_report(tmp_path: Path, company: Path) -> None:
-    result = _import(tmp_path / "out", company, "--json")
+    result = _build(tmp_path / "out", company, "--json")
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["catalogue_id"] == "retail_example_2026.09"
@@ -139,18 +147,37 @@ def test_json_prints_the_report(tmp_path: Path, company: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_strict_exits_three_and_writes_no_project(tmp_path: Path,
-                                                  company: Path) -> None:
-    """The sample's lookup journey is a hard finding, so --strict refuses.
-    The report is still written, so the reason can be read."""
+def test_a_plain_import_is_strict_and_writes_no_project(tmp_path: Path,
+                                                         company: Path) -> None:
+    """Strict is the default. The sample's lookup journey is a hard finding,
+    so a plain import refuses. The report is still written, so the reason can
+    be read, and the message says how to build the rest."""
     out = tmp_path / "out"
 
-    result = _import(out, company, "--strict")
+    for result in (_import(out, company),
+                   _import(out, company, "--overwrite", "--strict")):
+        assert result.exit_code == 3, result.output
+        assert not (out / "project.json").exists()
+        assert (out / "import-report.md").exists()
+        assert "answer_only_unsupported" in result.output
+        assert "--no-strict" in result.output
 
-    assert result.exit_code == 3, result.output
-    assert not (out / "project.json").exists()
-    assert (out / "import-report.md").exists()
-    assert "answer_only_unsupported" in result.output
+
+def test_no_strict_writes_the_buildable_journeys(tmp_path: Path,
+                                                 company: Path) -> None:
+    """The same catalogue, with --no-strict: the write journey is built, and
+    the lookup journey is still a hard finding in the report."""
+    out = tmp_path / "out"
+
+    result = _build(out, company)
+
+    assert result.exit_code == 0, result.output
+    project = ProjectSpec.model_validate_json((out / "project.json").read_text())
+    assert [case.id for case in project.use_cases] == [WRITES]
+    report = json.loads((out / "import-report.json").read_text())
+    assert "answer_only_unsupported" in [
+        finding["code"] for finding in report["findings"]
+        if finding["severity"] == "hard"]
 
 
 def test_a_strict_rerun_removes_a_stale_project(tmp_path: Path,
@@ -158,10 +185,10 @@ def test_a_strict_rerun_removes_a_stale_project(tmp_path: Path,
     """A project left from an earlier run would sit beside a report that
     describes a different import."""
     out = tmp_path / "out"
-    _import(out, company)
+    _build(out, company)
     assert (out / "project.json").exists()
 
-    _import(out, company, "--overwrite", "--strict")
+    _import(out, company, "--overwrite")
 
     assert not (out / "project.json").exists()
 
@@ -215,10 +242,10 @@ def test_a_company_without_a_name_is_refused(tmp_path: Path) -> None:
 def test_a_second_import_does_not_silently_replace_the_first(
         tmp_path: Path, company: Path) -> None:
     out = tmp_path / "out"
-    _import(out, company)
+    _build(out, company)
 
-    again = _import(out, company)
-    replaced = _import(out, company, "--overwrite")
+    again = _build(out, company)
+    replaced = _build(out, company, "--overwrite")
 
     assert again.exit_code == 2
     assert "already exists" in again.output
@@ -268,7 +295,8 @@ def test_a_filled_in_template_is_a_company_import_accepts(tmp_path: Path) -> Non
     out.write_text(json.dumps(document))
 
     resolution = resolve(from_document(document))
-    result = _run("import", EXAMPLE, "--company", out, "--out", tmp_path / "o")
+    result = _run("import", EXAMPLE, "--company", out, "--out", tmp_path / "o",
+                  "--no-strict")
 
     assert resolution.conflicts == ()
     assert result.exit_code == 0, result.output
@@ -288,8 +316,8 @@ def test_two_imports_write_identical_files(tmp_path: Path, company: Path) -> Non
     """§8 test 8, at the level a person sees: the same catalogue and company
     give the same four files, byte for byte, wherever they are written."""
     first, second = tmp_path / "first", tmp_path / "second"
-    assert _import(first, company).exit_code == 0
-    assert _import(second, company).exit_code == 0
+    assert _build(first, company).exit_code == 0
+    assert _build(second, company).exit_code == 0
 
     for name in ("project.json", "import-report.json", "import-report.md",
                  "import-receipt.json"):
@@ -376,7 +404,7 @@ def test_acknowledge_unmet_builds_and_records_what_was_accepted(
 
     result = RUNNER.invoke(app, [
         "telemetry", "import", str(EXAMPLE), "--company", str(rivalled),
-        "--out", str(out), "--acknowledge-unmet"])
+        "--out", str(out), "--acknowledge-unmet", "--no-strict"])
     project = ProjectSpec.model_validate_json((out / "project.json").read_text())
 
     assert result.exit_code == 0, result.output
