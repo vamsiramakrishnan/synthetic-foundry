@@ -24,11 +24,12 @@ journey that cannot be matched is refused whole.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
-from worldloom import connector_definition
+from worldloom import connector_definition, packkit
 from worldloom.connector_definition import load_connector_definition
 from worldloom.telemetry import (
     CONNECTOR_NOT_EMULATED,
@@ -327,17 +328,46 @@ def test_each_connector_definition_is_loaded_once_per_run(
     """Once per run, not once per step: every journey in one import is
     matched against the same definitions."""
     loads: list[str] = []
-    real = connector_definition.load_connector_definition
+    real = connector_definition.shipped_connector_definition
 
     def counting(name: str):
         loads.append(name)
         return real(name)
 
-    monkeypatch.setattr(registry, "load_connector_definition", counting)
+    monkeypatch.setattr(registry, "shipped_connector_definition", counting)
 
     match_catalogue(_catalogue())
 
     assert sorted(loads) == ["confluence", "jira"]
+
+
+def test_an_installed_pack_does_not_change_what_matches(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pack named ``jira`` can replace what is served, not the vocabulary a
+    catalogue is matched in. Otherwise the same catalogue would match
+    differently on two machines, and the receipt would not say why."""
+    monkeypatch.setenv("WORLDLOOM_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("WORLDLOOM_PACK_PATH", raising=False)
+    root = tmp_path / "packs"
+    # Confluence's contract under Jira's name: no issue record at all.
+    body = {**load_connector_definition("confluence").served_dict(),
+            "connector": "jira"}
+    path = root / "connector" / "jira.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"schema": "worldloom.pack/v1",
+                                "kind": "connector", "name": "jira",
+                                "body": body}))
+    before = match_catalogue(_catalogue())
+
+    packkit.refresh()
+    try:
+        with packkit.use(roots=[root]):
+            assert "issue" not in load_connector_definition("jira").entity_aliases
+            during = match_catalogue(_catalogue())
+    finally:
+        packkit.refresh()
+
+    assert during == before
 
 
 def test_jira_does_not_model_projects_yet() -> None:

@@ -45,15 +45,19 @@ refused import.
 
 This module reads Worldloom's own shipped connector definitions, once per
 :func:`match_catalogue` call, so every journey in a run is matched against the
-same definitions and a renamed entity cannot go unnoticed between runs. It
-never opens the customer's catalogue; those bytes arrive already parsed.
+same definitions and a renamed entity cannot go unnoticed between runs. Only
+the shipped ones: a connector pack can replace ``jira.json`` for what is
+served, but not for the vocabulary a catalogue is matched in, or the same
+catalogue would match differently depending on what is installed, and nothing
+on the receipt would say why. It never opens the customer's catalogue; those
+bytes arrive already parsed.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from ..connector_definition import is_reference_connector, load_connector_definition
+from ..connector_definition import REFERENCE_CONNECTORS, shipped_connector_definition
 from ..models import Model
 from .catalogue import Cuj
 from .report import Finding, ImportReport, hard
@@ -107,8 +111,13 @@ class MissingCapability(Model):
     """Every journey refused for want of this."""
 
     sessions: int = 0
+    """Summed over those journeys, so an upper bound: one session can hold
+    several journeys and is then counted once for each."""
+
     share: float = 0.0
-    """Of real traffic, summed over those journeys. What to add first."""
+    """Of real traffic, summed over those journeys. Exact, unlike
+    ``sessions``: share counts queries, each query belongs to one journey,
+    and ``inv9`` checks the shares add up. What to add first."""
 
     @property
     def name(self) -> str:
@@ -144,10 +153,13 @@ def _definition(connector: str, loaded: Definitions) -> ConnectorDefinition | No
     Once per run rather than once per step: every journey in one import is
     then matched against the same definitions, and a catalogue of forty
     journeys does not read the same file forty times.
+
+    The shipped definition, whatever pack is installed; see the module
+    docstring. A connector only a pack provides is therefore not emulated.
     """
     if connector not in loaded:
-        loaded[connector] = (load_connector_definition(connector)
-                             if is_reference_connector(connector) else None)
+        loaded[connector] = (shipped_connector_definition(connector)
+                             if connector in REFERENCE_CONNECTORS else None)
     return loaded[connector]
 
 
