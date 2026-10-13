@@ -6,7 +6,7 @@
     "difficulty": "medium",
     "id": "cuj_9636dd61a048",
     "persona": "employee",
-    "request_template": "For {company}: Create epics in STOREOPS from the action items in the store ops notes{failure_instruction}",
+    "request_template": "For {company}: Create epics in ACTIONITEM from the action items in the sprint notes{failure_instruction}",
     "requirements": [
       {
         "hard": true,
@@ -16,7 +16,7 @@
         "selector": {
           "connector": "confluence",
           "entity": "page",
-          "title": "store ops"
+          "title": "sprint"
         }
       },
       {
@@ -27,7 +27,7 @@
         "selector": {
           "connector": "jira",
           "entity": "project",
-          "title": "STOREOPS"
+          "title": "ACTIONITEM"
         }
       }
     ],
@@ -142,7 +142,7 @@
         ],
         "name": "cuj_9636dd61a048",
         "process": "cuj_9636dd61a048",
-        "prompt_template": "For {company}: Create epics in STOREOPS from the action items in the store ops notes{failure_instruction}",
+        "prompt_template": "For {company}: Create epics in ACTIONITEM from the action items in the sprint notes{failure_instruction}",
         "purpose": "Meeting notes to Jira epics",
         "sources": [
           {

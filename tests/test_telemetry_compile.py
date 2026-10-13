@@ -5,7 +5,7 @@ is the point of using it as the anchor:
 
     cuj_9636dd61a048   creates Jira epics      ──▶  write
     cuj_3ac134e740af   searches and answers    ──▶  lookup
-    cuj_80e0d9ce1f1b   drafting, no tools      ──▶  no_world
+    cuj_07f5d9725f49   drafting, no tools      ──▶  no_world
 
 The rest of the tests cover the edges one happy file cannot: a journey W2
 refused, a journey anchored on a cluster that still carries a tool step, and
@@ -58,7 +58,7 @@ EXAMPLE = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
 
 WRITES = "cuj_9636dd61a048"
 LOOKS_UP = "cuj_3ac134e740af"
-DRAFTS = "cuj_80e0d9ce1f1b"
+DRAFTS = "cuj_07f5d9725f49"
 
 #: The smallest company document ``ProjectSpec`` accepts. The importer never
 #: invents one — ``--company`` is required — so tests supply their own.
@@ -260,8 +260,8 @@ def test_the_question_and_the_world_agree_on_every_value() -> None:
     selectors = {requirement.id: requirement.selector
                  for requirement in case.construction.requirements}
 
-    assert selectors["jira.project"]["title"] == "STOREOPS"
-    assert "STOREOPS" in case.construction.request_template
+    assert selectors["jira.project"]["title"] == "ACTIONITEM"
+    assert "ACTIONITEM" in case.construction.request_template
 
 
 def test_there_is_one_requirement_per_pair_not_per_step() -> None:
@@ -347,15 +347,15 @@ def test_a_journey_writing_only_where_the_planner_cannot_reach_is_refused() -> N
 
 
 def test_a_search_phrase_is_pinned_as_the_title_of_what_was_searched_for() -> None:
-    """The question says "store ops notes", so a page titled "store ops" must
+    """The question says "sprint notes", so a page titled "sprint" must
     exist. The world builder mints it, plus a near miss on the title."""
     case = _built()
     assert case.construction is not None
     page = next(r for r in case.construction.requirements
                 if r.id == "confluence.page")
 
-    assert page.selector["title"] == "store ops"
-    assert "store ops" in case.construction.request_template
+    assert page.selector["title"] == "sprint"
+    assert "sprint" in case.construction.request_template
 
 
 def test_written_free_text_is_not_pinned() -> None:

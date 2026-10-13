@@ -40,7 +40,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from ..connector_definition import load_connector_definition
+from ..connector_definition import shipped_connector_definition
 from ..enterprise_specs import (
     ContentAction,
     CoverageProfile,
@@ -453,9 +453,10 @@ def _roles(reads: Mapping[tuple[str, str], set[str]],
 
 def _knows(connector: str, entity: str, field: str) -> bool:
     """Whether the connector definition describes *field* on *entity*: a
-    field manifest, a query field, or a field required on create."""
+    field manifest, a query field, or a field required on create. The
+    shipped definition, as matching uses."""
     try:
-        definition = load_connector_definition(connector)
+        definition = shipped_connector_definition(connector)
         if definition.resolve_field(entity, field) is not None:
             return True
         members = definition.entity_members(entity)

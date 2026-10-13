@@ -94,8 +94,8 @@ def test_the_report_accounts_for_every_journey(tmp_path: Path,
 
     assert report["schema_version"] == "worldloom.telemetry-import-report/v1"
     assert [(j["cuj_id"], j["group"], j["count"]) for j in report["journeys"]] == [
+        ("cuj_07f5d9725f49", "no_world", 0),
         ("cuj_3ac134e740af", "lookup", 0),
-        ("cuj_80e0d9ce1f1b", "no_world", 0),
         (WRITES, "write", 200)]
     assert report["share_lost"] == pytest.approx(0.511)
     assert report["assumptions"] == {

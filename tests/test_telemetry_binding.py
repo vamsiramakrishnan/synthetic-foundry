@@ -47,7 +47,7 @@ EXAMPLE = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
            / "valid" / "example.json")
 
 WRITES = "cuj_9636dd61a048"
-DRAFTS = "cuj_80e0d9ce1f1b"
+DRAFTS = "cuj_07f5d9725f49"
 
 
 def _data() -> bytes:
@@ -407,7 +407,7 @@ def test_the_real_renderer_fills_what_the_importer_wrote() -> None:
     text = _render(World.load("examples/retail-close"), workflow, row,
                    builtin_registry())
 
-    assert "Create epics in STOREOPS" in text
+    assert "Create epics in ACTIONITEM" in text
     assert "{" not in text
     assert text.endswith("identify stale evidence.")
 

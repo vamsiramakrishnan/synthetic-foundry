@@ -69,7 +69,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from ..connector_definition import load_connector_definition
+from ..connector_definition import shipped_connector_definition
 from ..models import Model
 from ..providers import digest
 from .report import Finding, info
@@ -266,8 +266,10 @@ def _container_terms(terms: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _definition(connector: str) -> ConnectorDefinition | None:
+    """The shipped definition, as matching uses: an installed pack must not
+    change what an import binds."""
     try:
-        return load_connector_definition(connector)
+        return shipped_connector_definition(connector)
     except ValueError:
         return None
 
