@@ -40,8 +40,9 @@ usage. Adding the entity — the way Jira already models ``sprint`` — makes th
 journey match unchanged.
 
 Refusal is per journey: one journey needing a missing entity does not stop the
-others. ``worldloom telemetry import --strict`` turns any refusal into a
-refused import.
+others here. ``worldloom telemetry import`` is strict by default, so any
+refusal still refuses the import, and the report says what to add;
+``--no-strict`` keeps the journeys that matched.
 
 This module reads Worldloom's own shipped connector definitions, once per
 :func:`match_catalogue` call, so every journey in a run is matched against the
