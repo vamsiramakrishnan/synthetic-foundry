@@ -165,11 +165,11 @@
       "exemplar_hashes": ["85f3e42f5b0ad7de20001877f6a4d7e8c5708451b8d57e1ccf43f0a2122af34f"]
     },
     {
-      "id": "cuj_80e0d9ce1f1b",
+      "id": "cuj_07f5d9725f49",
       "label": "Drafting help with no source system",
       "label_source": "rule",
       "anchor": "domain_cluster",
-      "cluster": { "cluster_id": 4, "keywords": ["rewrite", "email", "summary", "tone"] },
+      "cluster": { "cluster_id": 4, "domain": "CREATIVE_WRITING", "anchor_terms": ["email", "rewrite", "summary"], "keywords": ["rewrite", "email", "summary", "tone"] },
       "kind": "single_turn",
       "steps": [
         { "id": "answer", "connector": "confluence", "entity": "page", "operation": "search", "capability": "generate", "effect": "transform", "presence": 1.0 }

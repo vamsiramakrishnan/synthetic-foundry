@@ -1,4 +1,8 @@
 {
+  "invalid/anchor_term_not_lowercase.json": {
+    "valid": false,
+    "violation": "schema"
+  },
   "invalid/bad_cuj_id.json": {
     "valid": false,
     "violation": "schema"
@@ -55,7 +59,19 @@
     "valid": false,
     "violation": "inv7"
   },
+  "invalid/inv8_anchor_term_not_in_keywords.json": {
+    "valid": false,
+    "violation": "inv8"
+  },
+  "invalid/inv8_duplicate_id.json": {
+    "valid": false,
+    "violation": "inv8"
+  },
   "invalid/inv8_id_mismatch.json": {
+    "valid": false,
+    "violation": "inv8"
+  },
+  "invalid/inv8_topic_id_from_cluster_id.json": {
     "valid": false,
     "violation": "inv8"
   },
@@ -80,6 +96,10 @@
     "violation": "schema"
   },
   "invalid/step_tool_and_capability.json": {
+    "valid": false,
+    "violation": "schema"
+  },
+  "invalid/too_many_anchor_terms.json": {
     "valid": false,
     "violation": "schema"
   },

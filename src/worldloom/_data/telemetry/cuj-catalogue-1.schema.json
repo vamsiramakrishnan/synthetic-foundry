@@ -356,7 +356,7 @@
         "id": {
           "type": "string",
           "pattern": "^cuj_[0-9a-f]{12}$",
-          "description": "First 12 hex of SHA-256 over the canonical signature (steps' connector.entity.operation / capability, in order). Stable across runs, so a CUJ can be tracked between telemetry windows."
+          "description": "First 12 hex of SHA-256 over the canonical signature (steps' connector.entity.operation / capability, in order; for a `domain_cluster` CUJ, its cluster's domain and anchor terms). Stable across runs, so a CUJ can be tracked between telemetry windows. Unique within a catalogue. Not opaque: a signature is a few known tokens or dictionary words, so it can be recovered from the id, and the same journey gets the same id for every customer."
         },
         "label": { "type": "string", "description": "Human name, e.g. `Meeting notes to Jira epics`." },
         "label_source": { "enum": ["rule", "llm", "manual"] },
@@ -367,11 +367,19 @@
         "cluster": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["cluster_id", "keywords"],
-          "description": "Required when anchor is `domain_cluster`.",
+          "required": ["domain", "anchor_terms", "keywords"],
+          "description": "Required when anchor is `domain_cluster`. The id is hashed from `domain` and `anchor_terms`, not from `cluster_id`.",
           "properties": {
-            "cluster_id": { "type": "integer" },
-            "keywords": { "type": "array", "items": { "type": "string" } }
+            "cluster_id": { "type": "integer", "description": "This run's IntentClusterer index. Not stable between runs and not part of the id." },
+            "domain": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "description": "The cluster's IntentClusterer domain_category, e.g. `CREATIVE_WRITING`." },
+            "anchor_terms": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 3,
+              "items": { "type": "string", "pattern": "^[a-z]{3,}$" },
+              "description": "Up to 3 topic terms, the first entries of `keywords`, so each is also in `keywords`. Lower-case ASCII letters only, as the term filter gives, so every producer sorts and hashes them alike. Order does not matter; the signature sorts them. They keep the id across runs while the cluster's top terms hold; a swap among them or a change of majority domain gives a new id, so some drift between windows is expected."
+            },
+            "keywords": { "type": "array", "items": { "type": "string" }, "description": "The cluster's top terms that pass the term filter, most significant first." }
           }
         },
         "kind": { "enum": ["single_turn", "multi_turn"] },

@@ -1,9 +1,9 @@
 """The CUJ catalogue importer, held to the contract the miner also builds to.
 
-The centre of this file is the conformance suite: 27 catalogues shipped by the
+The centre of this file is the conformance suite: 32 catalogues shipped by the
 miner, each with a recorded verdict, run against Worldloom's reader. Both sides
 of a handoff can agree a format and still disagree about files, so the format
-is not the contract — these 27 files and their verdicts are.
+is not the contract — these 32 files and their verdicts are.
 
 Everything after the suite covers what it cannot. The suite is thorough about
 *which* rule a file breaks, and silent about four other things:
@@ -41,24 +41,26 @@ CONFORMANCE = Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
 SCHEMA = (Path(__file__).parent.parent / "src" / "worldloom" / "_data"
           / "telemetry" / "cuj-catalogue-1.schema.json")
 
-#: Where the vendored schema and conformance suite came from: the miner's
-#: ``main`` at this commit (customer-telemetry-miner #8). Re-vendor from a newer
-#: commit by copying ``schemas/`` and ``conformance/`` and updating all three
-#: lines below together.
-MINER_COMMIT = "bb5254496019"
+#: Where the vendored schema and conformance suite came from: the head of
+#: customer-telemetry-miner #14, which names answer-only journeys by topic
+#: rather than by cluster index. Not yet merged into the miner's ``main``;
+#: re-pin to the merge commit when it is. Re-vendor from a newer commit by
+#: copying ``schemas/`` and ``conformance/`` and updating all three lines below
+#: together.
+MINER_COMMIT = "61804349b499"
 
 #: SHA-256 of the miner's ``cuj_catalogue.schema.json`` at ``MINER_COMMIT``. The
 #: models in ``telemetry.catalogue`` are a transcription of that exact file, so
 #: if it changes the transcription must be re-derived. The pin makes that a
-#: failing test rather than a silent divergence found weeks later. Unchanged
-#: since the M1 handover.
-SCHEMA_SHA256 = "53bf25f8c2f316a2bdd289ea01e40b8548bc8b7f8afda51758b1a24355e42506"
+#: failing test rather than a silent divergence found weeks later. #14 changed
+#: it: ``cluster`` gained ``domain`` and ``anchor_terms``.
+SCHEMA_SHA256 = "82052e4220ff99327bbe0ad69eeec2a40758f89dfc050079f272f6ee3497e47c"
 
 #: SHA-256 of the conformance suite's answer sheet, ``EXPECTED.json``, at
-#: ``MINER_COMMIT``: 27 files, including ``invalid/key_trailing_newline.json``.
+#: ``MINER_COMMIT``: 32 files, including the five #14 added for topic ids.
 #: Pinned so a verdict changed locally cannot make the suite agree with us
 #: instead of with the miner.
-EXPECTED_SHA256 = "78bda095457afde07a2c57d1bfb9d98985b968b49033e50fb00b413c2929e064"
+EXPECTED_SHA256 = "4ec092a02ad890ed020e4273975d997a2c445fca79f147322a0f1c67170f3396"
 
 EXPECTED: dict[str, dict[str, Any]] = json.loads(
     (CONFORMANCE / "EXPECTED.json").read_text())
@@ -202,26 +204,61 @@ def test_signature_ignores_everything_that_drifts() -> None:
     assert [c.id for c in after.cujs] == [c.id for c in before.cujs]
 
 
-def test_answer_only_journeys_are_named_by_cluster() -> None:
-    """A journey with no business tool call is identified by its cluster.
+def test_answer_only_journeys_are_named_by_topic() -> None:
+    """A journey with no business tool call is identified by its topic.
 
-    Two answer-only journeys in the same cluster are the same journey, however
-    their model-only steps differ — so the cluster replaces the steps in the
+    Two answer-only journeys on the same topic are the same journey, however
+    their model-only steps differ — so the topic replaces the steps in the
     signature rather than joining them.
     """
-    payload = _load_json("valid/minimal.json")
-    cuj = payload["cujs"][0]
-    assert cuj["anchor"] == "domain_cluster"
+    payload = _load_json("valid/example.json")
+    index = next(i for i, c in enumerate(payload["cujs"])
+                 if c["anchor"] == "domain_cluster")
+    cluster = payload["cujs"][index]["cluster"]
 
     catalogue, _ = load_catalogue(json.dumps(payload).encode("utf-8"))
-    assert signature(catalogue.cujs[0]) == f"cluster:{cuj['cluster']['cluster_id']}"
+    assert signature(catalogue.cujs[index]) == (
+        f"topic:{cluster['domain']}:" + ",".join(sorted(cluster["anchor_terms"])))
 
-    # Changing the steps must not change the id; changing the cluster must.
+    # Changing the domain must change the id.
     moved = copy.deepcopy(payload)
-    moved["cujs"][0]["cluster"]["cluster_id"] += 1
+    moved["cujs"][index]["cluster"]["domain"] = "SUMMARIZATION"
     with pytest.raises(CatalogueRefused) as raised:
         load_catalogue(json.dumps(moved).encode("utf-8"))
     assert raised.value.report.violation == "inv8"
+
+
+def test_the_cluster_index_and_term_order_do_not_move_the_id() -> None:
+    """The clustering index is one run's numbering, and the terms are sorted
+    before hashing. Neither may rename a journey between telemetry windows."""
+    payload = _load_json("valid/example.json")
+    index = next(i for i, c in enumerate(payload["cujs"])
+                 if c["anchor"] == "domain_cluster")
+    cluster = payload["cujs"][index]["cluster"]
+    assert len(cluster["anchor_terms"]) > 1, "needs terms to reorder"
+    before, _ = load_catalogue(json.dumps(payload).encode("utf-8"))
+
+    cluster["cluster_id"] += 1
+    cluster["anchor_terms"].reverse()
+    after, _ = load_catalogue(json.dumps(payload).encode("utf-8"))
+    assert after.cujs[index].id == before.cujs[index].id
+
+    del cluster["cluster_id"]
+    load_catalogue(json.dumps(payload).encode("utf-8"))
+
+
+def test_a_repeated_id_is_reported_once_per_repeat() -> None:
+    """Copying a journey makes its id appear twice. The copy is reported,
+    with where the id was first seen, and the original is not."""
+    payload = _load_json("valid/example.json")
+    payload["cujs"].append(copy.deepcopy(payload["cujs"][0]))
+
+    with pytest.raises(CatalogueRefused) as raised:
+        load_catalogue(json.dumps(payload).encode("utf-8"))
+    repeats = [f for f in raised.value.report.hard_findings
+               if f.code == "inv8" and "unique" in f.message]
+    assert [f.detail for f in repeats] == [
+        {"first": "0", "again": str(len(payload["cujs"]) - 1)}]
 
 
 # ---------------------------------------------------------------------------

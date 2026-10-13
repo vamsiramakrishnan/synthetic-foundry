@@ -52,7 +52,7 @@ NOTES_TO_EPICS = "cuj_9636dd61a048"
 #: refusal tests edit this one: one cause per test.
 LOOKUP = "cuj_3ac134e740af"
 #: Drafting help, no tool calls at all.
-DRAFTING = "cuj_80e0d9ce1f1b"
+DRAFTING = "cuj_07f5d9725f49"
 
 
 def _catalogue():
