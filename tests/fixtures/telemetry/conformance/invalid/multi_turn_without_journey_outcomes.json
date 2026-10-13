@@ -1,0 +1,113 @@
+{
+  "schema_version": "cuj-catalogue/1",
+  "catalogue_id": "conformance_no_phrasings_1",
+  "created_at": "2026-08-14T00:00:00Z",
+  "producer": {
+    "tool": "customer-telemetry-miner",
+    "version": "0.2.0",
+    "config_digest": "7f8abf58efb7b746873fca0033b097638f93c162469363f199c3a7d064d1becd"
+  },
+  "source": {
+    "queryset_id": "conformance_no_phrasings",
+    "queryset_version": "1",
+    "queryset_checksum": "9892901365387681562ec662bfd96c083979e9a683810689c6c4c51ace6947d0",
+    "surface": "gemini_enterprise",
+    "window": { "start": "2026-08-11T00:00:00Z", "end": "2026-08-14T00:00:00Z" },
+    "counts": { "records_ingested": 120, "records_curated": 60, "sessions": 40, "tool_calls": 95 }
+  },
+  "privacy": {
+    "min_support": 3,
+    "text_policy": "none",
+    "pii_redaction": "regex",
+    "notes": "Invented values for conformance testing."
+  },
+  "connectors": [
+    {
+      "key": "confluence",
+      "display_name": "Confluence",
+      "observed_prefixes": ["confluence_agent"],
+      "call_count": 20,
+      "entities": [
+        { "name": "page", "operations": ["search"], "argument_fields": ["queries"], "calls": 20 }
+      ],
+      "tools": [
+        { "name": "confluence_agent__multi_query_search_page_tool", "entity": "page", "operation": "search", "calls": 20, "classified_by": "rule" }
+      ]
+    },
+    {
+      "key": "jira",
+      "display_name": "Jira",
+      "observed_prefixes": ["jira_agent"],
+      "call_count": 55,
+      "entities": [
+        { "name": "issue", "operations": ["create", "read", "search"], "argument_fields": ["description", "issue_key", "issue_type_id", "jql", "project_key", "summary"], "calls": 55 }
+      ],
+      "tools": [
+        { "name": "jira_agent__create_issue", "entity": "issue", "operation": "create", "calls": 20, "classified_by": "rule" },
+        { "name": "jira_agent__get_issue", "entity": "issue", "operation": "read", "calls": 10, "classified_by": "rule" },
+        { "name": "jira_agent__search_issues", "entity": "issue", "operation": "search", "calls": 25, "classified_by": "rule" }
+      ]
+    }
+  ],
+  "excluded_tools": [
+    { "name": "load_skill", "calls": 20, "reason": "orchestration" }
+  ],
+  "cujs": [
+    {
+      "id": "cuj_fc293740277c",
+      "label": "Create issue in Jira from Confluence page",
+      "label_source": "rule",
+      "anchor": "tool_signature",
+      "kind": "multi_turn",
+      "steps": [
+        { "id": "search_page", "connector": "confluence", "entity": "page", "operation": "search", "effect": "read", "argument_fields": ["queries"], "presence": 1.0 },
+        { "id": "generate", "capability": "generate", "effect": "transform", "depends_on": ["search_page"], "presence": 1.0 },
+        { "id": "create_issue", "connector": "jira", "entity": "issue", "operation": "create", "effect": "write", "depends_on": ["search_page", "generate"], "argument_fields": ["description", "issue_type_id", "project_key", "summary"], "presence": 0.833 }
+      ],
+      "support": { "sessions": 12, "queries": 30, "share": 0.3 },
+      "turns": { "mean": 2.5, "p50": 2, "p90": 4 },
+      "outcomes": { "PENDING_CONFIRMATION": 6, "SUCCESS": 20, "TOOL_FAILURE": 4 },
+      "hardness": { "HARD_FAILURE": 10, "HEAD_EASY": 2, "MEDIUM": 18 },
+      "checks": { "trace": 30 },
+      "volatility": { "stable": 30, "high": 0 },
+      "domains": { "TOOL_USE": 30 },
+      "domain_terms": ["backlog", "epic"],
+      "failure_modes": [
+        { "mode": "pending_confirmation", "count": 6, "step_id": "create_issue", "signal": "OutcomeClassifier.PENDING_CONFIRMATION" },
+        { "mode": "connector_unavailable", "count": 4, "step_id": "create_issue", "signal": "tool_status.unavailable" }
+      ],
+      "phrasings": [],
+      "exemplar_hashes": ["5b20c3f12ee4372acf5b7d20cf8207620c8d6349b55b6740a0df13e6ae26eef0"]
+    },
+    {
+      "id": "cuj_c66095703ccc",
+      "label": "Look up issue in Jira",
+      "label_source": "rule",
+      "anchor": "tool_signature",
+      "kind": "single_turn",
+      "steps": [
+        { "id": "search_issue", "connector": "jira", "entity": "issue", "operation": "search", "effect": "read", "argument_fields": ["jql"], "presence": 1.0 },
+        { "id": "read_issue", "connector": "jira", "entity": "issue", "operation": "read", "effect": "read", "depends_on": ["search_issue"], "argument_fields": ["issue_key"], "presence": 0.625 },
+        { "id": "answer", "capability": "answer", "effect": "transform", "depends_on": ["search_issue", "read_issue"], "presence": 1.0 }
+      ],
+      "support": { "sessions": 16, "queries": 20, "share": 0.4 },
+      "outcomes": { "CAPABILITY_GAP": 3, "SUCCESS": 17 },
+      "hardness": { "HEAD_EASY": 12, "MEDIUM": 8 },
+      "checks": { "answer": 17, "negative": 3 },
+      "volatility": { "stable": 14, "high": 6, "temporal_patterns": { "count_now": 2, "latest": 4 } },
+      "domains": { "FACTUAL_LOOKUP": 20 },
+      "domain_terms": ["backlog", "sprint"],
+      "failure_modes": [
+        { "mode": "not_found", "count": 3, "step_id": "search_issue", "signal": "OutcomeClassifier.CAPABILITY_GAP" }
+      ],
+      "exemplar_hashes": ["c6637ab89e889fbdf6f506d3552316dc6449abd4d3bbd6e9b418a097fa484734"]
+    }
+  ],
+  "coverage": {
+    "cujs_emitted": 2,
+    "covered_share": 0.7,
+    "suppressed_share": 0.1,
+    "unclassified_share": 0.2
+  },
+  "review_notes": []
+}
