@@ -5,8 +5,8 @@ match exactly as recorded. One of them — notes in Confluence become epics in
 Jira — searches for a Jira *project*. Jira did not model projects until this
 catalogue's refusal named the gap (``jira.project`` · search · 22.9% of
 traffic); ``project`` was then added the way ``sprint`` already was, and the
-journey matches unchanged. The gap-report tests now use ``jira.user``, which
-Jira still does not model.
+journey matches unchanged. The gap-report tests use ``jira.widget``, which
+no Jira will ever model, so adding a real entity cannot break them.
 
 Nothing here rewrites a journey. A matched journey comes back byte for byte
 as the customer recorded it, and still passes every invariant W1 checks; a
@@ -20,8 +20,8 @@ journey that cannot be matched is refused whole.
     operations we support  │ one we do not, and an ambiguous one, by name
     one fault at a time    │ a journey with two faults reports both
     an alias that resolves │ it resolves with no finding at all
-    today's definitions    │ loaded once per run; project is modelled, and
-                           │ the day user arrives, a test says so
+    today's definitions    │ loaded once per run, shipped only; a project
+                           │ can be searched for and read back
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ import pytest
 
 from worldloom import connector_definition, packkit
 from worldloom.connector_definition import load_connector_definition
+from worldloom.connector_emulator import ConnectorEmulator
 from worldloom.telemetry import (
     CONNECTOR_NOT_EMULATED,
     ENTITY_UNRESOLVED,
@@ -106,9 +107,11 @@ def test_the_example_matches_every_journey_exactly_as_recorded() -> None:
     assert matched.missing == ()
 
 
-def _needs_jira_users(cuj, step_id: str):
-    """*cuj* with one step searching Jira users, which Jira does not model."""
-    return _edit(cuj, step_id, connector="jira", entity="user",
+def _needs_jira_widgets(cuj, step_id: str):
+    """*cuj* with one step searching Jira widgets, which no Jira will ever
+    model. A real entity Jira lacks today, such as ``user``, would break these
+    tests the day it is added, for reasons unrelated to what they test."""
+    return _edit(cuj, step_id, connector="jira", entity="widget",
                  operation="search")
 
 
@@ -116,9 +119,9 @@ def test_the_refusal_says_exactly_what_worldloom_would_need() -> None:
     """A to-do list for the connector definitions, weighted by real usage.
     This is how ``jira.project`` was found and added."""
     catalogue = _catalogue()
-    users = _needs_jira_users(_cuj(catalogue, NOTES_TO_EPICS), "find_project")
+    widgets = _needs_jira_widgets(_cuj(catalogue, NOTES_TO_EPICS), "find_project")
 
-    matched = match_catalogue(_replacing(catalogue, users))
+    matched = match_catalogue(_replacing(catalogue, widgets))
 
     assert matched.refused == (NOTES_TO_EPICS,)
     finding = matched.report.findings[0]
@@ -126,7 +129,7 @@ def test_the_refusal_says_exactly_what_worldloom_would_need() -> None:
     assert "Add it to the jira connector definition" in finding.message
     assert len(matched.missing) == 1
     gap = matched.missing[0]
-    assert (gap.name, gap.kind, gap.operations) == ("jira.user", "entity",
+    assert (gap.name, gap.kind, gap.operations) == ("jira.widget", "entity",
                                                     ("search",))
     assert gap.cuj_ids == (NOTES_TO_EPICS,)
     assert gap.sessions == 22
@@ -173,10 +176,10 @@ def test_the_gap_report_groups_journeys_and_sums_their_traffic() -> None:
     catalogue = _catalogue()
     matched = match_catalogue(_replacing(
         catalogue,
-        _needs_jira_users(_cuj(catalogue, NOTES_TO_EPICS), "find_project"),
-        _needs_jira_users(_cuj(catalogue, LOOKUP), "search")))
+        _needs_jira_widgets(_cuj(catalogue, NOTES_TO_EPICS), "find_project"),
+        _needs_jira_widgets(_cuj(catalogue, LOOKUP), "search")))
 
-    assert [gap.name for gap in matched.missing] == ["jira.user"]
+    assert [gap.name for gap in matched.missing] == ["jira.widget"]
     gap = matched.missing[0]
     assert gap.cuj_ids == (LOOKUP, NOTES_TO_EPICS)
     assert gap.sessions == 22 + 31
@@ -188,11 +191,11 @@ def test_the_gap_report_puts_the_most_used_gap_first() -> None:
     matched = match_catalogue(_replacing(
         catalogue,
         _edit(_cuj(catalogue, LOOKUP), "search", connector="acme_internal_tool"),
-        _needs_jira_users(_cuj(catalogue, NOTES_TO_EPICS), "find_project")))
+        _needs_jira_widgets(_cuj(catalogue, NOTES_TO_EPICS), "find_project")))
 
     assert [(gap.kind, gap.name) for gap in matched.missing] == [
         ("connector", "acme_internal_tool"),   # 32.3% of traffic
-        ("entity", "jira.user")]               # 22.9%
+        ("entity", "jira.widget")]             # 22.9%
 
 
 def test_an_ambiguous_operation_is_not_a_gap() -> None:
@@ -395,15 +398,29 @@ def test_jira_models_projects_the_way_it_models_sprints() -> None:
     assert definition.tool_for("project", "read") == "get_project"
 
 
-def test_jira_does_not_model_users_or_issue_types_yet() -> None:
-    """The review suggested these too. No catalogue has asked for them yet,
-    so they wait for one to — the catalogue drives what is added. The day
-    this fails, update the gap-report tests above, which lean on ``user``."""
-    definition = load_connector_definition("jira")
+def test_a_jira_project_can_be_searched_for_and_read_back() -> None:
+    """The mapping above says which tool to call; this calls it. A project
+    seeded into the emulator is found by ``search_projects``, an issue beside
+    it is not, and ``get_project`` returns it by the id the search gave.
 
-    for entity in ("user", "issue_type"):
-        assert entity not in definition.entities
-        assert entity not in definition.entity_aliases
+    Seeded by hand because the base Jira data has no project records: they
+    exist only when an eval witness mints one, as W3's requirements ask."""
+    emulator = ConnectorEmulator(load_connector_definition("jira"), [
+        {"fid": "jr:project:0001", "server": "jira", "entity": "project",
+         "ident": "STOREOPS", "name": "Store operations",
+         "title": "Store operations"},
+        {"fid": "jr:bug:0001", "server": "jira", "entity": "bug",
+         "ident": "STOREOPS-1", "name": "Till jams", "summary": "Till jams",
+         "project": "STOREOPS"},
+    ])
+
+    page = emulator.call("search_projects",
+                         predicate={"name": "Store operations"})
+    assert [item["key"] for item in page["items"]] == ["STOREOPS"]
+    assert emulator.call("search_projects")["total"] == 1
+
+    project = emulator.call("get_project", id=page["items"][0]["id"])
+    assert project["key"] == "STOREOPS"
 
 
 def test_a_write_still_needs_a_concrete_entity() -> None:
