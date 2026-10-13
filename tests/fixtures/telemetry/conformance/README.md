@@ -38,6 +38,8 @@ These fail the schema:
 | `unknown_operation.json` | `no_phrasings.json` | A connector tool's `operation` is `fetch`, which is not in the operation enum. |
 | `step_tool_and_capability.json` | `example.json` | A step names both a tool (`connector`, `entity`, `operation`) and a `capability`. |
 | `domain_cluster_without_cluster.json` | `minimal.json` | A `domain_cluster` CUJ has no `cluster`. |
+| `too_many_anchor_terms.json` | `minimal.json` | A cluster has 4 `anchor_terms`; at most 3 are allowed. |
+| `anchor_term_not_lowercase.json` | `minimal.json` | An anchor term is `Email`; anchor terms are lower-case ASCII letters. Its id is recomputed to match. |
 | `multi_turn_without_journey_outcomes.json` | `no_phrasings.json` | A `multi_turn` CUJ has no `journey_outcomes`. |
 | `bad_outcome_key.json` | `no_phrasings.json` | An `outcomes` key is `TIMEOUT`, which is not an outcome label. |
 | `tool_signature_without_connector_step.json` | `no_phrasings.json` | A `tool_signature` CUJ has only a capability step. Its id is recomputed to match. |
@@ -60,6 +62,9 @@ These pass the schema but break one invariant, named by the file's prefix:
 | `inv6_phrasing_with_text_policy_none.json` | `example.json` | `text_policy` is `none`, but phrasings are present. |
 | `inv7_redaction_marker_in_template.json` | `example.json` | A template contains `[NAME_REDACTED]`. |
 | `inv8_id_mismatch.json` | `no_phrasings.json` | A well-formed CUJ id is hashed from the wrong signature (the `~answer` step left out). |
+| `inv8_topic_id_from_cluster_id.json` | `minimal.json` | A topic CUJ's id is hashed from `cluster:0`, the old rule that used the run's `cluster_id`, instead of its domain and anchor terms. |
+| `inv8_duplicate_id.json` | `minimal.json` | The topic CUJ appears twice, so two CUJs share an id. Shares are halved so coverage still adds up. |
+| `inv8_anchor_term_not_in_keywords.json` | `minimal.json` | The anchor term `email` is not in the cluster's `keywords` (`rewrite`). Its id is recomputed to match. |
 | `inv9_shares_do_not_sum.json` | `no_phrasings.json` | Coverage shares sum to 1.02, outside the ±0.01 tolerance. |
 | `inv9_covered_share_mismatch.json` | `no_phrasings.json` | 0.02 moves from `unclassified_share` to `covered_share`: the shares still sum to 1, but `covered_share` is 0.72 while the CUJ shares sum to 0.7, just outside the ±0.01 tolerance. |
 | `inv10_histogram_mismatch.json` | `no_phrasings.json` | Hardness counts sum to 29, but `support.queries` is 30. |

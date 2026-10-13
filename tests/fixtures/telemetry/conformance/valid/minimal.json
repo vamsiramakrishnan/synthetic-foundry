@@ -22,11 +22,11 @@
   "connectors": [],
   "cujs": [
     {
-      "id": "cuj_20ea4fbee50d",
+      "id": "cuj_fdf9cc46a049",
       "label": "General drafting help",
       "label_source": "rule",
       "anchor": "domain_cluster",
-      "cluster": { "cluster_id": 0, "keywords": [] },
+      "cluster": { "domain": "CREATIVE_WRITING", "anchor_terms": [], "keywords": [] },
       "kind": "single_turn",
       "steps": [
         { "id": "generate", "capability": "generate", "effect": "transform" }

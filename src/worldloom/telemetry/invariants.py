@@ -65,12 +65,19 @@ def signature(cuj: Cuj) -> str:
 
     Step tokens joined with ``|`` — except for an answer-only journey, which
     has no business tool call to be recognised by and is identified by its
-    intent cluster instead. There the cluster *replaces* the steps rather than
-    joining them, so two answer-only journeys in the same cluster collapse to
-    one identity however their model-only steps happen to differ.
+    topic instead: ``topic:<domain>:`` and its anchor terms, sorted and joined
+    with ``,``. The topic *replaces* the steps rather than joining them, so two
+    answer-only journeys on the same topic collapse to one identity however
+    their model-only steps happen to differ.
+
+    Not ``cluster_id``. That is the clustering index of one run, so hashing it
+    gave the same topic a new id in every telemetry window, which is the one
+    thing an id must not do. Sorting the terms means their order cannot move
+    the id either.
     """
     if cuj.anchor == "domain_cluster" and cuj.cluster is not None:
-        return f"cluster:{cuj.cluster.cluster_id}"
+        return (f"topic:{cuj.cluster.domain}:"
+                + ",".join(sorted(cuj.cluster.anchor_terms)))
     return "|".join(step_token(step) for step in cuj.steps)
 
 
@@ -286,13 +293,20 @@ def inv7_no_redaction_markers(catalogue: Catalogue) -> Iterator[Finding]:
 
 
 def inv8_ids_recomputed(catalogue: Catalogue) -> Iterator[Finding]:
-    """Every journey id is recomputed from its steps, not trusted.
+    """Every journey id is recomputed from its signature, not trusted, and no
+    two journeys share one.
 
     The id is the only thing tying this month's catalogue to last month's, so
     it is the one field where accepting the producer's word costs the most. The
     check is cheap and the recipe is fixed; there is no reason not to redo it.
+
+    Two more checks guard the topic id. Every anchor term must also be one of
+    the cluster's keywords, or the id is hashed from words the cluster never
+    had. And ids must be unique: two clusters can land on the same domain and
+    anchor terms, and the miner merges them, so a repeated id means it did not.
     """
-    for cuj in catalogue.cujs:
+    first_with_id: dict[str, int] = {}
+    for index, cuj in enumerate(catalogue.cujs):
         expected = cuj_id(cuj)
         if cuj.id != expected:
             yield hard(
@@ -302,6 +316,24 @@ def inv8_ids_recomputed(catalogue: Catalogue) -> Iterator[Finding]:
                 cuj_id=cuj.id,
                 detail={"declared": cuj.id, "computed": expected,
                         "signature": signature(cuj)})
+        if cuj.id in first_with_id:
+            yield hard(
+                "inv8",
+                f"id {cuj.id!r} is also journey {first_with_id[cuj.id]}'s; "
+                "ids must be unique",
+                cuj_id=cuj.id,
+                detail={"first": str(first_with_id[cuj.id]),
+                        "again": str(index)})
+        first_with_id.setdefault(cuj.id, index)
+        if cuj.anchor == "domain_cluster" and cuj.cluster is not None:
+            missing = [term for term in cuj.cluster.anchor_terms
+                       if term not in cuj.cluster.keywords]
+            if missing:
+                yield hard(
+                    "inv8",
+                    f"anchor terms {missing} are not in the cluster's keywords",
+                    cuj_id=cuj.id,
+                    detail={"missing": ",".join(missing)})
 
 
 # --------------------------------------------------------------------------
