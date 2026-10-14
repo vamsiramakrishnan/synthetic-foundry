@@ -2612,6 +2612,44 @@ Replay the recipe and verify every record, identifier and byte commitment.
 worldloom synth verify <DIRECTORY>
 ```
 
+### `worldloom telemetry`
+
+Import a customer's CUJ catalogue as a Studio company project.
+
+### `worldloom telemetry company-template`
+
+Write a company file to fill in, suggested from the catalogue's hint.
+
+```
+worldloom telemetry company-template <CATALOGUE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out` | Where to write the company file. |
+| `--overwrite` | Replace an existing file. |
+
+### `worldloom telemetry import`
+
+Turn a CUJ catalogue into a project `worldloom studio init` accepts.
+
+```
+worldloom telemetry import <CATALOGUE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--acknowledge-unmet` | Build even though the company file asks for things Worldloom cannot build. |
+| `--audience` | Who the output is for. |
+| `--cases` | Total questions, shared by real traffic. |
+| `--company` | Company JSON. Required: the catalogue says nothing about the company itself. |
+| `--json` | Print the report as JSON instead of a summary. |
+| `--out` | Directory for project.json and the import report. |
+| `--overwrite` | Replace files a previous import wrote. |
+| `--persona` | Who asks. The catalogue cannot say. |
+| `--seed` | The company's seed in project.json. |
+| `--strict` | Strict (the default): exit 3 on any hard finding, and write no project. --no-strict writes the project from the journeys that could be built. |
+
 ### `worldloom topology`
 
 Read the corpus's graphs: what depends on what, and what nothing routes around.

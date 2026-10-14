@@ -129,6 +129,7 @@ from .packkit_cli import install_commands as _install_pack_commands
 from .seams_cli import seams_command
 from .studio_cli import studio_app
 from .synthesis_cli import app as synthesis_app
+from .telemetry_cli import telemetry_app
 
 
 # Registered before every other command because typer lists commands in
@@ -172,6 +173,7 @@ def guide(
 app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
 app.add_typer(studio_app, name="studio")
+app.add_typer(telemetry_app, name="telemetry")
 _install_pack_commands(pack_app)
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 app.add_typer(evalrun_app, name="evalrun")
@@ -797,6 +799,13 @@ _REFUSALS: dict[str, str] = {
     "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",
     "dataset_rejected": "dataset plan, source or checkpoint was refused; detail names the contract",
     "studio_rejected": "company project, harness proposal or run was refused; detail names the contract",
+    "catalogue_rejected": "a CUJ catalogue could not be read, or broke its schema or an invariant; data.findings lists every one",
+    "catalogue_version_unknown": "a CUJ catalogue declares a schema_version this importer does not read",
+    "catalogue_uncompilable": "no journey in a CUJ catalogue could be built; the import report says why for each",
+    "cases_below_journeys": "telemetry import's --cases is below the number of journeys that could be built; every journey needs at least one question",
+    "company_required": "telemetry import needs a company file naming identity.company_name; the importer never invents one",
+    "company_unmet": "the company file asks for things Worldloom cannot build; pass --acknowledge-unmet to build without them",
+    "strict_findings": "an import had hard findings, and imports are strict by default; no project was written, the import report lists them, --no-strict builds the rest",
     "interview_refused": "a world interview answer, transcript or realisation was refused; data.findings names each rule",
     "interview_incomplete": "the world interview stopped before every question was settled; the directory resumes it",
     "dataset_incomplete": "dataset quotas, diversity or split obligations remain; the run can be inspected or resumed",
