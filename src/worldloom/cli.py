@@ -734,6 +734,7 @@ _REFUSALS: dict[str, str] = {
     "catalogue_rejected": "a CUJ catalogue could not be read, or broke its schema or an invariant; data.findings lists every one",
     "catalogue_version_unknown": "a CUJ catalogue declares a schema_version this importer does not read",
     "catalogue_uncompilable": "no journey in a CUJ catalogue could be built; the import report says why for each",
+    "cases_below_journeys": "telemetry import's --cases is below the number of journeys that could be built; every journey needs at least one question",
     "company_required": "telemetry import needs a company file naming identity.company_name; the importer never invents one",
     "company_unmet": "the company file asks for things Worldloom cannot build; pass --acknowledge-unmet to build without them",
     "strict_findings": "an import had hard findings, and imports are strict by default; no project was written, the import report lists them, --no-strict builds the rest",

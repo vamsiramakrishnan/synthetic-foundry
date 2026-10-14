@@ -132,7 +132,9 @@
             "entities": [
               "issue"
             ],
-            "formats": [],
+            "formats": [
+              "epic"
+            ],
             "operations": [
               "create"
             ],

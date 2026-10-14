@@ -156,6 +156,8 @@ def _report(result: ImportResult, *, assumptions: dict[str, Any],
         "assumptions": assumptions,
         "questions": result.counts.total,
         "share_lost": result.counts.share_lost,
+        "share_uncatalogued": result.counts.share_uncatalogued,
+        "share_not_represented": result.counts.share_not_represented,
         "journeys": [journey.model_dump(mode="json")
                      for journey in result.journeys],
         "findings": [finding.model_dump(mode="json")
@@ -180,7 +182,9 @@ def _markdown(report: dict[str, Any]) -> str:
         "",
         f"{len(report['journeys'])} journeys in the catalogue · "
         f"{len(built)} built · {report['questions']} questions · "
-        f"{report['share_lost']:.1%} of real traffic not represented",
+        f"{report['share_not_represented']:.1%} of real traffic not represented "
+        f"({report['share_lost']:.1%} in journeys not built, "
+        f"{report['share_uncatalogued']:.1%} never catalogued)",
         "",
         f"Accepted: **{'yes' if report['accepted'] else 'no'}** "
         f"({len(hard)} hard, {len(info)} info). "
@@ -247,7 +251,7 @@ def import_command(
     """Turn a CUJ catalogue into a project `worldloom studio init` accepts."""
     from .cli import _refuse
     from .studio.models import ProjectSpec
-    from .telemetry import CatalogueRefused, import_catalogue
+    from .telemetry import CASES_BELOW_JOURNEYS, CatalogueRefused, import_catalogue
 
     document, acknowledged = _company(company, acknowledge_unmet)
     data = _read_catalogue(catalogue)
@@ -281,6 +285,18 @@ def import_command(
     (out / REPORT_MD).write_text(_markdown(report), encoding="utf-8")
     _write_json(out / RECEIPT, result.receipt.model_dump(mode="json"))
 
+    budget = next((finding for finding in hard
+                   if finding.code == CASES_BELOW_JOURNEYS), None)
+    if budget is not None:
+        # Journeys could be built; the budget could not cover them. Saying
+        # "nothing could be built" would send people looking in the wrong
+        # place, so this is its own refusal, and a bad input like any other.
+        _refuse("cases_below_journeys",
+                f"[red]error:[/red] --cases {budget.detail['cases']} is below "
+                f"the {budget.detail['journeys']} journeys that could be built; "
+                f"ask for at least {budget.detail['journeys']}",
+                exit_code=2, cases=int(budget.detail["cases"]),
+                journeys=int(budget.detail["journeys"]))
     if result.project is None:
         codes = sorted({finding.code for finding in hard})
         _refuse("catalogue_uncompilable",
@@ -303,7 +319,9 @@ def import_command(
     built = [journey for journey in result.journeys if journey.count]
     typer.echo(f"wrote {out / PROJECT}: {len(built)} of {len(result.journeys)} "
                f"journeys, {result.counts.total} questions, "
-               f"{result.counts.share_lost:.1%} of traffic not represented")
+               f"{result.counts.share_not_represented:.1%} of real traffic not "
+               f"represented ({result.counts.share_lost:.1%} in journeys not "
+               f"built, {result.counts.share_uncatalogued:.1%} never catalogued)")
     typer.echo(f"      {_count(len(hard), 'hard finding')} and "
                f"{_count(len(result.report.info_findings), 'info finding')} — "
                f"see {out / REPORT_MD}")

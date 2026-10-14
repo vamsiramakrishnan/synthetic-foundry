@@ -20,6 +20,9 @@ from pathlib import Path
 
 import pytest
 
+from worldloom.connector_definition import shipped_connector_definition
+from worldloom.enterprise_queries import valid_rows
+from worldloom.enterprise_rows import RowError, _tool_name
 from worldloom.enterprise_specs import apply_scenario_profile, builtin_registry
 from worldloom.providers import digest_bytes
 from worldloom.studio.construction import compile_project
@@ -37,13 +40,22 @@ from worldloom.telemetry import (
     plannable,
     sort_catalogue,
 )
-from worldloom.telemetry.binding import bind_question, prompt_template
+from worldloom.telemetry.binding import (
+    Binding,
+    BindRule,
+    bind_question,
+    prompt_template,
+)
 from worldloom.telemetry.catalogue import FailureMode, Hardness
 from worldloom.telemetry.compile import (
+    ALIAS_MEMBER_CHOSEN,
     ARGUMENT_FIELD_UNKNOWN,
     CASES_BELOW_JOURNEYS,
     DEFAULT_CASES,
     DROPPED_FOR_CONFLICT,
+    FAILURE_MODE_UNCONSTRUCTABLE,
+    LOOKUP_NOT_PLANNED,
+    VALUE_NOT_IN_WORLD,
     _apportion,
     build_use_case,
     check_with_studio,
@@ -51,6 +63,9 @@ from worldloom.telemetry.compile import (
     import_catalogue,
     record_shapes,
     share_counts,
+    unbacked_values,
+    unconstructable,
+    write_target,
 )
 
 EXAMPLE = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
@@ -526,7 +541,8 @@ def test_the_counts_add_up_and_nobody_gets_zero() -> None:
 
     Largest-remainder rounding alone gives a=5 b=3 c=2 d=0, summing to 10.
     Raising d to 1 would make 11. The repayment takes that question back
-    from the largest count, which is the one it costs least.
+    from whichever count is furthest above its exact share: a, at 5 against
+    4.4.
     """
     weights = {"a": 0.44, "b": 0.31, "c": 0.24, "d": 0.01}
 
@@ -547,6 +563,53 @@ def test_a_long_tail_still_adds_up_exactly() -> None:
     assert sum(counts.values()) == 200
     assert min(counts.values()) >= 1
     assert len(counts) == 40
+
+
+def test_repaying_a_question_keeps_the_split_in_order() -> None:
+    """Review on #77. j2 and j3 both round to 6; j0 is raised to 1 and one
+    question must come back. Taking it from the largest count took it from
+    j2 (6 against an exact 6.3), leaving the bigger journey with fewer
+    questions. The donor is now the one furthest above its share, j3."""
+    weights = {"j0": 0.002, "j1": 0.048, "j2": 0.485, "j3": 0.465}
+
+    counts = _apportion(weights, 13)
+
+    assert counts == {"j0": 1, "j1": 1, "j2": 6, "j3": 5}
+
+
+def test_remainders_that_tie_are_ordered_by_id_not_by_float_error() -> None:
+    """``0.1 * 3`` is ``0.30000000000000004``. Two remainders that should tie
+    are rounded first, so the spare question goes to the lower id."""
+    counts = _apportion({"a": 0.3, "b": 0.1 * 3, "c": 0.4}, 5)
+
+    assert counts == {"a": 2, "b": 1, "c": 2}
+
+
+def test_journeys_that_all_report_no_share_split_the_budget_evenly() -> None:
+    """``Share`` allows 0. Dividing by the total crashed the import; with no
+    proportion to keep, each journey gets an equal part."""
+    catalogue, _ = load_catalogue(EXAMPLE.read_bytes())
+    piles = sort_catalogue(match_catalogue(catalogue))
+    write = piles.write[0]
+    zero = write.support.model_copy(update={"share": 0.0})
+    twins = (write.model_copy(update={"support": zero}),
+             write.model_copy(update={"id": "cuj_000000000000", "support": zero}))
+
+    counts, findings = share_counts(piles.model_copy(update={"write": twins}),
+                                    catalogue, cases=10)
+
+    assert findings == ()
+    assert [a.count for a in counts.allocations] == [5, 5]
+
+
+def test_the_traffic_never_catalogued_is_counted_as_not_represented() -> None:
+    """Journey shares sum to ``covered_share`` (0.74 here), not 1. Half the
+    catalogued traffic is lost, and the miner never catalogued another 26%,
+    so 77.1% of all traffic has no question."""
+    counts, _ = _counts()
+
+    assert counts.share_uncatalogued == pytest.approx(0.19 + 0.07)
+    assert counts.share_not_represented == pytest.approx(0.511 + 0.26)
 
 
 def test_asking_for_fewer_questions_than_journeys_is_refused() -> None:
@@ -641,7 +704,10 @@ def test_the_sample_imports_end_to_end() -> None:
     assert result.counts.share_lost == pytest.approx(0.511)
     assert [finding.code for finding in result.report.findings] == [
         ANSWER_ONLY_UNSUPPORTED, NO_WORLD_NEEDED,
-        ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN]
+        ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN, ARGUMENT_FIELD_UNKNOWN,
+        ALIAS_MEMBER_CHOSEN, LOOKUP_NOT_PLANNED,
+        FAILURE_MODE_UNCONSTRUCTABLE, FAILURE_MODE_UNCONSTRUCTABLE,
+        FAILURE_MODE_UNCONSTRUCTABLE]
 
 
 def test_studio_accepts_what_the_importer_built() -> None:
@@ -880,3 +946,126 @@ def test_the_built_case_carries_the_mapped_failures() -> None:
 
     assert case.scenario.coverage.failures == ("none", "stale_source",
                                                "ambiguous_join")
+
+
+# ---------------------------------------------------------------------------
+# Review on #77: writes to an alias, fallbacks, and what must not be silent.
+# ---------------------------------------------------------------------------
+
+
+def test_a_write_to_an_alias_carries_the_member_rows_need() -> None:
+    """``jira.issue`` is an alias over epic, story, bug, task and subtask.
+    Row compilation refuses to create an alias, so before this every row of
+    the sample's write journey was refused once rows were compiled, while
+    ``studio init`` passed. The member chosen from the journey's words rides
+    in the destination's formats, which is where row compilation looks."""
+    result = _imported()
+    assert result.project is not None
+    case = result.project.use_cases[0]
+    assert case.scenario is not None
+    destination = case.scenario.additional_workflows[0].destinations[0]
+    assert (destination.entities, destination.formats) == (("issue",), ("epic",))
+    assert ALIAS_MEMBER_CHOSEN in _codes(result.report.findings)
+
+    registry = apply_scenario_profile(builtin_registry(), case.scenario)
+    rows = [row for row in valid_rows(registry, case.scenario.coverage)
+            if row["destination"] == "jira"]
+    jira = shipped_connector_definition("jira")
+    assert rows and {row["output_format"] for row in rows} == {"epic"}
+    for row in rows:
+        assert _tool_name(jira, row["destination_entity"], row["operation"],
+                          "q", concrete_hint=row["output_format"],
+                          preexisting_record=False) == ("create_issue", "epic")
+    with pytest.raises(RowError):
+        _tool_name(jira, "issue", "create", "q", preexisting_record=False)
+
+
+def test_a_write_recorded_as_a_member_is_planned_under_its_alias() -> None:
+    """A catalogue that records ``jira.epic.create`` named a type the planner
+    cannot, and was refused as ``write_not_plannable``. Its alias names the
+    role, and the member it recorded rides in formats."""
+    cuj, prompt, bindings = _built_parts()
+    epic = cuj.model_copy(update={"steps": tuple(
+        step.model_copy(update={"entity": "epic"})
+        if step.id == "create_epics" else step for step in cuj.steps)})
+
+    assert write_target(epic, "jira", "epic") == ("issue", "epic", "recorded")
+    case = build_use_case(epic, prompt, bindings)
+    assert case.scenario is not None
+    destination = case.scenario.additional_workflows[0].destinations[0]
+    assert (destination.entities, destination.formats) == (("issue",), ("epic",))
+
+
+def test_a_non_alias_write_carries_no_format() -> None:
+    cuj, _, _ = _built_parts()
+
+    assert write_target(cuj, "confluence", "page") == ("page", "page", "named")
+
+
+def test_a_journey_reading_only_what_the_planner_cannot_name_keeps_its_source(
+        ) -> None:
+    """Find a Jira project, create an issue. The project cannot be a source,
+    so the issue stands in, and it must get a requirement too: when roles and
+    requirements each had their own fallback, the source had none and Studio
+    dropped a buildable journey as ``workflow_source_unbound``."""
+    cuj, prompt, _ = _built_parts()
+    keep = {"find_project", "create_epics"}
+    narrow = cuj.model_copy(update={"steps": tuple(
+        step.model_copy(update={"depends_on": tuple(
+            dep for dep in step.depends_on if dep in keep)})
+        for step in cuj.steps if step.id in keep)})
+
+    case = build_use_case(narrow, prompt, ())
+
+    assert case.construction is not None
+    assert case.scenario is not None
+    workflow = case.scenario.additional_workflows[0]
+    assert [(role.connector, role.entities) for role in workflow.sources] == [
+        ("jira", ("issue",))]
+    assert {r.id for r in case.construction.requirements} == {
+        "jira.project", "jira.issue"}
+    survivors, findings = check_with_studio(COMPANY, (case,), {narrow.id: 1.0})
+    assert [survivor.id for survivor in survivors] == [narrow.id]
+    assert "workflow_source_unbound" not in _codes(findings)
+
+
+def test_a_lookup_the_planner_cannot_name_is_reported() -> None:
+    """The project lookup is built but left out of the planned query, so a
+    failure recorded at it grades elsewhere. The report says so."""
+    findings = [f for f in _imported().report.findings
+                if f.code == LOOKUP_NOT_PLANNED]
+
+    assert [(f.detail["connector"], f.detail["entity"], f.severity)
+            for f in findings] == [("jira", "project", Severity.INFO)]
+
+
+def test_a_container_named_only_on_a_write_is_reported() -> None:
+    """A project key on the create step, with nothing reading jira.issue:
+    the question would name a project the world may not hold."""
+    cuj, _, _ = _built_parts()
+    on_write = Binding(slot="project", value="OPS", rule=BindRule.KEY,
+                       connector="jira", entity="issue", field="project_key")
+    on_read = on_write.model_copy(update={"entity": "project",
+                                          "field": "query"})
+
+    assert _codes(unbacked_values(cuj, (on_write,))) == [VALUE_NOT_IN_WORLD]
+    assert unbacked_values(cuj, (on_read,)) == ()
+    assert unbacked_values(cuj, (on_write.model_copy(
+        update={"rule": BindRule.TEXT}),)) == ()
+
+
+def test_every_failure_mode_not_built_is_a_hard_finding() -> None:
+    """None is dropped silently (§5.7). Each names what must be built, so
+    the catalogue can be fed again once it is."""
+    cuj, _, _ = _built_parts()
+
+    findings = unconstructable(cuj)
+
+    assert [(f.detail["mode"], f.detail["needs"], f.severity) for f in findings] == [
+        ("pending_confirmation", "W5", Severity.HARD),
+        ("connector_unavailable", "core change C2 (outages)", Severity.HARD),
+        ("clarification_loop", "W5", Severity.HARD)]
+    single = cuj.model_copy(update={"steps": tuple(
+        step for step in cuj.steps if step.connector != "confluence")})
+    assert ("wrong_entity", "W5 (look-alike records within one connector)") in [
+        (f.detail["mode"], f.detail["needs"]) for f in unconstructable(single)]

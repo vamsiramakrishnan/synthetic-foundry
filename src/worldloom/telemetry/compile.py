@@ -37,6 +37,7 @@ returns the same journeys in labelled piles.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -88,7 +89,7 @@ from .registry import match_catalogue
 from .report import Finding, ImportReport, hard, info
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from .binding import Binding
     from .registry import MatchedCatalogue
@@ -252,6 +253,27 @@ ARGUMENT_FIELD_UNKNOWN = "argument_field_unknown"
 so no record shape can be asked for it. Info: nothing is wrong with the
 journey, and with today's shipped connectors this is the common case."""
 
+ALIAS_MEMBER_CHOSEN = "alias_member_chosen"
+"""A write named an alias, such as Jira's ``issue``, and creating a record
+needs one concrete type. One member was chosen from the journey's own words
+and carried in the destination's ``formats``, which is where row compilation
+looks for it. Info: the choice is shown, nothing is lost."""
+
+LOOKUP_NOT_PLANNED = "lookup_not_planned"
+"""A read the planner cannot name, such as a Jira project. The world still
+holds the record, but no workflow role names it, so the planned query leaves
+the lookup out and nothing grades it. Info: it is built, just not checked."""
+
+VALUE_NOT_IN_WORLD = "value_not_in_world"
+"""The question names a container, such as a project key, on a step that
+only writes, and nothing the journey reads makes that container exist. Hard:
+the question may ask for something the world does not hold."""
+
+FAILURE_MODE_UNCONSTRUCTABLE = "failure_mode_unconstructable"
+"""A failure the customer's users hit that Worldloom cannot build into a
+question yet. Hard: real behaviour is missing from the corpus. The finding
+names what has to be built, so the catalogue can be fed again once it is."""
+
 
 def _capability(label: str) -> str:
     """``slug(label)``, cut to 64 — the doc's rule for ``EvalSpec.capability``."""
@@ -289,7 +311,7 @@ def _difficulty(cuj: Cuj) -> Literal["easy", "medium", "hard"]:
 
 def _eval_steps(cuj: Cuj) -> tuple[EvalStepSpec, ...]:
     """One step each, in order. ``inv2`` already guarantees the order is
-    topological, and W2's rewiring preserves it, so ``EvalSpec``'s own
+    topological, and W2 never rewrites a journey, so ``EvalSpec``'s own
     "depends_on names an earlier step" check cannot fire here."""
     steps: list[EvalStepSpec] = []
     for step in cuj.steps:
@@ -370,6 +392,9 @@ def _selectors(reads: Mapping[tuple[str, str], set[str]],
     for binding in bindings:
         selector = selectors.get((binding.connector, binding.entity))
         if selector is None:
+            # A value on a pair nothing reads. Free text and options there
+            # are the agent's own output; a container is not, and
+            # :func:`unbacked_values` reports it.
             continue
         if _searched_for(binding.field) and binding.rule in (BindRule.TEXT,
                                                              BindRule.KEY):
@@ -417,25 +442,94 @@ def plannable(connector: str, entity: str) -> bool:
     return spec is not None and any(item.name == entity for item in spec.entities)
 
 
-def _roles(reads: Mapping[tuple[str, str], set[str]],
+def _members(connector: str, entity: str) -> tuple[str, ...]:
+    """The record types *entity* stands for: itself, or an alias's members.
+    Empty when the shipped definition does not know it."""
+    try:
+        return shipped_connector_definition(connector).entity_members(entity)
+    except (KeyError, ValueError):
+        return ()
+
+
+def _plannable_alias(connector: str, member: str) -> str | None:
+    """An alias the planner can name that stands for *member*, if any:
+    ``issue`` for Jira's ``epic``."""
+    try:
+        aliases = shipped_connector_definition(connector).entity_aliases
+    except ValueError:
+        return None
+    return next((alias for alias, members in sorted(aliases.items())
+                 if member in members and plannable(connector, alias)), None)
+
+
+def _words(texts: Iterable[str]) -> set[str]:
+    return {word for text in texts
+            for word in re.split(r"[^a-z]+", text.casefold()) if word}
+
+
+def _chosen_member(cuj: Cuj, members: tuple[str, ...]) -> tuple[str, str]:
+    """Which member of an alias the journey means, and where that came from.
+
+    The journey's own vocabulary first, then its phrasings, in the order the
+    definition lists the members; a plural counts ("epics"). Failing both,
+    the first member the definition lists, so the choice is still the same
+    on every run.
+    """
+    for source, words in (("domain_terms", _words(cuj.domain_terms)),
+                          ("phrasing", _words(p.template for p in cuj.phrasings))):
+        for member in members:
+            if member in words or f"{member}s" in words:
+                return member, source
+    return members[0], "first_listed"
+
+
+def write_target(cuj: Cuj, connector: str, entity: str,
+                 ) -> tuple[str, str, str] | None:
+    """How one written pair appears in a workflow: ``(role entity, concrete
+    member, how)``, or ``None`` when the planner cannot name it at all.
+
+    The planner speaks only a connector's ``catalog``, and Jira's lists the
+    alias ``issue``. Row compilation, though, refuses to create an alias: it
+    needs one concrete type, and reads it from the destination's
+    ``formats``, as SharePoint's ``file`` alias already works. So:
+
+        recorded       role         formats    how
+        jira.issue     jira.issue   (epic,)    chosen from the journey
+        jira.epic      jira.issue   (epic,)    recorded; issue is its alias
+        confluence.page  page       ()         named; not an alias
+    """
+    if plannable(connector, entity):
+        members = _members(connector, entity)
+        if len(members) <= 1:
+            return entity, entity, "named"
+        member, source = _chosen_member(cuj, members)
+        return entity, member, source
+    alias = _plannable_alias(connector, entity)
+    if alias is not None:
+        return alias, entity, "recorded"
+    return None
+
+
+def _roles(cuj: Cuj, reads: Mapping[tuple[str, str], set[str]],
            writes: Mapping[tuple[str, str], set[str]],
            selectors: Mapping[tuple[str, str], dict[str, str | int | bool]],
            ) -> tuple[tuple[SourceRole, ...], tuple[DestinationRole, ...]]:
     """Read pairs become sources, write pairs become destinations, for the
-    pairs the planner can name (:func:`plannable`).
+    pairs the planner can name (:func:`plannable`, :func:`write_target`).
 
     A source's ``required_fields`` are its selector's pinned fields, as the
     design document asks: the fields a record must carry for the agent to
     find the one the question means. A pair read *and* written is both.
-    When no read pair is plannable, the written pairs stand in as sources,
-    as they do when a journey reads nothing at all.
+
+    No fallback here. :func:`_requirement_reads` has already added stand-in
+    sources when nothing read is plannable, and given each a requirement:
+    deciding that in two places let them disagree, and a source with no
+    requirement makes Studio drop the journey (``workflow_source_unbound``).
     """
     def operations(names: set[str]) -> tuple[Operation, ...]:
         return tuple(sorted(Operation(name) for name in names))
 
-    writes = {pair: names for pair, names in writes.items() if plannable(*pair)}
-    reads = ({pair: names for pair, names in reads.items() if plannable(*pair)}
-             or {pair: {"read"} for pair in writes})
+    reads = {pair: names for pair, names in reads.items() if plannable(*pair)}
 
     sources = tuple(
         SourceRole(connector=connector, entities=(entity,),
@@ -444,11 +538,41 @@ def _roles(reads: Mapping[tuple[str, str], set[str]],
                        key for key in selectors[(connector, entity)]
                        if key not in ("connector", "entity"))))
         for (connector, entity), names in sorted(reads.items()))
+    targets: dict[tuple[str, str, str], set[str]] = {}
+    for (connector, entity), names in writes.items():
+        target = write_target(cuj, connector, entity)
+        if target is not None:
+            role, member, _ = target
+            targets.setdefault((connector, role, member), set()).update(names)
     destinations = tuple(
-        DestinationRole(connector=connector, entities=(entity,),
-                        operations=operations(names))
-        for (connector, entity), names in sorted(writes.items()))
+        DestinationRole(connector=connector, entities=(role,),
+                        operations=operations(names),
+                        formats=(member,) if member != role else ())
+        for (connector, role, member), names in sorted(targets.items()))
     return sources, destinations
+
+
+def _requirement_reads(cuj: Cuj) -> dict[tuple[str, str], set[str]]:
+    """What must exist before the agent starts: every pair the journey reads,
+    plus stand-ins when none of them can be a workflow source.
+
+    A workflow needs a source and a case needs a requirement, so a journey
+    whose reads the planner cannot name (a Jira project lookup) or that reads
+    nothing at all would be refused outright. Its written pairs, as the role
+    names them, stand in as what must exist beforehand — true anyway, since
+    Worldloom mints a pre-existing record for every write step so updates
+    and duplicates can be graded. Decided here, once, for both the sources
+    and the requirements.
+    """
+    reads = _reads(cuj)
+    if any(plannable(*pair) for pair in reads):
+        return reads
+    stand_ins: dict[tuple[str, str], set[str]] = {}
+    for connector, entity in _writes(cuj):
+        target = write_target(cuj, connector, entity)
+        if target is not None:
+            stand_ins[(connector, target[0])] = {"read"}
+    return {**reads, **stand_ins}
 
 
 def _knows(connector: str, entity: str, field: str) -> bool:
@@ -546,29 +670,78 @@ def coverage_failures(cuj: Cuj) -> tuple[str, ...]:
     of them. The design document accepts that, and W8's fidelity report
     measures the gap.
 
-    The other rows of §5.7 — adversarial markers, trajectory rules, phrasing
-    variants, difficulty adjustments, and the ``failure_mode_unconstructable``
-    finding for anything that cannot be built — are W5.
+    Every failure mode that does not become one of these gets a
+    ``failure_mode_unconstructable`` finding instead (:func:`unconstructable`),
+    so none is dropped silently. The other rows of §5.7 — adversarial
+    markers, trajectory rules, phrasing variants, difficulty adjustments —
+    are W5.
     """
-    kinds = {mode.mode for mode in cuj.failure_modes}
-    connectors = {step.connector for step in cuj.steps if step.connector}
-    updates = any(step.effect == "write" and str(step.operation) in _UPDATES
-                  for step in cuj.steps)
-    stale = (FailureModeKind.STALE_VERSION in kinds
-             or cuj.volatility.temporal_patterns.get(TemporalPattern.LATEST, 0) > 0)
+    connectors = len({step.connector for step in cuj.steps if step.connector})
+    designed = {_designed(mode.mode, connectors)[0] for mode in cuj.failure_modes}
+    if cuj.volatility.temporal_patterns.get(TemporalPattern.LATEST, 0) > 0:
+        designed.add("stale_source")
+    if "stale_source" in designed and any(
+            step.effect == "write" and str(step.operation) in _UPDATES
+            for step in cuj.steps):
+        designed.add("version_conflict")
+    return ("none", *(failure for failure in _FAILURE_ORDER if failure in designed))
 
-    wanted: list[str] = []
-    if FailureModeKind.PERMISSION_DENIED in kinds:
-        wanted.append("permission_denied")
-    if stale:
-        wanted.append("stale_source")
-        if updates:
-            wanted.append("version_conflict")
-    if FailureModeKind.WRONG_ENTITY in kinds and len(connectors) >= 2:
-        wanted.append("ambiguous_join")
-    if FailureModeKind.CONNECTOR_UNAVAILABLE in kinds:
-        wanted.append("connector_unavailable")
-    return ("none", *(failure for failure in wanted if _renderable(failure)))
+
+#: The order designed failures are listed in, as before this was data.
+_FAILURE_ORDER = ("permission_denied", "stale_source", "version_conflict",
+                  "ambiguous_join", "connector_unavailable")
+
+
+#: What each failure mode needs before it can be built, when it cannot be
+#: built today. W5 builds most; two need a core change first.
+_NEEDS = {FailureModeKind.CONNECTOR_UNAVAILABLE: "core change C2 (outages)",
+          FailureModeKind.CAPABILITY_GAP: "core change C1 (capability gaps)"}
+
+
+def _designed(kind: FailureModeKind, connectors: int,
+              ) -> tuple[str | None, str]:
+    """The designed failure *kind* becomes, or ``None`` and what it needs.
+
+    One place decides, so :func:`coverage_failures` and
+    :func:`unconstructable` cannot disagree about which modes were built.
+    """
+    if kind is FailureModeKind.PERMISSION_DENIED:
+        return "permission_denied", ""
+    if kind is FailureModeKind.STALE_VERSION:
+        return "stale_source", ""
+    if kind is FailureModeKind.WRONG_ENTITY:
+        if connectors >= 2:
+            return "ambiguous_join", ""
+        return None, "W5 (look-alike records within one connector)"
+    if kind is FailureModeKind.CONNECTOR_UNAVAILABLE \
+            and _renderable("connector_unavailable"):
+        return "connector_unavailable", ""
+    return None, _NEEDS.get(kind, "W5")
+
+
+def unconstructable(cuj: Cuj) -> tuple[Finding, ...]:
+    """One hard finding per failure mode the journey's questions cannot carry.
+
+    Hard because real behaviour is missing from the corpus, and a strict run
+    should say so: the finding names the mode, how many sessions hit it, and
+    what Worldloom has to build. Once that is built, feeding the same
+    catalogue again turns the finding into a designed failure.
+    """
+    connectors = len({step.connector for step in cuj.steps if step.connector})
+    findings: list[Finding] = []
+    for mode in cuj.failure_modes:
+        failure, needs = _designed(mode.mode, connectors)
+        if failure is not None:
+            continue
+        where = f" at step {mode.step_id!r}" if mode.step_id else ""
+        findings.append(hard(
+            FAILURE_MODE_UNCONSTRUCTABLE,
+            f"{cuj.id}: {mode.mode.value!r}{where} ({mode.count} sessions) "
+            f"cannot be built into a question yet; needs {needs}",
+            cuj_id=cuj.id,
+            detail={"mode": mode.mode.value, "count": str(mode.count),
+                    "step_id": mode.step_id or "", "needs": needs}))
+    return tuple(findings)
 
 
 def _content_actions(cuj: Cuj) -> tuple[ContentAction, ...]:
@@ -671,16 +844,9 @@ def build_use_case(cuj: Cuj, prompt: str,
     thing, a slot in the company's process catalogue, and the catalogue
     cannot say which one a journey belongs to.
     """
-    writes = _writes(cuj)
-    # A journey that only writes reads nothing, and both ``WorkflowSpec`` (no
-    # source) and ``EvalSpec`` (no requirement) refuse that outright — so a
-    # single "create an issue" would crash the import rather than report
-    # anything. Its written pairs stand in as what must exist beforehand,
-    # which is true anyway: Worldloom mints a pre-existing record for every
-    # write step, so updates and duplicates can be graded.
-    reads = _reads(cuj) or {pair: {"read"} for pair in writes}
+    reads = _requirement_reads(cuj)
     selectors = _selectors(reads, bindings)
-    sources, destinations = _roles(reads, writes, selectors)
+    sources, destinations = _roles(cuj, reads, _writes(cuj), selectors)
     return UseCase(
         id=cuj.id, title=cuj.label, objective=_objective(cuj), count=count,
         scenario=_scenario(cuj, prompt, sources, destinations,
@@ -691,6 +857,63 @@ def build_use_case(cuj: Cuj, prompt: str,
             requirements=_requirements(reads, selectors),
             shape=shape or EvalShape(), difficulty=_difficulty(cuj),
             candidate_count=1))
+
+
+def alias_choices(cuj: Cuj) -> tuple[Finding, ...]:
+    """One info finding per write whose concrete type was chosen, because
+    the journey named an alias (:func:`write_target`)."""
+    findings: list[Finding] = []
+    for connector, entity in _writes(cuj):
+        target = write_target(cuj, connector, entity)
+        if target is None or target[2] in ("named", "recorded"):
+            continue
+        _, member, source = target
+        findings.append(info(
+            ALIAS_MEMBER_CHOSEN,
+            f"{cuj.id} creates {connector}.{entity}, which stands for several "
+            f"record types; {member!r} was chosen "
+            + ("as the first the definition lists" if source == "first_listed"
+               else f"from the journey's {source.replace('_', ' ')}"),
+            cuj_id=cuj.id,
+            detail={"connector": connector, "alias": entity, "member": member,
+                    "source": source}))
+    return tuple(findings)
+
+
+def unplanned_lookups(cuj: Cuj) -> tuple[Finding, ...]:
+    """One info finding per read the planner cannot name. Its record is in
+    the world, but no workflow role names it, so the planned query leaves the
+    lookup out — and a failure recorded there grades somewhere else."""
+    return tuple(
+        info(LOOKUP_NOT_PLANNED,
+             f"{cuj.id} reads {connector}.{entity}, which Studio's planner "
+             "cannot name: the record is built, but the planned query leaves "
+             "this lookup out and nothing checks it",
+             cuj_id=cuj.id, detail={"connector": connector, "entity": entity})
+        for connector, entity in _reads(cuj) if not plannable(connector, entity))
+
+
+def unbacked_values(cuj: Cuj, bindings: tuple[Binding, ...],
+                    ) -> tuple[Finding, ...]:
+    """One hard finding per container the question names that nothing makes
+    exist: a project key on a step that only writes, with no step reading it.
+
+    The question then sends the agent to a place the world may not hold —
+    the silent failure the selector comments warn about, made loud.
+    """
+    reads = _requirement_reads(cuj)
+    return tuple(
+        hard(VALUE_NOT_IN_WORLD,
+             f"{cuj.id}'s question names {binding.value!r} for "
+             f"{binding.connector}.{binding.entity}.{binding.field}, but no "
+             "step reads it, so nothing makes it exist in the world",
+             cuj_id=cuj.id,
+             detail={"slot": binding.slot, "value": binding.value,
+                     "connector": binding.connector, "entity": binding.entity,
+                     "field": binding.field})
+        for binding in bindings
+        if binding.rule is BindRule.KEY
+        and (binding.connector, binding.entity) not in reads)
 
 
 # --------------------------------------------------------------------------
@@ -714,10 +937,11 @@ def build_use_case(cuj: Cuj, prompt: str,
 # sample's three journeys are nowhere near it; a customer with forty
 # journeys and a long tail hits it on the first run.
 #
-# This resolves it by satisfying B and then repaying A out of the largest
-# counts, one question at a time. Largest because it costs least
-# proportionally: 5 → 4 moves that journey by a fifth, while taking the same
-# question from a count of 2 moves that one by half.
+# This resolves it by satisfying B and then repaying A one question at a
+# time, each from the journey furthest *above* its exact share. Taking from
+# the largest count instead can push a bigger journey below a smaller one:
+# with 13 questions and shares 0.485 and 0.465, both round to 6, and the
+# largest-count rule took from the bigger, leaving 5 against 6.
 
 
 DEFAULT_CASES = 200
@@ -751,24 +975,39 @@ class CaseCounts(Model):
     allocations: tuple[Allocation, ...] = ()
     total: int = 0
     share_lost: float = 0.0
-    """Real traffic represented by no question at all, because its journey
-    was not built. Rescaling hides this by construction — the shares always
-    sum to 1 afterwards, whatever was dropped — so it is reported explicitly
-    or nobody would know to ask."""
+    """Catalogued traffic represented by no question at all, because its
+    journey was not built. Rescaling hides this by construction — the shares
+    always sum to 1 afterwards, whatever was dropped — so it is reported
+    explicitly or nobody would know to ask."""
+
+    share_uncatalogued: float = 0.0
+    """Traffic the miner never put in a journey: suppressed below
+    ``min_support``, or unclassified. Journey shares sum to
+    ``covered_share``, not 1, so ``share_lost`` alone understates the gap."""
+
+    @property
+    def share_not_represented(self) -> float:
+        """All real traffic no question represents: lost plus uncatalogued."""
+        return round(self.share_lost + self.share_uncatalogued, 6)
 
 
 def _apportion(weights: dict[str, float], total: int) -> dict[str, int]:
     """Largest remainder, then a floor of 1, then repay the difference.
 
     Ties are broken by journey id throughout, so the same catalogue always
-    divides the same way.
+    divides the same way. Differences are rounded before they are compared:
+    ``0.1 * 3`` is not ``0.3`` in floating point, and two remainders that
+    should tie must not be ordered by the error in their seventeenth digit.
     """
     exact = {key: total * weight for key, weight in weights.items()}
     counts = {key: int(value) for key, value in exact.items()}
 
+    def under(key: str) -> float:
+        """How far *key* is below its exact share; negative when above."""
+        return round(exact[key] - counts[key], 9)
+
     leftover = max(0, total - sum(counts.values()))
-    by_remainder = sorted(weights, key=lambda key: (-(exact[key] - counts[key]), key))
-    for key in by_remainder[:leftover]:
+    for key in sorted(weights, key=lambda key: (-under(key), key))[:leftover]:
         counts[key] += 1
 
     deficit = sum(1 for value in counts.values() if value == 0)
@@ -777,9 +1016,10 @@ def _apportion(weights: dict[str, float], total: int) -> dict[str, int]:
             counts[key] = 1
     for _ in range(deficit):
         # Some count exceeds 1: the total is now N + deficit, which is more
-        # than N, which is at least the number of journeys. Ties go to the
-        # lowest id because ``max`` keeps the first of equal keys.
-        donor = max(sorted(counts), key=lambda key: counts[key])
+        # than N, which is at least the number of journeys. The donor is the
+        # one furthest above its exact share, so the split stays in order.
+        donor = min((key for key in counts if counts[key] > 1),
+                    key=lambda key: (under(key), key))
         counts[donor] -= 1
     return counts
 
@@ -796,12 +1036,14 @@ def share_counts(piles: SortedCatalogue, catalogue: Catalogue, *,
     built = {cuj.id: cuj.support.share for cuj in piles.write}
     lost = sum(cuj.support.share for cuj in catalogue.cujs
                if cuj.id not in built)
+    uncatalogued = round(catalogue.coverage.suppressed_share
+                         + catalogue.coverage.unclassified_share, 6)
 
     if not built:
-        return CaseCounts(share_lost=lost), ()
+        return CaseCounts(share_lost=lost, share_uncatalogued=uncatalogued), ()
 
     if cases < len(built):
-        return CaseCounts(share_lost=lost), (hard(
+        return CaseCounts(share_lost=lost, share_uncatalogued=uncatalogued), (hard(
             CASES_BELOW_JOURNEYS,
             f"--cases {cases} cannot cover {len(built)} journeys; every "
             "journey must get at least one question, so ask for at least "
@@ -809,7 +1051,10 @@ def share_counts(piles: SortedCatalogue, catalogue: Catalogue, *,
             detail={"cases": str(cases), "journeys": str(len(built))}),)
 
     weight = sum(built.values())
-    rescaled = {cuj_id: share / weight for cuj_id, share in built.items()}
+    # ``Share`` allows 0. If every surviving journey reports 0, there is no
+    # proportion to keep, so each gets an equal part rather than a crash.
+    rescaled = ({cuj_id: share / weight for cuj_id, share in built.items()}
+                if weight > 0 else dict.fromkeys(built, 1 / len(built)))
     counts = _apportion(rescaled, cases)
 
     return CaseCounts(
@@ -817,7 +1062,8 @@ def share_counts(piles: SortedCatalogue, catalogue: Catalogue, *,
             Allocation(cuj_id=cuj_id, original_share=built[cuj_id],
                        rescaled_share=rescaled[cuj_id], count=counts[cuj_id])
             for cuj_id in sorted(built)),
-        total=sum(counts.values()), share_lost=lost), ()
+        total=sum(counts.values()), share_lost=lost,
+        share_uncatalogued=uncatalogued), ()
 
 
 # --------------------------------------------------------------------------
@@ -1040,7 +1286,7 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
     built: list[UseCase] = []
     for cuj in piles.write:
         targets = sorted(_writes(cuj))
-        if not any(plannable(*pair) for pair in targets):
+        if not any(write_target(cuj, *pair) is not None for pair in targets):
             findings.append(hard(
                 WRITE_NOT_PLANNABLE,
                 f"{cuj.id} writes only to "
@@ -1073,6 +1319,9 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
                         "phrasings": str(len(cuj.phrasings))}))
         shape, shape_findings = record_shapes(cuj)
         findings.extend(shape_findings)
+        findings.extend((*alias_choices(cuj), *unplanned_lookups(cuj),
+                         *unbacked_values(cuj, bindings),
+                         *unconstructable(cuj)))
         built.append(build_use_case(cuj, prompt, bindings,
                                     industry=industry, persona=persona,
                                     audience=audience, shape=shape))

@@ -117,7 +117,8 @@ def test_the_readable_report_says_what_was_lost_and_what_was_assumed(
 
     text = (out / "import-report.md").read_text()
 
-    assert "51.1% of real traffic not represented" in text
+    assert ("77.1% of real traffic not represented (51.1% in journeys not "
+            "built, 26.0% never catalogued)") in text
     assert "a choice, not a measurement" in text
     assert "`answer_only_unsupported`" in text
 
@@ -193,6 +194,48 @@ def test_a_strict_rerun_removes_a_stale_project(tmp_path: Path,
     assert not (out / "project.json").exists()
 
 
+def test_the_report_counts_traffic_the_miner_never_catalogued(
+        tmp_path: Path, company: Path) -> None:
+    """Journey shares sum to covered_share, not 1, so the share lost to
+    unbuilt journeys alone understates what no question represents."""
+    out = tmp_path / "out"
+    _build(out, company)
+
+    report = json.loads((out / "import-report.json").read_text())
+
+    assert report["share_lost"] == pytest.approx(0.511)
+    assert report["share_uncatalogued"] == pytest.approx(0.26)
+    assert report["share_not_represented"] == pytest.approx(0.771)
+
+
+def test_a_budget_below_the_journeys_is_its_own_refusal(
+        tmp_path: Path, company: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review on #77: journeys could be built, the budget could not cover
+    them, and the command said nothing could be built. It is a bad input,
+    so it exits 2 with its own code. The sample has one buildable journey
+    and ``--cases`` is at least 1, so the importer's result is stood in."""
+    import worldloom.telemetry as telemetry
+    from worldloom.telemetry.compile import CASES_BELOW_JOURNEYS
+
+    real = telemetry.import_catalogue
+
+    def short_budget(*args, **kwargs):
+        result = real(*args, **kwargs)
+        return result.model_copy(update={
+            "project": None,
+            "report": result.report.with_findings(telemetry.hard(
+                CASES_BELOW_JOURNEYS, "--cases 1 cannot cover 2 journeys",
+                detail={"cases": "1", "journeys": "2"}))})
+
+    monkeypatch.setattr(telemetry, "import_catalogue", short_budget)
+    code, envelope = _refusal("import", EXAMPLE, "--company", company,
+                              "--out", tmp_path / "out", "--cases", "1")
+
+    assert code == 2, envelope
+    assert envelope["refusal"] == "cases_below_journeys"
+    assert envelope["data"]["journeys"] == 2
+
+
 def test_nothing_buildable_exits_three(tmp_path: Path, company: Path) -> None:
     payload = json.loads(EXAMPLE.read_text())
     for cuj in payload["cujs"]:
@@ -264,7 +307,8 @@ def test_an_invalid_catalogue_lists_every_reason(tmp_path: Path,
 def test_every_code_this_command_can_refuse_with_is_registered() -> None:
     for code in ("catalogue_rejected", "catalogue_version_unknown",
                  "catalogue_uncompilable", "company_required", "company_unmet",
-                 "strict_findings", "destination_exists"):
+                 "strict_findings", "destination_exists",
+                 "cases_below_journeys"):
         assert code in _REFUSALS, code
 
 

@@ -168,9 +168,9 @@ class Binding(Model):
     connector: str = ""
     entity: str = ""
     field: str = ""
-    """The step this value belongs to, *after* following any fold. The caller
-    needs it to put the value in the right construction requirement — the
-    question and the world have to agree on what exists."""
+    """The step this value belongs to. The caller needs it to put the value
+    in the right construction requirement — the question and the world have
+    to agree on what exists."""
 
 
 class BoundQuestion(Model):
@@ -288,8 +288,8 @@ def _closed_list(connector: str, entity: str,
     try:
         declared = definition.resolve_field(entity, field)
     except KeyError:
-        # An entity the connector does not know. W2 would have refused the
-        # journey, so this is a slot pointing at a step from before a fold.
+        # An entity the connector does not know. W2 refuses such a journey,
+        # so only a direct caller reaches this.
         return None
     if declared is not None and declared.options:
         return declared.options, "field manifest"
@@ -417,10 +417,16 @@ def bind_question(cuj: Cuj, catalogue_digest: str,
 
         bindings = tuple(bind_slot(slot, cuj, catalogue_digest)
                          for slot in phrasing.slots)
+        # Checked on the template, before any value goes in: a value may
+        # itself contain "{", and ``_escape`` exists for exactly those, so
+        # looking at the filled text would blame the template for the value.
+        undeclared = phrasing.template
+        for binding in bindings:
+            undeclared = undeclared.replace("{" + binding.slot + "}", "")
         text = phrasing.template
         for binding in bindings:
             text = text.replace("{" + binding.slot + "}", binding.value)
-        if "{" in text:
+        if "{" in undeclared:
             # A template naming a slot it did not declare. ``inv3`` checks the
             # other direction, so this one is ours to catch.
             findings.append(info(

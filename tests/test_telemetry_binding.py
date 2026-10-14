@@ -42,6 +42,7 @@ from worldloom.telemetry.binding import (
     prompt_template,
     seed_for,
 )
+from worldloom.telemetry.catalogue import Slot
 
 EXAMPLE = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
            / "valid" / "example.json")
@@ -312,6 +313,27 @@ def test_a_template_naming_an_undeclared_slot_falls_through() -> None:
     assert question is not None
     assert question.template == good.template
     assert PHRASING_VARIANT_UNUSED in [f.code for f in findings]
+
+
+def test_a_brace_inside_a_bound_value_is_not_an_undeclared_slot() -> None:
+    """Review on #77: the check looked at the filled text, so a value that
+    itself contained "{" made a good phrasing look broken. The template is
+    checked before any value goes in; ``_escape`` handles the value later."""
+    journey = _cuj(WRITES)
+    good = journey.phrasings[0]
+    topic = good.model_copy(update={
+        "template": "Draft {topic} epics", "support": 99,
+        "slots": (Slot(name="topic", step_id="create_epics", field="summary"),)})
+    braced = journey.model_copy(update={"phrasings": (topic, good),
+                                        "domain_terms": ("ops {beta}",)})
+
+    question, findings = bind_question(braced, digest_bytes(_data()))
+
+    assert question is not None
+    assert question.template == "Draft {topic} epics"
+    assert question.text == "Draft ops {beta} epics"
+    assert "undeclared" not in [f.detail.get("reason") for f in findings
+                                if f.code == PHRASING_VARIANT_UNUSED]
 
 
 def test_a_journey_with_no_phrasings_asks_for_a_default_not_a_refusal() -> None:

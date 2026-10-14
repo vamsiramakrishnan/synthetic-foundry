@@ -74,6 +74,7 @@ from .catalogue import (
     load_catalogue,
 )
 from .compile import (
+    ALIAS_MEMBER_CHOSEN,
     ANSWER_ONLY_UNSUPPORTED,
     ARGUMENT_FIELD_UNKNOWN,
     CASES_BELOW_JOURNEYS,
@@ -82,7 +83,10 @@ from .compile import (
     DEFAULT_CASES,
     DEFAULT_PERSONA,
     DROPPED_FOR_CONFLICT,
+    FAILURE_MODE_UNCONSTRUCTABLE,
+    LOOKUP_NOT_PLANNED,
     NO_WORLD_NEEDED,
+    VALUE_NOT_IN_WORLD,
     WRITE_NOT_PLANNABLE,
     Allocation,
     CaseCounts,
@@ -99,6 +103,7 @@ from .compile import (
     record_shapes,
     share_counts,
     sort_catalogue,
+    write_target,
 )
 from .invariants import check, cuj_id, signature
 from .registry import (
@@ -121,6 +126,7 @@ from .report import (
 )
 
 __all__ = [
+    "ALIAS_MEMBER_CHOSEN",
     "ANSWER_ONLY_UNSUPPORTED",
     "ARGUMENT_FIELD_UNKNOWN",
     "CASES_BELOW_JOURNEYS",
@@ -131,6 +137,8 @@ __all__ = [
     "DEFAULT_PERSONA",
     "DROPPED_FOR_CONFLICT",
     "ENTITY_UNRESOLVED",
+    "FAILURE_MODE_UNCONSTRUCTABLE",
+    "LOOKUP_NOT_PLANNED",
     "NO_WORLD_NEEDED",
     "OPERATION_AMBIGUOUS",
     "OPERATION_UNSUPPORTED",
@@ -139,6 +147,7 @@ __all__ = [
     "RENDER_KEYS",
     "REJECTED",
     "SCHEMA_VERSION",
+    "VALUE_NOT_IN_WORLD",
     "VERSION_UNKNOWN",
     "WRITE_NOT_PLANNABLE",
     "Allocation",
@@ -190,4 +199,5 @@ __all__ = [
     "share_counts",
     "signature",
     "sort_catalogue",
+    "write_target",
 ]

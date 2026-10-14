@@ -10,7 +10,7 @@ Two code vocabularies meet here, and they are deliberately not merged:
 ``Finding.code``
     The *shared* vocabulary the miner also speaks — ``schema`` and ``inv1`` …
     ``inv10`` for contract failures, and the importer's own names
-    (``connector_not_emulated``, ``step_folded``, …) for everything later. Both
+    (``connector_not_emulated``, ``no_world_needed``, …) for everything later. Both
     checkers must agree on these, file for file.
 
 ``CatalogueRefused.code``
@@ -53,7 +53,7 @@ class Severity(StrEnum):
 
     INFO = "info"
     """Nothing is wrong, and a reader should still be told — an alias picked,
-    a step folded, a default used, or a journey that needed no world."""
+    a default used, or a journey that needed no world."""
 
 
 class Finding(Model):
