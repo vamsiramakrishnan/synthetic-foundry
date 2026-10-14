@@ -38,10 +38,12 @@ returns the same journeys in labelled piles.
 from __future__ import annotations
 
 import re
+from datetime import date
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ..connector_definition import shipped_connector_definition
+from ..enterprise_dag import default_shapes
 from ..enterprise_specs import (
     ContentAction,
     CoverageProfile,
@@ -536,7 +538,8 @@ def _roles(cuj: Cuj, reads: Mapping[tuple[str, str], set[str]],
                    operations=operations(names),
                    required_fields=tuple(sorted(
                        key for key in selectors[(connector, entity)]
-                       if key not in ("connector", "entity"))))
+                       if key not in ("connector", "entity")
+                       and _declared(connector, entity, key))))
         for (connector, entity), names in sorted(reads.items()))
     targets: dict[tuple[str, str, str], set[str]] = {}
     for (connector, entity), names in writes.items():
@@ -550,6 +553,23 @@ def _roles(cuj: Cuj, reads: Mapping[tuple[str, str], set[str]],
                         formats=(member,) if member != role else ())
         for (connector, role, member), names in sorted(targets.items()))
     return sources, destinations
+
+
+def _declared(connector: str, entity: str, field: str) -> bool:
+    """Whether the connector definition declares *field* on *entity*.
+
+    Only a declared field can be a source's ``required_field``: Studio fills
+    one from the definition, and refuses every record when the definition
+    has no such field. A Confluence page's title is not a field at all, it
+    is the record's own title, so ``title`` is pinned by the requirement's
+    selector, which matches on it, and never listed here.
+    """
+    try:
+        definition = shipped_connector_definition(connector)
+        return any(definition.resolve_field(member, field) is not None
+                   for member in definition.entity_members(entity))
+    except (KeyError, ValueError):
+        return False
 
 
 def _requirement_reads(cuj: Cuj) -> dict[tuple[str, str], set[str]]:
@@ -818,6 +838,30 @@ def _scenario(cuj: Cuj, prompt: str, sources: tuple[SourceRole, ...],
         coverage=CoverageProfile(failures=coverage_failures(cuj)))
 
 
+#: The shapes that need two records from each source (see
+#: ``enterprise_dag.default_shapes``): ``map_read`` fetches every hit and
+#: ``conditional`` branches on there being at least two.
+_MULTI_HIT_SHAPES = frozenset({"conditional", "map_read"})
+
+
+def _dag_shapes(requirements: tuple[WorldRequirement, ...]) -> tuple[str, ...]:
+    """Every shape, unless a source is pinned to one record.
+
+    A pinned source is the one record the question names, and the world
+    builder mints exactly that record. A shape that needs two of them can
+    never be filled, and the materializer refuses every row of it
+    (``insufficient_sources``). Minting a second would make "the sprint
+    notes" ambiguous for every other shape, so those two shapes are left out
+    instead — only when something is pinned.
+    """
+    pinned = any(set(requirement.selector) - {"connector", "entity"}
+                 for requirement in requirements)
+    if not pinned:
+        return ("*",)
+    return tuple(shape for shape in default_shapes()
+                 if shape not in _MULTI_HIT_SHAPES)
+
+
 def build_use_case(cuj: Cuj, prompt: str,
                    bindings: tuple[Binding, ...], *, industry: str = "",
                    persona: str = DEFAULT_PERSONA,
@@ -847,14 +891,16 @@ def build_use_case(cuj: Cuj, prompt: str,
     reads = _requirement_reads(cuj)
     selectors = _selectors(reads, bindings)
     sources, destinations = _roles(cuj, reads, _writes(cuj), selectors)
+    requirements = _requirements(reads, selectors)
     return UseCase(
         id=cuj.id, title=cuj.label, objective=_objective(cuj), count=count,
+        dag_shapes=_dag_shapes(requirements),
         scenario=_scenario(cuj, prompt, sources, destinations,
                            industry=industry, audience=audience),
         construction=EvalSpec(
             id=cuj.id, capability=_capability(cuj.label), persona=persona,
             request_template=prompt, steps=_eval_steps(cuj),
-            requirements=_requirements(reads, selectors),
+            requirements=requirements,
             shape=shape or EvalShape(), difficulty=_difficulty(cuj),
             candidate_count=1))
 
@@ -1258,6 +1304,35 @@ def check_with_studio(company: dict[str, Any], cases: tuple[UseCase, ...],
     return survivors, tuple(findings)
 
 
+def episodes(catalogue: Catalogue) -> tuple[str, ...]:
+    """The months the catalogue's telemetry window covers, as ``YYYY-MM``.
+
+    A world needs history before anything can be built into it: with no
+    episode, Studio refuses to mint a single record ("cannot intervene on a
+    world with no events"). The window is when the customer's people did
+    these journeys, so the company is given those months of history. Taken
+    from the window's dates, which W1 checks are text; a window that does not
+    start with a date falls back to the month the catalogue was made.
+    """
+    def month(stamp: str) -> date | None:
+        try:
+            return date.fromisoformat(stamp[:10]).replace(day=1)
+        except ValueError:
+            return None
+
+    window = catalogue.source.window
+    start, end = month(window.start), month(window.end)
+    if start is None or end is None or end < start:
+        made = month(catalogue.created_at)
+        return (f"{made:%Y-%m}",) if made is not None else ()
+    months: list[str] = []
+    current = start
+    while current <= end:
+        months.append(f"{current:%Y-%m}")
+        current = date(current.year + current.month // 12, current.month % 12 + 1, 1)
+    return tuple(months)
+
+
 def import_catalogue(data: bytes, company: dict[str, Any], *,
                      cases: int = DEFAULT_CASES,
                      persona: str = DEFAULT_PERSONA,
@@ -1341,7 +1416,8 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
                 for allocation in counts.allocations}
     final = tuple(case.model_copy(update={"count": allotted[case.id]})
                   for case in survivors if case.id in allotted)
-    project = (ProjectSpec(company=company, use_cases=final)
+    project = (ProjectSpec(company=company, use_cases=final,
+                           episodes=episodes(catalogue))
                if final else None)
     groups = {
         **{cuj.id: Group.WRITE for cuj in piles.write},

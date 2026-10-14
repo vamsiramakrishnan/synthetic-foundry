@@ -93,7 +93,13 @@
   },
   "count": 200,
   "dag_shapes": [
-    "*"
+    "deep_chain",
+    "delete_chain",
+    "diamond",
+    "fan_in",
+    "fan_out",
+    "read_chain",
+    "write_chain"
   ],
   "id": "cuj_9636dd61a048",
   "incident_rule": null,
@@ -157,9 +163,7 @@
               "read",
               "search"
             ],
-            "required_fields": [
-              "title"
-            ]
+            "required_fields": []
           }
         ],
         "topologies": [

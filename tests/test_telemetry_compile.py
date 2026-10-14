@@ -60,6 +60,7 @@ from worldloom.telemetry.compile import (
     build_use_case,
     check_with_studio,
     coverage_failures,
+    episodes,
     import_catalogue,
     record_shapes,
     share_counts,
@@ -309,8 +310,11 @@ def test_reads_become_sources_and_writes_become_destinations() -> None:
     assert case.scenario is not None
     workflow = case.scenario.additional_workflows[0]
 
+    # The title is pinned by the requirement's selector, not listed as a
+    # required field: Confluence declares no ``title`` field, and Studio
+    # refused every page record for lacking one (found by W4's round trip).
     assert [(role.connector, role.required_fields)
-            for role in workflow.sources] == [("confluence", ("title",))]
+            for role in workflow.sources] == [("confluence", ())]
     assert [role.connector for role in workflow.destinations] == ["jira"]
     assert workflow.destinations[0].entities == ("issue",)
 
@@ -1069,3 +1073,52 @@ def test_every_failure_mode_not_built_is_a_hard_finding() -> None:
         step for step in cuj.steps if step.connector != "confluence")})
     assert ("wrong_entity", "W5 (look-alike records within one connector)") in [
         (f.detail["mode"], f.detail["needs"]) for f in unconstructable(single)]
+
+
+# ---------------------------------------------------------------------------
+# W4: what Studio needs to actually build the world.
+# ---------------------------------------------------------------------------
+
+
+def test_the_project_gets_the_months_of_the_telemetry_window() -> None:
+    """With no episode the world has no history, and Studio refuses to mint
+    a single record into it ("cannot intervene on a world with no events").
+    The sample's window is 11-14 August, so the company gets August."""
+    result = _imported()
+    assert result.project is not None
+
+    assert result.project.episodes == ("2026-08",)
+
+
+def test_a_window_across_months_gives_every_month_and_a_bad_one_falls_back(
+        ) -> None:
+    catalogue = _catalogue()
+    def windowed(start: str, end: str):
+        window = catalogue.source.window.model_copy(update={"start": start,
+                                                            "end": end})
+        return catalogue.model_copy(update={"source": catalogue.source.model_copy(
+            update={"window": window})})
+
+    assert episodes(windowed("2026-11-28T00:00:00Z", "2027-02-01T00:00:00Z")) == (
+        "2026-11", "2026-12", "2027-01", "2027-02")
+    assert episodes(windowed("not a date", "2026-08-14")) == ("2026-09",)
+
+
+def test_a_pinned_source_leaves_out_the_shapes_that_need_two_of_it() -> None:
+    """``map_read`` and ``conditional`` need two records from each source.
+    The world mints exactly the one record the question names, so every row
+    of those shapes was refused (``insufficient_sources``)."""
+    case = _built()
+
+    assert "*" not in case.dag_shapes
+    assert not {"conditional", "map_read"} & set(case.dag_shapes)
+    assert {"fan_in", "read_chain"} <= set(case.dag_shapes)
+
+
+def test_with_nothing_pinned_every_shape_is_allowed() -> None:
+    cuj, prompt, _ = _built_parts()
+    write_only = cuj.model_copy(update={"steps": tuple(
+        step.model_copy(update={"depends_on": ()})
+        for step in cuj.steps if step.id == "create_epics")})
+
+    assert build_use_case(write_only, prompt, ()).dag_shapes == ("*",)
