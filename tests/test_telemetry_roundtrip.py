@@ -65,7 +65,9 @@ def test_the_round_trip_scores_full_marks_offline(tmp_path: Path) -> None:
     test does not need, and it refuses file-reading tasks anyway, so the run
     stops before freezing and evalrun grades the qualified baseline.
     """
+    import os
     import shlex
+    import subprocess
     import sys
 
     from worldloom.evals.calibration import NoiseVariant
@@ -84,6 +86,8 @@ def test_the_round_trip_scores_full_marks_offline(tmp_path: Path) -> None:
             max_training_attempts=1, max_holdout_attempts=1, reader_share=0.1, max_turns=8),
     })
     harness = shlex.join([sys.executable, str(ROOT / "replay_harness.py")])
+    if os.name == "nt":
+        harness = subprocess.list2cmdline([sys.executable, str(ROOT / "replay_harness.py")])
     studio = Studio(tmp_path / "workspace")
     project = studio.store.create(spec)
 
