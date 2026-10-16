@@ -34,6 +34,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -46,6 +47,12 @@ runner = CliRunner()
 def _flat(text: str) -> str:
     # Rich wraps to a width nothing in the test controls; see test_flag_reach.
     return " ".join(text.split())
+
+
+def _solid(text: str) -> str:
+    # `_flat` cannot rejoin a word Rich folded mid-token; this can, at the
+    # price of word boundaries, so it is for long single tokens like paths.
+    return "".join(text.split())
 
 
 def _cmd(*parts: object) -> str:
@@ -370,14 +377,14 @@ def test_a_sleeping_child_is_killed_at_the_timeout(
 def _expected_split(corpus: Path, *, k: int, limit: int | None = None) -> list[tuple[str, bool]]:
     """What the even/odd responder must score, case by case, computed from IDs.
 
-    Uses the same BM25 index and the same `_covers` the command reuses — the
-    point is not an independent reimplementation of coverage but that the
+    Uses the same BM25 index and shared grader as evaluate — the
+    point is not an independent reimplementation of grading but that the
     subprocess plumbing (payload out, ids back, abstention flag honoured)
     lands each case on exactly the grade its ids dictate.
     """
     from worldloom.evaluate.bm25 import Bm25
     from worldloom.evaluate.index import passages as index_passages
-    from worldloom.evaluate.score import _covers
+    from worldloom.evaluate.score import Retrieval, grade
 
     world = World.load(corpus)
     world = world if world.artifact_irs else world.compile()
@@ -387,18 +394,16 @@ def _expected_split(corpus: Path, *, k: int, limit: int | None = None) -> list[t
     if limit is not None:
         cases = cases[:limit]
 
-    expected = []
+    retrievals = []
     for position, case in enumerate(cases):
         offered = [pool[i] for i, _ in index.rank(case.question, limit=k)]
         if position % 2 == 0:
-            # Answered with everything offered: passes iff the top-k covers
-            # the expected facts and the case wanted an answer at all.
-            passed = (not case.expects_abstention) and _covers(offered, case)
+            retrievals.append(Retrieval(tuple(offered), False))
         else:
             # Abstained: passes iff abstention is what the case expects.
-            passed = case.expects_abstention
-        expected.append((case.id, passed))
-    return expected
+            retrievals.append(Retrieval((), True))
+    return [(outcome.case_id, outcome.passed)
+            for outcome in grade(pool, cases, retrievals, k=k).outcomes]
 
 
 def test_the_scorecard_splits_exactly_as_constructed(
@@ -457,9 +462,19 @@ def test_the_prose_scorecard_is_labelled_with_the_command(
         "--exec", command,
     ])
     assert result.exit_code == 0, result.output
-    flat = _flat(result.output)
-    assert "exec:" in flat and "even_odd.py" in flat
-    assert "overall" in flat, "the scorecard shape is evaluate's"
+    # The command's paths are tokens as long as the tmp path, and Rich folds a
+    # token wider than the console mid-word, where `_flat` cannot rejoin it:
+    # under pytest-xdist the path gains a `popen-gwN/` segment, which split
+    # `even_odd.py` across lines and failed this test only in parallel runs.
+    # Widening the console is not reliable either: pytest imports readline,
+    # which exports COLUMNS (80 with no terminal) into the environment every
+    # xdist worker inherits, and Rich pins that width when `cli.console` is
+    # built at import, so `invoke(env=...)` never reaches it. The whole label is
+    # compared with whitespace removed, which holds the command character for
+    # character wherever the console folded it. Unstyled because FORCE_COLOR
+    # makes Rich highlight the path segments apart.
+    assert _solid(f"exec: {command}") in _solid(click.unstyle(result.output)), result.output
+    assert "overall" in _flat(result.output), "the scorecard shape is evaluate's"
 
 
 def test_a_malformed_answer_names_the_case_and_the_shape(

@@ -41,12 +41,19 @@ The rules the campaign holds whatever the builder does:
   base plan's), and every stage records them.
 - **One grader.** The grader is pinned when the campaign starts; a campaign
   resumed under a different grader is refused (``GraderDrift``).
+- **Qualification evidence is fresh.** With a ``QualificationPolicy``,
+  evidence components cannot cross training and held-out sets or appear in
+  two stages' held-out pools. The original policy and its telescoping
+  stage allocation are sealed before the first run.
 
 The headline number is the cross-stage held-out ledger: after each stage the
 campaign's original champion and its current champion both run the stage's
 held-out cases, which neither the proposer nor any training set ever saw, so
 the report says stage by stage how far the policy has moved from where it
-started. Everything lands under the output directory: ``campaign.json``,
+started. Under qualification this diagnostic ledger measures only already
+reserved tranches; it never probes unspent protected evidence. The ledger
+is selection evidence, not a final blind audit. Everything lands under the
+output directory: ``campaign.json``,
 ``stages/NNN/stage.json``, the stage's case sets under ``stages/NNN/cases``,
 its improve loop under ``stages/NNN/improve`` and the ledger runs under
 ``stages/NNN/ledger``. A stage with a ``stage.json`` is complete and is read
@@ -87,7 +94,7 @@ STAGE_SCHEMA = "worldloom.campaign-stage/v1"
 
 #: How a campaign can stop, each with its reason in ``CampaignReport.reasons``.
 STOPS = ("max_stages", "case_budget", "no_new_cases", "nothing_harder", "held_out_overlap", "questions",
-         "proposer_error")
+         "proposer_error", "qualification_exhausted")
 
 #: What ``improve()`` is given by the campaign itself; a caller passing one of
 #: these through ``improve_options`` would silently fight the campaign.
@@ -129,6 +136,14 @@ class RecordGroups:
         for case in cases:
             parts[where[case.id]].append(case)
         return [(part, self.groups[index][1]) for index, part in enumerate(parts) if part]
+
+    def pin_cases(self, cases: Sequence[EvalCase]) -> tuple[EvalCase, ...]:
+        """Each group's records supply its provenance namespace and source pin."""
+        from .qualification import with_record_provenance
+
+        named = {case.id: case for part, records in self.split(cases)
+                 for case in with_record_provenance(part, records)}
+        return tuple(named[case.id] for case in cases)
 
 
 StageRunner = Callable[[Sequence[EvalCase], RecordGroups, AgentUnderTest], RunReport]
@@ -464,6 +479,8 @@ def _status(report: ImproveReport, patience: int) -> tuple[str, str]:
         return "halted", f"the stage stopped with {last}" + (f": {reasons[0]}" if reasons else "")
     if last == "no_failures":
         return "saturated", "the champion passes every training case of the stage"
+    if last == "qualification_exhausted":
+        return "failing", "the sealed promotion pool is exhausted; the next stage needs fresh evidence"
     trailing = 0
     for decision in reversed(decisions):
         if decision == "promoted":
@@ -557,9 +574,26 @@ class _Campaign:
     def ledger(self, number: int, original: ResolvedPack, current: ResolvedPack, held: Sequence[EvalCase],
                records: RecordGroups) -> LedgerEntry:
         base = self.stage_dir(number) / "ledger"
-        before = self.cached_run(base / "original", original, held, records, holdout=True)
-        after = before if current.digest == original.digest else self.cached_run(
-            base / "current", current, held, records, holdout=True)
+        if self.improve_options.get("qualification") is not None:
+            # A diagnostic must not quietly probe tranches that have never
+            # been reserved. Otherwise later resume could call them fresh.
+            vault = self.stage_dir(number) / "improve" / "qualification"
+            manifest = _read_json(vault / "seal.json")
+            spent = tuple((vault / "trials").glob("*.json"))
+            used = {int(json.loads(path.read_text(encoding="utf-8"))["trial"]) for path in spent}
+            allowed = {case_id for index, ids in enumerate(manifest["tranches"], start=1)
+                       if index in used for case_id in ids} if isinstance(manifest, dict) else set()
+            held = tuple(case for case in held if case.id in allowed)
+        if held:
+            before = self.cached_run(base / "original", original, held, records, holdout=True)
+            after = before if current.digest == original.digest else self.cached_run(
+                base / "current", current, held, records, holdout=True)
+        else:
+            before = RunReport(agent=original.ref, principal="agent", case_set=case_set_digest(()),
+                               results=(), grader=self.grader, agent_pack=_identity(original), split="holdout")
+            after = before.model_copy(update={"agent": current.ref, "agent_pack": _identity(current)})
+            write_run(base / "original", before)
+            write_run(base / "current", after)
         comparison = compare(before, after)
         first, last = _side(original, before), _side(current, after)
         return LedgerEntry(stage=number, held_case_set=case_set_digest(held), held_cases=len(held), original=first,
@@ -634,6 +668,10 @@ def campaign(
     ``evalrun.campaign.max_cases`` and ``patience`` to
     ``evalrun.campaign.patience``. ``value=True`` gates every stage on the
     value-weighted delta too and weights the targeted curriculum by value.
+    Qualification spends the campaign's nominal error budget across stages
+    as ``alpha / (stage * (stage + 1))`` and then across each stage's probes.
+    The allocation is stable when a campaign resumes or extends its stage
+    budget; bootstrap intervals remain empirical estimates.
     """
     owned = sorted(_OWNED.intersection(improve_options))
     if owned:
@@ -668,6 +706,20 @@ def campaign(
     per_set = int(getattr(builder, "seeds_per_set", 1))
     sealed: set[str] = set()
     trained: set[str] = set()
+    qualification = improve_options.get("qualification")
+    qualification_file = root / "qualification.json"
+    if qualification is not None:
+        from .qualification import QUALIFICATION_SCHEMA, _claim
+
+        if not qualification_file.exists() and isinstance(stored, dict):
+            raise ValueError("cannot add qualification to an existing unqualified campaign; use a new directory")
+        _claim(qualification_file, {"schema": QUALIFICATION_SCHEMA,
+                                    "policy": qualification.model_dump(mode="json"),
+                                    "stage_allocation": "alpha/(stage*(stage+1))"})
+    elif qualification_file.exists():
+        raise ValueError("cannot drop a sealed campaign qualification policy; use a new directory")
+    trained_evidence: list[EvalCase] = []
+    sealed_evidence: list[EvalCase] = []
     spent = 0
     records: list[StageRecord] = []
     previous: StageOutcome | None = None
@@ -675,6 +727,9 @@ def campaign(
     if baseline is not None:
         cases = tuple(baseline[0])
         groups = RecordGroups.of(baseline[1], cases)
+        if qualification is not None:
+            cases = groups.pin_cases(cases)
+            trained_evidence.extend(cases)
         run_report = state.cached_run(root / "baseline", original, cases, groups)
         summary = summarize(run_report)
         baseline_summary = {"case_set": case_set_digest(cases), "cases": len(cases), "passed": summary.passed,
@@ -697,6 +752,18 @@ def campaign(
                                  "use a new directory")
             train, train_groups = read_stage_cases(stage / "cases" / "train")
             held, _ = read_stage_cases(stage / "cases" / "held")
+            if qualification is not None:
+                from .qualification import audit_splits
+
+                audit = audit_splits((*trained_evidence, *train), (*sealed_evidence, *held),
+                                     unit_dimension=qualification.unit_dimension)
+                if not audit.isolated:
+                    raise ValueError("resumed campaign stages share protected training and held-out evidence")
+                if not audit_splits(sealed_evidence, held,
+                                    unit_dimension=qualification.unit_dimension).isolated:
+                    raise ValueError("resumed campaign stages reuse protected held-out evidence")
+                trained_evidence.extend(train)
+                sealed_evidence.extend(held)
             current = state.resolve(record.improve.champion_after, number)
             used.update(record.seeds.all())
             sealed.update(map(case_key, held))
@@ -729,8 +796,13 @@ def campaign(
                 stopped, reasons = "no_new_cases", (f"stage {number} ({mode}): the builder produced "
                                                     f"{len(train_raw)} training and {len(held_raw)} held-out case(s)",)
                 break
-            write_stage_cases(stage / "cases" / "train", train_raw, RecordGroups.of(made.records_train, train_raw))
-            write_stage_cases(stage / "cases" / "held", held_raw, RecordGroups.of(made.records_held, held_raw))
+            train_groups_raw = RecordGroups.of(made.records_train, train_raw)
+            held_groups_raw = RecordGroups.of(made.records_held, held_raw)
+            if improve_options.get("qualification") is not None:
+                train_raw = train_groups_raw.pin_cases(train_raw)
+                held_raw = held_groups_raw.pin_cases(held_raw)
+            write_stage_cases(stage / "cases" / "train", train_raw, train_groups_raw)
+            write_stage_cases(stage / "cases" / "held", held_raw, held_groups_raw)
             description = made.description
             _write(built_file, {"builder": builder_id, "mode": mode, "seeds": seeds.model_dump(mode="json"),
                                 "description": description})
@@ -739,6 +811,18 @@ def campaign(
         train, train_groups = read_stage_cases(stage / "cases" / "train")
         held, held_groups = read_stage_cases(stage / "cases" / "held")
         overlap = _overlap(number, train, held, sealed, trained)
+        if qualification is not None:
+            from .qualification import audit_splits
+
+            audit = audit_splits((*trained_evidence, *train), (*sealed_evidence, *held),
+                                 unit_dimension=qualification.unit_dimension)
+            if not audit.isolated:
+                overlap += (f"stage {number}: training and held-out cases share {audit.overlapping_units} "
+                            "protected evidence component(s)",)
+            reused = audit_splits(sealed_evidence, held, unit_dimension=qualification.unit_dimension)
+            if not reused.isolated:
+                overlap += (f"stage {number}: held-out cases reuse {reused.overlapping_units} protected "
+                            "evidence component(s) from an earlier stage",)
         if overlap:
             stopped, reasons = "held_out_overlap", overlap
             _write(stage / "refused.json", {"stopped": stopped, "reasons": list(overlap)})
@@ -748,14 +832,20 @@ def campaign(
                 f"stage {number} needs {len(train) + len(held)} case(s) and {budget - spent} of the "
                 f"campaign's {budget} remain (policy `evalrun.campaign.max_cases`)",)
             break
-        by_set = {case_set_digest(train): train_groups, case_set_digest(held): held_groups}
-        train_ids = frozenset(case.id for case in train)
+        from .qualification import suite_digest
+
+        by_set = {suite_digest(train): train_groups, suite_digest(held): held_groups}
+        train_keys = frozenset(suite_digest((case,)) for case in train)
+        held_keys = frozenset(suite_digest((case,)) for case in held)
 
         def run_stage(subset: Sequence[EvalCase], agent: AgentUnderTest,
                       _groups: Mapping[str, RecordGroups] = by_set, _train: RecordGroups = train_groups,
-                      _train_ids: frozenset[str] = train_ids) -> RunReport:
-            groups = _groups.get(case_set_digest(subset))
-            if groups is None and subset and all(case.id in _train_ids for case in subset):
+                      _train_keys: frozenset[str] = train_keys, _held: RecordGroups = held_groups,
+                      _held_keys: frozenset[str] = held_keys) -> RunReport:
+            groups = _groups.get(suite_digest(subset))
+            if groups is None and subset and all(suite_digest((case,)) in _held_keys for case in subset):
+                groups = _held
+            if groups is None and subset and all(suite_digest((case,)) in _train_keys for case in subset):
                 # Wide search screens candidates on part of the training
                 # set; each case still runs over its own world's records.
                 groups = _train
@@ -767,9 +857,13 @@ def campaign(
         improve_dir = stage / "improve"
         values = state.values_for(train, train_groups)
         holdout_values = state.values_for(held, held_groups)
+        stage_options = dict(improve_options)
+        if qualification is not None:
+            confidence = 1.0 - (1.0 - qualification.confidence) / (number * (number + 1))
+            stage_options["qualification"] = qualification.model_copy(update={"confidence": confidence})
         report = improve(current, train, run=run_stage, agent_for=agent_for, exchange=exchange, out=improve_dir,
                          rater=rater, holdout=held, pack_roots=state.roots(number - 1), values=values,
-                         holdout_values=holdout_values, **improve_options)
+                         holdout_values=holdout_values, **stage_options)
         before = current
         after = state.resolve(report.champion, number)
         status, why = _status(report, wait)
@@ -790,6 +884,9 @@ def campaign(
         used.update(seeds.all())
         sealed.update(map(case_key, held))
         trained.update(map(case_key, train))
+        if qualification is not None:
+            trained_evidence.extend(train)
+            sealed_evidence.extend(held)
         spent += len(train) + len(held)
         current = after
         previous = state.outcome(number, status, after, train, train_groups, final, report)

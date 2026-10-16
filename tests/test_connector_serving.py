@@ -263,7 +263,12 @@ def test_selected_corpus_serves_through_cli_and_fixture_failures(tmp_path: Any) 
     result = CliRunner().invoke(app, ["enterprise-evals", "serve", str(tmp_path), "--check"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["queries"] == 1
-    runtime = ConnectorEvaluationService.from_corpus(corpus)
+    stored = CliRunner().invoke(app, ["enterprise-evals", "serve", str(tmp_path), "--check",
+                                      "--run-store", str(tmp_path / "state" / "runs.jsonl")])
+    assert stored.exit_code == 0, stored.output
+    refused = CliRunner().invoke(app, ["enterprise-evals", "serve", str(tmp_path), "--check", "--run-store", str(tmp_path)])
+    assert refused.exit_code != 0 and "name a file" in refused.output, refused.output
+    runtime =ConnectorEvaluationService.from_corpus(corpus)
     for query in corpus.queries:
         assert runtime.begin("agent", query.id)["query_id"] == query.id
 

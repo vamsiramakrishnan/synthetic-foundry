@@ -624,9 +624,15 @@ def divisional_performance_ir(world, intent: ArtifactIntent, minter: Minter) -> 
         # states nothing is `validate.empty_cell_cites_a_fact`, and a treasury
         # desk genuinely holds no deposits.
         fact_id = fact.id if fact else None
-        if children:
+        # A treasury desk has no deposits; an operations centre has FTE but no
+        # lending. Sum only the children that actually report this measure.
+        # A blank is absence of a measurement, not a zero with an invented unit.
+        measured_children = [child for child in children or []
+                             if (child_fact := stated.get((kind, child))) is not None
+                             and child_fact.value is not None]
+        if measured_children and value is not None:
             return Cell(value=value, fact_id=fact_id,
-                        formula=FormulaKind.SUM, operands=children)
+                        formula=FormulaKind.SUM, operands=measured_children)
         return Cell(value=value, fact_id=fact_id)
 
     def measure_row(key: str, label: str, subject: str, *,

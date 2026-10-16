@@ -171,19 +171,66 @@ def test_provenance_requires_the_expected_facts_and_successful_evidence_reads() 
     assert score_trace(query("permission_denied"), ()).failure_handling == 1.0
 
 
-def test_a_source_the_world_cannot_ground_trips_materialization_instead_of_minting_evidence() -> None:
-    """A filler record used to meet the count here and fail at validate as
-    `carries no fact`. The planner now refuses such a source, so a query that
-    still reaches materialization over one is a defect, and the refusal names
-    the query and the source."""
+def _unanswerable() -> PlannedEnterpriseQuery:
+    """A query over a source retail-close never projects, raised by hand
+    because the planner refuses to plan one."""
     planned = query()
     source = SourceRequirement(connector="servicenow", entity="change_request")
-    planned = planned.model_copy(update={"generation": planned.generation.model_copy(update={"source_requirements": (source,)})})
+    return planned.model_copy(update={"generation": planned.generation.model_copy(update={"source_requirements": (source,)})})
+
+
+def test_a_source_the_world_cannot_ground_is_refused_by_default() -> None:
+    """Strict sources are the default: a case the corpus cannot answer is
+    refused with the shortfall and the query named, not built."""
+    planned = _unanswerable()
     world = World.load(Path("examples/retail-close"))
-    with pytest.raises(ValueError, match=rf"ungroundable_source: query {planned.id} needs 1 servicenow:change_request record\(s\) for evidence and this world has 0 \(0 carrying evidence\)"):
+    with pytest.raises(ValueError, match=rf"missing_source: servicenow:change_request has 0 record\(s\) and a planned row needs 1 \(query {planned.id}\)"):
         materialize_corpus(world, (planned,))
     with pytest.raises(ValueError, match="missing_source"):
         materialize_corpus(world, (planned,), strict_sources=True)
+
+
+def test_the_permissive_opt_out_still_trips_instead_of_minting_evidence() -> None:
+    """`strict_sources=False` is passed explicitly: this pins the permissive
+    contract. A filler record used to meet the count there and fail at
+    validate as `carries no fact`; the opt-out now reaches the tripwire,
+    which names the query and the source instead of minting evidence."""
+    planned = _unanswerable()
+    world = World.load(Path("examples/retail-close"))
+    with pytest.raises(ValueError, match=rf"ungroundable_source: query {planned.id} needs 1 servicenow:change_request record\(s\) for evidence and this world has 0 \(0 carrying evidence\)"):
+        materialize_corpus(world, (planned,), strict_sources=False)
+    # The opt-out relaxes nothing for an answerable case: same corpus either way.
+    answerable = query()
+    assert (materialize_corpus(world, (answerable,), strict_sources=False)
+            == materialize_corpus(world, (answerable,)))
+
+
+def test_the_harness_defaults_to_strict_sources_and_keeps_the_opt_out() -> None:
+    from dataclasses import replace
+
+    from worldloom.enterprise_sdk import EnterpriseEvalHarness
+
+    harness = EnterpriseEvalHarness.from_world(World.load(Path("examples/retail-close")))
+    assert harness.strict_sources is True
+    assert replace(harness, strict_sources=False).require_sources().strict_sources is True
+
+
+def test_cli_build_refuses_an_unanswerable_case_with_a_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI build reaches the strict default too, and refuses by code
+    instead of a traceback. The planner never plans such a row, so it is
+    substituted for the planner's output."""
+    import worldloom.enterprise_queries as enterprise_queries
+
+    planned = _unanswerable()
+    monkeypatch.setattr(enterprise_queries, "plan_queries", lambda *_args, **_kwargs: ((planned,), None))
+    monkeypatch.setenv("WORLDLOOM_OUTPUT", "json")
+    result = CliRunner().invoke(app, ["enterprise-evals", "build", "examples/retail-close", str(tmp_path / "out")])
+    assert result.exit_code == 2, result.output
+    envelope = json.loads(result.stderr.strip().splitlines()[-1])
+    assert envelope["refusal"] == "sources_insufficient"
+    assert "missing_source: servicenow:change_request" in envelope["message"]
+    assert planned.id in envelope["message"]
+    assert not (tmp_path / "out").exists()
 
 
 def test_simulate_reports_each_cause_and_continues_after_harness_error(tmp_path: Path) -> None:

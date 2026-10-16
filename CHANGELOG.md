@@ -7,6 +7,328 @@ reproducibility even when no API moved.
 
 ## 0.1.0
 
+### Consistent temporal and authority retrieval grading
+
+**Generation**
+
+- Retail incident final-status temporal cases (EVAL-0023 on seed 8128,
+  March 2026) are cut at the first planned report's publication, computed by
+  the manifest's `documents.written_at`, rather than at the finalisation
+  event. This deliberately changes their cut-off and reasoning in generated
+  `evals.jsonl`; ids, expected facts, questions, document bytes and wire shapes
+  stay unchanged. Existing stored corpora are not rewritten; regenerate them
+  to obtain the recut case.
+
+**Evaluation**
+
+- `benchmark run` now uses `evaluate/score.py:grade`, as built-in retrieval
+  and `evaluate --predictions` do. A temporal top hit must carry every expected
+  fact and be written by the cut-off. An authority top hit must carry an
+  expected fact and match the strongest carrier's authority in the full pool.
+  Later or stronger second hits no longer rescue a failing top hit. The child
+  request/response and scorecard JSON shapes are unchanged.
+- An executable's unoffered passage ids now refuse as `exec_unparseable`,
+  instead of being silently dropped and potentially promoting a later hit.
+  Returned ids retain their order and duplicates collapse to the first entry.
+- Temporal reachability requires a single timely unit carrying every expected
+  fact. Old pre-publication cases fail with `reachable=False` in the SDK and
+  are reported as unanswerable in the prose scorecard, remaining in the score
+  denominator. Failed timely hits now explain that their expected facts are
+  missing.
+- Differential tests pin verdicts and reachability across built-in retrieval,
+  passage predictions, artifact predictions and executable grading, plus CLI
+  runs at k=1 and k=5. The perfect-ranking tests require every case to pass;
+  there is no EVAL-0023 exception.
+
+### A guided CLI, bring-your-own retrieval scoring and identical bytes on Windows
+
+**Generation**
+
+- XLSX packages rendered on Windows now match Linux byte for byte. openpyxl
+  stages worksheets in temp files and `ZipFile.write` copied their host mode
+  (`0o666` on Windows, `0o600` on POSIX) into each entry; `ooxml.normalise`
+  pins it. Linux and macOS bytes are unchanged. Windows XLSX bytes, and the
+  native task ids derived from their checksums, change to the Linux values.
+
+**Command line**
+
+- `worldloom --help` groups commands into workflow panels (start, build,
+  inspect, author, evaluate, integrate). `--version` and shell completion
+  (`--install-completion`) are available on the root command.
+- `worldloom guide [GOAL] [--json]` prints the ordered commands for a goal
+  (`rag`, `documents`, `agent`, `native`, `improve`, `company`, `narrate`,
+  `python`) and what each evaluation command is for. A test parses every
+  printed command against the CLI.
+- Refusals print a `fix:` line with the next command, from the site or from
+  defaults for 21 codes; the JSON envelope carries the same fix. Four codes
+  that crashed instead of refusing are registered. The bundled-corpus hint
+  lists only directories that load as corpora.
+- `worldloom doctor` checks the agent setup: `worldloom` on PATH is this
+  installation, the `mcp` extra, every `.mcp.json` server command, and the
+  optional `embeddings` and `visuals` extras, then names the next command.
+
+**Evaluation**
+
+- `worldloom evals passages` exports the passages the baselines rank, and
+  `worldloom evaluate --predictions FILE` grades an external system's ranked
+  passage or artifact ids with the baselines' scorer, k and scorecard.
+- `worldloom evals export --format ragas|promptfoo` writes the cases for those
+  harnesses; the default output is unchanged.
+
+**Development**
+
+- The suite runs under pytest-xdist (`pytest -q -n auto`) locally and in CI,
+  about 3.9x faster on four cores. Tests that wrote to the shared
+  `~/.worldloom` cache or outside pytest's temp directory, and timing checks
+  that measured wall clock under contention, were fixed.
+- README opens with a "What are you testing?" table; feature notes moved to
+  "More capabilities".
+
+### Strict sources, a mutation-tested grader and a failure curriculum
+
+**Generation**
+
+- Enterprise materialization defaults to `strict_sources=True`: a case the
+  source corpus cannot ground is refused (`missing_source`), and
+  `enterprise-evals build` reports it as the `sources_insufficient` refusal
+  rather than a traceback. Corpora that built before build the same bytes.
+- Opt-in `--reconcile auto` on `corpus-scale build` (and
+  `corpus-scale reconcile`) derives revenue, gross-profit and headcount
+  `FactReconciliation`s where unit, period and stock/flow semantics match, and
+  reports each pair it did not bind with the reason.
+- Opt-in source policies (`source_policy=True`) grade ambiguous joins as a
+  clarifying question naming every candidate and stale sources as a citation
+  of the authoritative replacement (`outcomes.clarification_missing`,
+  `outcomes.stale_source_used`, `outcomes.authoritative_source_missing`).
+  Existing case sets keep their bytes.
+
+**Evaluation and harness integration**
+
+- `tests/test_grader_mutations.py` replays 21 mutation classes over gold runs
+  and requires the exact finding key for each. It caught a legacy-row
+  attribution bug (a readback taken for a skipped read), now fixed;
+  `plan.order` on generated rows remains an explicit strict xfail.
+- `tools/measure_enterprise_execution.py --paired` measures legacy and grammar
+  arms over one identity set with a shared pairing key and retained refusals.
+- `improve --curriculum failures` adds training cases drawn from the previous
+  champion's failure clusters each round, never overlapping held-out cases by
+  id, content, source records or gold DAG. Every finding key is mapped or
+  declared unmappable, and a test fails on an unregistered key.
+- `worldloom enterprise-evals serve --run-store PATH` journals runs to an
+  fsynced append-only JSONL file and replays open runs after a restart.
+- `worldloom smoke` runs build, narrate, render, validate, evaluate,
+  enterprise case generation and a reference `evalrun` end to end; CI runs it
+  first. `tools/scoreboard.py` writes a digest-pinned release scoreboard, which
+  the release workflow uploads.
+- Cloud sessions install the package at start so the `worldloom` MCP server
+  connects; mypy no longer fails on the optional `google-genai` import.
+
+### Controlled harness queries, native realism tactics and visual proposals
+
+**Generation**
+
+- Optional `NativeScenarioDemand.realism` records population and presentation
+  tactics in the existing replay recipe. Profiles add 3–64 canonical lines,
+  Zipf/lognormal budget allocation, bounded exception prevalence, time-valid
+  working assessments and configurable evidence presentation. Existing detail
+  allocation and Simulator arithmetic own the results. Omitting the profile
+  preserves the earlier recipe and generated facts.
+- Native realism measurements distinguish realised simulation/IR quantities
+  from physical pagination or perceived realism. Presentation changes preserve
+  canonical facts; source variants retain their case ancestry.
+- `HarnessDagConfig` compiles supplied, evidence-bearing connector records into
+  search/read/reconcile/create-or-update/readback cases. Source cohorts,
+  mutation variants and insufficient-result conditions are explicit. Missing
+  evidence and impossible budgets refuse or produce named omissions.
+- `project_native_sources` connects byte-qualified native files to that DAG
+  path through an explicit extracted-content projection. Exact measure/unit
+  selection, authority, source hashes and locators are retained; replicas are
+  deduplicated and overlapping aggregates refused. This is not a claim that
+  the target itself downloaded or parsed the original binary file.
+- Optional Nano Banana generation binds infographic requests to canonical fact
+  snapshots. A caller-owned Gemini Interactions client proposes PNG bytes;
+  bounded decoding and content-addressed receipts permit exact offline replay.
+  Images remain unqualified visual evidence. Native attachments preserve
+  existing evidence and require task re-planning against their new digest.
+
+**Evaluation and harness integration**
+
+- Controlled retrieval evaluates typed predicates over the real ACL-visible
+  corpus, with declared empty/partial/stale responses and transient faults.
+  It bypasses upstream ranking. Unsupported native query syntax exposes the
+  typed alternative; ordinary connector query execution is unchanged.
+- Evaluator-owned receipts bind queries to delivered records, payload digests,
+  pagination and semantic progress. Failed/oversized deliveries cannot satisfy
+  access; their attempt history survives rollback. Unchanged insufficient
+  queries cannot satisfy recovery. Correct first queries need no forced retry.
+- The existing three-axis evaluator admits legitimate recovery attempts and
+  grades query progress separately from computed values, mutations and readback.
+  Bounded exact aggregation consumes actual source results. Public-only
+  reference workers exercise direct and refining strategies.
+- Grader identity advances to version 4. Create outcomes now check the
+  expected persisted fields; explicitly independent mapped reads may arrive
+  in either order without relaxing source attribution or result bindings.
+- Native command harnesses preserve the selected executable entry path when
+  staging inputs. Resolving a virtual environment's Python symlink previously
+  launched its base interpreter and silently lost installed dependencies.
+- `enterprise-evals harness-dags` writes standard evalrun case sets. `visuals
+  plan` and `visuals generate` share the visual SDK and support offline replay.
+  Model API tests use injected clients; no live image quality or live-harness
+  improvement is claimed by these implementation tests.
+
+### Native scenarios, required coverage and measured training curricula
+
+**Generation**
+
+- Registered `NativeScenarioEpisodes` adds bounded supplier reconciliation,
+  customer settlement and inventory replenishment cases to a replayable company.
+  Case-specific canonical facts, events, typed tables, formulas and authored
+  process variants render as business DOCX, PPTX and XLSX files. The parameters
+  are explicit synthetic assumptions, not customer-calibrated distributions.
+- Scenario partitioning selects the declared artifact scope and interleaves
+  process families before allocating training and held-out evidence. Shared
+  facts, formula dependencies and format replicas remain one component.
+  Source scope and allocation are pinned in exact resume configuration.
+- Native discovery adds numeric reads across formats, source-grounded ratios
+  and authored-sum reconciliation. Explicit requirement cells receive bounded
+  task-selection priority. This changes generated workload identities and
+  ordering; unavailable capabilities remain named findings.
+- Benchmark packages use `worldloom.native-benchmark/v2`: canonical World,
+  source manifests, source digest and split role participate in identity.
+  Root-level native exchanges, `export_legacy`, the CLI layout flag and CLI
+  model-import shim are removed. Rebuild old packages; the public task and
+  target exchange protocols remain v1.
+- Removed `worldloom.query_planning` after proving its realized planning and
+  fixture behavior through the canonical enterprise SDK. New-schema corpora
+  must be rebuilt. Nominal `checksum`, `map_reduce` and `chart` labels are not
+  carried forward as executed capabilities; supported topology runs use the
+  existing executable DAG catalogue.
+
+**Evaluation and harness integration**
+
+- `BenchmarkRequirements` declares named operation, format, calculation, scope
+  and verified source-dimension cells. Assessment and improvement enforce
+  independent support in training, the held-out pool and every fresh tranche.
+  Correlated tasks and format copies cannot satisfy another unit; missing
+  support refuses improvement before target or proposer calls.
+- Authored native workflows qualify and grade bounded ordered steps, propagate
+  actual graded update bytes to downstream read/analyze tasks, block descendants
+  after a failed parent, and regrade receipts on resume. They observe runner
+  calls and staged bytes, not internal target trajectories or autonomous plans.
+  Conditional branches, iteration, created-file inputs and derived write
+  contracts remain unsupported; connector workflows remain complementary.
+- Training-only curriculum diagnosis reloads committed receipts and independently
+  regrades their submissions. Versioned proposals carry source, query and
+  evaluation demands with bounded diagnostic codes and explicit ablations.
+  Evolution rederives the proposal before creating new canonical training
+  evidence. New policy claims require a fresh held-out pool and sealed study.
+- The public SDK and `native-evals` expose `scenarios`, `workflow-qualify`,
+  `workflow-run`, `diagnose` and `evolve`; `inspect` and `improve` accept explicit
+  requirements, and `build` can declare a split role. Scripted and reference
+  execution tests establish implementation behavior, not live-model gains.
+
+### A shared native benchmark workflow for SDKs and harnesses
+
+**Generation**
+
+- Formula rounding is explicit source semantics. Optional
+  `Cell.formula_decimal_places` and authored derivation precision use decimal
+  `ROUND_HALF_UP`. Retail margin facts and P&L ratios keep their two-decimal
+  business meaning; XLSX and native formulas reproduce it with `ROUND` in
+  percentage units. Halfway values can differ from earlier binary rounding.
+  Cells without declared precision retain their serialized shape.
+- Banking network totals sum only children that carry the requested numeric
+  measure. Missing deposits or turnover remain absent rather than becoming
+  invented zero-valued formula leaves. Valid financial tables can now enter
+  native corpora instead of being excluded for inconsistent computations.
+- Native partition plans opt into canonical reporting-period context in section
+  headings and table titles. Repeated monthly records become discoverable from
+  the actual files. The option defaults off for existing native plans; intake
+  accepts contextual labels only when they match the served canonical evidence.
+
+**Evaluation and harness integration**
+
+- `worldloom.benchmarks` is the public seam for building, exporting, loading,
+  qualifying, assessing, running and improving native benchmarks. Split packages
+  separate public requests/files from private source/oracle material, validate
+  exact inventories and reconstruct task contracts from canonical source.
+- Native build, partition, inspection, protocol, run and improvement commands
+  call that seam. The earlier optional split layout and source-free exchanges
+  are superseded by the mandatory source-bound v2 package described above.
+- Command and callable harness adapters receive task-scoped public inputs.
+  Execution pins implementation, input, contract and grading identities;
+  persisted submissions are independently regraded on exact resume. Targets
+  receive actual revised policy bodies during improvement. Local subprocesses
+  remain trusted processes, not an OS sandbox.
+- Assessments distinguish executable tasks, requested coverage and promotion
+  support. They count transitive evidence components and audit train/held-out
+  overlap, fresh-tranche budgets and repeat requirements using existing gates.
+  More paraphrases and format copies do not increase independent support.
+- Source-family partitioning constructs disjoint train/held-out packages before
+  rendering. Shared facts, derivation/supersession ancestry and table dependencies
+  stay together. Final byte-bound workloads must prove the requested family
+  support; caps, copies and cross-artifact tasks cannot inflate independence.
+  Whole components can be grouped into richer local files; original component
+  counts and allocation remain explicit. Prose synthesis can pair the same
+  measure and subject across distinct periods without joining unrelated work.
+- Bounded discovery samples source evidence and formats fairly before rotating
+  task lanes. Small files remain eligible beside large workbooks; format copies
+  share a scheduling lane. Canonical lineage still decides independence.
+- Native runners require canonical source snapshots to independently verify
+  expanded ancestry and pin the source graph. Caller-provided lineage claims
+  cannot certify split isolation.
+- Planning and native improvement intake share source-evidence guards. Hidden
+  source sections, duplicate canonical identities and ungrounded changed prose
+  cannot bypass source checks by presenting previously rendered bytes.
+- Planning and native case compilation reuse bounded source snapshots within
+  each invocation, keyed by actual bytes and format. They retain extracted
+  immutable units rather than parser objects; source checks, qualification and
+  fresh submitted-output inspection continue to run.
+
+### Physical enterprise corpora and independent promotion evidence
+
+**Generation**
+
+- Eval-first reference proofs no longer manufacture oracle facts in read
+  outputs. Bound capability assertions now scope evidence to the source's
+  connector and entity; unsupported connectorless execution requires an
+  explicit executor. Verification checks observed readback of dependent writes.
+  Searches follow every connector page for each selector, so required evidence
+  beyond the first page can qualify. Older cases that relied on fabricated
+  evidence no longer qualify.
+- Opt-in corpus scale plans materialise bounded relational shards, typed XLSX
+  and grounded large native files. Declared integer table totals can reconcile
+  exactly to canonical company facts. Source replay checks physical projections,
+  native bytes and measured counts, including locale and presentation bindings.
+- New scale plans opt into business native files with real source tables,
+  typed measures, formula dependencies and business labels. Canonical IDs stay
+  private. Explicit business native plans refuse hidden source prose and
+  tables, including presenter notes, as automatic selection already does.
+  Existing native plans retain their legacy serialization and bytes.
+
+**Evaluation**
+
+- Optional qualification policies reserve fresh, disjoint evidence-component
+  tranches before target execution. Repeated paired comparisons use independent
+  units and a finite confidence budget. Interrupted qualification resumes only
+  under the same sealed policy, candidate, source and grader pins.
+- `corpus-scale assess|build|verify` and `evalrun audit-split` expose the shared
+  SDK checks from the CLI. `evalrun improve --qualification-policy` applies
+  them to the existing policy and skill improvement loop.
+- `native-evals build|qualify|grade` exposes reference-qualified discovery tasks
+  over actual DOCX, PPTX and XLSX bytes. Prompts hide source locators; coverage
+  reports ambiguity and missing operations. Cross-file analysis, grounded
+  updates and creates reuse the independent native byte grader. Studio accepts
+  the same planner through an opt-in discovery request.
+- A native evaluation bridge feeds independently graded byte outcomes into
+  the existing policy improvement runner, with canonical source lineage,
+  native grader/parser pins and fresh repeat execution IDs. Plan and trajectory
+  stay unobserved. Optional runner hooks supply experiment context and domain
+  grader identity while preserving existing connector runners.
+- A reproducible construction pilot records workload, physical row and relation
+  counts, file metrics and independent source reconstruction. It does not claim
+  a live target harness improved.
+
 The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.

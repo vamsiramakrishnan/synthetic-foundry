@@ -68,7 +68,8 @@ has not selected.
 
 Export the program, recipe, records, manifest, search report and applicable
 receipts. Use an industry-specific operational profile for enterprise queries.
-Use strict sources and retain the operational ledger. Never relabel a generated
+Keep strict sources (the default; do not pass `strict_sources=False`) and
+retain the operational ledger. Never relabel a generated
 row ID as a World fact ID or claim macro reconciliation without checking it.
 
 Report the rows generated, actual invariants exercised, occupied behavior cells,

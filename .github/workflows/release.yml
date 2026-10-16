@@ -38,6 +38,31 @@ jobs:
       - name: The golden episode validates
         run: worldloom validate retail-close
 
+  # The release's numbers: the reference and lazy agents over a digest-pinned
+  # enterprise case set, and the lexical retrieval baselines over a fixed-seed
+  # corpus. Uploaded, never committed: a release workflow that pushes to the
+  # branch it was tagged from would make the tag point at a tree that is no
+  # longer the tree's head. Diff the artifact against the checked-in
+  # docs/measurements/release-scoreboard.json to see what this release moved.
+  # Not a dependency of publishing: a moved case-set pin fails this job loudly
+  # without holding a release hostage to a measurement.
+  scoreboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e .
+      - name: Regenerate the scoreboard
+        run: python tools/scoreboard.py --revision "$GITHUB_SHA" --out-dir scoreboard
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-scoreboard
+          path: scoreboard/
+
   package:
     runs-on: ubuntu-latest
     steps:

@@ -39,7 +39,21 @@ To hand the evaluation set to an external system instead of scoring the baseline
 
 ```bash
 worldloom evals export <CORPUS> -o evals.jsonl
+worldloom evals passages <CORPUS> -o passages.jsonl
 ```
+
+`evals passages` writes the passages the built-in retrievers index, one JSONL
+line each, so the external system indexes the units the answer key is keyed by.
+Its rankings come back as one `{"id", "passage_ids"}` line per case and are
+graded by the same code as the built-in retrievers:
+
+```bash
+worldloom evaluate <CORPUS> --predictions predictions.jsonl
+```
+
+For a ragas or promptfoo harness, `worldloom evals export <CORPUS> --format ragas`
+or `--format promptfoo` writes the same cases in that tool's shape; see
+`references/evaluating.md` for what each promptfoo assertion checks.
 
 `worldloom stats` is `evaluate`'s sibling for a different question. It does not
 ask "is this hard to retrieve from" but "what does it actually contain": document

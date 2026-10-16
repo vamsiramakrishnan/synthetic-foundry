@@ -24,9 +24,9 @@ debugging its own adapter gets exactly one artifact from a dead subprocess,
 and that artifact is stderr.
 
 Scoring in :func:`benchmark_run` is **id-based only, never text similarity**.
-The child answers with passage IDs, and a case passes when those passages
-carry the expected fact IDs and the abstention flag matches the case's
-expectation. Grading free answer text would smuggle a judge — a model — into
+The child answers with ranked passage IDs, graded by the same temporal,
+authority, coverage and abstention rules as ``evaluate``. Grading free answer
+text would smuggle a judge — a model — into
 a system whose whole point is mechanical ground truth; that is a design
 boundary, not an implementation gap, and code wanting to cross it should be
 refused in review.
@@ -397,20 +397,20 @@ def benchmark_run(
     Per case the child receives ``{"question": …, "passages": [{"passage_id",
     "text"}, …]}`` — the top-*k* from the same BM25 index ``worldloom search``
     ranks with — and must print ``{"answer_passage_ids": […], "abstain":
-    bool}``. A case passes when the returned passages between them carry the
-    expected fact IDs (`score._covers`, the exact coverage grading
-    ``evaluate`` uses) and the abstention flag matches the case's
-    expectation. Answer *text* is never read, let alone graded — see the
+    bool}``, with IDs best first. ``score.grade`` applies the same per-family
+    rules as ``evaluate`` and ``evaluate --predictions``: temporal and
+    authority cases grade the returned top hit, coverage cases the whole
+    ranking. Answer *text* is never read, let alone graded — see the
     module docstring for why that boundary exists.
 
     Returned ids are resolved against the passages this case was offered.
-    An id from outside that set carries nothing: the payload is the child's
-    whole world for the case, and crediting a passage it was never shown
-    would grade retrieval the child did not do.
+    An id from outside that set refuses the reply: the payload is the child's
+    whole world for the case. Dropping an unoffered first ID would promote
+    the second hit and bypass the temporal and authority top-hit rules.
     """
     from .evaluate.bm25 import Bm25
     from .evaluate.index import passages as index_passages
-    from .evaluate.score import Outcome, Scorecard, _covers
+    from .evaluate.score import Retrieval, grade
 
     pool = index_passages(world)
     if not pool:
@@ -423,7 +423,7 @@ def benchmark_run(
     if limit is not None:
         cases = cases[:limit]
 
-    card = Scorecard(k=k, retriever="exec")
+    retrievals = []
     for case in cases:
         ranked = index.rank(case.question, limit=k)
         offered = [pool[position] for position, _ in ranked]
@@ -438,30 +438,26 @@ def benchmark_run(
         answer_ids, abstain = _answer(reply, case.id, command)
 
         offered_by_id = {passage.id: passage for passage in offered}
-        returned = [
+        unoffered = sorted(set(answer_ids) - set(offered_by_id))
+        if unoffered:
+            raise ExecUnparseable(
+                f"case {case.id}: the child returned passage id(s) not offered: {unoffered}",
+                stderr_tail=reply.stderr_tail, command=command, case=case.id,
+                unoffered_ids=unoffered,
+            )
+        returned = tuple(
             offered_by_id[identifier]
-            for identifier in answer_ids
-            if identifier in offered_by_id
-        ]
+            for identifier in dict.fromkeys(answer_ids)
+        )
 
-        if case.expects_abstention:
-            # Retrieving something confident is the failure mode this family
-            # exists to catch, so the abstain flag *is* the answer.
-            passed = abstain
-            detail = (
-                "abstained, as expected" if abstain
-                else f"answered with {len(answer_ids)} passage(s) where abstention was expected"
-            )
-        elif abstain:
-            passed = False
-            detail = "abstained, but the corpus holds the answer"
-        else:
-            passed = _covers(returned, case)
-            missing = sorted(
-                set(case.expected_fact_ids)
-                - {fact for passage in returned for fact in passage.fact_ids}
-            )
-            detail = "covered" if passed else f"missed {missing[:3]}"
+        detail = (
+            "abstained, as expected" if abstain
+            else f"answered with {len(answer_ids)} passage(s) where abstention was expected"
+        )
+        retrievals.append(Retrieval(returned, abstain, detail))
 
-        card.outcomes.append(Outcome(case.id, case.evaluation_type, passed, detail))
-    return card
+    # Coverage alone let a later temporal answer, or a lower-authority hit
+    # followed by the record, pass here while evaluate failed the same IDs.
+    # Keep the subprocess seam responsible only for delivery and resolution;
+    # every family is graded against the full corpus by the shared scorer.
+    return grade(pool, cases, retrievals, k=k, retriever="exec")

@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 
 import pytest
+import shared_builds
 
 import worldloom
 from worldloom import factkinds, industry
@@ -295,10 +296,10 @@ def test_a_country_with_no_locale_still_says_so_though_none_is_left(tmp_path: Pa
     for name in ("telecom", "retail", "banking", "technology_saas"):
         assert not any(
             "a locale for" in finding
-            for finding in industry.programme(name).summary.findings
+            for finding in shared_builds.programme_summary(name).findings
         ), name
 
-    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    spec = shared_builds.industry_project("telecom", "Ardent Telecom", lobs=("billing",))
     studio = Studio(tmp_path)
     project = studio.store.create(spec)
     findings = studio.describe(project["id"], project["revision"])["findings"]
@@ -851,7 +852,7 @@ def test_a_bank_project_seats_every_line_and_the_pack_pool_is_recut(tmp_path: Pa
     the locale as each line attaches and the bank keeps its own role table."""
     from worldloom.studio.service import Studio
 
-    spec = industry.project("banking", "Harbour Bank")
+    spec = shared_builds.industry_project("banking", "Harbour Bank")
     assert len(spec.lobs) > 20
     world, _ = Studio(tmp_path).snapshot(spec)
     assert world.validate().ok
@@ -942,7 +943,7 @@ def test_a_project_meets_its_own_evidence_requirements_from_the_world(tmp_path: 
 
     # Audit reads ServiceNow and compliance reads Salesforce: their records
     # are the catalogue's, restated on the emulator the line reads.
-    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing", "audit", "compliance"))
+    spec = shared_builds.industry_project("telecom", "Ardent Telecom", lobs=("billing", "audit", "compliance"))
     # Only the units that sell are revenue divisions.
     assert [unit.key for unit in spec.divisions] == ["consumer_mobile", "enterprise"]
     assert abs(sum(unit.share for unit in spec.divisions) - 1.0) < 0.01
@@ -1055,7 +1056,7 @@ def test_an_engine_less_industry_seats_its_revenue_function_in_the_commercial_se
     assert buyer["title"] == "Customer Service Manager, {unit}" and buyer["manager_suffix"] == "_md"
     assert buyer["kinds"] == ["customer_segment"]
     assert {row["key"] for row in table["table"]} == {role.key for role in __import__("worldloom.roles", fromlist=["x"])._shipped("retail")}
-    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    spec = shared_builds.industry_project("telecom", "Ardent Telecom", lobs=("billing",))
     world, _ = Studio(tmp_path).snapshot(spec)
     titles = [person.title for person in world.people]
     assert "Customer Service Director" in titles and "Customer Service Manager, Consumer Mobile" in titles

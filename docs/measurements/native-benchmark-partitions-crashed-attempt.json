@@ -1,0 +1,23 @@
+{
+  "diagnostics": "Periodic faulthandler stack dumps were active. The last observed calls were in DOCX/PPTX/XLSX parsing. Crash cause is unestablished; this is not a completed construction measurement.",
+  "exit_code": 139,
+  "live_target_trials": 0,
+  "native_formats": [
+    "docx",
+    "pptx",
+    "xlsx"
+  ],
+  "operations": [
+    "read",
+    "analyze",
+    "update",
+    "create"
+  ],
+  "published_packages": 0,
+  "requested_heldout_families": 15,
+  "requested_training_families": 3,
+  "schema": "worldloom.native-benchmark-measurement-attempt/v1",
+  "stage": "heldout_native_reference_qualification",
+  "status": "process_terminated_before_publication",
+  "task_budget_per_package": 256
+}

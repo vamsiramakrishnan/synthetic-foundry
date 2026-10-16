@@ -1,0 +1,11 @@
+{
+  "batch_id": "native-rebuild-pilot",
+  "episodes": 18,
+  "processes": [
+    "supplier_reconciliation",
+    "customer_settlement",
+    "inventory_replenishment"
+  ],
+  "rows_per_episode": 3,
+  "start_period": "2026-01"
+}

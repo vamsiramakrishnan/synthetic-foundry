@@ -1,0 +1,215 @@
+{
+  "configuration": {
+    "heldout_families": 15,
+    "qualification_policy": {
+      "confidence": 0.95,
+      "min_repeats": 2,
+      "min_units": 5,
+      "trials": 3,
+      "unit_dimension": null
+    },
+    "repeats": 2,
+    "training_families": 3,
+    "workload_plan": {
+      "discovery_scope": "artifact",
+      "formats": [
+        "docx",
+        "pptx",
+        "xlsx"
+      ],
+      "max_tasks": 256,
+      "objective": "Review the company reporting evidence, reconcile the reported values, and preserve source content in requested updates.",
+      "operations": [
+        "read",
+        "analyze",
+        "update",
+        "create"
+      ],
+      "use_case_id": "monthly-enterprise-close"
+    }
+  },
+  "construction": {
+    "elapsed_seconds": 40.736,
+    "passed": false,
+    "refusal": "native workload has no executable tasks; inspect source scope and discovery coverage"
+  },
+  "diagnosis": {
+    "families": [
+      {
+        "components": [
+          "9be3027fbf5358e6073521a631e838b2",
+          "a2520c3df2f21cc2bfa180010a9fa55a"
+        ],
+        "contents": [
+          {
+            "artifact": "ART-0008",
+            "body": null,
+            "heading": "Corporate Cost Base",
+            "section": 4,
+            "table": true,
+            "title": "Northstar Retail \u2014 Month-End Model"
+          },
+          {
+            "artifact": "ART-0137",
+            "body": null,
+            "heading": "Corporate Cost Base",
+            "section": 4,
+            "table": true,
+            "title": "Northstar Retail \u2014 Month-End Model"
+          }
+        ],
+        "id": "0556ff40e247bd6af916aded5c247295"
+      },
+      {
+        "components": [
+          "982830227d8a0fc5b611da16a9b8b142",
+          "a3c9162486f77394ca9178ff5ca85619"
+        ],
+        "contents": [
+          {
+            "artifact": "ART-0064",
+            "body": "The close was committed for {{fact:FACT-3613}}.",
+            "heading": "Commitment",
+            "section": 0,
+            "table": false,
+            "title": "Close Calendar"
+          },
+          {
+            "artifact": "ART-0076",
+            "body": "The close was committed for {{fact:FACT-4801}}.",
+            "heading": "Commitment",
+            "section": 0,
+            "table": false,
+            "title": "Close Calendar"
+          }
+        ],
+        "id": "1e6211c6d497115e494350b00bf3135f"
+      },
+      {
+        "components": [
+          "b2a4a8e65d32b736f97c6441170008d5",
+          "cbd30bbcee7c91114d878d707cabaa76"
+        ],
+        "contents": [
+          {
+            "artifact": "ART-0007",
+            "body": "The revised close date was {{fact:FACT-0606}}.",
+            "heading": "Escalation",
+            "section": 1,
+            "table": false,
+            "title": "Close Calendar"
+          },
+          {
+            "artifact": "ART-0148",
+            "body": "The revised close date was {{fact:FACT-10190}}.",
+            "heading": "Escalation",
+            "section": 1,
+            "table": false,
+            "title": "Close Calendar"
+          }
+        ],
+        "id": "1ea055c8704ae2b2683e14eaf6ed7be7"
+      }
+    ],
+    "workload": {
+      "findings_by_code": {
+        "ambiguous_evidence_selector": 12,
+        "ambiguous_table_selector": 18,
+        "operation_unavailable": 4
+      },
+      "tasks": 0
+    }
+  },
+  "limitations": [
+    "Reference qualification proves satisfiability, not external harness performance.",
+    "Promotion readiness establishes experiment prerequisites, not a measured improvement or successful promotion.",
+    "Source is the unchanged prior 18-month pilot; sections rejected by current source gates remain excluded.",
+    "Format replicas and related canonical facts count as one independent evidence family.",
+    "Independence requires each target invocation receive only its declared task input files."
+  ],
+  "live_target_trials": 0,
+  "measurement_status": "Before visible source period context; grouped construction refused before export because repeated business sections had no executable discovery selectors.",
+  "method": "partition-before-render; transitive canonical fact and native formula closure; independent byte qualification; canonical evidence split audit",
+  "partition_inventory": {
+    "available_families": 44,
+    "component_section_count_distribution": {
+      "1": 42,
+      "54": 1,
+      "224": 1
+    },
+    "largest_components": [
+      {
+        "canonical_fact_closure": 9360,
+        "content_units": 224,
+        "id": "be7c3165b7a51e8a64e48dc4d40cedb6",
+        "source_artifacts": 128
+      },
+      {
+        "canonical_fact_closure": 72,
+        "content_units": 54,
+        "id": "fdf2d133e9665770429614b268e10106",
+        "source_artifacts": 54
+      }
+    ],
+    "omitted_families": 0,
+    "retained_content_units": 320,
+    "retained_distinct_fact_closure": 9510,
+    "retained_families": 44
+  },
+  "qualification": {
+    "performed": false,
+    "reason": "No benchmark was exported."
+  },
+  "resume": {
+    "performed": false,
+    "reason": "No benchmark was exported."
+  },
+  "schema": "worldloom.native-benchmark-partition-measurement/v1",
+  "source": {
+    "artifact_irs": 162,
+    "authored_sections": 792,
+    "company": "Northstar Retail",
+    "company_id": "CO-0001",
+    "excluded_sections": 472,
+    "exclusion_codes": {
+      "duplicate_grounded_content": 70,
+      "invalid_native_evidence": 234,
+      "private_native_section": 168
+    },
+    "facts": 11624,
+    "file_count": 10,
+    "periods": [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12",
+      "2027-01",
+      "2027-02",
+      "2027-03",
+      "2027-04",
+      "2027-05",
+      "2027-06"
+    ],
+    "recipe_digest": "7088298e5b502df50da36a9a51ca60f26b510c8a26af3adb526f80b4c4f456b8",
+    "seed": 8128,
+    "selected_sections": 320,
+    "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+    "tree_digest": "c0851147b3676f70f4c1430350d6ebc03388adb03cf704745ec267e97d342e01"
+  },
+  "source_code_digests_captured_after_refusal": {
+    "src/worldloom/benchmarks/core.py": "fc5176f8a20f6f205236515f187c95409c5ab689d13003db491d6d236db82dd2",
+    "src/worldloom/benchmarks/coverage.py": "e8fe416043807fdd184edd9b0711122ee91f4b774626ff77ada72d6a75d7be7d",
+    "src/worldloom/benchmarks/partitions.py": "c31437df103fdb6091284aac0a6c11fbc9a49ceec3e58699235adb6ad8b161c2",
+    "src/worldloom/native_eval_bridge.py": "8d04d9577c9ddfac02327b302b2ec2619a97ca71482d7b716ce2ac3839e949b7",
+    "src/worldloom/native_query_evidence.py": "f6fe3db7996f792adde7da0a2b50db7e81dbaa5dde488d359fa90c579ee0b954",
+    "src/worldloom/native_query_planning.py": "2f0e42ae08d09153fda51776e51bdb9670ab355324c969a45ac10c51841d2418"
+  }
+}

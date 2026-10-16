@@ -119,6 +119,9 @@ loop reruns only the repeats it lost.
 | `--finalists` | `finalists=` | `evalrun.improve.finalists` (1) |
 | `--parents` | `parents=` | `evalrun.improve.parents` (`champion`; `archive` draws from the Pareto frontier) |
 | `--round-budget` | `round_budget=` | `evalrun.improve.round_budget` (0: no limit) |
+| `--curriculum failures` | `improve(curriculum="failures")` | off: the training set stays fixed |
+| `--curriculum-cases` | `improve(curriculum_cases=)` | 8 new training cases a round |
+| `--curriculum-pool` | `improve(curriculum_pool=)` | the cases of CORPUS that `--limit` left out |
 
 **Sizing repeats.** Run the champion two or three times and read
 `worldloom evalrun noise RUN_DIR... [--cases N] [--repeats K]`: it reports the

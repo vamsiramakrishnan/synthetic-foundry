@@ -51,6 +51,21 @@ The trajectory grade counts the points honoured under four laws,
 that requires no question and gets none scores exactly as before. The
 reference agent asks what the row requires, so the ceiling still passes.
 
+**Source defects can be graded under a policy (opt-in).** An enterprise
+corpus can inject an `ambiguous_join` (an indistinguishable second record) or
+a `stale_source` (the bound record rolled back a version). The legacy gold for
+both is still the single write. `cases_from_corpus(corpus, source_policy=True)`
+(`worldloom.evalrun.source_policy.with_source_policies` for an existing case
+list) regrades those cases. The ambiguous case reads both candidates and asks
+which is meant, naming both (`question_required`, declined). It writes
+nothing; the write tools stay offered, gated, and off the plan. The stale case
+materialises the authoritative replacement (the override's
+`authoritative_replacement` detail): the stale record names it in
+`superseded_by`, and the gold reads it and cites it. `OutcomeGrade.source_policy`
+records the result, and the autopsy keys are `outcomes.clarification_missing`,
+`outcomes.stale_source_used` and `outcomes.authoritative_source_missing`.
+Without the flag, cases, grades and ledgers keep their bytes.
+
 **A refused call is still an attempt.** A call the surface does not admit
 (an unknown tool, an undeclared argument, a limit) never reaches a connector,
 so no span exists for it; the service records it as a refusal instead, the
@@ -413,6 +428,30 @@ delta is then the mean over the axes both runs observed, two runs with no axis
 in common have no delta and no verdict, and the summary's trajectory rates
 (exact, in-order, any-order, mean calls) are absent rather than zero where no
 trajectory was observed.
+
+### Anvil composite flows
+
+Anvil composes several connectors into one SDK whose `Flow` is a DAG of
+operation calls (`anvil connectors compose`, Anvil ADR-0031). A planner may
+answer with that flow (`anvil.compose-flow/v1`) or with the plan Anvil derives
+from it (`anvil.compose-plan/v1`), bare or under `plan`. `parse_plan` reads
+either one through the shipped Anvil mappings
+(`_data/connectors/anvil/<connector>.json`). Each operation becomes the tool
+the mapping serves it with, and dependencies come from `depends_on`, or from a
+flow's `$ref` inputs, `for_each`, `when` and `after`. The DAG is then graded
+exactly as a native plan. An operation that no mapping knows stays
+`<connector>.<operation>` and is graded as an unmatched node.
+
+`evalrun flow ./cases -o flows.json` writes the other direction: every case's
+expected DAG as a composite flow (`worldloom.compose-flows/v1`, keyed by case
+id). Each tool node becomes a step on the operation that serves its tool, with
+the gold payload as its arguments by wire name. The edges, with transforms
+compressed out, become `after`, and writes are confirmed. Tool nodes that no
+mapping serves are listed under `unmapped`. Required inputs the payload does
+not give (values a real run reads from an earlier result) are listed under a
+step's `needs`. The flow is a reference statement of the gold plan, readable
+by `python -m anvil_compose plan|validate`. It is not a replayable script.
+`worldloom.evalrun.compose` holds both translations.
 
 ## Driving it from another harness
 

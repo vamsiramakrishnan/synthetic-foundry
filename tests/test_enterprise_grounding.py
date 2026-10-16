@@ -197,7 +197,11 @@ def test_the_filler_is_a_tripwire_and_destination_fixtures_are_untouched() -> No
     query = next(iter(queries))
     source = query.generation.source_requirements[0].model_copy(update={"connector": "servicenow", "entity": "incident"})
     ungrounded = query.model_copy(update={"generation": query.generation.model_copy(update={"source_requirements": (source,)})})
+    # The tripwire sits on the permissive path, so the opt-out is explicit;
+    # the strict default refuses the same row earlier, as `missing_source`.
     with pytest.raises(ValueError, match=rf"ungroundable_source: query {query.id} needs 1 servicenow:incident record\(s\)"):
+        materialize_corpus(world, (ungrounded,), strict_sources=False)
+    with pytest.raises(ValueError, match=rf"missing_source: servicenow:incident has 0 record\(s\).*\(query {query.id}\)"):
         materialize_corpus(world, (ungrounded,))
     # A record-addressed write still gets the destination fixture it always had.
     mutation = query.generation.mutation.model_copy(update={"operation": "update", "preexisting_record": True})

@@ -1,0 +1,571 @@
+{
+  "assessment": {
+    "capabilities": [
+      {
+        "independent_units": 2,
+        "name": "analyze:docx",
+        "requested": true,
+        "tasks": 4
+      },
+      {
+        "independent_units": 0,
+        "name": "analyze:pptx",
+        "requested": true,
+        "tasks": 0
+      },
+      {
+        "independent_units": 0,
+        "name": "analyze:xlsx",
+        "requested": true,
+        "tasks": 0
+      },
+      {
+        "independent_units": 2,
+        "name": "create:docx",
+        "requested": true,
+        "tasks": 4
+      },
+      {
+        "independent_units": 0,
+        "name": "create:pptx",
+        "requested": true,
+        "tasks": 0
+      },
+      {
+        "independent_units": 2,
+        "name": "create:xlsx",
+        "requested": true,
+        "tasks": 4
+      },
+      {
+        "independent_units": 3,
+        "name": "read:docx",
+        "requested": true,
+        "tasks": 7
+      },
+      {
+        "independent_units": 3,
+        "name": "read:pptx",
+        "requested": true,
+        "tasks": 7
+      },
+      {
+        "independent_units": 3,
+        "name": "read:xlsx",
+        "requested": true,
+        "tasks": 7
+      },
+      {
+        "independent_units": 0,
+        "name": "update:docx",
+        "requested": true,
+        "tasks": 0
+      },
+      {
+        "independent_units": 0,
+        "name": "update:pptx",
+        "requested": true,
+        "tasks": 0
+      },
+      {
+        "independent_units": 0,
+        "name": "update:xlsx",
+        "requested": true,
+        "tasks": 0
+      }
+    ],
+    "coverage_complete": false,
+    "execution_ready": true,
+    "findings": [
+      {
+        "blocks": [],
+        "code": "operation_counts_uneven",
+        "detail": "Requested operations have unequal delivered task counts.",
+        "remediation": "Use the per-operation counts when comparing results; generate missing evidence before expanding weak categories."
+      },
+      {
+        "blocks": [],
+        "code": "operation_format_gaps",
+        "detail": "Requested operation/format combinations without tasks: analyze:pptx, analyze:xlsx, create:pptx, update:docx, update:pptx, update:xlsx.",
+        "remediation": "Inspect the missing combinations before treating aggregate coverage as coverage of every format."
+      },
+      {
+        "blocks": [
+          "coverage",
+          "promotion"
+        ],
+        "code": "requested_operation_missing",
+        "detail": "No tasks cover requested operations: update.",
+        "remediation": "Add source evidence supporting those operations, increase a truncating task limit, or explicitly revise the plan."
+      },
+      {
+        "blocks": [],
+        "code": "shared_evidence",
+        "detail": "29 tasks reduce to 3 evidence components.",
+        "remediation": "Place disjoint canonical sections and facts in separate task input files; paraphrases, extra assertions, and format copies do not add units."
+      }
+    ],
+    "formats": [
+      {
+        "independent_units": 3,
+        "name": "docx",
+        "requested": true,
+        "tasks": 15
+      },
+      {
+        "independent_units": 3,
+        "name": "pptx",
+        "requested": true,
+        "tasks": 7
+      },
+      {
+        "independent_units": 3,
+        "name": "xlsx",
+        "requested": true,
+        "tasks": 11
+      }
+    ],
+    "heldout_reference_qualified": 105,
+    "independent_units": 3,
+    "namespace": "CO-0001",
+    "operations": [
+      {
+        "independent_units": 2,
+        "name": "analyze",
+        "requested": true,
+        "tasks": 4
+      },
+      {
+        "independent_units": 2,
+        "name": "create",
+        "requested": true,
+        "tasks": 4
+      },
+      {
+        "independent_units": 3,
+        "name": "read",
+        "requested": true,
+        "tasks": 21
+      },
+      {
+        "independent_units": 0,
+        "name": "update",
+        "requested": true,
+        "tasks": 0
+      }
+    ],
+    "planner_finding_counts": {
+      "operation_unavailable": 1
+    },
+    "promotion_ready": false,
+    "qualification_policy": {
+      "confidence": 0.95,
+      "min_repeats": 2,
+      "min_units": 5,
+      "trials": 3,
+      "unit_dimension": null
+    },
+    "reference_qualified": 29,
+    "repeats": 2,
+    "required_heldout_units": 15,
+    "schema_version": "worldloom.benchmark-assessment/v1",
+    "split_audit": {
+      "heldout_cases": 105,
+      "heldout_units": 15,
+      "isolated": true,
+      "overlapping_units": 0,
+      "overlaps": [],
+      "training_cases": 29,
+      "training_units": 3
+    },
+    "task_limit": 256,
+    "tasks": 29,
+    "unassigned_tasks": 0,
+    "used_canonical_facts": 7,
+    "used_sources": 9,
+    "workload_digest": "ef27a1c26b9cc06f3b5251f1d65d2c6d"
+  },
+  "configuration": {
+    "heldout_families": 15,
+    "qualification_policy": {
+      "confidence": 0.95,
+      "min_repeats": 2,
+      "min_units": 5,
+      "trials": 3,
+      "unit_dimension": null
+    },
+    "repeats": 2,
+    "training_families": 3,
+    "workload_plan": {
+      "discovery_scope": "artifact",
+      "formats": [
+        "docx",
+        "pptx",
+        "xlsx"
+      ],
+      "max_tasks": 256,
+      "objective": "Review the company reporting evidence, reconcile the reported values, and preserve source content in requested updates.",
+      "operations": [
+        "read",
+        "analyze",
+        "update",
+        "create"
+      ],
+      "use_case_id": "monthly-enterprise-close"
+    }
+  },
+  "construction": {
+    "elapsed_seconds": 53.384,
+    "heldout_digest": "5a05b6c20a3cabfb364f24230775edfc31773afd550ffd5a4a7f3d0f312bd4b2",
+    "heldout_tasks": 105,
+    "passed": true,
+    "selected_content_units": 18,
+    "selected_distinct_fact_closure": 34,
+    "selected_family_ids": [
+      "01629c4eb05398d9ab3e2e61ebe98fd8",
+      "087e6fda96c88a500c216f90e25ebe1d",
+      "0bec5c649e5c05d00f52adf799ff2b13",
+      "0c81f244d084b547b230f293ed49bac4",
+      "1cf99528002c3ad26044ded8c9519629",
+      "2863ad5a8ebd8f281819b72eab933244",
+      "367685fc63735e89fddee3d33ef0017c",
+      "3e18157ea248daae4a3ec4cceb65f3c8",
+      "44e7d4e8fdbafe59a7dcea89104c46c4",
+      "4b5c6d3f68e4569566f8962458994335",
+      "4b6f839c3a408cb09da78f9f819acb0b",
+      "5211369ca26f45fb9dd6e4da2787ebf5",
+      "5d29ddce7d63c7d231954571f41b26dd",
+      "61034c71771ab7becaecf0df53a3c233",
+      "661e2cd487889b38f30e32776cd2b3f7",
+      "6ac23f9017bdffaff594ffcdb60c8de6",
+      "6f9509608607d676a85f2cdeade898ed",
+      "756e929a3e1f49890876269d4039efbf"
+    ],
+    "split_audit": {
+      "heldout_cases": 105,
+      "heldout_units": 15,
+      "isolated": true,
+      "overlapping_units": 0,
+      "overlaps": [],
+      "training_cases": 29,
+      "training_units": 3
+    },
+    "training_digest": "c219ad0610c075128329b005fd016832383c8ed73cc328fff89c5cbead2f0fbe",
+    "training_tasks": 29
+  },
+  "elapsed_seconds": 117.614,
+  "limitations": [
+    "Reference qualification proves satisfiability, not external harness performance.",
+    "Promotion readiness establishes experiment prerequisites, not a measured improvement or successful promotion.",
+    "Source is the unchanged prior 18-month pilot; sections rejected by current source gates remain excluded.",
+    "Format replicas and related canonical facts count as one independent evidence family.",
+    "Independence requires each target invocation receive only its declared task input files."
+  ],
+  "live_target_trials": 0,
+  "measurement_status": "Before workload-aware grouping; requested update operation unavailable; no candidate was promoted.",
+  "method": "partition-before-render; transitive canonical fact and native formula closure; independent byte qualification; canonical evidence split audit",
+  "packages": {
+    "heldout": {
+      "capability_coverage": {
+        "business_predicate": 72,
+        "evidence_discovery": 105,
+        "formula_output": 12,
+        "native_creation": 12,
+        "native_formula_inspection": 6,
+        "structured_arithmetic": 24,
+        "structured_output": 12,
+        "subject_difference": 24,
+        "table_discovery": 54
+      },
+      "digest": "5a05b6c20a3cabfb364f24230775edfc31773afd550ffd5a4a7f3d0f312bd4b2",
+      "distinct_source_facts_per_file": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "native_files": 45,
+      "operation_counts": {
+        "analyze": 12,
+        "create": 12,
+        "read": 81
+      },
+      "planner_finding_counts": {
+        "operation_unavailable": 1
+      },
+      "public_bytes": 1540908,
+      "public_files": 46,
+      "reference_qualification": {
+        "failed_tasks": [],
+        "passed": true,
+        "tasks": 105
+      },
+      "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+      "tasks": 105,
+      "truncated": false
+    },
+    "training": {
+      "capability_coverage": {
+        "business_predicate": 24,
+        "evidence_discovery": 29,
+        "formula_output": 4,
+        "native_creation": 4,
+        "native_formula_inspection": 2,
+        "structured_arithmetic": 8,
+        "structured_output": 4,
+        "subject_difference": 8,
+        "table_discovery": 18
+      },
+      "digest": "c219ad0610c075128329b005fd016832383c8ed73cc328fff89c5cbead2f0fbe",
+      "distinct_source_facts_per_file": [
+        1,
+        1,
+        1,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "native_files": 9,
+      "operation_counts": {
+        "analyze": 4,
+        "create": 4,
+        "read": 21
+      },
+      "planner_finding_counts": {
+        "operation_unavailable": 1
+      },
+      "public_bytes": 342134,
+      "public_files": 10,
+      "reference_qualification": {
+        "failed_tasks": [],
+        "passed": true,
+        "tasks": 29
+      },
+      "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+      "tasks": 29,
+      "truncated": false
+    }
+  },
+  "partition_inventory": {
+    "available_families": 44,
+    "omitted_families": 0,
+    "retained_content_units": 320,
+    "retained_distinct_fact_closure": 9510,
+    "retained_families": 44,
+    "section_count_distribution": {
+      "1": 42,
+      "54": 1,
+      "224": 1
+    },
+    "selected_families": [
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "01629c4eb05398d9ab3e2e61ebe98fd8",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "087e6fda96c88a500c216f90e25ebe1d",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "0bec5c649e5c05d00f52adf799ff2b13",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "0c81f244d084b547b230f293ed49bac4",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "1cf99528002c3ad26044ded8c9519629",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "2863ad5a8ebd8f281819b72eab933244",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "367685fc63735e89fddee3d33ef0017c",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "3e18157ea248daae4a3ec4cceb65f3c8",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "44e7d4e8fdbafe59a7dcea89104c46c4",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "4b5c6d3f68e4569566f8962458994335",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "4b6f839c3a408cb09da78f9f819acb0b",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "5211369ca26f45fb9dd6e4da2787ebf5",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 3,
+        "content_units": 1,
+        "id": "5d29ddce7d63c7d231954571f41b26dd",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "61034c71771ab7becaecf0df53a3c233",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "661e2cd487889b38f30e32776cd2b3f7",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "6ac23f9017bdffaff594ffcdb60c8de6",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "6f9509608607d676a85f2cdeade898ed",
+        "source_artifacts": 1
+      },
+      {
+        "canonical_fact_closure": 1,
+        "content_units": 1,
+        "id": "756e929a3e1f49890876269d4039efbf",
+        "source_artifacts": 1
+      }
+    ]
+  },
+  "resume": {
+    "byte_identical": true,
+    "elapsed_seconds": 27.763,
+    "identical_build_report": true,
+    "passed": true,
+    "tree_digest_after": "7fbc59de606c22ea94dec38818731a4b3cb44f7cee9b2695c40635d2d69bdb65",
+    "tree_digest_before": "7fbc59de606c22ea94dec38818731a4b3cb44f7cee9b2695c40635d2d69bdb65"
+  },
+  "schema": "worldloom.native-benchmark-partition-measurement/v1",
+  "source": {
+    "artifact_irs": 162,
+    "authored_sections": 792,
+    "company": "Northstar Retail",
+    "company_id": "CO-0001",
+    "excluded_sections": 472,
+    "exclusion_codes": {
+      "duplicate_grounded_content": 70,
+      "invalid_native_evidence": 234,
+      "private_native_section": 168
+    },
+    "facts": 11624,
+    "file_count": 10,
+    "periods": [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12",
+      "2027-01",
+      "2027-02",
+      "2027-03",
+      "2027-04",
+      "2027-05",
+      "2027-06"
+    ],
+    "recipe_digest": "7088298e5b502df50da36a9a51ca60f26b510c8a26af3adb526f80b4c4f456b8",
+    "seed": 8128,
+    "selected_sections": 320,
+    "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+    "tree_digest": "c0851147b3676f70f4c1430350d6ebc03388adb03cf704745ec267e97d342e01"
+  },
+  "source_code_digests": {
+    "src/worldloom/benchmarks/core.py": "fc5176f8a20f6f205236515f187c95409c5ab689d13003db491d6d236db82dd2",
+    "src/worldloom/benchmarks/coverage.py": "e8fe416043807fdd184edd9b0711122ee91f4b774626ff77ada72d6a75d7be7d",
+    "src/worldloom/benchmarks/partitions.py": "7df30a9762dcfa79d583c5939425857730b5c8d1652b6173c41deded6ac28bdf",
+    "src/worldloom/native_eval_bridge.py": "8d04d9577c9ddfac02327b302b2ec2619a97ca71482d7b716ce2ac3839e949b7",
+    "src/worldloom/native_query_evidence.py": "f6fe3db7996f792adde7da0a2b50db7e81dbaa5dde488d359fa90c579ee0b954",
+    "src/worldloom/native_query_planning.py": "77c1836e0b54689833d4caceeda6900eaa8a7ad23e84ec547cd2893868beeeab"
+  }
+}

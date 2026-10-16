@@ -322,6 +322,11 @@ by running the code, and two of the answers changed this document.
   `ArtifactRequirement`. It is real bytes of the right format, but its shape was
   reported as not matching the requirement that asked for it, and as
   non-deterministic. That gates the file outcome in B.
+> Retirement update: the flat `worldloom.query_planning` module has since been
+> removed after canonical enterprise parity tests. See the
+> [migration guide](../agent-workflow-evals.md#migration-from-the-removed-flat-planner).
+> The planning observations below describe the earlier state.
+
 - Three modules appear dead: `query_planning.py` is a second planner with no
   `expected_dag` and no caller, `enterprise_cli.py` has zero importers, and
   `field_manifests.py` has zero importers. Deleting them is a separate,

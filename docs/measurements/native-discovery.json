@@ -1,0 +1,46 @@
+{
+  "capability_coverage": {
+    "actual_budget_variance": 4,
+    "business_predicate": 18,
+    "content_update": 8,
+    "evidence_discovery": 32,
+    "formula_output": 6,
+    "multi_source_citations": 10,
+    "native_creation": 8,
+    "native_formula_inspection": 2,
+    "native_preservation": 8,
+    "period_change": 5,
+    "speaker_notes": 1,
+    "structured_arithmetic": 14,
+    "structured_output": 8,
+    "subject_difference": 5,
+    "table_discovery": 5
+  },
+  "coverage_findings": {
+    "ambiguous_evidence_selector": 435,
+    "ambiguous_numeric_selector": 835,
+    "independent_cross_artifact_evidence_missing": 1
+  },
+  "independent_qualification_recheck": {
+    "passed": true,
+    "tasks": 32
+  },
+  "limitations": [
+    "Reference qualification demonstrates satisfiability, not target harness performance.",
+    "These aggregate files share evidence; task and format counts do not establish independent qualification support.",
+    "Ambiguous selectors and missing independent cross-file evidence remain measured gaps."
+  ],
+  "live_target_trials": 0,
+  "method": "reference-construction-and-independent-native-byte-grading",
+  "operation_counts": {
+    "analyze": 8,
+    "create": 8,
+    "read": 8,
+    "update": 8
+  },
+  "reference_qualified": 32,
+  "schema": "worldloom.native-workload-measurement/v1",
+  "source_scale_measurement": "corpus-scale-retail.json",
+  "tasks": 32,
+  "workload_plan": "../examples/native-discovery-workload.json"
+}

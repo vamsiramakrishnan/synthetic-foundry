@@ -81,19 +81,48 @@ def _assertion_result(
         )
     elif assertion.type == "capability_invoked":
         step = by_step.get(assertion.step_id or "")
+        declaration = next((item for item in instance.steps if item.id == assertion.step_id), None)
         expected_operation = assertion.operation or assertion.capability
         operation_ok = bool(
             step and (expected_operation is None or step.operation == expected_operation)
         )
+        # Scoped IDs constrain which evidence came back; an empty binding
+        # does not waive the operation's need to return evidence. In
+        # particular, connectorless custom executors cannot prove a read or
+        # computation by reporting only its name. Writes instead prove their
+        # observed effects through side_effect_occurred.
+        requires_output = declaration is not None and declaration.effect in {"read", "transform", "verify"}
         evidence_ok = bool(
-            step and set(assertion.evidence_ids) <= set(step.output_ids)
+            step and (not requires_output or step.output_ids)
+            and set(assertion.evidence_ids) <= set(step.output_ids)
         )
         passed = operation_ok and evidence_ok
     elif assertion.type == "side_effect_occurred":
         step = by_step.get(assertion.step_id or "")
         passed = bool(step and step.effect_ids)
     elif assertion.type == "verification_performed":
-        passed = assertion.step_id in by_step
+        step = by_step.get(assertion.step_id or "")
+        # Merely naming a verification is not a readback. The executor must
+        # return observed evidence, including effects of writes this step
+        # depends on when they occur on the same connector.
+        declarations = {item.id: item for item in instance.steps}
+        declaration = declarations.get(assertion.step_id or "")
+        observed_effects: set[str] = set()
+        pending = list(declaration.depends_on) if declaration is not None else []
+        visited: set[str] = set()
+        while pending:
+            ancestor = pending.pop()
+            if ancestor in visited:
+                continue
+            visited.add(ancestor)
+            parent = declarations.get(ancestor)
+            if parent is not None:
+                pending.extend(parent.depends_on)
+                if declaration is not None and parent.connector == declaration.connector:
+                    executed = by_step.get(ancestor)
+                    if executed is not None:
+                        observed_effects.update(executed.effect_ids)
+        passed = bool(step and step.output_ids and observed_effects <= set(step.output_ids))
     elif assertion.type == "world_requirement_satisfied":
         evidence = set(assertion.evidence_ids)
         oracle_evidence = set(instance.oracle.evidence_by_requirement.get(assertion.requirement_id or "", ()))

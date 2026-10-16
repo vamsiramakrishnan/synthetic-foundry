@@ -15,7 +15,7 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .connector_data import ConnectorRecord
 from .connector_definition import ConnectorDefinition, ConnectorToolDefinition
@@ -24,6 +24,9 @@ from .connector_payload import shape_payload
 from .connector_query import parse_native
 from .ids import content_key
 from .predicates import FieldPredicate, Predicate, PredicateOp, evaluate
+
+if TYPE_CHECKING:
+    from .evalrun.retrieval import ControlledRetrieval
 
 #: The keys a product-shaped payload may carry its identity under
 #: (``connector_keys``): the identity set ``shape_payload`` preserves under
@@ -87,10 +90,38 @@ class _PendingSpan:
         )
 
 
+_ATOMIC = frozenset({str, int, float, bool, type(None)})
+
+
+def _copy_tree(value: Any) -> Any:
+    """``copy.deepcopy`` for the JSON-shaped trees a record holds, a lot faster.
+
+    Every emulator copies every record it is built over, and qualification
+    builds one per connector per query: the generic deepcopy (memo dict,
+    reducer lookup per node) was over half of a foundry run. Plain dicts,
+    lists and scalars are copied here; anything else still goes through
+    ``copy.deepcopy``, so a value of another type copies exactly as before.
+    Unlike deepcopy this does not preserve aliasing *within* one record
+    (one list reachable twice becomes two lists), which nothing reads: the
+    copy exists so no caller's record is mutated through the emulator, and
+    that holds either way.
+    """
+    kind = type(value)
+    # Leaves are tested inline rather than recursed into: most nodes are
+    # scalars, and a call per scalar was most of what this cost.
+    if kind is dict:
+        return {key: item if type(item) in _ATOMIC else _copy_tree(item) for key, item in value.items()}
+    if kind is list:
+        return [item if type(item) in _ATOMIC else _copy_tree(item) for item in value]
+    if kind in _ATOMIC:
+        return value
+    return copy.deepcopy(value)
+
+
 def _canonical_record(record: ConnectorRecord | Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(record, ConnectorRecord):
         return {
-            **copy.deepcopy(record.fields),
+            **_copy_tree(dict(record.fields)),
             "fid": record.id,
             "server": record.connector,
             "entity": record.entity,
@@ -109,7 +140,7 @@ def _canonical_record(record: ConnectorRecord | Mapping[str, Any]) -> dict[str, 
             "event_ids": list(record.event_ids),
             "source_artifact_ids": list(record.source_artifact_ids),
         }
-    return copy.deepcopy(dict(record))
+    return _copy_tree(dict(record))  # type: ignore[no-any-return]
 
 
 def _coerce_predicate(value: Predicate | Mapping[str, Any] | None, *, entity: str | None) -> Predicate:
@@ -195,6 +226,7 @@ class ConnectorEmulator:
         faults: Mapping[str, Sequence[str]] | None = None,
         actor: str = "agent",
         query_engine: str | None = None,
+        retrieval: ControlledRetrieval | None = None,
     ) -> None:
         self.definition = definition
         self.server = definition.connector
@@ -218,12 +250,15 @@ class ConnectorEmulator:
         self._call_ordinal = 0
         self._created = 0
         self._recent_creates: dict[tuple[Any, ...], str] = {}
+        self.retrieval = retrieval
+        if self.retrieval is not None:
+            self.retrieval.bind(definition)
 
     def fork(self) -> ConnectorEmulator:
         child = ConnectorEmulator.__new__(ConnectorEmulator)
         child.definition = self.definition
         child.server = self.server
-        child.records = copy.deepcopy(self.records)
+        child.records = _copy_tree(self.records)
         child.by_entity = defaultdict(list, {key: list(value) for key, value in self.by_entity.items()})
         child.by_ident = dict(self.by_ident)
         child.acl = copy.deepcopy(self.acl)
@@ -234,6 +269,7 @@ class ConnectorEmulator:
         child._call_ordinal = 0
         child._created = 0
         child._recent_creates = {}
+        child.retrieval = self.retrieval.fork() if self.retrieval is not None else None
         return child
 
     def transaction(self, *, fresh: bool = False) -> ConnectorEmulator:
@@ -254,6 +290,7 @@ class ConnectorEmulator:
         child.by_ident = dict(self.by_ident)
         child._recent_creates = dict(self._recent_creates)
         child.trace = [] if fresh else list(self.trace)
+        child.retrieval = self.retrieval.fork(fresh=fresh) if self.retrieval is not None else None
         if fresh:
             child._call_ordinal = 0
             child._created = 0
@@ -418,7 +455,10 @@ class ConnectorEmulator:
             error=None,
             actor=self.actor,
         )
+        result: Any = None
         try:
+            if self.retrieval is not None:
+                self.retrieval.before_call(canonical_name)
             write_ops = {
                 "create",
                 "update",
@@ -474,7 +514,10 @@ class ConnectorEmulator:
             span.error = {"code": error.code, "message": error.message, "kind": error.kind}
             raise
         finally:
-            self.trace.append(span.freeze())
+            frozen = span.freeze()
+            self.trace.append(frozen)
+            if self.retrieval is not None:
+                self.retrieval.observe(frozen, result, self.records)
 
     def _op_search(
         self,
@@ -492,13 +535,28 @@ class ConnectorEmulator:
     ) -> dict[str, Any]:
         if start_at < 0:
             raise ConnectorError(400, "start_at must be non-negative", "validation")
+        if max_results is not None and max_results < 1:
+            raise ConnectorError(400, "max_results must be positive", "validation")
+        controlled = self.retrieval is not None and self.retrieval.applies(span.tool.split(".", 1)[1])
         active: Predicate | None = None
         native = (
             self._native_search(tool, span.tool.split(".", 1)[1], query, entity)
-            if query and predicate is None and name is None and self.query_engine == "native"
+            if not controlled and query and predicate is None and name is None and self.query_engine == "native"
             else None
         )
-        if native is not None:
+        if controlled:
+            from .evalrun.retrieval import UnsupportedControlledQuery
+
+            assert self.retrieval is not None
+            try:
+                active = self.retrieval.parse(query=query, predicate=predicate, entity=entity, name=name)
+                pool = self._pool(active.entity or entity, tool)
+                hits = self.retrieval.select(active, [self._record_for_predicate(record) for record in pool])
+            except UnsupportedControlledQuery as error:
+                raise ConnectorError(400, str(error), "unsupported_query") from error
+            except ValueError as error:
+                raise ConnectorError(400, str(error), "validation") from error
+        elif native is not None:
             hits, projection = native
             fields = fields or projection or None
         elif query and predicate is None:
@@ -514,7 +572,7 @@ class ConnectorEmulator:
             # predicate carrying the alias name would match none of them —
             # every `where` search under an alias returned nothing until this.
             active = active.model_copy(update={"entity": None})
-        if native is None:
+        if native is None and not controlled:
             pool = self._pool(entity, tool)
             if name is not None:
                 hits = [
@@ -543,7 +601,7 @@ class ConnectorEmulator:
             page = page[:-1]
         span.reads.extend(str(record["fid"]) for record in page)
         span.items = len(page)
-        return {
+        result: dict[str, Any] = {
             "total": len(hits),
             "start_at": start_at,
             "max_results": limit,
@@ -551,6 +609,10 @@ class ConnectorEmulator:
             "native_query": query,
             "items": [shape_payload(self.definition, record, fields) for record in page],
         }
+        if controlled:
+            assert self.retrieval is not None
+            result["retrieval"] = self.retrieval.public_info()
+        return result
 
     def _native_search(
         self,

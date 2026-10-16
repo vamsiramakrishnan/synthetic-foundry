@@ -7,6 +7,33 @@ tags: [contributing, docs-gate, determinism-sweep, retrievers, layout]
 
 # Where things are
 
+For large benchmark construction, read [Enterprise benchmark improvement](../enterprise-benchmark-improvement.md).
+For the public SDK, target protocol, resumable runs and native policy improvement,
+read [Native benchmark workflow](../native-benchmark-workflow.md).
+`worldloom native-evals scenarios` generates bounded business episodes and partitions their evidence;
+`worldloom native-evals inspect` audits declared coverage cells and independent support;
+`worldloom native-evals partition` constructs disjoint source families before rendering;
+`worldloom native-evals protocol` describes the public target exchange;
+`worldloom native-evals run` executes and resumes actual target trials;
+`worldloom native-evals improve` connects native outcomes to sealed policy improvement;
+`worldloom native-evals workflow-qualify` proves an authored native DAG against actual reference bytes;
+`worldloom native-evals workflow-run` executes its steps with graded update-file lineage;
+`worldloom native-evals diagnose` regrades training receipts into a versioned curriculum;
+`worldloom native-evals evolve` builds a fresh training package from that verified proposal.
+Native workflow receipts observe scheduled calls and returned bytes, not the
+target's internal tool trajectory. Conditional and iterated connector workflows
+remain in the connector DAG engine. Native package v2 requires canonical source
+lineage; rebuild retired root-level exchanges and v1 packages from their sources.
+`worldloom corpus-scale assess` checks source and population floors;
+`worldloom corpus-scale build` materialises bounded files;
+`worldloom corpus-scale verify` reconstructs their source projections.
+`worldloom native-evals build` emits business discovery tasks and public inputs;
+`worldloom native-evals qualify` checks actual-byte solvability;
+`worldloom native-evals grade` independently grades target replies and files.
+`worldloom evalrun audit-split` checks transitive evidence overlap before
+`worldloom evalrun improve --qualification-policy qualification.json` spends a
+predeclared budget of fresh promotion cohorts.
+
 | Path | What |
 | --- | --- |
 | `src/worldloom/models.py` | The thin waist. Every subsystem speaks these types |
@@ -40,7 +67,7 @@ every command in every agent-facing document and requires it to exist, and
 requires every command to be documented somewhere.
 
 `worldloom seams` lists the library seams a harness composes against
-(`connectors`, `evals`, `pipeline`) with the canonical import for each;
+(`connectors`, `evals`, `pipeline`, `benchmarks`) with the canonical import for each;
 `--json` emits the full contract. Import through those names rather than the
 modules behind them: the seam is what stays put when a subsystem is
 reorganised, and it is what the SDK, the CLI, and the skills all share.

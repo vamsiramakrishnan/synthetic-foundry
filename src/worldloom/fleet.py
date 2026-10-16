@@ -423,9 +423,24 @@ _UNDERIVABLE = {
 }
 
 
+#: One survey of a fleet: every member's record, its reading, and the spine.
+Survey = tuple[tuple[WorldRecord, ...], tuple[Any, ...], dict[str, Any]]
+
+
+def survey(fleet_dir: str | Path) -> Survey:
+    """Load and measure every member of *fleet_dir* once, for `qualify` and `curate`.
+
+    Both verbs survey the fleet themselves when not handed one; a caller that
+    runs both over the same unchanged directory (`evolve`, once per
+    generation) surveys once and hands the result to each, instead of loading,
+    validating and replaying every member twice. Reads only.
+    """
+    return _survey(fleet_dir)
+
+
 def _survey(
     fleet_dir: str | Path,
-) -> tuple[tuple[WorldRecord, ...], tuple[Any, ...], dict[str, Any]]:
+) -> Survey:
     """Load and measure every member. The expensive half of both verbs.
 
     Returns the spine reading alongside so each world is loaded exactly once —
@@ -707,17 +722,19 @@ class Qualification:
         return json.dumps(self.as_dict(), indent=2, sort_keys=True) + "\n"
 
 
-def qualify(fleet_dir: str | Path, purpose: FleetPurpose) -> Qualification:
+def qualify(fleet_dir: str | Path, purpose: FleetPurpose, *, surveyed: Survey | None = None) -> Qualification:
     """Measure *fleet_dir* and rule on whether it is qualified for *purpose*.
 
     Reads only. No corpus is touched, nothing is written, and — the module
     docstring's design decision — nothing returned here is consumable by a
     build: the verdict names floors, the coverage names holes, and both are
     work lists for a *planner*, never objectives for a generator.
+
+    *surveyed* is `survey(fleet_dir)` when the caller already took it.
     """
     checked = _checked_purpose(purpose)
     root = Path(fleet_dir)
-    records, readings, spine = _survey(root)
+    records, readings, spine = surveyed if surveyed is not None else _survey(root)
 
     from . import spaces
 
@@ -870,7 +887,7 @@ class Curation:
         return json.dumps(self.as_dict(), indent=2, sort_keys=True) + "\n"
 
 
-def curate(fleet_dir: str | Path, purpose: FleetPurpose) -> Curation:
+def curate(fleet_dir: str | Path, purpose: FleetPurpose, *, surveyed: Survey | None = None) -> Curation:
     """Keep one champion per niche, name every reject, list the empty niches.
 
     Writes ``fleet-manifest.json`` at the fleet root — deterministic
@@ -887,7 +904,9 @@ def curate(fleet_dir: str | Path, purpose: FleetPurpose) -> Curation:
     root = Path(fleet_dir)
     # The spine reading is qualification's business, not curation's; surveyed
     # anyway because one pass per member is the deal `_survey` makes.
-    records, readings, _ = _survey(root)
+    # *surveyed* is `survey(fleet_dir)` when the caller already took it; it
+    # must be taken before this writes the manifest, as it is here.
+    records, readings, _ = surveyed if surveyed is not None else _survey(root)
 
     metric = _FITNESS[checked]
     grid = archive.Archive(_NICHE_AXES)
@@ -968,8 +987,10 @@ __all__ = [
     "FleetPurpose",
     "Qualification",
     "Reject",
+    "Survey",
     "WorldRecord",
     "configuration_of",
     "curate",
     "qualify",
+    "survey",
 ]

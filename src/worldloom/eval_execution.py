@@ -10,10 +10,9 @@ write lands on the precondition record the constructive layer minted. The
 proof is therefore a statement about the corpus and the emulator together: the
 DAG is executable, every read found something, every write changed something.
 
-Steps without a connector (a transform, a verification) are recorded as
-executed with the oracle's evidence, because there is no tool surface for
-them to go through; the assertion layer still requires them to appear in
-order.
+Steps without a connector require a caller-supplied ``StepExecutor``. A
+semantic transform or verification has no executable meaning on this connector
+surface, and cannot be proven by copying oracle evidence into its outputs.
 """
 
 from __future__ import annotations
@@ -123,13 +122,8 @@ def emulator_executor(
     def execute(world: World, step: EvalStepSpec, instance: EvalInstance) -> tuple[World, ExecutionStep]:
         operation = (step.operation or step.capability).lower()
         if not step.connector:
-            if step.effect == "write":
-                # A write with no surface to land on cannot be proven; saying
-                # it happened would make every such eval pass by construction.
-                raise ValueError(f"{step.id}: a write step needs a connector to execute against")
-            return world, ExecutionStep(
-                step_id=step.id, operation=step.operation or step.capability,
-                output_ids=instance.oracle.fact_ids,
+            raise ValueError(
+                f"{step.id}: a {step.effect} step needs a connector or a caller-supplied StepExecutor"
             )
         definition = definition_for(step.connector)
         emulator = emulator_for(world, step.connector, instance)
@@ -137,21 +131,36 @@ def emulator_executor(
         entity = _step_entity(definition, step, "search" if entity_op in {"search", "read"} else entity_op)
         predicates = _witness_predicates(world, step.connector, step.entity and entity)
 
-        def facts_behind(fids: list[str]) -> set[str]:
-            return {fact for fid in fids for fact in emulator.records[fid].get("fact_ids", ())}
+        def evidence_behind(fids: list[str]) -> set[str]:
+            # Only provenance on records actually returned by this operation
+            # counts. Oracle values may select a gold call, never supply its
+            # results.
+            return {
+                identifier for fid in fids
+                for field in ("fact_ids", "event_ids", "source_artifact_ids")
+                for identifier in emulator.records[fid].get(field, ())
+            }
 
-        if entity_op == "search" or (operation not in _READ and step.effect in {"read", "verify"}):
+        if entity_op == "search":
             hits: list[str] = []
             for predicate in predicates or [Predicate(entity=entity)]:
                 target_entity = predicate.entity or entity
                 tool = definition.tool_for(target_entity, "search")
-                page = emulator.call(tool, _node=step.id, entity=target_entity, predicate=predicate, max_results=50)
-                hits.extend(str(item.get("id") or item.get("key")) for item in page["items"])
-                hits.extend(emulator.trace[-1].reads)
+                start_at = 0
+                while True:
+                    page = emulator.call(tool, _node=step.id, entity=target_entity, predicate=predicate,
+                                         max_results=50, start_at=start_at)
+                    hits.extend(emulator.trace[-1].reads)
+                    if page["is_last"]:
+                        break
+                    # A connector can clamp the requested page size. Its
+                    # returned offsets, rather than our request, identify the
+                    # next page; every required record must actually be read.
+                    start_at = page["start_at"] + page["max_results"]
             if not hits:
                 raise ValueError(f"{step.id}: search on {step.connector}/{entity} found nothing")
             reads = [fid for fid in hits if fid in emulator.records]
-            outputs = tuple(sorted(set(hits) | facts_behind(reads) | set(instance.oracle.fact_ids)))
+            outputs = tuple(sorted(set(hits) | evidence_behind(reads)))
             return world, ExecutionStep(step_id=step.id, operation=step.operation or step.capability,
                                         output_ids=outputs)
         if entity_op in {"read", "extract"}:
@@ -161,26 +170,34 @@ def emulator_executor(
             pool = list(emulator.by_entity.get(entity, ()))
             from .predicates import evaluate
 
+            required_record_ids = {
+                identifier for assertion in instance.assertions
+                if assertion.type == "capability_invoked" and assertion.step_id == step.id
+                for identifier in assertion.evidence_ids if identifier in emulator.records
+            }
             matching = [
                 fid for fid in pool
-                if not predicates or any(
+                if (not required_record_ids or fid in required_record_ids) and (not predicates or any(
                     evaluate(predicate, emulator._record_for_predicate(emulator.records[fid]), entity=entity)
                     for predicate in predicates if (predicate.entity or entity) == entity
-                )
-            ] or pool
+                ))
+            ]
             if not matching:
                 raise ValueError(f"{step.id}: no {step.connector}/{entity} record to {operation}")
             try:
                 tool = definition.tool_for(entity, entity_op)
             except KeyError as error:
                 raise ValueError(str(error)) from error
-            target = matching[0]
+            target = sorted(matching)[0]
             emulator.call(tool, _node=step.id, id=target)
-            outputs = tuple(sorted({target} | facts_behind([target]) | set(instance.oracle.fact_ids)))
+            reads = [fid for fid in emulator.trace[-1].reads if fid in emulator.records]
+            outputs = tuple(sorted(set(reads) | evidence_behind(reads)))
             return world, ExecutionStep(step_id=step.id, operation=step.operation or step.capability,
                                         input_ids=(target,), output_ids=outputs)
         # A write: land it on the precondition the constructive layer minted, or
         # on the first record of the entity when the eval brought its own.
+        if step.effect in {"read", "verify", "transform"}:
+            raise ValueError(f"{step.id}: unsupported {step.effect} operation {operation!r}")
         try:
             tool = definition.tool_for(entity, operation)
         except KeyError as error:

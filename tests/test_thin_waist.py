@@ -54,6 +54,10 @@ CORE_MODULES: tuple[str, ...] = (
     "render/ooxml.py", "render/values.py",
     "evaluate/__init__.py", "evaluate/bm25.py", "evaluate/index.py",
     "evaluate/score.py",
+    # What an outside retrieval stack reads and writes: it has to work for
+    # a vertical nobody here has met, or the loop it closes only closes for
+    # retail.
+    "evaluate/interchange.py", "evaluate/predictions.py",
     "narrative/claims.py", "narrative/compiler.py", "narrative/handshake.py",
     "narrative/references.py", "narrative/requests.py",
 )

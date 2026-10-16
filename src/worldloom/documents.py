@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from . import columns as columns_module
 from . import domains, packkit, roleseq, structure
 from . import recipe as recipe_module
+from .formula_semantics import formula_value
 from .ids import Minter
 from .models import (
     ArtifactIntent,
@@ -437,6 +438,7 @@ _MEASURES: dict[str, str] = columns_module.PNL.kinds()
 #: way — a subtotal that pasted its variance while the rows above computed
 #: theirs is exactly the disagreement this project exists to prevent.
 _DERIVED: dict[str, tuple[FormulaKind, list[str]]] = columns_module.PNL.derivations()
+_PRECISIONS: dict[str, int] = columns_module.PNL.precisions()
 
 #: Columns a subtotal must *not* sum, because they do not add up. A margin
 #: percentage is a ratio of totals, never the total of ratios; a variance, by
@@ -482,7 +484,7 @@ class _Bound:
     column per row over thousands of rows.
     """
 
-    __slots__ = ("_derived", "_measures", "_not_additive", "_rate_kinds", "sheet")
+    __slots__ = ("_derived", "_measures", "_not_additive", "_precisions", "_rate_kinds", "sheet")
 
     def __init__(self, sheet: columns_module.Sheet | None) -> None:
         self.sheet = sheet
@@ -490,6 +492,7 @@ class _Bound:
         self._derived = None if sheet is None else sheet.derivations()
         self._not_additive = None if sheet is None else sheet.not_summable()
         self._rate_kinds = None if sheet is None else sheet.rate_kinds()
+        self._precisions = None if sheet is None else sheet.precisions()
 
     @property
     def measures(self) -> Mapping[str, str]:
@@ -498,6 +501,10 @@ class _Bound:
     @property
     def derived(self) -> Mapping[str, tuple[FormulaKind, list[str]]]:
         return _DERIVED if self._derived is None else self._derived
+
+    @property
+    def precisions(self) -> Mapping[str, int]:
+        return _PRECISIONS if self._precisions is None else self._precisions
 
     @property
     def not_additive(self) -> frozenset[str]:
@@ -608,7 +615,8 @@ def _measure_row(
             )
         elif derived is not None:
             formula, operands = derived
-            cells[column.key] = Cell(value=value, fact_id=fact_id, formula=formula, operands=operands)
+            cells[column.key] = Cell(value=value, fact_id=fact_id, formula=formula, operands=operands,
+                                     formula_decimal_places=bound.precisions.get(column.key))
         else:
             cells[column.key] = _money(value, fact_id)
     # Descriptive columns a sheet carries alongside its measures — a store's
@@ -658,11 +666,11 @@ def _sum_row(
         right = cells.get(operands[1])
         if left is None or right is None:
             continue
-        if formula is FormulaKind.DIFFERENCE:
-            value = (left.value or 0.0) - (right.value or 0.0)
-        else:
-            value = ((left.value or 0.0) / right.value * 100) if right.value else 0.0
-        cells[column.key] = Cell(value=value, formula=formula, operands=operands)
+        precision = bound.precisions.get(column.key)
+        value = formula_value(formula, (float(left.value or 0.0), float(right.value or 0.0)),
+                              decimal_places=precision)
+        cells[column.key] = Cell(value=value, formula=formula, operands=operands,
+                                 formula_decimal_places=precision)
     cells.update(extra or {})
     return Row(key=key, label=label, cells=cells, emphasis=True)
 

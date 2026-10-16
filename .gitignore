@@ -27,3 +27,7 @@ venv/
 # commit-worthy; raw controller state does not.
 .alphaevolve.env
 evals/_runs/
+# pytest-testmon's dependency database (`make check-fast`): which tests ran
+# which lines on this machine, rebuilt on demand and meaningless elsewhere.
+.testmondata
+.testmondata-*

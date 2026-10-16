@@ -18,6 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import build_cache
 import pytest
 from typer.testing import CliRunner
 
@@ -437,9 +438,18 @@ def test_cases_over_a_rendered_world_prove_without_a_result_mismatch() -> None:
     from worldloom.evalrun import cases_from_corpus
     from worldloom.scenarios import MonthEndClose
 
-    world = (RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-03", include_operational_incident=True))
-             .render("docx", "xlsx"))
-    built, _ = EnterpriseEvalHarness.from_world(world).take(200).with_dag_grammar().build()
+    def build() -> Any:
+        world = (RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-03", include_operational_incident=True))
+                 .render("docx", "xlsx"))
+        return EnterpriseEvalHarness.from_world(world).take(200).with_dag_grammar().build()[0]
+
+    # Rendering and planning 200 cases is ~60 CPU-seconds and a pure function
+    # of this recipe and the source tree, so the built corpus is reused across
+    # runs (`build_cache`, keyed on the serving surface too). What this test
+    # claims is about proving, and `prove_cases` below always runs fresh.
+    recipe = {"seed": 8128, "period": "2026-03", "incident": True, "render": ["docx", "xlsx"],
+              "take": 200, "dag_grammar": True}
+    built = build_cache.cached_value("evalset-proof-rendered-200", recipe, build)
     renamed = {record.id for record in built.connector_data.records
                if record.connector in {"drive", "sharepoint"} and record.fields.get("name") not in (None, record.title)}
     cases = cases_from_corpus(built)

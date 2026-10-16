@@ -40,7 +40,7 @@ import statistics
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_serializer
 
 from .. import packkit
 from ..ids import content_key
@@ -444,6 +444,15 @@ class PairedComparison(Model):
     newly_errored: tuple[str, ...]
     noise_floor_baseline: float | None
     noise_floor_recent: float | None
+    #: Independent evidence components when a clustered experiment was declared.
+    independent_units: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_units(self, handler: Any) -> Any:
+        document = handler(self)
+        if isinstance(document, dict) and self.independent_units is None:
+            document.pop("independent_units", None)
+        return document
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -455,7 +464,8 @@ def _weights(values: Mapping[str, Any]) -> dict[str, float]:
 
 
 def paired(baseline: Sequence[RunReport], recent: Sequence[RunReport], *, values: Mapping[str, Any] | None = None,
-           confidence: float | None = None, resamples: int | None = None, seed: str | None = None) -> PairedComparison:
+           confidence: float | None = None, resamples: int | None = None, seed: str | None = None,
+           units: Mapping[str, str] | None = None) -> PairedComparison:
     """*recent* against *baseline*, each a set of repeats of one policy, as a paired test over per-case means.
 
     A case is compared when both sides graded it at least once; its overall
@@ -463,6 +473,12 @@ def paired(baseline: Sequence[RunReport], recent: Sequence[RunReport], *, values
     observed different axes, the mean of the axis differences they share,
     as ``results.compare`` does). The bootstrap's seed is *seed* or the case
     set and the two policies' digests.
+
+    With ``units``, siblings are averaged within each independent evidence
+    component and the unweighted estimand is the mean across components.
+    The bootstrap draws components and run repeats: one repeat draw is shared
+    across all sampled components, preserving batch-wide stochastic shocks.
+    Value weights sum within a component and remain attached to it.
     """
     if not baseline or not recent:
         raise ValueError("a paired comparison needs at least one run on each side")
@@ -474,6 +490,8 @@ def paired(baseline: Sequence[RunReport], recent: Sequence[RunReport], *, values
     left, right = _by_case(baseline), _by_case(recent)
     shared = sorted(case_id for case_id in left if case_id in right
                     and len(left[case_id]) == len(baseline) and len(right[case_id]) == len(recent))
+    if units is not None and any(case_id not in units or not units[case_id] for case_id in shared):
+        raise ValueError("every paired case needs a declared independent unit")
     key = seed if seed is not None else "\0".join(
         (baseline[0].case_set, _pack_digest(baseline[0]) or baseline[0].agent,
          _pack_digest(recent[0]) or recent[0].agent))
@@ -507,6 +525,60 @@ def paired(baseline: Sequence[RunReport], recent: Sequence[RunReport], *, values
         ids = sorted(deltas)
         if not ids:
             return None
+        if units is not None:
+            groups: dict[str, list[str]] = {}
+            for case_id in ids:
+                groups.setdefault(units[case_id], []).append(case_id)
+            grouped_deltas: list[float] = []
+            grouped_weights: list[float] = []
+            unit_left: list[list[float]] = []
+            unit_right: list[list[float]] = []
+            axis = label if label in AXES else None
+            for unit in sorted(groups):
+                members = groups[unit]
+                member_weights = [1.0 if weights is None else weights.get(case_id, 1.0) for case_id in members]
+                total = sum(member_weights)
+                if total <= 0:
+                    raise ValueError("an independent unit's weights sum to nothing")
+                grouped_deltas.append(sum(deltas[case_id] * weight
+                                          for case_id, weight in zip(members, member_weights, strict=True)) / total)
+                grouped_weights.append(total)
+                for rows, into, repeats in ((left, unit_left, len(baseline)), (right, unit_right, len(recent))):
+                    repeated = []
+                    for repeat in range(repeats):
+                        present = [(weight, score) for case_id, weight in zip(members, member_weights, strict=True)
+                                   if (score := _scores(rows[case_id][repeat], axis)) is not None]
+                        repeated.append(sum(weight * score for weight, score in present)
+                                        / sum(weight for weight, _ in present) if present else 0.0)
+                    into.append(repeated)
+            size = len(groups)
+            w = [1.0] * size if weights is None else grouped_weights
+            mean = sum(weight * delta for weight, delta in zip(w, grouped_deltas, strict=True)) / sum(w)
+            if size < 2:
+                return Interval(cases=size, mean=round(mean, 6))
+            stream = Rng(int(content_key("cluster-paired-bootstrap", key, label), 16), "evalrun.noise")
+            bootstraps = []
+            for _ in range(count):
+                # Resample whole repeat batches, independently on either side:
+                # equal repeat numbers do not imply coupled inference randomness.
+                a_repeats = [stream.integer(0, len(baseline) - 1) for _ in baseline]
+                b_repeats = [stream.integer(0, len(recent) - 1) for _ in recent]
+                sampled, weight_sum = 0.0, 0.0
+                for _ in range(size):
+                    index = stream.integer(0, size - 1)
+                    delta = (sum(unit_right[index][repeat] for repeat in b_repeats) / len(b_repeats)
+                             - sum(unit_left[index][repeat] for repeat in a_repeats) / len(a_repeats))
+                    sampled += w[index] * delta
+                    weight_sum += w[index]
+                bootstraps.append(sampled / weight_sum)
+            stderr = statistics.stdev(bootstraps)
+            bootstraps.sort()
+            alpha = 1.0 - level
+            margin = t_quantile(1.0 - alpha / 2, size - 1) * stderr
+            return Interval(cases=size, mean=round(mean, 6), stderr=_round(stderr),
+                            ci_low=_round(_quantile(bootstraps, alpha / 2)),
+                            ci_high=_round(_quantile(bootstraps, 1.0 - alpha / 2)),
+                            t_low=_round(mean - margin), t_high=_round(mean + margin))
         return interval([deltas[case_id] for case_id in ids], confidence=level, resamples=count,
                         seed=f"{key}\0{label}",
                         weights=None if weights is None else [weights.get(case_id, 1.0) for case_id in ids])
@@ -523,7 +595,9 @@ def paired(baseline: Sequence[RunReport], recent: Sequence[RunReport], *, values
         improvements=tuple(case_id for case_id, delta in rounded.items() if delta > band),
         regressions=tuple(case_id for case_id, delta in rounded.items() if delta < -band),
         newly_errored=tuple(newly_errored),
-        noise_floor_baseline=noise_floor(baseline), noise_floor_recent=noise_floor(recent))
+        noise_floor_baseline=noise_floor(baseline), noise_floor_recent=noise_floor(recent),
+        independent_units=None if units is None else len({units[case_id] for case_id in overall}),
+        method="bootstrap" if units is None else "cluster_bootstrap")
 
 
 __all__ = ["AXES", "NOISE_SCHEMA", "PAIRED_SCHEMA", "CaseNoise", "Interval", "NoiseReport", "PairedComparison",

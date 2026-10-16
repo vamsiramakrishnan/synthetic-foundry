@@ -13,7 +13,6 @@ redo.
 from __future__ import annotations
 
 import json
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 
@@ -185,8 +184,8 @@ def after(before: World) -> World:
     return causal.apply(before, causal.TEMPLATE)
 
 
-def test_a_world_without_a_model_is_untouched(before: World) -> None:
-    root = Path(tempfile.mkdtemp()) / "pristine"
+def test_a_world_without_a_model_is_untouched(before: World, tmp_path: Path) -> None:
+    root = tmp_path / "pristine"
     before.export(root)
     assert not (root / "causal.jsonl").exists()
     assert "Causal" not in [step["scenario"] for step in before.recipe["steps"]]
@@ -215,15 +214,15 @@ def test_the_world_validates_and_every_imperfection_is_still_establishable(after
     assert report.ok, [str(v) for v in report.violations]
 
 
-def test_export_load_and_replay_are_byte_identical(after: World) -> None:
-    root = Path(tempfile.mkdtemp()) / "corpus"
+def test_export_load_and_replay_are_byte_identical(after: World, tmp_path: Path) -> None:
+    root = tmp_path / "corpus"
     after.export(root)
     assert (root / "causal.jsonl").exists()
     loaded = World.load(root)
     assert list(loaded.causal) == list(after.causal)
     assert loaded.validate().ok
     replayed = rebuild(loaded.recipe)
-    again = Path(tempfile.mkdtemp()) / "replayed"
+    again = tmp_path / "replayed"
     replayed.export(again)
     for path in sorted(root.iterdir()):
         assert path.read_bytes() == (again / path.name).read_bytes(), path.name

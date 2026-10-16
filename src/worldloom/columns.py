@@ -129,6 +129,11 @@ class Derivation:
 
     kind: ColumnFormula
     operands: tuple[str, ...]
+    decimal_places: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.decimal_places is not None and not 0 <= self.decimal_places <= 12:
+            raise ValueError("formula decimal places must be between zero and twelve")
 
 
 @dataclass(frozen=True)
@@ -239,6 +244,11 @@ class Sheet:
     def not_summable(self) -> frozenset[str]:
         """The keys a subtotal must not sum. Was ``documents._NOT_ADDITIVE``."""
         return frozenset(column.key for column in self.columns if not column.summable)
+
+    def precisions(self) -> dict[str, int]:
+        """Explicit rounding for computed columns, in their semantic units."""
+        return {column.key: column.derive.decimal_places for column in self.columns
+                if column.derive is not None and column.derive.decimal_places is not None}
 
     def rate_kinds(self) -> frozenset[str]:
         """The same rule stated over fact *kinds*, for the trend sheets.
@@ -498,12 +508,12 @@ PNL = Sheet(
         ColumnSpec(key="gm_pct_budget", label="GM% budget",
                    kind="financial.gross_margin_pct.budget", unit="percent",
                    derive=Derivation(FormulaKind.RATIO_PCT,
-                                     ("gp_budget", "revenue_budget")),
+                                     ("gp_budget", "revenue_budget"), decimal_places=2),
                    summable=False),
         ColumnSpec(key="gm_pct_actual", label="GM% actual",
                    kind="financial.gross_margin_pct.actual", unit="percent",
                    derive=Derivation(FormulaKind.RATIO_PCT,
-                                     ("gp_actual", "revenue_actual")),
+                                     ("gp_actual", "revenue_actual"), decimal_places=2),
                    summable=False),
     ),
 )

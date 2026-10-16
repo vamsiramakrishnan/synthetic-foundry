@@ -1,0 +1,4429 @@
+{
+  "assessment": {
+    "capabilities": [
+      {
+        "independent_units": 3,
+        "name": "analyze:docx",
+        "requested": true,
+        "tasks": 38
+      },
+      {
+        "independent_units": 3,
+        "name": "analyze:pptx",
+        "requested": true,
+        "tasks": 38
+      },
+      {
+        "independent_units": 3,
+        "name": "analyze:xlsx",
+        "requested": true,
+        "tasks": 32
+      },
+      {
+        "independent_units": 3,
+        "name": "create:docx",
+        "requested": true,
+        "tasks": 9
+      },
+      {
+        "independent_units": 3,
+        "name": "create:pptx",
+        "requested": true,
+        "tasks": 9
+      },
+      {
+        "independent_units": 3,
+        "name": "create:xlsx",
+        "requested": true,
+        "tasks": 42
+      },
+      {
+        "independent_units": 3,
+        "name": "read:docx",
+        "requested": true,
+        "tasks": 137
+      },
+      {
+        "independent_units": 3,
+        "name": "read:pptx",
+        "requested": true,
+        "tasks": 137
+      },
+      {
+        "independent_units": 3,
+        "name": "read:xlsx",
+        "requested": true,
+        "tasks": 124
+      },
+      {
+        "independent_units": 3,
+        "name": "update:docx",
+        "requested": true,
+        "tasks": 3
+      },
+      {
+        "independent_units": 3,
+        "name": "update:pptx",
+        "requested": true,
+        "tasks": 3
+      },
+      {
+        "independent_units": 3,
+        "name": "update:xlsx",
+        "requested": true,
+        "tasks": 3
+      }
+    ],
+    "coverage_complete": true,
+    "execution_ready": true,
+    "findings": [
+      {
+        "blocks": [],
+        "code": "operation_counts_uneven",
+        "detail": "Requested operations have unequal delivered task counts.",
+        "remediation": "Use the per-operation counts when comparing results; generate missing evidence before expanding weak categories."
+      },
+      {
+        "blocks": [],
+        "code": "shared_evidence",
+        "detail": "575 tasks reduce to 3 evidence components.",
+        "remediation": "Place disjoint canonical sections and facts in separate task input files; paraphrases, extra assertions, and format copies do not add units."
+      }
+    ],
+    "formats": [
+      {
+        "independent_units": 3,
+        "name": "docx",
+        "requested": true,
+        "tasks": 187
+      },
+      {
+        "independent_units": 3,
+        "name": "pptx",
+        "requested": true,
+        "tasks": 187
+      },
+      {
+        "independent_units": 3,
+        "name": "xlsx",
+        "requested": true,
+        "tasks": 201
+      }
+    ],
+    "heldout_coverage_complete": true,
+    "heldout_reference_qualified": 768,
+    "heldout_required_coverage": [
+      {
+        "independent_units": 15,
+        "name": "analyze:docx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:docx",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 90
+      },
+      {
+        "independent_units": 15,
+        "name": "analyze:pptx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:pptx",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 90
+      },
+      {
+        "independent_units": 15,
+        "name": "analyze:xlsx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:xlsx",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 61
+      },
+      {
+        "independent_units": 15,
+        "name": "create:docx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:docx",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 45
+      },
+      {
+        "independent_units": 15,
+        "name": "create:pptx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:pptx",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 39
+      },
+      {
+        "independent_units": 15,
+        "name": "create:xlsx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:xlsx",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 157
+      },
+      {
+        "independent_units": 15,
+        "name": "format:docx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:docx",
+          "operation": null,
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 210
+      },
+      {
+        "independent_units": 15,
+        "name": "format:pptx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:pptx",
+          "operation": null,
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 204
+      },
+      {
+        "independent_units": 15,
+        "name": "format:xlsx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:xlsx",
+          "operation": null,
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 354
+      },
+      {
+        "independent_units": 15,
+        "name": "operation:analyze",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:analyze",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 241
+      },
+      {
+        "independent_units": 15,
+        "name": "operation:create",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:create",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 241
+      },
+      {
+        "independent_units": 15,
+        "name": "operation:read",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:read",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 241
+      },
+      {
+        "independent_units": 15,
+        "name": "operation:update",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:update",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 45
+      },
+      {
+        "independent_units": 15,
+        "name": "read:docx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:docx",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 60
+      },
+      {
+        "independent_units": 15,
+        "name": "read:pptx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:pptx",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 60
+      },
+      {
+        "independent_units": 15,
+        "name": "read:xlsx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:xlsx",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 121
+      },
+      {
+        "independent_units": 15,
+        "name": "update:docx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:docx",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 15
+      },
+      {
+        "independent_units": 15,
+        "name": "update:pptx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:pptx",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 15
+      },
+      {
+        "independent_units": 15,
+        "name": "update:xlsx",
+        "required_units": 15,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:xlsx",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 15
+      }
+    ],
+    "independent_units": 3,
+    "namespace": "CO-0001",
+    "operations": [
+      {
+        "independent_units": 3,
+        "name": "analyze",
+        "requested": true,
+        "tasks": 108
+      },
+      {
+        "independent_units": 3,
+        "name": "create",
+        "requested": true,
+        "tasks": 60
+      },
+      {
+        "independent_units": 3,
+        "name": "read",
+        "requested": true,
+        "tasks": 398
+      },
+      {
+        "independent_units": 3,
+        "name": "update",
+        "requested": true,
+        "tasks": 9
+      }
+    ],
+    "planner_findings": [],
+    "promotion_ready": true,
+    "qualification_policy": {
+      "confidence": 0.95,
+      "min_repeats": 2,
+      "min_units": 5,
+      "trials": 3,
+      "unit_dimension": null
+    },
+    "reference_qualified": 575,
+    "repeats": 2,
+    "required_coverage": [
+      {
+        "independent_units": 3,
+        "name": "analyze:docx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:docx",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 38
+      },
+      {
+        "independent_units": 3,
+        "name": "analyze:pptx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:pptx",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 38
+      },
+      {
+        "independent_units": 3,
+        "name": "analyze:xlsx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:xlsx",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 32
+      },
+      {
+        "independent_units": 3,
+        "name": "create:docx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:docx",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 9
+      },
+      {
+        "independent_units": 3,
+        "name": "create:pptx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:pptx",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 9
+      },
+      {
+        "independent_units": 3,
+        "name": "create:xlsx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:xlsx",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 42
+      },
+      {
+        "independent_units": 3,
+        "name": "format:docx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:docx",
+          "operation": null,
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 187
+      },
+      {
+        "independent_units": 3,
+        "name": "format:pptx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:pptx",
+          "operation": null,
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 187
+      },
+      {
+        "independent_units": 3,
+        "name": "format:xlsx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:xlsx",
+          "operation": null,
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 201
+      },
+      {
+        "independent_units": 3,
+        "name": "operation:analyze",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:analyze",
+          "operation": "analyze",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 108
+      },
+      {
+        "independent_units": 3,
+        "name": "operation:create",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:create",
+          "operation": "create",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 60
+      },
+      {
+        "independent_units": 3,
+        "name": "operation:read",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:read",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 398
+      },
+      {
+        "independent_units": 3,
+        "name": "operation:update",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:update",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 9
+      },
+      {
+        "independent_units": 3,
+        "name": "read:docx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:docx",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 137
+      },
+      {
+        "independent_units": 3,
+        "name": "read:pptx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:pptx",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 137
+      },
+      {
+        "independent_units": 3,
+        "name": "read:xlsx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:xlsx",
+          "operation": "read",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 124
+      },
+      {
+        "independent_units": 3,
+        "name": "update:docx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:docx",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 3
+      },
+      {
+        "independent_units": 3,
+        "name": "update:pptx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:pptx",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 3
+      },
+      {
+        "independent_units": 3,
+        "name": "update:xlsx",
+        "required_units": 1,
+        "requirement": {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:xlsx",
+          "operation": "update",
+          "scope": null
+        },
+        "satisfied": true,
+        "tasks": 3
+      }
+    ],
+    "required_heldout_units": 15,
+    "requirements": {
+      "cells": [
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:docx",
+          "operation": "analyze",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:pptx",
+          "operation": "analyze",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:xlsx",
+          "operation": "analyze",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:docx",
+          "operation": "create",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:pptx",
+          "operation": "create",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:xlsx",
+          "operation": "create",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:docx",
+          "operation": null,
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:pptx",
+          "operation": null,
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "format:xlsx",
+          "operation": null,
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:analyze",
+          "operation": "analyze",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:create",
+          "operation": "create",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:read",
+          "operation": "read",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": null,
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "operation:update",
+          "operation": "update",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:docx",
+          "operation": "read",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:pptx",
+          "operation": "read",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:xlsx",
+          "operation": "read",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:docx",
+          "operation": "update",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:pptx",
+          "operation": "update",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:xlsx",
+          "operation": "update",
+          "scope": null
+        }
+      ],
+      "schema_version": "worldloom.benchmark-requirements/v1"
+    },
+    "schema_version": "worldloom.benchmark-assessment/v1",
+    "split_audit": {
+      "heldout_cases": 768,
+      "heldout_units": 15,
+      "isolated": true,
+      "overlapping_units": 0,
+      "overlaps": [],
+      "training_cases": 575,
+      "training_units": 3
+    },
+    "task_limit": 768,
+    "tasks": 575,
+    "tranche_required_coverage": [
+      [
+        {
+          "independent_units": 5,
+          "name": "analyze:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:docx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 30
+        },
+        {
+          "independent_units": 5,
+          "name": "analyze:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:pptx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 30
+        },
+        {
+          "independent_units": 5,
+          "name": "analyze:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:xlsx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 19
+        },
+        {
+          "independent_units": 5,
+          "name": "create:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:docx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 15
+        },
+        {
+          "independent_units": 5,
+          "name": "create:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:pptx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 13
+        },
+        {
+          "independent_units": 5,
+          "name": "create:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:xlsx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 53
+        },
+        {
+          "independent_units": 5,
+          "name": "format:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:docx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 70
+        },
+        {
+          "independent_units": 5,
+          "name": "format:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:pptx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 68
+        },
+        {
+          "independent_units": 5,
+          "name": "format:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:xlsx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 116
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:analyze",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:analyze",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 79
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:create",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:create",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 81
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:read",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:read",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 79
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:update",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:update",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 15
+        },
+        {
+          "independent_units": 5,
+          "name": "read:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:docx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 20
+        },
+        {
+          "independent_units": 5,
+          "name": "read:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:pptx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 20
+        },
+        {
+          "independent_units": 5,
+          "name": "read:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:xlsx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 39
+        },
+        {
+          "independent_units": 5,
+          "name": "update:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:docx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        },
+        {
+          "independent_units": 5,
+          "name": "update:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:pptx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        },
+        {
+          "independent_units": 5,
+          "name": "update:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:xlsx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        }
+      ],
+      [
+        {
+          "independent_units": 5,
+          "name": "analyze:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:docx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 30
+        },
+        {
+          "independent_units": 5,
+          "name": "analyze:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:pptx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 30
+        },
+        {
+          "independent_units": 5,
+          "name": "analyze:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:xlsx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 21
+        },
+        {
+          "independent_units": 5,
+          "name": "create:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:docx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 15
+        },
+        {
+          "independent_units": 5,
+          "name": "create:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:pptx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 13
+        },
+        {
+          "independent_units": 5,
+          "name": "create:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:xlsx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 52
+        },
+        {
+          "independent_units": 5,
+          "name": "format:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:docx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 70
+        },
+        {
+          "independent_units": 5,
+          "name": "format:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:pptx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 68
+        },
+        {
+          "independent_units": 5,
+          "name": "format:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:xlsx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 119
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:analyze",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:analyze",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 81
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:create",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:create",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 80
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:read",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:read",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 81
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:update",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:update",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 15
+        },
+        {
+          "independent_units": 5,
+          "name": "read:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:docx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 20
+        },
+        {
+          "independent_units": 5,
+          "name": "read:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:pptx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 20
+        },
+        {
+          "independent_units": 5,
+          "name": "read:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:xlsx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 41
+        },
+        {
+          "independent_units": 5,
+          "name": "update:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:docx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        },
+        {
+          "independent_units": 5,
+          "name": "update:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:pptx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        },
+        {
+          "independent_units": 5,
+          "name": "update:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:xlsx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        }
+      ],
+      [
+        {
+          "independent_units": 5,
+          "name": "analyze:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:docx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 30
+        },
+        {
+          "independent_units": 5,
+          "name": "analyze:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:pptx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 30
+        },
+        {
+          "independent_units": 5,
+          "name": "analyze:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "analyze:xlsx",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 21
+        },
+        {
+          "independent_units": 5,
+          "name": "create:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:docx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 15
+        },
+        {
+          "independent_units": 5,
+          "name": "create:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:pptx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 13
+        },
+        {
+          "independent_units": 5,
+          "name": "create:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "create:xlsx",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 52
+        },
+        {
+          "independent_units": 5,
+          "name": "format:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:docx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 70
+        },
+        {
+          "independent_units": 5,
+          "name": "format:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:pptx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 68
+        },
+        {
+          "independent_units": 5,
+          "name": "format:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "format:xlsx",
+            "operation": null,
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 119
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:analyze",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:analyze",
+            "operation": "analyze",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 81
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:create",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:create",
+            "operation": "create",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 80
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:read",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:read",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 81
+        },
+        {
+          "independent_units": 5,
+          "name": "operation:update",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": null,
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "operation:update",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 15
+        },
+        {
+          "independent_units": 5,
+          "name": "read:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:docx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 20
+        },
+        {
+          "independent_units": 5,
+          "name": "read:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:pptx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 20
+        },
+        {
+          "independent_units": 5,
+          "name": "read:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "read:xlsx",
+            "operation": "read",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 41
+        },
+        {
+          "independent_units": 5,
+          "name": "update:docx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "docx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:docx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        },
+        {
+          "independent_units": 5,
+          "name": "update:pptx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "pptx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:pptx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        },
+        {
+          "independent_units": 5,
+          "name": "update:xlsx",
+          "required_units": 5,
+          "requirement": {
+            "calculation": null,
+            "dimensions": [],
+            "format": "xlsx",
+            "format_role": "operation",
+            "min_independent_units": 1,
+            "name": "update:xlsx",
+            "operation": "update",
+            "scope": null
+          },
+          "satisfied": true,
+          "tasks": 5
+        }
+      ]
+    ],
+    "unassigned_tasks": 0,
+    "used_canonical_facts": 97,
+    "used_sources": 9,
+    "workload_digest": "09cc4cbea37c4c73032b5ca42eb54f06"
+  },
+  "demand": {
+    "batch_id": "native-rebuild-pilot",
+    "episodes": 18,
+    "processes": [
+      "supplier_reconciliation",
+      "customer_settlement",
+      "inventory_replenishment"
+    ],
+    "rows_per_episode": 3,
+    "start_period": "2026-01"
+  },
+  "digest": "a04f9e226f847c735ec44429d753df84",
+  "experiment": {
+    "heldout_families": 15,
+    "qualification_policy": {
+      "confidence": 0.95,
+      "min_repeats": 2,
+      "min_units": 5,
+      "trials": 3
+    },
+    "repeats": 2,
+    "seed": 8128,
+    "training_families": 3
+  },
+  "fresh_tranches": [
+    {
+      "cases_digest": "3c47a7c54bd3972498a6d2de58348d13",
+      "descriptive_process_support": {
+        "customer_settlement": {
+          "independent_units": 2,
+          "tasks": 100
+        },
+        "inventory_replenishment": {
+          "independent_units": 1,
+          "tasks": 49
+        },
+        "supplier_reconciliation": {
+          "independent_units": 2,
+          "tasks": 105
+        }
+      },
+      "independent_units": 5,
+      "number": 1,
+      "tasks": 254
+    },
+    {
+      "cases_digest": "7d4b9112dfb8eea9e2bd0dbe5cd89323",
+      "descriptive_process_support": {
+        "customer_settlement": {
+          "independent_units": 1,
+          "tasks": 49
+        },
+        "inventory_replenishment": {
+          "independent_units": 2,
+          "tasks": 104
+        },
+        "supplier_reconciliation": {
+          "independent_units": 2,
+          "tasks": 104
+        }
+      },
+      "independent_units": 5,
+      "number": 2,
+      "tasks": 257
+    },
+    {
+      "cases_digest": "0adb74a8c122b54e64485ef20179b5bc",
+      "descriptive_process_support": {
+        "customer_settlement": {
+          "independent_units": 2,
+          "tasks": 104
+        },
+        "inventory_replenishment": {
+          "independent_units": 2,
+          "tasks": 104
+        },
+        "supplier_reconciliation": {
+          "independent_units": 1,
+          "tasks": 49
+        }
+      },
+      "independent_units": 5,
+      "number": 3,
+      "tasks": 257
+    }
+  ],
+  "heldout": {
+    "benchmark_digest": "cfce6ee3ba3ef3436ba5ec272772533e4aeb5e4838ce7727eb3c2b6313e46380",
+    "calculation_assertion_counts": {
+      "difference": 201,
+      "ratio": 80,
+      "sum": 81
+    },
+    "descriptive_process_support": {
+      "customer_settlement": {
+        "independent_units": 5,
+        "tasks": 253
+      },
+      "inventory_replenishment": {
+        "independent_units": 5,
+        "tasks": 257
+      },
+      "supplier_reconciliation": {
+        "independent_units": 5,
+        "tasks": 258
+      }
+    },
+    "descriptive_template_support": {
+      "chronology_first": {
+        "independent_units": 5,
+        "tasks": 258
+      },
+      "decision_first": {
+        "independent_units": 4,
+        "tasks": 198
+      },
+      "evidence_first": {
+        "independent_units": 6,
+        "tasks": 312
+      }
+    },
+    "file_count": 45,
+    "independent_units": 15,
+    "operation_counts": {
+      "analyze": 241,
+      "create": 241,
+      "read": 241,
+      "update": 45
+    },
+    "operation_format_task_counts": {
+      "analyze:docx": 90,
+      "analyze:pptx": 90,
+      "analyze:xlsx": 61,
+      "create:docx": 45,
+      "create:pptx": 39,
+      "create:xlsx": 157,
+      "read:docx": 60,
+      "read:pptx": 60,
+      "read:xlsx": 121,
+      "update:docx": 15,
+      "update:pptx": 15,
+      "update:xlsx": 15
+    },
+    "planner_capability_counts": {
+      "actual_budget_ratio": 80,
+      "actual_budget_variance": 201,
+      "authored_sum_reconciliation": 81,
+      "business_predicate": 472,
+      "content_update": 45,
+      "evidence_discovery": 768,
+      "formula_output": 121,
+      "multi_source_citations": 165,
+      "native_creation": 241,
+      "native_formula_inspection": 80,
+      "native_preservation": 45,
+      "structured_arithmetic": 362,
+      "structured_output": 241,
+      "table_discovery": 242
+    },
+    "planner_findings": [],
+    "planner_truncated": true,
+    "reference_qualified": 768,
+    "source_files": [
+      {
+        "addressable_units": 174,
+        "artifact_id": "native-family-0d808a7515b567429af70c20edb52bb6-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-62205C281C61A934F8CB473C852B328D"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39380,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "5a227ddf68d3bfbdeae1b753961ccfa62b087a6a5769e5f5a8a4ffe85fd434b9",
+        "size_bytes": 39380
+      },
+      {
+        "addressable_units": 201,
+        "artifact_id": "native-family-0d808a7515b567429af70c20edb52bb6-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-62205C281C61A934F8CB473C852B328D"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44074,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "8a21fc49857ba13b3a47ce18fbcf5b5f28d7820c3eb4f10d165a6f30a2d1b557",
+        "size_bytes": 44074
+      },
+      {
+        "addressable_units": 239,
+        "artifact_id": "native-family-0d808a7515b567429af70c20edb52bb6-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-62205C281C61A934F8CB473C852B328D"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9524,
+          "formula_cells": 19,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "fb575d05b1206fc050b0522cf0e25d8274340e30514cc1c7a468ffc22f385098",
+        "size_bytes": 9524
+      },
+      {
+        "addressable_units": 174,
+        "artifact_id": "native-family-2f627cd262dbdd5f5003cc724fe598bf-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39368,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "c174a4ebfc0ba787582b3502ec99a8cc6a3d1ab6cf06f60701759a18632127e4",
+        "size_bytes": 39368
+      },
+      {
+        "addressable_units": 201,
+        "artifact_id": "native-family-2f627cd262dbdd5f5003cc724fe598bf-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44080,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "e1081016e79933f070f7d5cfc675e3025c78facea78f4cd7d8969304398ae0ef",
+        "size_bytes": 44080
+      },
+      {
+        "addressable_units": 239,
+        "artifact_id": "native-family-2f627cd262dbdd5f5003cc724fe598bf-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9521,
+          "formula_cells": 19,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "781af4aed2f510b704a2a781cccf12872585431ca80df302b4a29ccba61db325",
+        "size_bytes": 9521
+      },
+      {
+        "addressable_units": 190,
+        "artifact_id": "native-family-54110ba84bd2dcea9ba1495169a11375-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39402,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "c28559b695132bed8fd9db5b572dd85605b8503f28b0e5c6a192b2bb2d2dfdab",
+        "size_bytes": 39402
+      },
+      {
+        "addressable_units": 217,
+        "artifact_id": "native-family-54110ba84bd2dcea9ba1495169a11375-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44139,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "67692970fa34db5922be8dc2bfeff3d5eda7e2fb2987977fb3aac18a05633cab",
+        "size_bytes": 44139
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-54110ba84bd2dcea9ba1495169a11375-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9611,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "12cb2749a69e5302219c6950cf401773111e9778062987031d9c2760dfb6939c",
+        "size_bytes": 9611
+      },
+      {
+        "addressable_units": 184,
+        "artifact_id": "native-family-79cc24fbd099bbcdb14aeee9fbd02acb-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39368,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "2a21bcd7160db5172300de82a1abb498a4d09610430a7642a2d1c9c865d7e0d8",
+        "size_bytes": 39368
+      },
+      {
+        "addressable_units": 211,
+        "artifact_id": "native-family-79cc24fbd099bbcdb14aeee9fbd02acb-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44010,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "07e27cef75aace75a331c4b7f78794e9661e355ce0a8885d287bf4b26807d949",
+        "size_bytes": 44010
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-79cc24fbd099bbcdb14aeee9fbd02acb-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9577,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "2ad723ab67d37e6d3f3ee8515051af44544ce9945ef5427ccd7be0005ae1177f",
+        "size_bytes": 9577
+      },
+      {
+        "addressable_units": 174,
+        "artifact_id": "native-family-7f6f2e38c787e09d4dd0e7132fa04f94-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-80537A59AD9D4CC0CCA5F7332633633B"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39380,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "12b53483dae575571039218bdcdc85da86f4764f7efcc6068ab2e441086bcf0a",
+        "size_bytes": 39380
+      },
+      {
+        "addressable_units": 201,
+        "artifact_id": "native-family-7f6f2e38c787e09d4dd0e7132fa04f94-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-80537A59AD9D4CC0CCA5F7332633633B"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44083,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "137f33a54942aa3a17ef9ccf40f5c5dcf7c1481f3fbdb30e175c3b4cb5909dcf",
+        "size_bytes": 44083
+      },
+      {
+        "addressable_units": 239,
+        "artifact_id": "native-family-7f6f2e38c787e09d4dd0e7132fa04f94-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-80537A59AD9D4CC0CCA5F7332633633B"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9515,
+          "formula_cells": 19,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "ea02103d4e9c4211622f28e340a8ba8ae0557a8838d80a662eaef079cb5da8ad",
+        "size_bytes": 9515
+      },
+      {
+        "addressable_units": 174,
+        "artifact_id": "native-family-81ee5e97d355855c3940c5d80cffb143-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-45FDF872561A6FDD4191E635EDC24401"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39363,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "874d6b232144400a5ab1ad82fcc5d712fe6609570954bb4e39031f55a2ff5d13",
+        "size_bytes": 39363
+      },
+      {
+        "addressable_units": 201,
+        "artifact_id": "native-family-81ee5e97d355855c3940c5d80cffb143-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-45FDF872561A6FDD4191E635EDC24401"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44084,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "4b177c089704f6b1859c2f5af1183e2b232acc05e2987a73616df77ac09d5734",
+        "size_bytes": 44084
+      },
+      {
+        "addressable_units": 239,
+        "artifact_id": "native-family-81ee5e97d355855c3940c5d80cffb143-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-45FDF872561A6FDD4191E635EDC24401"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9524,
+          "formula_cells": 19,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "8b2b1e69512dd05dc02188542ff7f10c790eb5462419a86a326ae8ee485ebcde",
+        "size_bytes": 9524
+      },
+      {
+        "addressable_units": 190,
+        "artifact_id": "native-family-83597502c479530a35c64b8cac1862f5-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-F382B50CE9B0E082E2EA748B3D22095A"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39443,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "b84aac6f600591f58a635a8b4584e332b895d461c34fe0e4f2749374dfa016bb",
+        "size_bytes": 39443
+      },
+      {
+        "addressable_units": 217,
+        "artifact_id": "native-family-83597502c479530a35c64b8cac1862f5-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-F382B50CE9B0E082E2EA748B3D22095A"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44155,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "12a0d1c1a95760abd2782e026ec5b05642f46a4d807111248f7b1ecbc74b24ae",
+        "size_bytes": 44155
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-83597502c479530a35c64b8cac1862f5-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-F382B50CE9B0E082E2EA748B3D22095A"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9631,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "18b9bd6669f1f5b4e25d826183ec63044f6f7f99f4b60ce29b25a1b27e2ec447",
+        "size_bytes": 9631
+      },
+      {
+        "addressable_units": 184,
+        "artifact_id": "native-family-b6adb4984a69888bbdcc097b9e8b1c72-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-25673DF90BACDC0925B67B55D1F73984"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39338,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "caf538d8663d2f115a3c987806c1b53db9871afdf763db58d245652e84b483dd",
+        "size_bytes": 39338
+      },
+      {
+        "addressable_units": 211,
+        "artifact_id": "native-family-b6adb4984a69888bbdcc097b9e8b1c72-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-25673DF90BACDC0925B67B55D1F73984"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44018,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "22f3014a2c84f5b48736d40a793c61dc7cf5c520c60a559d0ee039ba0e8fec5d",
+        "size_bytes": 44018
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-b6adb4984a69888bbdcc097b9e8b1c72-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-25673DF90BACDC0925B67B55D1F73984"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9585,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "ad4fb21fa63fe26594f3fff411f5fdac36bd41b48923f8907e310b91bac5b1c7",
+        "size_bytes": 9585
+      },
+      {
+        "addressable_units": 174,
+        "artifact_id": "native-family-c00356570fe29a2ab265e8257e35a83f-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-FC5AE6C96FA579A667F13C11466F76AA"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39351,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "37795d2ffe81c22845ec3afa1fb7e73c2fd4ec8260ef8914108b74735b54789c",
+        "size_bytes": 39351
+      },
+      {
+        "addressable_units": 201,
+        "artifact_id": "native-family-c00356570fe29a2ab265e8257e35a83f-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-FC5AE6C96FA579A667F13C11466F76AA"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44070,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "ffecf5807b9dc637ba2494494e85af0ac1a2968c5f252eacf29a4b6496fd4b44",
+        "size_bytes": 44070
+      },
+      {
+        "addressable_units": 239,
+        "artifact_id": "native-family-c00356570fe29a2ab265e8257e35a83f-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-FC5AE6C96FA579A667F13C11466F76AA"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9507,
+          "formula_cells": 19,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "1c52900be3bc927e6987c868bab31ed5f67aba512ae83b1bf89c491d3027c7c5",
+        "size_bytes": 9507
+      },
+      {
+        "addressable_units": 184,
+        "artifact_id": "native-family-c12f42ddb8d552bde8246ac6e47b8787-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-805411EF62239162D3A2E03E9F1DFA5E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39335,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "fdd693d5371e0c05718d11ed9205c3f4d0e2492c277a0804fbd339af9938f04b",
+        "size_bytes": 39335
+      },
+      {
+        "addressable_units": 211,
+        "artifact_id": "native-family-c12f42ddb8d552bde8246ac6e47b8787-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-805411EF62239162D3A2E03E9F1DFA5E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44008,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "a867b7e5f329e2efe30a1c3410e441109d1d487fc753ceef5930b01df4b960d2",
+        "size_bytes": 44008
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-c12f42ddb8d552bde8246ac6e47b8787-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-805411EF62239162D3A2E03E9F1DFA5E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9582,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "f4c9c0996fff6757a49536380759d41838f4b8a597188e379bd2fa7a51e69ba2",
+        "size_bytes": 9582
+      },
+      {
+        "addressable_units": 184,
+        "artifact_id": "native-family-d59cab701f377c531ed4b3bfe4bc2180-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-CAE73C8931E404A2D5C073AD15F58224"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39374,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "26ab143bc1b2faba6a67779f553c2081e4e7d64908daa17a61c1b9bdb4f879cf",
+        "size_bytes": 39374
+      },
+      {
+        "addressable_units": 211,
+        "artifact_id": "native-family-d59cab701f377c531ed4b3bfe4bc2180-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-CAE73C8931E404A2D5C073AD15F58224"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44047,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "eef9f50b261dc43854b2a12d80c3c8295c8c7fb864cdd916f5ee00fd2092b3cb",
+        "size_bytes": 44047
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-d59cab701f377c531ed4b3bfe4bc2180-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-CAE73C8931E404A2D5C073AD15F58224"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9602,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "4932e43e6c5862cbf2d86dfa39f6cd6576cbd688d618bcde6c7eb6cf8bd44c58",
+        "size_bytes": 9602
+      },
+      {
+        "addressable_units": 184,
+        "artifact_id": "native-family-d9d3d07c8e3516573779d38ec9c9daf2-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-227E83CFEC9772CE3332D9A69BB2723E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39348,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "eda916548ab45ac5a94349bd80d83aa525b07067228a5e71f4348355fd50bb9c",
+        "size_bytes": 39348
+      },
+      {
+        "addressable_units": 211,
+        "artifact_id": "native-family-d9d3d07c8e3516573779d38ec9c9daf2-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-227E83CFEC9772CE3332D9A69BB2723E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44001,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "90d43a378a43e6b8b5125e23bc247145f4c8c4cf9544b16c3b837620c5ac5d85",
+        "size_bytes": 44001
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-d9d3d07c8e3516573779d38ec9c9daf2-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-227E83CFEC9772CE3332D9A69BB2723E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9567,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "3fed5cf6308f11f7927424fa9a567870c3da2084b5a51165e055d285a64e0fb8",
+        "size_bytes": 9567
+      },
+      {
+        "addressable_units": 190,
+        "artifact_id": "native-family-eaf5a1d48ff168a2e658d856eacd6ff7-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39394,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "f50f01b21eb05c7d9d2f54a32f06d9a744da2271ee87daeddfb57c647f330ac5",
+        "size_bytes": 39394
+      },
+      {
+        "addressable_units": 217,
+        "artifact_id": "native-family-eaf5a1d48ff168a2e658d856eacd6ff7-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44132,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "a8d2da8a14a2cae6b189d1f27de37cba759996f4603ee6a7b6d2752bde36dfbd",
+        "size_bytes": 44132
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-eaf5a1d48ff168a2e658d856eacd6ff7-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9613,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "84d61425d180073e9e04e34beec70b5fdd502c6528350aef1cca303ad275d21c",
+        "size_bytes": 9613
+      },
+      {
+        "addressable_units": 190,
+        "artifact_id": "native-family-f0364fbc543840ca4d54eacf11e5c885-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39411,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "b2986cea995c2defae9c5d717714258ba4913cdac986ae3bdc47ecbee5ea002a",
+        "size_bytes": 39411
+      },
+      {
+        "addressable_units": 217,
+        "artifact_id": "native-family-f0364fbc543840ca4d54eacf11e5c885-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44152,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "693d3862e179f1d52f749e7660b3945b538bd94a5fac4db0dd2d884a085bfeb8",
+        "size_bytes": 44152
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-f0364fbc543840ca4d54eacf11e5c885-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9633,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "e564f4c059eb8c72af79e1cbbabd4c3059ec8af4fd3bb16b144acecb5ec60abc",
+        "size_bytes": 9633
+      },
+      {
+        "addressable_units": 190,
+        "artifact_id": "native-family-f105b7a0fafa4462a72fdd69928dce1d-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39447,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "b4758cb32b41f9bdbde9c81b2abe5f6eb4a1f03ecc3187a92d039af898c981f3",
+        "size_bytes": 39447
+      },
+      {
+        "addressable_units": 217,
+        "artifact_id": "native-family-f105b7a0fafa4462a72fdd69928dce1d-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44149,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "33a197f2a1c4aa7b5170509e66ec62607297df2646a019d81b21a02f0d3c300c",
+        "size_bytes": 44149
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-f105b7a0fafa4462a72fdd69928dce1d-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9622,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "274fe66926c38f4ba76301ac35985078adb8dfc982efcedd30587e866a07d91f",
+        "size_bytes": 9622
+      }
+    ],
+    "split_role": "heldout",
+    "tasks": 768,
+    "total_source_bytes": 1395518
+  },
+  "measurement_limits": {
+    "candidate_proposals": 0,
+    "cross_artifact_workflows_measured": false,
+    "process_and_template_counts_are_descriptive": true,
+    "target_calls": 0,
+    "target_model_gain_measured": false,
+    "visual_layout_parity_measured": false
+  },
+  "partition": {
+    "available_components": 18,
+    "exclusions": [],
+    "heldout_families": 15,
+    "omissions": [],
+    "split_audit": {
+      "heldout_cases": 768,
+      "heldout_units": 15,
+      "isolated": true,
+      "overlapping_units": 0,
+      "overlaps": [],
+      "training_cases": 575,
+      "training_units": 3
+    },
+    "training_families": 3
+  },
+  "runtime": {
+    "native_grader": {
+      "dependencies": {
+        "networkx": "3.7",
+        "openpyxl": "3.1.5",
+        "pydantic": "2.13.5",
+        "python-docx": "1.2.0",
+        "python-pptx": "1.0.2"
+      },
+      "digest": "d0978032ef86a91188dd2dcdd782bbdf",
+      "schema": "worldloom.native-grader/v1",
+      "sources": {
+        "worldloom.formula_semantics": "0a5660c55f12b2acd569458219d5e30720a6f52a74abd0917073b4f3cecb35de",
+        "worldloom.native_artifacts": "b8a43f9fed5def4a94aa2985739f57bd09a90d02adbb81a379aa778e9c896170",
+        "worldloom.native_business": "7906772e179c2e22e538f51fe69ba03970c4de158620241618aae80724365d33",
+        "worldloom.native_corpus": "62b75f07cb3021dabcc46d010b42a16855f9a79132b4340ea8cb80b988ec828c",
+        "worldloom.native_eval_bridge": "2fb03e4d34f4be38022ff34f8d9900ef7c3bffe24774964a464345dcdeccc074",
+        "worldloom.native_query_evidence": "b3f63dcc3273462ea0cc45e3129cc204a001c040fe95d6708ec40dddfeae3dce",
+        "worldloom.native_query_planning": "2c5554aeeeba8402e9f30feffe59f21a01ab75eed2e7b6a7471db1a834eb8b05",
+        "worldloom.native_reference": "027cba759dd01c4625e26c22030cb9e14559bd5d76004bb8fd8a01430a4e7d7c",
+        "worldloom.native_tasks": "51b273d78793cf029911997253e9730c72973384b267874b7cd5470068390456"
+      }
+    },
+    "python": "3.12.14"
+  },
+  "schema": "worldloom.native-rebuild-pilot/v1",
+  "scope": {
+    "background_fact_ids_used": [],
+    "episode_pairs_with_shared_canonical_ancestry": 0,
+    "selected_source_artifacts": 18,
+    "unique_scoped_canonical_facts": 582
+  },
+  "source_coherence_verified": true,
+  "source_digest": "b1525e3a07ee1ef03c62b7fb2531a1faa9d6457cc7150e63d25c24a9420362b7",
+  "source_episodes": [
+    {
+      "case_id": "ddedc6dfb3a664aeb8e994deea0aedc5",
+      "event_ids": [
+        "EV-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-OPEN",
+        "EV-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-REVIEW",
+        "EV-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-DATE-CLOSED",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-DATE-OPENED",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-DATE-REVIEWED",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-FINAL-STATUS",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE0-ELIGIBLE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE0-PRICE-CHANGE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE0-UNRECEIPTED",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE1-ELIGIBLE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE1-PRICE-CHANGE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE1-UNRECEIPTED",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE2-ELIGIBLE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE2-PRICE-CHANGE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE2-UNRECEIPTED",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-REVIEW-STATUS",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-STATUS",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-TOTAL-ACTUAL",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-TOTAL-BUDGET",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-TOTAL-ELIGIBLE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-TOTAL-PRICE-CHANGE",
+        "FACT-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5-TOTAL-UNRECEIPTED"
+      ],
+      "formula_cells": 19,
+      "numeric_facts": 20,
+      "period": "2026-01",
+      "process": "supplier_reconciliation",
+      "simulation_digest": "d5214511ec3f466628ec02e0eb2cd5eb71ec51f41fe03c05b0cb540889e63c9a",
+      "source_artifact_id": "ART-NATIVE-DDEDC6DFB3A664AEB8E994DEEA0AEDC5",
+      "template_variant": "decision_first"
+    },
+    {
+      "case_id": "36e4421573b0a6666933fc0abb159e5b",
+      "event_ids": [
+        "EV-NATIVE-36E4421573B0A6666933FC0ABB159E5B-OPEN",
+        "EV-NATIVE-36E4421573B0A6666933FC0ABB159E5B-REVIEW",
+        "EV-NATIVE-36E4421573B0A6666933FC0ABB159E5B-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-DATE-CLOSED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-DATE-OPENED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-DATE-REVIEWED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-FINAL-STATUS",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE0-APPROVED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE0-PAID",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE0-PENDING",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE0-REJECTED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE0-SURGE",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE1-APPROVED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE1-PAID",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE1-PENDING",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE1-REJECTED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE1-SURGE",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE2-APPROVED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE2-PAID",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE2-PENDING",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE2-REJECTED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE2-SURGE",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-REVIEW-STATUS",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-STATUS",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-TOTAL-ACTUAL",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-TOTAL-APPROVED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-TOTAL-BUDGET",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-TOTAL-PAID",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-TOTAL-PENDING",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-TOTAL-REJECTED",
+        "FACT-NATIVE-36E4421573B0A6666933FC0ABB159E5B-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-01",
+      "process": "customer_settlement",
+      "simulation_digest": "6784b9e8ecd07bbb70162865748d3e3ccf51d3ba6e10028f90ed7beb9a051ca2",
+      "source_artifact_id": "ART-NATIVE-36E4421573B0A6666933FC0ABB159E5B",
+      "template_variant": "decision_first"
+    },
+    {
+      "case_id": "6c04139955e6339a887f128801e8869e",
+      "event_ids": [
+        "EV-NATIVE-6C04139955E6339A887F128801E8869E-OPEN",
+        "EV-NATIVE-6C04139955E6339A887F128801E8869E-REVIEW",
+        "EV-NATIVE-6C04139955E6339A887F128801E8869E-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-DATE-CLOSED",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-DATE-OPENED",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-DATE-REVIEWED",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-FINAL-STATUS",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE0-INBOUND",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE0-SHORTAGE",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE0-STOCK",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE0-SUPPLY",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE0-SURGE",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE1-INBOUND",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE1-SHORTAGE",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE1-STOCK",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE1-SUPPLY",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE1-SURGE",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE2-INBOUND",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE2-SHORTAGE",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE2-STOCK",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE2-SUPPLY",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE2-SURGE",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-REVIEW-STATUS",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-STATUS",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-TOTAL-ACTUAL",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-TOTAL-BUDGET",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-TOTAL-INBOUND",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-TOTAL-SHORTAGE",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-TOTAL-STOCK",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-TOTAL-SUPPLY",
+        "FACT-NATIVE-6C04139955E6339A887F128801E8869E-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-01",
+      "process": "inventory_replenishment",
+      "simulation_digest": "0e1f6ea64365d42902cce2dc9a0ab12324de3ca036eee10460fcfb215f1b7512",
+      "source_artifact_id": "ART-NATIVE-6C04139955E6339A887F128801E8869E",
+      "template_variant": "decision_first"
+    },
+    {
+      "case_id": "80537a59ad9d4cc0cca5f7332633633b",
+      "event_ids": [
+        "EV-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-OPEN",
+        "EV-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-REVIEW",
+        "EV-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-DATE-CLOSED",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-DATE-OPENED",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-DATE-REVIEWED",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-FINAL-STATUS",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE0-ELIGIBLE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE0-PRICE-CHANGE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE0-UNRECEIPTED",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE1-ELIGIBLE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE1-PRICE-CHANGE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE1-UNRECEIPTED",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE2-ELIGIBLE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE2-PRICE-CHANGE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE2-UNRECEIPTED",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-REVIEW-STATUS",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-STATUS",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-TOTAL-ACTUAL",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-TOTAL-BUDGET",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-TOTAL-ELIGIBLE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-TOTAL-PRICE-CHANGE",
+        "FACT-NATIVE-80537A59AD9D4CC0CCA5F7332633633B-TOTAL-UNRECEIPTED"
+      ],
+      "formula_cells": 19,
+      "numeric_facts": 20,
+      "period": "2026-02",
+      "process": "supplier_reconciliation",
+      "simulation_digest": "a0139174312bc478b9b97fb089017baafe522e6a7634531188aaa9bc1cf166b5",
+      "source_artifact_id": "ART-NATIVE-80537A59AD9D4CC0CCA5F7332633633B",
+      "template_variant": "evidence_first"
+    },
+    {
+      "case_id": "3cd432bdfa34ed27c3117d5f841e34c5",
+      "event_ids": [
+        "EV-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-OPEN",
+        "EV-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-REVIEW",
+        "EV-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-DATE-CLOSED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-DATE-OPENED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-DATE-REVIEWED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-FINAL-STATUS",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE0-APPROVED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE0-PAID",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE0-PENDING",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE0-REJECTED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE0-SURGE",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE1-APPROVED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE1-PAID",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE1-PENDING",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE1-REJECTED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE1-SURGE",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE2-APPROVED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE2-PAID",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE2-PENDING",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE2-REJECTED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE2-SURGE",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-REVIEW-STATUS",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-STATUS",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-TOTAL-ACTUAL",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-TOTAL-APPROVED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-TOTAL-BUDGET",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-TOTAL-PAID",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-TOTAL-PENDING",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-TOTAL-REJECTED",
+        "FACT-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-02",
+      "process": "customer_settlement",
+      "simulation_digest": "46a17d19a15992f72565db2a1bd19d0e4b4d81227e9b1a7263781f44312083f2",
+      "source_artifact_id": "ART-NATIVE-3CD432BDFA34ED27C3117D5F841E34C5",
+      "template_variant": "evidence_first"
+    },
+    {
+      "case_id": "227e83cfec9772ce3332d9a69bb2723e",
+      "event_ids": [
+        "EV-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-OPEN",
+        "EV-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-REVIEW",
+        "EV-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-DATE-CLOSED",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-DATE-OPENED",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-DATE-REVIEWED",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-FINAL-STATUS",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE0-INBOUND",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE0-SHORTAGE",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE0-STOCK",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE0-SUPPLY",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE0-SURGE",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE1-INBOUND",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE1-SHORTAGE",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE1-STOCK",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE1-SUPPLY",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE1-SURGE",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE2-INBOUND",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE2-SHORTAGE",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE2-STOCK",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE2-SUPPLY",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE2-SURGE",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-REVIEW-STATUS",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-STATUS",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-TOTAL-ACTUAL",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-TOTAL-BUDGET",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-TOTAL-INBOUND",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-TOTAL-SHORTAGE",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-TOTAL-STOCK",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-TOTAL-SUPPLY",
+        "FACT-NATIVE-227E83CFEC9772CE3332D9A69BB2723E-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-02",
+      "process": "inventory_replenishment",
+      "simulation_digest": "c034f5fcd3ecbb7d27a329ca8101a54681af17f140a7a95f53cd9ba4ebff50a3",
+      "source_artifact_id": "ART-NATIVE-227E83CFEC9772CE3332D9A69BB2723E",
+      "template_variant": "evidence_first"
+    },
+    {
+      "case_id": "a35fec45f57f803fcb152e7493b0e680",
+      "event_ids": [
+        "EV-NATIVE-A35FEC45F57F803FCB152E7493B0E680-OPEN",
+        "EV-NATIVE-A35FEC45F57F803FCB152E7493B0E680-REVIEW",
+        "EV-NATIVE-A35FEC45F57F803FCB152E7493B0E680-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-DATE-CLOSED",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-DATE-OPENED",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-DATE-REVIEWED",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-FINAL-STATUS",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE0-ELIGIBLE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE0-PRICE-CHANGE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE0-UNRECEIPTED",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE1-ELIGIBLE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE1-PRICE-CHANGE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE1-UNRECEIPTED",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE2-ELIGIBLE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE2-PRICE-CHANGE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE2-UNRECEIPTED",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-REVIEW-STATUS",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-STATUS",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-TOTAL-ACTUAL",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-TOTAL-BUDGET",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-TOTAL-ELIGIBLE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-TOTAL-PRICE-CHANGE",
+        "FACT-NATIVE-A35FEC45F57F803FCB152E7493B0E680-TOTAL-UNRECEIPTED"
+      ],
+      "formula_cells": 19,
+      "numeric_facts": 20,
+      "period": "2026-03",
+      "process": "supplier_reconciliation",
+      "simulation_digest": "1e2412a8e5267b640188199dfd6e60d0a20ef7e65e588391cf0cd131692bde1e",
+      "source_artifact_id": "ART-NATIVE-A35FEC45F57F803FCB152E7493B0E680",
+      "template_variant": "chronology_first"
+    },
+    {
+      "case_id": "f7fe3ab3fc3102da6ac3ed66f26d5b64",
+      "event_ids": [
+        "EV-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-OPEN",
+        "EV-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-REVIEW",
+        "EV-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-DATE-CLOSED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-DATE-OPENED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-DATE-REVIEWED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-FINAL-STATUS",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE0-APPROVED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE0-PAID",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE0-PENDING",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE0-REJECTED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE0-SURGE",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE1-APPROVED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE1-PAID",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE1-PENDING",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE1-REJECTED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE1-SURGE",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE2-APPROVED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE2-PAID",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE2-PENDING",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE2-REJECTED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE2-SURGE",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-REVIEW-STATUS",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-STATUS",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-TOTAL-ACTUAL",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-TOTAL-APPROVED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-TOTAL-BUDGET",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-TOTAL-PAID",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-TOTAL-PENDING",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-TOTAL-REJECTED",
+        "FACT-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-03",
+      "process": "customer_settlement",
+      "simulation_digest": "75f77bcd4e9ce8527c084e527ce15fd312bf82f4b0806a1b0c3f84184f4cb3be",
+      "source_artifact_id": "ART-NATIVE-F7FE3AB3FC3102DA6AC3ED66F26D5B64",
+      "template_variant": "chronology_first"
+    },
+    {
+      "case_id": "805411ef62239162d3a2e03e9f1dfa5e",
+      "event_ids": [
+        "EV-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-OPEN",
+        "EV-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-REVIEW",
+        "EV-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-DATE-CLOSED",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-DATE-OPENED",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-DATE-REVIEWED",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-FINAL-STATUS",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE0-INBOUND",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE0-SHORTAGE",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE0-STOCK",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE0-SUPPLY",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE0-SURGE",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE1-INBOUND",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE1-SHORTAGE",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE1-STOCK",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE1-SUPPLY",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE1-SURGE",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE2-INBOUND",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE2-SHORTAGE",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE2-STOCK",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE2-SUPPLY",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE2-SURGE",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-REVIEW-STATUS",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-STATUS",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-TOTAL-ACTUAL",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-TOTAL-BUDGET",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-TOTAL-INBOUND",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-TOTAL-SHORTAGE",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-TOTAL-STOCK",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-TOTAL-SUPPLY",
+        "FACT-NATIVE-805411EF62239162D3A2E03E9F1DFA5E-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-03",
+      "process": "inventory_replenishment",
+      "simulation_digest": "73ccf996c72b93fc6d7000f3515de7e7e5214d7fd6952cceae1ef1d4603ba152",
+      "source_artifact_id": "ART-NATIVE-805411EF62239162D3A2E03E9F1DFA5E",
+      "template_variant": "chronology_first"
+    },
+    {
+      "case_id": "45fdf872561a6fdd4191e635edc24401",
+      "event_ids": [
+        "EV-NATIVE-45FDF872561A6FDD4191E635EDC24401-OPEN",
+        "EV-NATIVE-45FDF872561A6FDD4191E635EDC24401-REVIEW",
+        "EV-NATIVE-45FDF872561A6FDD4191E635EDC24401-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-DATE-CLOSED",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-DATE-OPENED",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-DATE-REVIEWED",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-FINAL-STATUS",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE0-ELIGIBLE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE0-PRICE-CHANGE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE0-UNRECEIPTED",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE1-ELIGIBLE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE1-PRICE-CHANGE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE1-UNRECEIPTED",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE2-ELIGIBLE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE2-PRICE-CHANGE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE2-UNRECEIPTED",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-REVIEW-STATUS",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-STATUS",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-TOTAL-ACTUAL",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-TOTAL-BUDGET",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-TOTAL-ELIGIBLE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-TOTAL-PRICE-CHANGE",
+        "FACT-NATIVE-45FDF872561A6FDD4191E635EDC24401-TOTAL-UNRECEIPTED"
+      ],
+      "formula_cells": 19,
+      "numeric_facts": 20,
+      "period": "2026-04",
+      "process": "supplier_reconciliation",
+      "simulation_digest": "bf8ded811f5f644b505f181f7a2bfebff8fbb2897aab52589f0460432ff6bd87",
+      "source_artifact_id": "ART-NATIVE-45FDF872561A6FDD4191E635EDC24401",
+      "template_variant": "decision_first"
+    },
+    {
+      "case_id": "7553dedeea0622901fce3f0cb81bdfdc",
+      "event_ids": [
+        "EV-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-OPEN",
+        "EV-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-REVIEW",
+        "EV-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-DATE-CLOSED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-DATE-OPENED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-DATE-REVIEWED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-FINAL-STATUS",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE0-APPROVED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE0-PAID",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE0-PENDING",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE0-REJECTED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE0-SURGE",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE1-APPROVED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE1-PAID",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE1-PENDING",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE1-REJECTED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE1-SURGE",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE2-APPROVED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE2-PAID",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE2-PENDING",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE2-REJECTED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE2-SURGE",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-REVIEW-STATUS",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-STATUS",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-TOTAL-ACTUAL",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-TOTAL-APPROVED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-TOTAL-BUDGET",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-TOTAL-PAID",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-TOTAL-PENDING",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-TOTAL-REJECTED",
+        "FACT-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-04",
+      "process": "customer_settlement",
+      "simulation_digest": "bbe96dd3e7687a32c8bb7a0c208b8548ed168e403f03ce62805f8d995e380c2e",
+      "source_artifact_id": "ART-NATIVE-7553DEDEEA0622901FCE3F0CB81BDFDC",
+      "template_variant": "decision_first"
+    },
+    {
+      "case_id": "cae73c8931e404a2d5c073ad15f58224",
+      "event_ids": [
+        "EV-NATIVE-CAE73C8931E404A2D5C073AD15F58224-OPEN",
+        "EV-NATIVE-CAE73C8931E404A2D5C073AD15F58224-REVIEW",
+        "EV-NATIVE-CAE73C8931E404A2D5C073AD15F58224-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-DATE-CLOSED",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-DATE-OPENED",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-DATE-REVIEWED",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-FINAL-STATUS",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE0-INBOUND",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE0-SHORTAGE",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE0-STOCK",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE0-SUPPLY",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE0-SURGE",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE1-INBOUND",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE1-SHORTAGE",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE1-STOCK",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE1-SUPPLY",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE1-SURGE",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE2-INBOUND",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE2-SHORTAGE",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE2-STOCK",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE2-SUPPLY",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE2-SURGE",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-REVIEW-STATUS",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-STATUS",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-TOTAL-ACTUAL",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-TOTAL-BUDGET",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-TOTAL-INBOUND",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-TOTAL-SHORTAGE",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-TOTAL-STOCK",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-TOTAL-SUPPLY",
+        "FACT-NATIVE-CAE73C8931E404A2D5C073AD15F58224-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-04",
+      "process": "inventory_replenishment",
+      "simulation_digest": "1ce39966c357a845a3dd08186c8cd4b944afbd625904d0e9b61ad24cda99c8b2",
+      "source_artifact_id": "ART-NATIVE-CAE73C8931E404A2D5C073AD15F58224",
+      "template_variant": "decision_first"
+    },
+    {
+      "case_id": "62205c281c61a934f8cb473c852b328d",
+      "event_ids": [
+        "EV-NATIVE-62205C281C61A934F8CB473C852B328D-OPEN",
+        "EV-NATIVE-62205C281C61A934F8CB473C852B328D-REVIEW",
+        "EV-NATIVE-62205C281C61A934F8CB473C852B328D-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-DATE-CLOSED",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-DATE-OPENED",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-DATE-REVIEWED",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-FINAL-STATUS",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE0-ELIGIBLE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE0-PRICE-CHANGE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE0-UNRECEIPTED",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE1-ELIGIBLE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE1-PRICE-CHANGE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE1-UNRECEIPTED",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE2-ELIGIBLE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE2-PRICE-CHANGE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE2-UNRECEIPTED",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-REVIEW-STATUS",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-STATUS",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-TOTAL-ACTUAL",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-TOTAL-BUDGET",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-TOTAL-ELIGIBLE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-TOTAL-PRICE-CHANGE",
+        "FACT-NATIVE-62205C281C61A934F8CB473C852B328D-TOTAL-UNRECEIPTED"
+      ],
+      "formula_cells": 19,
+      "numeric_facts": 20,
+      "period": "2026-05",
+      "process": "supplier_reconciliation",
+      "simulation_digest": "16f6187c347b47bbfd39b96b016c5039db577c6989b145751c068d2090f07718",
+      "source_artifact_id": "ART-NATIVE-62205C281C61A934F8CB473C852B328D",
+      "template_variant": "evidence_first"
+    },
+    {
+      "case_id": "f382b50ce9b0e082e2ea748b3d22095a",
+      "event_ids": [
+        "EV-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-OPEN",
+        "EV-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-REVIEW",
+        "EV-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-DATE-CLOSED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-DATE-OPENED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-DATE-REVIEWED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-FINAL-STATUS",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE0-APPROVED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE0-PAID",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE0-PENDING",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE0-REJECTED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE0-SURGE",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE1-APPROVED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE1-PAID",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE1-PENDING",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE1-REJECTED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE1-SURGE",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE2-APPROVED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE2-PAID",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE2-PENDING",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE2-REJECTED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE2-SURGE",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-REVIEW-STATUS",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-STATUS",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-TOTAL-ACTUAL",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-TOTAL-APPROVED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-TOTAL-BUDGET",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-TOTAL-PAID",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-TOTAL-PENDING",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-TOTAL-REJECTED",
+        "FACT-NATIVE-F382B50CE9B0E082E2EA748B3D22095A-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-05",
+      "process": "customer_settlement",
+      "simulation_digest": "8ca9419abfc8a22d9ef6f4090ebfbb13170f0a8a74997647c16d95b651fd3251",
+      "source_artifact_id": "ART-NATIVE-F382B50CE9B0E082E2EA748B3D22095A",
+      "template_variant": "evidence_first"
+    },
+    {
+      "case_id": "9e44cf4fc3b5fd63c54a82cf8530526d",
+      "event_ids": [
+        "EV-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-OPEN",
+        "EV-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-REVIEW",
+        "EV-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-DATE-CLOSED",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-DATE-OPENED",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-DATE-REVIEWED",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-FINAL-STATUS",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE0-INBOUND",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE0-SHORTAGE",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE0-STOCK",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE0-SUPPLY",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE0-SURGE",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE1-INBOUND",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE1-SHORTAGE",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE1-STOCK",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE1-SUPPLY",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE1-SURGE",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE2-INBOUND",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE2-SHORTAGE",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE2-STOCK",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE2-SUPPLY",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE2-SURGE",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-REVIEW-STATUS",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-STATUS",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-TOTAL-ACTUAL",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-TOTAL-BUDGET",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-TOTAL-INBOUND",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-TOTAL-SHORTAGE",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-TOTAL-STOCK",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-TOTAL-SUPPLY",
+        "FACT-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-05",
+      "process": "inventory_replenishment",
+      "simulation_digest": "b750815b306fc2d269ca1bd17d3fde391d9aefd38ab9ec51bea927a9bdf9ecb0",
+      "source_artifact_id": "ART-NATIVE-9E44CF4FC3B5FD63C54A82CF8530526D",
+      "template_variant": "evidence_first"
+    },
+    {
+      "case_id": "fc5ae6c96fa579a667f13c11466f76aa",
+      "event_ids": [
+        "EV-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-OPEN",
+        "EV-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-REVIEW",
+        "EV-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-DATE-CLOSED",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-DATE-OPENED",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-DATE-REVIEWED",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-FINAL-STATUS",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE0-ELIGIBLE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE0-PRICE-CHANGE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE0-UNRECEIPTED",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE1-ELIGIBLE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE1-PRICE-CHANGE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE1-UNRECEIPTED",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE2-ELIGIBLE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE2-PRICE-CHANGE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE2-UNRECEIPTED",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-REVIEW-STATUS",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-STATUS",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-TOTAL-ACTUAL",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-TOTAL-BUDGET",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-TOTAL-ELIGIBLE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-TOTAL-PRICE-CHANGE",
+        "FACT-NATIVE-FC5AE6C96FA579A667F13C11466F76AA-TOTAL-UNRECEIPTED"
+      ],
+      "formula_cells": 19,
+      "numeric_facts": 20,
+      "period": "2026-06",
+      "process": "supplier_reconciliation",
+      "simulation_digest": "dceee53cdc3f3f98f5d60d92ccedd4fc1b4022eeb493b295a21d3edab2a96051",
+      "source_artifact_id": "ART-NATIVE-FC5AE6C96FA579A667F13C11466F76AA",
+      "template_variant": "chronology_first"
+    },
+    {
+      "case_id": "fc0caca670a1c180593dcaa3f1bfacb8",
+      "event_ids": [
+        "EV-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-OPEN",
+        "EV-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-REVIEW",
+        "EV-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-DATE-CLOSED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-DATE-OPENED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-DATE-REVIEWED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-FINAL-STATUS",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE0-APPROVED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE0-PAID",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE0-PENDING",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE0-REJECTED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE0-SURGE",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE1-APPROVED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE1-PAID",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE1-PENDING",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE1-REJECTED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE1-SURGE",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE2-APPROVED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE2-PAID",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE2-PENDING",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE2-REJECTED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE2-SURGE",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-REVIEW-STATUS",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-STATUS",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-TOTAL-ACTUAL",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-TOTAL-APPROVED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-TOTAL-BUDGET",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-TOTAL-PAID",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-TOTAL-PENDING",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-TOTAL-REJECTED",
+        "FACT-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-06",
+      "process": "customer_settlement",
+      "simulation_digest": "969e26cd9e82076685a93f1072373a87a3fcb7251a06b28c2cc0a8f7c163d83d",
+      "source_artifact_id": "ART-NATIVE-FC0CACA670A1C180593DCAA3F1BFACB8",
+      "template_variant": "chronology_first"
+    },
+    {
+      "case_id": "25673df90bacdc0925b67b55d1f73984",
+      "event_ids": [
+        "EV-NATIVE-25673DF90BACDC0925B67B55D1F73984-OPEN",
+        "EV-NATIVE-25673DF90BACDC0925B67B55D1F73984-REVIEW",
+        "EV-NATIVE-25673DF90BACDC0925B67B55D1F73984-CLOSE"
+      ],
+      "fact_ids": [
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-ACCOUNTABLE-OWNER",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-DATE-CLOSED",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-DATE-OPENED",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-DATE-REVIEWED",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-FINAL-STATUS",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE0-INBOUND",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE0-SHORTAGE",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE0-STOCK",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE0-SUPPLY",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE0-SURGE",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE0-VOLUME-ACTUAL",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE0-VOLUME-BUDGET",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE1-INBOUND",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE1-SHORTAGE",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE1-STOCK",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE1-SUPPLY",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE1-SURGE",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE1-VOLUME-ACTUAL",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE1-VOLUME-BUDGET",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE2-INBOUND",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE2-SHORTAGE",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE2-STOCK",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE2-SUPPLY",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE2-SURGE",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE2-VOLUME-ACTUAL",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-LINE2-VOLUME-BUDGET",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-REVIEW-STATUS",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-STATUS",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-TOTAL-ACTUAL",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-TOTAL-BUDGET",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-TOTAL-INBOUND",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-TOTAL-SHORTAGE",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-TOTAL-STOCK",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-TOTAL-SUPPLY",
+        "FACT-NATIVE-25673DF90BACDC0925B67B55D1F73984-TOTAL-SURGE"
+      ],
+      "formula_cells": 24,
+      "numeric_facts": 28,
+      "period": "2026-06",
+      "process": "inventory_replenishment",
+      "simulation_digest": "4b4ab89e72918efb50fdae6d538b2965163688fcfbf4b87f6f6f9ee70862d5db",
+      "source_artifact_id": "ART-NATIVE-25673DF90BACDC0925B67B55D1F73984",
+      "template_variant": "chronology_first"
+    }
+  ],
+  "source_recipe_replay_verified": true,
+  "training": {
+    "benchmark_digest": "9b8fb882cff7d2d6ecaf9d7c2d5f2a61052b5dbbb29f388d7b98e82bdbdf8765",
+    "calculation_assertion_counts": {
+      "difference": 66,
+      "ratio": 33,
+      "sum": 42
+    },
+    "descriptive_process_support": {
+      "customer_settlement": {
+        "independent_units": 1,
+        "tasks": 199
+      },
+      "inventory_replenishment": {
+        "independent_units": 1,
+        "tasks": 206
+      },
+      "supplier_reconciliation": {
+        "independent_units": 1,
+        "tasks": 170
+      }
+    },
+    "descriptive_template_support": {
+      "chronology_first": {
+        "independent_units": 1,
+        "tasks": 170
+      },
+      "decision_first": {
+        "independent_units": 2,
+        "tasks": 405
+      }
+    },
+    "file_count": 9,
+    "independent_units": 3,
+    "operation_counts": {
+      "analyze": 108,
+      "create": 60,
+      "read": 398,
+      "update": 9
+    },
+    "operation_format_task_counts": {
+      "analyze:docx": 38,
+      "analyze:pptx": 38,
+      "analyze:xlsx": 32,
+      "create:docx": 9,
+      "create:pptx": 9,
+      "create:xlsx": 42,
+      "read:docx": 137,
+      "read:pptx": 137,
+      "read:xlsx": 124,
+      "update:docx": 3,
+      "update:pptx": 3,
+      "update:xlsx": 3
+    },
+    "planner_capability_counts": {
+      "actual_budget_ratio": 33,
+      "actual_budget_variance": 66,
+      "authored_sum_reconciliation": 42,
+      "business_predicate": 370,
+      "content_update": 9,
+      "evidence_discovery": 575,
+      "formula_output": 33,
+      "multi_source_citations": 36,
+      "native_creation": 60,
+      "native_formula_inspection": 67,
+      "native_preservation": 9,
+      "structured_arithmetic": 141,
+      "structured_output": 60,
+      "table_discovery": 369
+    },
+    "planner_findings": [],
+    "planner_truncated": false,
+    "reference_qualified": 575,
+    "source_files": [
+      {
+        "addressable_units": 190,
+        "artifact_id": "native-family-08af79fb222e6ec7c12af12bbe4875e8-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-36E4421573B0A6666933FC0ABB159E5B"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39409,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "486c10590de3857f0d9c82f6a41d12783d49700aa28c77886c31ea4f26d2a4fd",
+        "size_bytes": 39409
+      },
+      {
+        "addressable_units": 217,
+        "artifact_id": "native-family-08af79fb222e6ec7c12af12bbe4875e8-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-36E4421573B0A6666933FC0ABB159E5B"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44162,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "d32030f49b541db57ebf00eb3fb7b12ea78704c7f126d4c11377c2e9ab3d7053",
+        "size_bytes": 44162
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-08af79fb222e6ec7c12af12bbe4875e8-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-36E4421573B0A6666933FC0ABB159E5B"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9625,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "db5d06cf4e74036c95a07e33a173be78d3275a5a6c0069795aaf5b5bec514f14",
+        "size_bytes": 9625
+      },
+      {
+        "addressable_units": 174,
+        "artifact_id": "native-family-0bf7fe855c276883174f28e6c7356863-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-A35FEC45F57F803FCB152E7493B0E680"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39355,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "f830d78fed809c238c195691afab056d5ded8803e19d711f8bf7e457684a6487",
+        "size_bytes": 39355
+      },
+      {
+        "addressable_units": 201,
+        "artifact_id": "native-family-0bf7fe855c276883174f28e6c7356863-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-A35FEC45F57F803FCB152E7493B0E680"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44065,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "f8a0e3e2af5ead02299c9453508a273c8a3c076046270f033e5ad8b4b5690260",
+        "size_bytes": 44065
+      },
+      {
+        "addressable_units": 239,
+        "artifact_id": "native-family-0bf7fe855c276883174f28e6c7356863-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-A35FEC45F57F803FCB152E7493B0E680"
+        ],
+        "direct_canonical_facts": 27,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9508,
+          "formula_cells": 19,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "e5f356b3af2870e68021893a6e67ecb92aa2340fab93a5ba8987b5bb050150bc",
+        "size_bytes": 9508
+      },
+      {
+        "addressable_units": 184,
+        "artifact_id": "native-family-1853ebe0e798e11f58a5ff716cf4b41e-docx",
+        "canonical_artifacts": [
+          "ART-NATIVE-6C04139955E6339A887F128801E8869E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 7,
+          "file_size_bytes": 39360,
+          "image_bytes": 0,
+          "paragraphs": 17,
+          "tables": 7
+        },
+        "sha256": "0574d2a78a221193cd87dc3513a0255b5adf970bc5308afa139204efffee199c",
+        "size_bytes": 39360
+      },
+      {
+        "addressable_units": 211,
+        "artifact_id": "native-family-1853ebe0e798e11f58a5ff716cf4b41e-pptx",
+        "canonical_artifacts": [
+          "ART-NATIVE-6C04139955E6339A887F128801E8869E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 44037,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 14,
+          "speaker_notes": 0,
+          "tables": 7
+        },
+        "sha256": "e85b37157c9f500706cbe7a2e8636ce6254f0a4ca92d8c27fb5c27c9e0899e9e",
+        "size_bytes": 44037
+      },
+      {
+        "addressable_units": 259,
+        "artifact_id": "native-family-1853ebe0e798e11f58a5ff716cf4b41e-xlsx",
+        "canonical_artifacts": [
+          "ART-NATIVE-6C04139955E6339A887F128801E8869E"
+        ],
+        "direct_canonical_facts": 35,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 9601,
+          "formula_cells": 24,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 9,
+          "rows_per_sheet": 4,
+          "sheets": 5
+        },
+        "sha256": "d933202b7a6a749966021e432917ee23ed2bd336e08cb41e9f86efd43856fbc3",
+        "size_bytes": 9601
+      }
+    ],
+    "split_role": "training",
+    "tasks": 575,
+    "total_source_bytes": 279122
+  },
+  "workload_plan": {
+    "discovery_scope": "artifact",
+    "formats": [
+      "docx",
+      "pptx",
+      "xlsx"
+    ],
+    "max_tasks": 768,
+    "objective": "Review each business case, reconcile its supported quantities, update the decision while preserving the source, and create a grounded native review artifact.",
+    "operations": [
+      "read",
+      "analyze",
+      "update",
+      "create"
+    ],
+    "requirements": {
+      "cells": [
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:docx",
+          "operation": "read",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:pptx",
+          "operation": "read",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "read:xlsx",
+          "operation": "read",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:docx",
+          "operation": "analyze",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:pptx",
+          "operation": "analyze",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "analyze:xlsx",
+          "operation": "analyze",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:docx",
+          "operation": "update",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:pptx",
+          "operation": "update",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "update:xlsx",
+          "operation": "update",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "docx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:docx",
+          "operation": "create",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "pptx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:pptx",
+          "operation": "create",
+          "scope": null
+        },
+        {
+          "calculation": null,
+          "dimensions": [],
+          "format": "xlsx",
+          "format_role": "operation",
+          "min_independent_units": 1,
+          "name": "create:xlsx",
+          "operation": "create",
+          "scope": null
+        }
+      ],
+      "schema_version": "worldloom.benchmark-requirements/v1"
+    },
+    "use_case_id": "native-rebuild-matrix-pilot"
+  }
+}

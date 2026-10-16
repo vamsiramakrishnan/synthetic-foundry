@@ -105,6 +105,11 @@ def register_kind(kind: PackKind) -> PackKind:
 
 
 def kind(name: str) -> PackKind:
+    # A registered kind answers without the import and install check below:
+    # this is on every `packkit.text` call, millions of them in a programme.
+    held = _KINDS.get(name)
+    if held is not None:
+        return held
     from . import builtin
 
     builtin.install()

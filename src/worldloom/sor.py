@@ -174,7 +174,12 @@ def records(
         if not row.sor_objects:
             continue
         for kind in row.sor_objects:
-            states = states_of.setdefault(kind, _workflow_states(kind))
+            # Not `setdefault(kind, _workflow_states(kind))`: that evaluates
+            # the default on every row, re-reading the connector definition
+            # once per binding, which was most of a programme's cost.
+            if kind not in states_of:
+                states_of[kind] = _workflow_states(kind)
+            states = states_of[kind]
             model = models.get((row.sor_product, kind), {})
             for period in periods:
                 for ordinal in range(per_period):

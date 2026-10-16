@@ -7,6 +7,7 @@ import json
 import shutil
 from pathlib import Path
 
+import build_cache
 import pytest
 
 from worldloom import packkit
@@ -42,10 +43,21 @@ class PolicyEcho(FrozenCompanyBuilder):
 
 @pytest.fixture(scope="module")
 def serial(tmp_path_factory) -> Path:
-    root = tmp_path_factory.mktemp("wave-serial")
-    run = compile_dataset(plan(), root, workers=1)
-    assert run.report.complete, run.report
-    assert run.report.batches == 4  # one whole wave of four
+    # The one-worker reference the parallel runs are compared with. It is a
+    # pure function of the plan and the source tree, so it is reused across
+    # runs and xdist workers (`build_cache`); its assertions run before an
+    # entry is published, so a cached entry certifies them. Every parallel
+    # compile below stays fresh: those are the builds under test, and a
+    # reference from an earlier process holds them to a stricter standard,
+    # not a looser one.
+    root = tmp_path_factory.mktemp("wave-serial") / "dataset"
+
+    def build(out: Path) -> None:
+        run = compile_dataset(plan(), out, workers=1)
+        assert run.report.complete, run.report
+        assert run.report.batches == 4  # one whole wave of four
+
+    build_cache.cached_tree("wave-serial", {"plan": plan().model_dump(mode="json"), "workers": 1}, build, root)
     return root
 
 

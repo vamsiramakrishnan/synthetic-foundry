@@ -23,6 +23,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
+from .cli_panels import WorkflowGroup, assign_panels
 
 # Type-only: this module's import time is the console script's startup floor
 # (W6), and `World`/`ValidationReport`/`CorpusError` each drag the pydantic
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from .world import World
 
 app = typer.Typer(
-    add_completion=False,
+    cls=WorkflowGroup,
     no_args_is_help=True,
     help="Generate coherent synthetic enterprise worlds.",
 )
@@ -101,12 +102,20 @@ industry_app = typer.Typer(
 app.add_typer(industry_app, name="industry")
 
 from .connector_serving_cli import serve_command
+from .corpus_scale_cli import scale_app
 from .dataset_cli import dataset_app
 from .enterprise_qualification_cli import qualify_command
+from .harness_dags_cli import harness_dags_command
+from .native_evals_cli import native_evals_app
 from .quality_cli import calibration_app, readers_app
+from .visuals_cli import visuals_app
 
 enterprise_evals_app.command("serve")(serve_command)
 enterprise_evals_app.command("qualify")(qualify_command)
+enterprise_evals_app.command("harness-dags")(harness_dags_command)
+app.add_typer(scale_app, name="corpus-scale")
+app.add_typer(native_evals_app, name="native-evals")
+app.add_typer(visuals_app, name="visuals")
 narrate_app.add_typer(readers_app, name="readers")
 evals_app.add_typer(calibration_app, name="calibration")
 evals_app.add_typer(dataset_app, name="dataset")
@@ -121,6 +130,45 @@ from .seams_cli import seams_command
 from .studio_cli import studio_app
 from .synthesis_cli import app as synthesis_app
 from .telemetry_cli import telemetry_app
+
+
+# Registered before every other command because typer lists commands in
+# registration order, and this is the one a new user should meet first in
+# `worldloom --help`: which of the fifty-odd others to run. The table itself is
+# data in `guide.py`, which `tests/test_guide.py` parses against this app.
+@app.command("guide")
+def guide(
+    goal: str | None = typer.Argument(
+        None, help="A goal from the table `worldloom guide` prints, such as rag or agent.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the goals and their command sequences as data.",
+    ),
+) -> None:
+    """Which commands to run, by what you are testing."""
+    from . import guide as guide_module
+
+    if goal is None:
+        if as_json:
+            typer.echo(json.dumps(guide_module.manifest(), indent=2, sort_keys=True))
+        else:
+            typer.echo(guide_module.overview_text())
+        return
+    chosen = guide_module.goal(goal)
+    if chosen is None:
+        known = [item.id for item in guide_module.GOALS]
+        _refuse(
+            "unknown_goal",
+            f"[red]error:[/red] unknown goal '{escape(goal)}'; expected one of {', '.join(known)}",
+            fix="run `worldloom guide` to list the goals and their first commands",
+            goal=goal, goals=known,
+        )
+    if as_json:
+        payload = {"schema": guide_module.GUIDE_SCHEMA, **chosen.as_dict()}
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        typer.echo(guide_module.goal_text(chosen))
+
 
 app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
@@ -404,6 +452,9 @@ def enterprise_evals_build(
 ) -> None:
     """Plan, materialize, validate, prove, export, and optionally render a connector corpus.
 
+    A case whose sources the world cannot supply is refused before anything
+    is written, naming the connector, the entity, the counts and the cases.
+
     Before anything is written, every case is proved solvable
     (`worldloom evalrun prove`): its gold DAG replayed through the connector
     emulator under the vendor query engine. A corpus with an unsolvable case
@@ -447,7 +498,13 @@ def enterprise_evals_build(
         shard_count=shard_count,
         dag_shapes=resolve_shapes(dag_shape),
     )
-    corpus = materialize_corpus(world, queries)
+    try:
+        corpus = materialize_corpus(world, queries)
+    except ValueError as exc:
+        # Every materializer refusal names the connector, entity and counts;
+        # a traceback would bury that under the stack.
+        _refuse("sources_insufficient", f"[red]error:[/red] {escape(str(exc))}",
+                fix="supply operational projections or a scenario profile whose sources the world can ground")
     findings = validate_corpus(corpus)
     if findings:
         for finding in findings:
@@ -665,9 +722,19 @@ console = Console()
 err = Console(stderr=True)
 
 
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
+
+
 @app.callback()
 def _install_domains(
     ctx: typer.Context,
+    _version: bool = typer.Option(
+        False, "--version", is_eager=True, callback=_print_version,
+        help="Print the installed version and exit.",
+    ),
     pack: list[str] | None = typer.Option(
         None, "--pack",
         help="Put a pack in force for this command (kind:name, kind:name@digest or a file; repeatable, "
@@ -717,6 +784,7 @@ _REFUSALS: dict[str, str] = {
     "synthesis_failed": "the operational synthesis contract was refused; data.finding names the rule",
     "access_profile_failed": "the corpus's documents could not be re-gated under the asked-for access profile",
     "actor_episode_failed": "the actor episode could not run to completion",
+    "bad_housekeeping_spec": "the housekeeping knobs do not describe a valid mess to generate",
     "bad_physics": "a physics override names an unknown parameter or an impossible span",
     "bad_shard": "the shard arguments do not describe a partition of the mosaic",
     "cannot_combine": "two flags were given that cannot both decide the same build",
@@ -764,6 +832,11 @@ _REFUSALS: dict[str, str] = {
     "reader_plan_rejected": "reader targets cannot be checked against the current corpus",
     "reader_check_rejected": "persisted independent reader review failed evidence admission",
     "calibration_rejected": "observed trial or snapshot violates the calibration contract",
+    "corpus_scale_rejected": "the source, scale plan, or physical files violate the corpus scale contract",
+    "qualification_rejected": "the proposed experiment cannot establish independent held-out promotion evidence",
+    "native_evals_rejected": "native discovery tasks, inputs, or replies violate the evaluation contract",
+    "visual_rejected": "visual source, provider output, or recorded image violates the visual contract",
+    "harness_dags_rejected": "harness DAG configuration or source records cannot support the requested evaluation",
     "fleet_error": "the fleet directory cannot be qualified or curated",
     "grader_drift": "the grader an improvement loop pinned changed mid-loop; data.changed names what moved",
     "history_too_short": "the corpus's history is too short for this decomposition",
@@ -800,8 +873,12 @@ _REFUSALS: dict[str, str] = {
     "resume_invalid": "a completed world does not validate for resume",
     "scenario_profile_rejected": "the enterprise scenario profile names something this registry does not hold, or selects nothing",
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
+    # `worldloom evaluate --predictions`.
+    "predictions_unreadable": "the --predictions file cannot be read, or a line is not {id, passage_ids or artifact_ids, abstain}; data.line names it",
+    "predictions_unknown_ids": "the --predictions file names case, passage or artifact ids this corpus does not hold; data lists each",
     # `worldloom evalrun`.
     "corpus_unreadable": "the enterprise-evals directory cannot be read or is not one",
+    "sources_insufficient": "a planned case needs source records the world cannot supply; the message names the connector, the entity and the counts",
     "cases_uncompilable": "the row compiler refused a query in the corpus; the message names the first reasons",
     "no_cases": "the corpus compiled to no cases, so there is nothing to run",
     "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",
@@ -810,6 +887,10 @@ _REFUSALS: dict[str, str] = {
     "unknown_connectors": "the --connectors value is not emulator or anvil",
     "unknown_harness_mode": "the --harness-mode value is not turns or sdk-program",
     "unknown_lever": "the --levers value names something other than agent and interface",
+    "unknown_curriculum": "the --curriculum value is not a curriculum the improve loop knows (failures)",
+    "unknown_brief": "the --brief value is not a brief mode the improve loop knows (summary or traces)",
+    "unknown_surface": "the --surface value is not a connector surface this package serves (native or contract)",
+    "surface_unavailable": "the contract surface cannot be loaded from the --contract bundles",
     "anvil_unavailable": "Anvil cannot serve the run: no Anvil CLI, an unreadable contract, or a contract its connector's mapping does not cover",
     # `worldloom contracts`.
     "contract_refused": "the contract lock does not read, a source's sha256 is not the locked one, Anvil refused the compile, or the mapping does not cover the bundle",
@@ -822,6 +903,7 @@ _REFUSALS: dict[str, str] = {
     "evalrun_shard_invalid": "--shard is not i/n with 1 <= i <= n",
     "resume_mismatch": "--resume found a ledger for a different run; the message names each identity field that differs",
     "concurrency_refused": "the connector service does not admit the requested --concurrency",
+    "smoke_failed": "a `worldloom smoke` stage failed; data.stage names it and data.output is the tail of what it printed",
     "shards_unmergeable": "the shard directories are not one complete sharded run; the message names what differs or is missing",
     "results_unreadable": "an external harness's results file cannot be read",
     "case_set_unreadable": "the case set directory's cases or records cannot be read",
@@ -842,6 +924,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_episode": "--episode names no installed process",
     "unknown_eval_density": "--eval-density names no known tier",
     "unknown_facet": "no facet is registered under that name",
+    "unknown_goal": "the goal is not one `worldloom guide` lists",
     "unknown_landscape": "no landscape is registered under that name",
     "unknown_locale": "no locale is registered under that name",
     "unknown_messiness": "no messiness level is registered under that name",
@@ -858,6 +941,54 @@ _REFUSALS: dict[str, str] = {
     "workspace_unwritable": "the workspace cannot be written",
 }
 
+#: The next command to run for a refusal whose site names no fix of its own.
+#: A site's own `fix=` always wins; this is the fallback, so an entry has to
+#: be the right next action at *every* site of its code that passes none, not
+#: merely at the commonest one. Each is a real invocation (a test parses
+#: every one against the live typer surface, flags included), with the
+#: example paths `AGENTS.md` uses, so a harness can show it verbatim.
+#:
+#: Chosen by walking the codes in order of how many `_refuse` sites use them.
+#: The most frequent codes are deliberately absent, because no single command
+#: is their remedy: `cannot_combine`, `missing_flag` and `exactly_one` are
+#: fixed by editing the flags the message already names; `unreadable_document`
+#: by repairing the file it names; `pack_rejected`, `studio_rejected`,
+#: `interview_refused` and `dataset_rejected` by answering the findings they
+#: carry; `destination_exists` by `--overwrite`, which only some of its
+#: commands take (its sites say so themselves); and the evalrun refusals
+#: (`results_unjoinable`, `service_unbuildable`, `cases_uncompilable`) by
+#: whatever the input they name got wrong. An entry that was right at one site
+#: and wrong at the next would be worse than none: a confident wrong fix is
+#: followed.
+_REFUSAL_FIXES: dict[str, str] = {
+    # Nothing at that path loads (or carries a recipe): make one that does.
+    "corpus_unloadable": "worldloom build --seed 8128 --out ./corpus",
+    "no_recipe": "worldloom build --seed 8128 --out ./corpus",
+    # The evalrun inputs, each with the command that writes one.
+    "run_unreadable": "worldloom evalrun run ./cases -o ./runs/reference",
+    "no_cases": "worldloom enterprise-evals build ./corpus ./cases --exhaustive",
+    "case_set_unreadable": "worldloom enterprise-evals build ./corpus ./cases --exhaustive",
+    # Unknown names: the command that lists the known ones.
+    "unknown_archetype": "worldloom archetypes",
+    "unknown_engine": "worldloom pack targets",
+    "unknown_facet": "worldloom pack facets",
+    "unknown_landscape": "worldloom pack landscapes",
+    "unknown_locale": "worldloom pack locales",
+    "unknown_messiness": "worldloom pack messiness",
+    "unknown_parameter": "worldloom pack params",
+    "unknown_profile": "worldloom present describe",
+    "no_matching_facts": "worldloom inspect ./corpus --facts",
+    # An installation that cannot do what was asked: doctor names the extra.
+    "render_failed": "worldloom doctor",
+    "mcp_unavailable": "worldloom doctor",
+    "smoke_failed": "worldloom doctor",
+    # Out of step with the loop: ask where the corpus is, or hand-write.
+    "nothing_awaiting_prose": "worldloom status ./corpus",
+    "loop_exhausted": "worldloom status ./corpus",
+    "no_writer": "worldloom narrate requests ./corpus -o requests.json",
+    "interview_incomplete": "worldloom interview status ./interview",
+}
+
 
 def _refuse(
     code: str,
@@ -869,10 +1000,14 @@ def _refuse(
 ) -> NoReturn:
     """Refuse with *message*, as prose by default and as data on request.
 
-    Default mode prints *message*: the exact string the site printed before
-    this helper existed: through `err`, so default stderr is byte-identical
-    and every test pinned to those strings still holds. With
-    ``WORLDLOOM_OUTPUT=json`` in the environment, one line of JSON goes to
+    Default mode prints *message* through `err` (the exact string the site
+    printed before this helper existed, so every test pinned to it still
+    holds), then, when a next action is known, one dim ``  fix: …`` line under
+    it. The fix is the site's own *fix*, else the code's `_REFUSAL_FIXES`
+    entry; it is left off when the message already says it word for word,
+    which several older sites do. A refusal that names what went wrong but
+    not what to do next used to say the second half only to JSON readers.
+    With ``WORLDLOOM_OUTPUT=json`` in the environment, one line of JSON goes to
     stderr instead: ``{"refusal": code, "message": …, "fix": …, "data": …}``.
     An env var and not a global ``--json`` flag because per-command ``--json``
     flags already exist with a different meaning (success payloads) and a
@@ -890,13 +1025,16 @@ def _refuse(
         raise RuntimeError(
             f"unregistered refusal code {code!r}; add it to _REFUSALS"
         )
-    if os.environ.get("WORLDLOOM_OUTPUT") == "json":
-        # Rich's own markup parser recovers the plain text, so `escape()`d
-        # brackets in the message read back as the user typed them. Written
-        # with `typer.echo` and not `err.print` because the envelope must be
-        # one machine-readable line and `err` soft-wraps at terminal width.
-        from rich.text import Text
+    if fix is None:
+        fix = _REFUSAL_FIXES.get(code)
+    # Rich's own markup parser recovers the plain text, so `escape()`d
+    # brackets in the message read back as the user typed them.
+    from rich.text import Text
 
+    if os.environ.get("WORLDLOOM_OUTPUT") == "json":
+        # Written with `typer.echo` and not `err.print` because the envelope
+        # must be one machine-readable line and `err` soft-wraps at terminal
+        # width.
         envelope = {
             "refusal": code,
             "message": Text.from_markup(message).plain,
@@ -908,6 +1046,10 @@ def _refuse(
         typer.echo(json.dumps(envelope, ensure_ascii=False, default=str), err=True)
     else:
         err.print(message)
+        # Fixes are plain text (the envelope carries them verbatim), so they
+        # are escaped here: `worldloom[xlsx]` must not be eaten as markup.
+        if fix and fix not in Text.from_markup(message).plain:
+            err.print(f"  [dim]fix: {escape(fix)}[/dim]")
     raise typer.Exit(code=exit_code)
 
 
@@ -5296,18 +5438,107 @@ def evolve_run(
 @evals_app.command("export")
 def evals_export(
     corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
-    out: Path = typer.Option(None, "--out", "-o", help="Write JSONL here instead of stdout."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write the export here instead of stdout."),
+    fmt: str = typer.Option(
+        "worldloom", "--format",
+        help=(
+            "worldloom (the default: the evaluation set as JSONL, unchanged), "
+            "ragas (JSONL rows with user_input, reference and the "
+            "reference_contexts the answer rests on) or promptfoo (a JSON "
+            "array of test cases with substring assertions only; cases no "
+            "substring can check are left out and counted on stderr)."
+        ),
+    ),
 ) -> None:
-    """Export the evaluation set as JSONL, ready to score a retrieval system."""
+    """Export the evaluation set, ready to score a retrieval system or hand to a harness.
+
+    `--format worldloom` writes the cases exactly as they always have been.
+    `ragas` and `promptfoo` are projections of the same cases into those
+    tools' shapes; neither adds a model to the grading. Pair any of them with
+    `worldloom evals passages` for the units to index.
+    """
+    from .evaluate.interchange import (
+        EXPORT_FORMATS,
+        jsonl,
+        promptfoo_tests,
+        ragas_records,
+    )
+
+    if fmt not in EXPORT_FORMATS:
+        raise typer.BadParameter(f"must be one of {list(EXPORT_FORMATS)}", param_hint="--format")
     world = _load(corpus)
+    if fmt == "ragas":
+        # Reference contexts are passages, so the corpus has to be compiled,
+        # the same precondition `evaluate` and `evals passages` have.
+        records = ragas_records(_compiled(world, corpus))
+        _emit(jsonl(records), out, f"{len(records)} case(s)")
+        return
+    if fmt == "promptfoo":
+        tests, left_out = promptfoo_tests(world)
+        if not tests:
+            _refuse(
+                "cases_unexportable",
+                f"[red]error:[/red] none of {len(left_out)} case(s) states a figure or short value"
+                " a substring assertion can check",
+                fix="use --format worldloom or ragas, which carry every case",
+                left_out=left_out,
+            )
+        _emit(json.dumps(tests, indent=2, sort_keys=True) + "\n", out, f"{len(tests)} test case(s)")
+        if left_out:
+            # Stderr, so stdout stays the JSON document promptfoo reads.
+            err.print(
+                f"[yellow]![/yellow] {len(left_out)} case(s) left out: the expected answer states no"
+                " figure or short value the question does not already contain (abstention, or an"
+                " answer stated only in prose)"
+            )
+        return
+    # The default keeps its exact bytes: the same dumps, the same join, and the
+    # same lone newline for an empty set that it has always written.
     lines = [json.dumps(case.model_dump(mode="json"), sort_keys=True) for case in world.evaluations]
-    payload = "\n".join(lines) + "\n"
+    _emit("\n".join(lines) + "\n", out, f"{len(lines)} case(s)")
+
+
+def _emit(payload: str, out: Path | None, summary: str) -> None:
+    """*payload* to *out*, or to stdout when no file was named.
+
+    The file is written with ``newline="\\n"`` for `corpus.write_jsonl`'s
+    reason: these exports are what an external index and an external harness
+    are built from, and a Windows checkout adding a CR to every line would
+    make one export two files depending on who ran it.
+    """
     if out is None:
         typer.echo(payload, nl=False)
-    else:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(payload, encoding="utf-8")
-        console.print(f"[green]✓[/green] {len(lines)} case(s) written to [bold]{out}[/bold]")
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload, encoding="utf-8", newline="\n")
+    console.print(f"[green]✓[/green] {summary} written to [bold]{out}[/bold]")
+
+
+@evals_app.command("passages")
+def evals_passages(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write JSONL here instead of stdout."),
+) -> None:
+    """Export the passages `evaluate` indexes as JSONL, for your own retriever to index.
+
+    One line per passage, in index order, keys sorted: `passage_id`,
+    `artifact_id`, `artifact_type`, `title`, `heading`, `source`, `authority`,
+    `created_at`, `fact_ids` and `text`. `text` is exactly the string the
+    built-in retrievers rank, so a system that indexes it is compared like for
+    like; `passage_id` is what `evaluate --predictions` joins a ranking on.
+    The same passages `search` and `evaluate` read, not a second chunking.
+    """
+    from .evaluate.interchange import jsonl, passage_records
+
+    world = _compiled(_load(corpus), corpus)
+    records = passage_records(world)
+    if not records:
+        # The state `search` refuses for the same reason: an empty index
+        # file reads downstream as "indexed, nothing relevant", which every
+        # case would then fail for a reason that is not retrieval.
+        _refuse("no_passages", "[red]error:[/red] this corpus has no retrievable passages",
+                fix="narrate and render the corpus first", corpus=str(corpus))
+    _emit(jsonl(records), out, f"{len(records)} passage(s)")
 
 
 @evals_app.command("construct")
@@ -5494,6 +5725,17 @@ def evaluate(
             "the embedding retriever with no model installed at all."
         ),
     ),
+    predictions: Path | None = typer.Option(
+        None, "--predictions",
+        help=(
+            "Grade your own system's rankings instead of a built-in retriever: "
+            'JSONL, one {"id", "passage_ids" or "artifact_ids" best first, '
+            '"abstain"} line per case. Same grading, -k and per-family '
+            "scorecard as --retriever; passage ids are the ones `worldloom evals "
+            "passages` exports. A case with no line fails and is listed; an id "
+            "this corpus does not hold refuses."
+        ),
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
     as_json: bool = typer.Option(
         False, "--json",
@@ -5516,10 +5758,14 @@ def evaluate(
     both of those are still *keyword* heuristics: a family the embedding
     retriever also fails is hard for a reason no ranking function fixes, and a
     family it walks past was a lexical trap rather than a difficult question.
+
+    `--predictions` grades a system this package never ran, by the same code:
+    index `worldloom evals passages`, rank each question, write the rankings.
     """
     import json as json_module
 
     from .evaluate import (
+        DEFAULT_RETRIEVER,
         LEXICAL_RETRIEVERS,
         RETRIEVERS,
         compare,
@@ -5533,6 +5779,21 @@ def evaluate(
     choices = sorted([*RETRIEVERS, "both", "all"])
     if retriever not in choices:
         raise typer.BadParameter(f"must be one of {choices}", param_hint="--retriever")
+
+    if predictions is not None:
+        if retriever != DEFAULT_RETRIEVER or vectors:
+            # Two answers to "whose ranking is graded": the file's, or a
+            # built-in one's. Picking either silently would print a scorecard
+            # for the ranking the caller did not mean.
+            _refuse(
+                "cannot_combine",
+                "[red]error:[/red] --predictions is the ranking being graded;"
+                " --retriever and --vectors choose a built-in one",
+                fix="run the built-in retriever as a separate `worldloom evaluate`",
+                flags=["--predictions", "--retriever" if retriever != DEFAULT_RETRIEVER else "--vectors"],
+            )
+        _evaluate_predictions(corpus, predictions, k=k, verbose=verbose, as_json=as_json)
+        return
 
     if vectors:
         # Bound for this invocation only, and by rebinding the registry entry
@@ -5647,11 +5908,84 @@ def evaluate(
     console.print(str(card))
 
     if verbose:
-        console.print("")
-        for outcome in card.outcomes:
-            mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
-            console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
-            console.print(f"      {outcome.detail}")
+        _print_outcomes(card)
+
+
+def _print_outcomes(card: Any) -> None:
+    """Every case of one scorecard, mark and detail, for `evaluate -v`."""
+    console.print("")
+    for outcome in card.outcomes:
+        mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
+        console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
+        # Escaped because a detail can quote ids from a predictions file, and
+        # rich reads a bracketed word as a style tag and drops it.
+        console.print(f"      {escape(outcome.detail)}")
+
+
+#: How many unanswered case ids the prose scorecard names before counting the
+#: rest. `--json` carries every one of them.
+_MISSING_NAMED = 20
+
+
+def _evaluate_predictions(corpus: str, path: Path, *, k: int, verbose: bool, as_json: bool) -> None:
+    """`evaluate --predictions`: grade a ranking another system wrote down.
+
+    The scorecard is `evaluate.score.grade()`'s, the one every built-in
+    retriever gets, labelled with the file's name the way `bm25` and `tfidf`
+    label theirs. The file is read and parsed before the corpus is loaded,
+    because a malformed line is the cheaper failure to report and needs no
+    corpus to find.
+    """
+    import json as json_module
+
+    from .evaluate.predictions import PredictionsError, parse, score_predictions
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        _refuse("predictions_unreadable", f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix="pass the path of a predictions JSONL file, UTF-8", path=str(path), line=0)
+    try:
+        parsed = parse(text)
+    except PredictionsError as exc:
+        _refuse(exc.code, f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix=exc.fix, path=str(path), **exc.data)
+
+    world = _compiled(_load(corpus), corpus)
+    try:
+        result = score_predictions(world, parsed, k=k, label=path.name)
+    except PredictionsError as exc:
+        _refuse(exc.code, f"[red]error:[/red] {escape(str(path))}: {escape(str(exc))}",
+                fix=exc.fix, path=str(path), **exc.data)
+    except ValueError as exc:
+        # `score()`'s empty-pool sentence, mapped where `benchmark run` maps it.
+        _refuse("no_passages", f"[red]error:[/red] {escape(str(exc))}")
+
+    card = result.card
+    if as_json:
+        # The single-retriever shape, so a harness that parses `--retriever
+        # bm25 --json` parses this unchanged, plus three additive keys: the
+        # file as given, the unit it ranked, and the cases it never answered.
+        typer.echo(json_module.dumps({
+            "retriever": card.retriever,
+            "k": card.k,
+            "predictions": str(path),
+            "granularity": result.granularity,
+            "missing": list(result.missing),
+            **_card_json(card),
+        }, indent=2))
+        return
+    console.print(f"[bold]predictions:[/bold] {escape(str(path))} ({result.granularity} ids)")
+    console.print(str(card))
+    if result.missing:
+        named = ", ".join(result.missing[:_MISSING_NAMED])
+        more = len(result.missing) - _MISSING_NAMED
+        console.print(
+            f"  {len(result.missing)} case(s) have no prediction and are scored as failures: {named}"
+            + (f", +{more} more (--json lists every one)" if more > 0 else "")
+        )
+    if verbose:
+        _print_outcomes(card)
 
 
 @app.command()
@@ -5798,9 +6132,10 @@ def benchmark_run(
     Per case the child receives `{"question": ..., "passages": [{"passage_id",
     "text"}, ...]}`, the top-k from the same BM25 index `search` and
     `evaluate` rank with, and must print `{"answer_passage_ids": [...],
-    "abstain": bool}`. Scoring is id-based only, never text similarity: a case
-    passes when the returned passages carry the expected fact IDs and the
-    abstention flag matches the case's expectation. Grading answer *text*
+    "abstain": bool}`, IDs best first. The shared `evaluate` grader checks
+    the unfiltered top hit's time and facts for temporal cases, its authority
+    and expected fact for authority cases, and coverage for the other families.
+    Scoring is id-based only, never text similarity. Grading answer *text*
     would put a judge inside a benchmark whose whole point is mechanical
     ground truth, so there is deliberately no flag for it.
     """
@@ -7869,6 +8204,69 @@ def archetypes() -> None:
         )
 
 
+#: The optional extras `doctor` reports on beyond the renderers (which it
+#: probes through their own `_require_*` functions) and `mcp` (through the
+#: server's): extra name, the modules the extra's code imports, and what is
+#: unavailable without it. The names are `[project.optional-dependencies]`
+#: keys, held to pyproject by a test; the extras left out are the renderer
+#: ones, the SDK's dataframe exports (`polars`, `pandas`, `arrow`), the
+#: bundles (`all`, `dev`) and `ingest`, which nothing under `src/` imports.
+_DOCTOR_EXTRAS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("embeddings", ("model2vec", "huggingface_hub"), "`evaluate --retriever embedding`"),
+    ("visuals", ("google.genai", "PIL"), "`visuals generate`"),
+)
+
+#: What `doctor` names as the next command once every required check passes:
+#: the goal-to-commands map, since a healthy install's next question is which
+#: of the evaluation paths to take.
+_DOCTOR_NEXT = "worldloom guide"
+
+
+def _extra_hint(extra: str) -> str:
+    """The pip command that installs *extra* into this installation.
+
+    An editable install from a checkout gets ``pip install -e '<root>[extra]'``
+    (``.`` when run from that root): the checkout's own pyproject declares the
+    extras it imports, and ``worldloom[extra]`` names an index release that
+    may not exist or may declare different ones.
+    """
+    root = Path(__file__).resolve().parents[2]
+    if (root / "pyproject.toml").is_file() and (root / "src" / "worldloom").is_dir():
+        here = "." if Path.cwd().resolve() == root else str(root)
+        return f"pip install -e '{here}[{extra}]'"
+    return f"pip install 'worldloom[{extra}]'"
+
+
+def _is_this_installation(executable: str) -> bool:
+    """Whether the *executable* found on PATH runs this process's worldloom.
+
+    By location rather than by version: two checkouts at one version still
+    serve different code, and the one an agent's harness launches by name is
+    the one whose edits it will see. A console script lives in its
+    environment's scripts directory, or is a link to one (`uv tool`, pipx); a
+    user-site install shares `~/.local/bin` across interpreters, so there the
+    script's shebang decides, compared unresolved, because a virtualenv's
+    python is a symlink to the base interpreter it must not be mistaken for.
+    """
+    import sys
+    import sysconfig
+
+    def place(path: str | Path) -> str:
+        return os.path.normcase(os.path.realpath(path))
+
+    homes = {place(sysconfig.get_path("scripts")), place(os.path.dirname(sys.executable))}
+    found = Path(executable)
+    if any(place(candidate.parent) in homes for candidate in (found, found.resolve())):
+        return True
+    try:
+        with found.open("rb") as handle:
+            first = handle.readline(4096)
+    except OSError:
+        return False
+    words = first[2:].split() if first.startswith(b"#!") else []
+    return bool(words) and os.path.abspath(os.fsdecode(words[0])) == os.path.abspath(sys.executable)
+
+
 @app.command()
 def doctor(
     as_json: bool = typer.Option(False, "--json", help="Emit the check list as JSON."),
@@ -7877,28 +8275,39 @@ def doctor(
 
     Each check reports ✓ or ✗ with the exact fix when it fails: the Python
     floor (read from the package's own metadata), every registered render
-    format's optional dependency, the bundled example corpus validating, and
-    the generated command reference being current. Exit 0 when everything
-    passes, 1 otherwise. Reads only this process and this disk; no network,
-    ever.
+    format's optional dependency, the bundled example corpus validating, the
+    generated command reference being current, and the agent setup: the
+    `worldloom` on PATH being this installation, the `mcp` extra, and every
+    server command in a `.mcp.json` here resolving. Optional extras
+    (`embeddings`, `visuals`) report – with the install command when absent
+    and never fail the run. Exit 0 when every required check passes, 1
+    otherwise; the last line names the command to run next. Reads only this
+    process and this disk; no network, ever.
     """
+    import shutil
     import sys as sys_module
+    import sysconfig
+    from importlib import import_module
     from importlib import metadata as importlib_metadata
 
     from . import World
     from . import docs as docs_generator
     from . import render as render_module
     from .corpus import CorpusError
+    from .mcp import _require_mcp
     from .render import RenderError
 
     checks: list[dict[str, Any]] = []
 
-    def check(name: str, ok: bool, detail: str, fix: str | None = None) -> None:
+    def check(name: str, ok: bool, detail: str, fix: str | None = None,
+              *, optional: bool = False) -> None:
         # `fix` is nulled on a passing check rather than stored, so the JSON
         # never shows a remedy beside a ✓ — a fix string is a claim that
-        # something needs fixing.
-        checks.append({"check": name, "ok": ok, "detail": detail,
-                       "fix": None if ok else fix})
+        # something needs fixing. An `optional` check that is not ok keeps its
+        # fix (the install command) but does not make the installation
+        # unhealthy: the prose marks it – rather than ✗.
+        checks.append({"check": name, "ok": ok, "optional": optional,
+                       "detail": detail, "fix": None if ok else fix})
 
     # 1. The Python floor, read from the installed package's own metadata
     # rather than restated here: `requires-python` lives in pyproject.toml,
@@ -8004,24 +8413,204 @@ def doctor(
             fix="run `worldloom docs` from the repository root and commit the result",
         )
 
-    healthy = all(entry["ok"] for entry in checks)
+    # 5. The `worldloom` an agent's harness runs. AGENTS.md, the skills and
+    # `.mcp.json` all say `worldloom …` and leave it to PATH, so this process
+    # can be healthy (run as `.venv/bin/worldloom doctor`) while the one a
+    # harness launches is missing, or is another installation with other
+    # code and other extras, whose refusals would then describe a CLI this
+    # checkout does not have.
+    scripts = sysconfig.get_path("scripts")
+    on_path = shutil.which("worldloom")
+    if on_path is None:
+        check(
+            "path:worldloom", False,
+            "no `worldloom` executable on PATH; agent harnesses and .mcp.json launch it by name",
+            fix=f"put {scripts} on PATH (activate the environment worldloom is installed in)",
+        )
+    elif _is_this_installation(on_path):
+        check("path:worldloom", True, f"{on_path} is this installation")
+    else:
+        check(
+            "path:worldloom", False,
+            f"{on_path} is another installation; this one's scripts are in {scripts}",
+            fix=f"put {scripts} ahead of {Path(on_path).parent} on PATH",
+        )
+
+    # 6. `.mcp.json` here: every server a client would launch must resolve,
+    # and one launching `worldloom mcp` makes the `mcp` extra required rather
+    # than optional. Read before the extra's check for that reason; servers
+    # with no `command` are remote and launch nothing.
+    config = Path(".mcp.json")
+    servers: dict[str, Any] = {}
+    config_error: str | None = None
+    if config.is_file():
+        try:
+            parsed = json.loads(config.read_text(encoding="utf-8"))
+            declared = parsed.get("mcpServers", {}) if isinstance(parsed, dict) else None
+            if not isinstance(declared, dict):
+                raise ValueError("`mcpServers` is not an object")
+            servers = declared
+        except (OSError, ValueError) as exc:
+            config_error = str(exc)
+    launches = {
+        name: server for name, server in sorted(servers.items())
+        if isinstance(server, dict) and isinstance(server.get("command"), str)
+    }
+    serves_mcp = any(
+        Path(server["command"]).stem == "worldloom"
+        and isinstance(server.get("args"), list) and server["args"][:1] == ["mcp"]
+        for server in launches.values()
+    )
+
+    # 7. The `mcp` extra, probed through the same `_require_mcp` the server
+    # calls first, so doctor cannot disagree with `worldloom mcp`.
+    try:
+        _require_mcp()
+    except RuntimeError:
+        check(
+            "extra:mcp", False,
+            "not installed: .mcp.json here launches `worldloom mcp`, which cannot start"
+            if serves_mcp else "not installed (optional): `worldloom mcp` cannot start",
+            fix=_extra_hint("mcp"), optional=not serves_mcp,
+        )
+    else:
+        check("extra:mcp", True, "importable: `worldloom mcp` can serve", optional=not serves_mcp)
+    if config_error is not None:
+        check("mcp.json", False, f".mcp.json cannot be read: {config_error}",
+              fix="make .mcp.json a JSON object whose `mcpServers` maps names to servers")
+    for name, server in launches.items():
+        command = server["command"]
+        resolved = shutil.which(command)
+        ours = Path(command).stem == "worldloom"
+        if resolved is None:
+            check(
+                f"mcp.json:{name}", False,
+                f"`{command}` is not on PATH, so an MCP client cannot launch this server",
+                fix=f"put {scripts} on PATH (activate the environment worldloom is installed in)"
+                    if ours else f"install `{command}` or put its directory on PATH",
+            )
+        elif ours and not _is_this_installation(resolved):
+            # Resolving is not enough for our own server: the client would
+            # serve another installation's tools to an agent editing this one.
+            check(
+                f"mcp.json:{name}", False,
+                f"`{command}` resolves to {resolved}, another installation",
+                fix=f"put {scripts} ahead of {Path(resolved).parent} on PATH",
+            )
+        else:
+            check(f"mcp.json:{name}", True, f"`{command}` resolves to {resolved}")
+
+    # 8. Optional extras: reported so an agent knows what it may not ask
+    # for, never counted against the installation.
+    for extra, modules, enables in _DOCTOR_EXTRAS:
+        try:
+            for module in modules:
+                import_module(module)
+        except Exception:
+            # Not only ImportError: a half-installed dependency raises what
+            # it likes at import, and doctor must report it, not crash on it.
+            check(f"extra:{extra}", False, f"not installed (optional): {enables} is unavailable",
+                  fix=_extra_hint(extra), optional=True)
+        else:
+            check(f"extra:{extra}", True, f"importable: {enables} is available")
+
+    healthy = all(entry["ok"] or entry["optional"] for entry in checks)
+    next_command = _DOCTOR_NEXT if healthy else "worldloom doctor"
     if as_json:
-        typer.echo(json.dumps({"ok": healthy, "checks": checks}, indent=2))
+        typer.echo(json.dumps({"ok": healthy, "checks": checks, "next": next_command}, indent=2))
     else:
         for entry in checks:
-            mark = "[green]✓[/green]" if entry["ok"] else "[red]✗[/red]"
+            if entry["ok"]:
+                mark = "[green]✓[/green]"
+            elif entry["optional"]:
+                mark = "[dim]–[/dim]"
+            else:
+                mark = "[red]✗[/red]"
             console.print(f"{mark} {escape(entry['check'])}: {escape(entry['detail'])}")
             if not entry["ok"] and entry["fix"]:
-                console.print(f"  [yellow]fix:[/yellow] {escape(entry['fix'])}")
+                label = "[dim]install:[/dim]" if entry["optional"] else "[yellow]fix:[/yellow]"
+                console.print(f"  {label} {escape(entry['fix'])}")
+        if healthy:
+            console.print(f"[dim]next:[/dim] {_DOCTOR_NEXT}")
     if not healthy:
-        failed = [entry["check"] for entry in checks if not entry["ok"]]
+        failed = [entry["check"] for entry in checks if not entry["ok"] and not entry["optional"]]
         _refuse(
             "doctor_unhealthy",
             f"[red]error:[/red] {len(failed)} of {len(checks)} check(s) failed:"
             f" {', '.join(failed)}: each names its fix above",
+            fix="apply each fix above, then run `worldloom doctor` again",
             exit_code=1,
             failed=failed,
         )
+
+
+@app.command()
+def smoke(
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Directory to run the pipeline in; kept afterwards for inspection. Must"
+             " be empty or absent. Omit to run in a temporary directory that is removed.",
+    ),
+    seed: int = typer.Option(8128, "--seed", "-s", help="World seed for the tiny world."),
+    formats: list[str] = typer.Option(
+        None, "--format", "-f",
+        help="Render these formats (repeatable). Default: markdown and xlsx; pass"
+             " `-f markdown` alone on an install without the xlsx extra.",
+    ),
+) -> None:
+    """Run the whole pipeline on a tiny world, one line per stage, in seconds.
+
+    Build, narrate through the agent handshake with the offline writer, render,
+    validate, score the retrieval baselines, generate enterprise eval cases, and
+    run the reference agent over them. Every stage is the real CLI command run
+    as its own process, on the previous stage's output. Exits non-zero at the
+    first stage that fails, naming it and printing the tail of what it said.
+    """
+    import tempfile
+    import time
+
+    from . import smoke as smoke_module
+
+    def report(outcome: Any) -> None:
+        console.print(
+            f"[green]✓[/green] {outcome.name:<17} {outcome.seconds:6.2f}s"
+            f"  [dim]{escape(outcome.detail)}[/dim]",
+            soft_wrap=True,
+        )
+
+    chosen = tuple(formats) if formats else smoke_module.DEFAULT_FORMATS
+    started = time.perf_counter()
+
+    def go(directory: Path) -> list[Any]:
+        try:
+            return smoke_module.run(directory, seed=seed, formats=chosen, on_stage=report)
+        except smoke_module.SmokeFailure as failure:
+            console.print(f"[red]✗[/red] {failure.stage:<17} {failure.seconds:6.2f}s")
+            # In JSON mode the tail rides in the envelope's data instead:
+            # stderr there is one machine-readable line, and the child's own
+            # output may itself hold an envelope a harness would match first.
+            if failure.output and os.environ.get("WORLDLOOM_OUTPUT") != "json":
+                err.print(escape(failure.output), soft_wrap=True)
+            _refuse(
+                "smoke_failed",
+                f"[red]error:[/red] smoke stage [bold]{escape(failure.stage)}[/bold]"
+                f" failed: {escape(failure.reason)}",
+                exit_code=1,
+                stage=failure.stage,
+                reason=failure.reason,
+                output=failure.output,
+            )
+
+    if out is None:
+        with tempfile.TemporaryDirectory(prefix="worldloom-smoke-") as scratch:
+            outcomes = go(Path(scratch) / "smoke")
+    else:
+        outcomes = go(out)
+    console.print(
+        f"[green]✓[/green] smoke passed: {len(outcomes)} stages in"
+        f" {time.perf_counter() - started:.1f}s"
+        + (f" [dim](kept in {escape(str(out))})[/dim]" if out is not None else "")
+    )
 
 
 @app.command()
@@ -8294,6 +8883,11 @@ def spaces(
         f" {space.size_at(strength):,} combinations"
         f": {space.exhaustive // max(1, len(rows)):,}x smaller than exhaustive"
     )
+
+
+# Last, so every command registered above (and by the sub-modules imported at
+# the top) has its panel before the first `--help` renders.
+assign_panels(app)
 
 
 if __name__ == "__main__":  # pragma: no cover

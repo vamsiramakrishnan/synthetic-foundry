@@ -265,8 +265,13 @@ def test_a_wrapped_exchange_carries_the_policy_and_every_round_records_it(tmp_pa
     # Without a policy nothing is recorded.
     plain = author("agent", "A careful agent", harness, name="careful")
     assert all("proposer" not in entry for entry in plain.rounds)
-    # Rewrapping replaces the policy instead of stacking one.
-    assert with_proposer(wrapped, pack).exchange is harness  # type: ignore[attr-defined]
+    # Rewrapping replaces the policy instead of stacking one. The cache is
+    # passed again because a wrapper materialises the policy's skill tree when
+    # built, and the default is the user's `~/.worldloom/cache`: this line
+    # used to write there, the one place every run, every xdist worker and
+    # every other checkout on the machine shares.
+    rewrapped = with_proposer(wrapped, pack, skills_cache=tmp_path / "cache")
+    assert rewrapped.exchange is harness  # type: ignore[attr-defined]
 
 
 def test_improve_receipts_name_the_proposer_policy(corpus: Any, tmp_path: Path) -> None:

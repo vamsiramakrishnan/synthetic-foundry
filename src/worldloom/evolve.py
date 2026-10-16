@@ -749,12 +749,12 @@ def evolve(
             _build(member, generation_dir / member.label)
 
         # Measured by the instruments that already exist, never by arithmetic
-        # of this module's own. Two surveys are paid here (qualify and curate
-        # each run fleet's survey); `fleet._survey` is the seam that would
-        # collapse them to one, and it should become public there rather than
-        # be copied here.
-        qualification = fleet.qualify(generation_dir, checked)  # type: ignore[arg-type]
-        curation = fleet.curate(generation_dir, checked)  # type: ignore[arg-type]
+        # of this module's own. One survey serves both verbs: nothing changes
+        # the generation directory between them, and each surveying it again
+        # loaded, validated and replayed every member twice.
+        surveyed = fleet.survey(generation_dir)
+        qualification = fleet.qualify(generation_dir, checked, surveyed=surveyed)  # type: ignore[arg-type]
+        curation = fleet.curate(generation_dir, checked, surveyed=surveyed)  # type: ignore[arg-type]
         champions = tuple(champion.world for champion in curation.champions)
         if not champions and index + 1 < generations:
             raise EvolveError(

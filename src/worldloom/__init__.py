@@ -238,6 +238,10 @@ def _install() -> None:
     from .banking import BankingWorld
     from .banking_scenarios import QuarterlyCapitalReturn
 
+    # Scenario corpora must replay and validate without importing the benchmark
+    # CLI first; registration is part of the world format, not the caller.
+    from .benchmarks import scenarios as _native_scenarios  # noqa: F401
+
     # Same contract as the banking imports above: importing this is what registers
     # the `routine_notice` artifact type (build --distractors's plainest family),
     # and a corpus that carries one must compile identically whether this process

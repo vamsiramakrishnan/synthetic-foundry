@@ -81,6 +81,7 @@ from .evals.intents import Intent, intents
 from .ids import Minter
 from .lob import Lob, Responsibility, RoleSpec, lint_lob, may_ask_about
 from .models import Authority, CanonicalFact, EvaluationCase, EvaluationType, Model
+from .packkit.resolve import derived
 from .process_bindings import (
     ActivityBinding,
     CompanySpec,
@@ -177,7 +178,15 @@ def aliases() -> dict[str, str]:
     phrase winning (`industry_of`). Packs are read lowest precedence first, so
     where two claim one phrase the pack a user or a project root put in front
     of the shipped ones has the last word, and within one root the later name.
+
+    Memoised against the pack search path (`packkit.resolve.derived`):
+    `industry_of` asks once per description, and a company resolution asks
+    many times, each of which re-read and re-resolved every industry pack.
     """
+    return dict(derived("industry.aliases", _aliases))
+
+
+def _aliases() -> dict[str, str]:
     visible = sorted(packkit.discover("industry", strict=False), key=lambda found: (-found.rank, found.envelope.name))
     words: dict[str, str] = {}
     for found in visible:

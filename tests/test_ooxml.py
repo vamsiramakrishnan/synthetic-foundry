@@ -9,12 +9,18 @@ one with ``datetime.now()``. These tests build the nesting directly, with
 plain ``zipfile``, rather than through a real chart — the defect is about the
 *packaging*, not about anything either renderer does, so it is worth proving
 independently of both.
+
+The last tests cover the host rather than the clock: a part a library staged
+on disk records that file's mode, which Windows and POSIX report differently.
 """
 
 from __future__ import annotations
 
 import io
+import stat
 import zipfile
+
+import pytest
 
 from worldloom.render import ooxml
 
@@ -129,3 +135,76 @@ def test_without_a_created_stamp_only_the_archive_entries_are_fixed() -> None:
         embedded = outer.read("ppt/embeddings/Microsoft_Excel_Sheet1.xlsx")
         with zipfile.ZipFile(io.BytesIO(embedded)) as inner:
             assert b"2024-06-15T12:30:00Z" in inner.read("docProps/core.xml")
+
+
+#: What ``os.stat`` reports for a writable regular file on Windows, and what
+#: ``mkstemp`` creates on POSIX. ``ZipFile.write`` copies the mode into the entry.
+_WINDOWS_STAGED = (stat.S_IFREG | 0o666) << 16
+_POSIX_STAGED = (stat.S_IFREG | 0o600) << 16
+
+
+def _staged(mode: int) -> bytes:
+    """A package whose worksheet was added from disk with *mode*, the way
+    openpyxl adds every worksheet, beside parts written from memory."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", b"<Types/>")
+        worksheet = zipfile.ZipInfo("xl/worksheets/sheet1.xml", date_time=(2024, 6, 15, 12, 30, 0))
+        worksheet.external_attr = mode
+        archive.writestr(worksheet, b"<worksheet/>")
+        chosen = zipfile.ZipInfo("xl/chosen.xml")
+        chosen.external_attr = 0o644 << 16  # a writer's own mode, no file-type bits
+        archive.writestr(chosen, b"<in-memory/>")
+    return buffer.getvalue()
+
+
+def test_a_staged_parts_host_file_mode_does_not_reach_the_package() -> None:
+    """The Windows CI job found this: openpyxl stages each worksheet in a
+    temporary file, ``ZipFile.write`` copies that file's mode into the entry,
+    and Windows reports ``0o666`` where POSIX ``mkstemp`` gives ``0o600``. Every
+    XLSX therefore differed between the two, and since native task ids digest
+    their input checksums, a Windows benchmark planned different tasks."""
+    assert _staged(_WINDOWS_STAGED) != _staged(_POSIX_STAGED)
+    assert ooxml.normalise(_staged(_WINDOWS_STAGED)) == ooxml.normalise(_staged(_POSIX_STAGED))
+
+
+def test_pinning_host_modes_leaves_posix_and_in_memory_entries_as_written() -> None:
+    """The pin must not move Linux or macOS bytes: POSIX-staged entries are
+    already ``0o600``, and entries written from memory carry no file-type bits
+    (``writestr`` gives them ``0o600`` unless the writer chose a mode)."""
+    with zipfile.ZipFile(io.BytesIO(ooxml.normalise(_staged(_WINDOWS_STAGED)))) as archive:
+        modes = {info.filename: info.external_attr for info in archive.infolist()}
+    assert modes == {"[Content_Types].xml": 0o600 << 16, "xl/worksheets/sheet1.xml": _POSIX_STAGED,
+                     "xl/chosen.xml": 0o644 << 16}
+
+
+def test_an_openpyxl_workbook_normalises_to_the_same_bytes_under_windows_file_modes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same claim against openpyxl's real save path, with ``os.stat``'s
+    Windows answer emulated where ``ZipFile.write`` reads it."""
+    pytest.importorskip("openpyxl")
+    from openpyxl import Workbook
+
+    def render() -> bytes:
+        workbook = Workbook()
+        workbook.active["A1"] = "Revenue evidence for store:east: AUD 125."
+        stream = io.BytesIO()
+        workbook.save(stream)
+        return ooxml.normalise(stream.getvalue(), created="2026-04-08T09:40:00+00:00")
+
+    posix = render()
+    original = zipfile.ZipInfo.from_file
+    staged: list[str] = []
+
+    def windows_from_file(cls: type[zipfile.ZipInfo], filename: str, arcname: str | None = None,
+                          *, strict_timestamps: bool = True) -> zipfile.ZipInfo:
+        info = original(filename, arcname, strict_timestamps=strict_timestamps)
+        info.external_attr = _WINDOWS_STAGED
+        staged.append(info.filename)
+        return info
+
+    monkeypatch.setattr(zipfile.ZipInfo, "from_file", classmethod(windows_from_file))
+    windows = render()
+    assert staged, "openpyxl no longer stages parts on disk; this emulation exercises nothing"
+    assert windows == posix

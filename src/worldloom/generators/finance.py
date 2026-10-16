@@ -25,8 +25,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from .. import profiles
+from ..formula_semantics import formula_value
 from ..ids import Minter
-from ..models import Authority, CanonicalFact, Category, Quantity, Site
+from ..models import Authority, CanonicalFact, Category, FormulaKind, Quantity, Site
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 
@@ -174,7 +175,7 @@ class _Ledger:
 
 
 def _pct(profit: int, revenue: int) -> float:
-    return round(profit / revenue * 100, 2) if revenue else 0.0
+    return formula_value(FormulaKind.RATIO_PCT, (profit, revenue), decimal_places=2)
 
 
 def generate(

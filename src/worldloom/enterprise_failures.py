@@ -71,13 +71,26 @@ def build_query_emulator(
         if override.kind in _SOURCE_KINDS and target is None:
             raise ValueError(f"source override {override.kind} requires a record")
         if override.kind == "stale_source" and target is not None:
+            if override.details.get("authoritative_replacement"):
+                # The source-policy case (`evalrun.source_policy`): the copy
+                # this record is stale against exists and the stale record
+                # says so. Without it, "prefer the authoritative version" had
+                # nothing to prefer, and the policy could not be graded.
+                replacement = deepcopy(target)
+                replacement_id = authoritative_replacement_id(query_id, str(override.record_id))
+                replacement.update(fid=replacement_id, id=replacement_id, ident=replacement_id,
+                                   external_id=replacement_id, supersedes=str(override.record_id))
+                materialized.append(replacement)
+                target["superseded_by"] = replacement_id
+                if isinstance(target.get("fields"), dict):
+                    target["fields"]["superseded_by"] = replacement_id
             fields = target.get("fields")
             source = fields if isinstance(fields, dict) else target
             source["version"] = max(0, int(source.get("version", 1)) - 1)
             target["version"] = source["version"]
         elif override.kind == "ambiguous_join" and target is not None:
             duplicate = deepcopy(target)
-            duplicate_id = content_key("ambiguous-enterprise-record", query_id, str(override.record_id))
+            duplicate_id = ambiguous_duplicate_id(query_id, str(override.record_id))
             duplicate.update(fid=duplicate_id, ident=duplicate_id, external_id=duplicate_id)
             materialized.append(duplicate)
         elif override.kind == "missing_stable_id" and target is not None:
@@ -122,7 +135,17 @@ def build_query_emulator(
     return ConnectorEmulator(definition, materialized, acl=permissions, faults=faults)
 
 
-__all__ = ["build_query_emulator", "compile_failure_contract"]
+def ambiguous_duplicate_id(query_id: str, record_id: str) -> str:
+    """The id of the indistinguishable second record an ``ambiguous_join`` adds for *query_id*."""
+    return content_key("ambiguous-enterprise-record", query_id, record_id)
+
+
+def authoritative_replacement_id(query_id: str, record_id: str) -> str:
+    """The id of the current copy a ``stale_source`` with ``authoritative_replacement`` adds."""
+    return content_key("authoritative-enterprise-record", query_id, record_id)
+
+
+__all__ = ["ambiguous_duplicate_id", "authoritative_replacement_id", "build_query_emulator", "compile_failure_contract"]
 
 
 def compile_failure_contract(row: Mapping[str, Any]) -> dict[str, Any]:

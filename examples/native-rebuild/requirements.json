@@ -1,0 +1,17 @@
+{
+  "schema_version": "worldloom.benchmark-requirements/v1",
+  "cells": [
+    {"name": "read:docx", "operation": "read", "format": "docx"},
+    {"name": "read:pptx", "operation": "read", "format": "pptx"},
+    {"name": "read:xlsx", "operation": "read", "format": "xlsx"},
+    {"name": "analyze:docx", "operation": "analyze", "format": "docx"},
+    {"name": "analyze:pptx", "operation": "analyze", "format": "pptx"},
+    {"name": "analyze:xlsx", "operation": "analyze", "format": "xlsx"},
+    {"name": "update:docx", "operation": "update", "format": "docx"},
+    {"name": "update:pptx", "operation": "update", "format": "pptx"},
+    {"name": "update:xlsx", "operation": "update", "format": "xlsx"},
+    {"name": "create:docx", "operation": "create", "format": "docx"},
+    {"name": "create:pptx", "operation": "create", "format": "pptx"},
+    {"name": "create:xlsx", "operation": "create", "format": "xlsx"}
+  ]
+}

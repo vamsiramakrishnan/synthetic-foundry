@@ -510,7 +510,9 @@ def test_the_shipped_sheet_round_trips_through_the_schema() -> None:
                     {}
                     if column.derive is None
                     else {"derive": {"formula": column.derive.kind.value,
-                                     "operands": list(column.derive.operands)}}
+                                     "operands": list(column.derive.operands),
+                                     **({"decimal_places": column.derive.decimal_places}
+                                        if column.derive.decimal_places is not None else {})}}
                 ),
             }
             for column in columns.PNL.columns

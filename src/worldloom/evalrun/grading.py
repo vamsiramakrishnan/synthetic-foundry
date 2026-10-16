@@ -24,6 +24,7 @@ only against what was observed.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
@@ -35,6 +36,7 @@ from .. import packkit
 from ..models import Model
 from .agents import AgentResponse
 from .contract import EvalCase, FailurePoint, StructuredOutcome
+from .retrieval_grading import RetrievalGrade, grade_retrieval, is_retrieval_attempt
 from .safety import (
     ErrorCode,
     OperationSafety,
@@ -159,7 +161,7 @@ def _tool_edges(case: EvalCase) -> tuple[tuple[str, str], ...]:
 
 
 def grade_plan(case: EvalCase, spans: Spans, response: AgentResponse | None = None) -> PlanGrade:
-    materialized = [_span(span) for span in spans]
+    materialized = [held for span in spans if not is_retrieval_attempt(case.row, held := _span(span))]
     reachable = _reachable(case, skipped_nodes(case, spans))
     first_seen: dict[str, int] = {}
     for index, span in enumerate(materialized):
@@ -264,10 +266,13 @@ class TrajectoryGrade(Model):
     #: what the emulator returned against the gold evidence at each node.
     #: Additive like ``PlanGrade.nodes``: absent when not graded.
     queries: QueryGrade | None = None
+    #: Private delivery receipts prove query quality and actual refinement.
+    #: Absent for ordinary cases, preserving their historical ledger bytes.
+    retrieval: RetrievalGrade | None = None
 
     @model_serializer(mode="wrap")
     def _omit_absent_stage(self, handler: Any) -> Any:
-        return _omit_none(handler(self), ("queries",))
+        return _omit_none(handler(self), ("queries", "retrieval"))
 
 
 def _reference_tools(case: EvalCase, skipped: frozenset[str] = frozenset()) -> tuple[str, ...]:
@@ -431,6 +436,9 @@ def grade_trajectory(
         # share honoured, and nothing when the row wanted none and the run
         # asked none — which keeps every existing ledger's score what it was.
         parts.append(_round(honoured_questions / len(expected_questions)) if expected_questions else 0.0)
+    retrieval = grade_retrieval(case.row, materialized)
+    if retrieval is not None:
+        parts.append(1.0 if retrieval.passed else 0.0)
     score = _mean(parts)
     return TrajectoryGrade(
         reference=reference, observed=observed, calls=len(materialized), errors=len(errors),
@@ -442,10 +450,10 @@ def grade_trajectory(
         questions_asked=len(asked), questions_expected=len(expected_questions),
         questions_honoured=honoured_questions, unsolicited_questions=len(unsolicited),
         question_findings=tuple(question_findings),
-        score=score,
+        score=score, retrieval=retrieval,
         passed=(recall == 1.0 and not storm and not findings and not budget_exceeded and not refused
                 and honoured == expected_failures and honoured_questions == len(expected_questions)
-                and not unsolicited),
+                and not unsolicited and (retrieval is None or retrieval.passed)),
     )
 
 
@@ -509,10 +517,74 @@ class OutcomeGrade(Model):
     #: Field values, format, sections and grounded facts of what the run
     #: produced (``stages.grade_output``). Additive: absent when not graded.
     output: OutputGrade | None = None
+    #: The case's source policy, held or not. Absent on a case without one,
+    #: so existing ledgers keep their bytes.
+    source_policy: SourcePolicyGrade | None = None
 
     @model_serializer(mode="wrap")
     def _omit_absent_stage(self, handler: Any) -> Any:
-        return _omit_none(handler(self), ("output",))
+        return _omit_none(handler(self), ("output", "source_policy"))
+
+
+class SourcePolicyGrade(Model):
+    """Whether the run met its case's source policy (``contract.SourcePolicy``)."""
+
+    kind: str
+    #: ``clarification_missing``, ``stale_source_used`` or
+    #: ``authoritative_source_missing``; empty when the policy held.
+    findings: tuple[str, ...] = ()
+    #: The policy's records the run named, each by its first key.
+    named: tuple[str, ...] = ()
+
+
+#: The source-policy findings, named once like the safety and question laws.
+SOURCE_POLICY_FINDINGS: tuple[str, ...] = ("clarification_missing", "stale_source_used", "authoritative_source_missing")
+
+
+def _names_record(keys: Sequence[str], texts: Sequence[str]) -> bool:
+    """Whether any text names the record by one of its keys, as a whole token.
+
+    Bounded, not a substring test: a bare ``in`` let ``WL-1`` count as named
+    wherever ``WL-10`` appeared, crediting a run with a record it never cited.
+    """
+    patterns = [re.compile(rf"(?<![A-Za-z0-9_]){re.escape(key)}(?![A-Za-z0-9_])", re.IGNORECASE)
+                for key in keys if key]
+    return any(pattern.search(text) for pattern in patterns for text in texts)
+
+
+def _grade_source_policy(case: EvalCase, response: AgentResponse | None, after: Mapping[str, Mapping[str, Any]],
+                         diff: StateDiff, spans: Sequence[Mapping[str, Any]],
+                         questions: Sequence[Mapping[str, Any]]) -> SourcePolicyGrade | None:
+    import json
+
+    policy = case.outcomes.source_policy
+    if policy is None:
+        return None
+    said = [response.answer] if response is not None else []
+    said.extend(artifact.text for artifact in (response.artifacts if response is not None else ()))
+    said.extend(cite for artifact in (response.artifacts if response is not None else ()) for cite in artifact.cites)
+
+    names = _names_record
+
+    if policy.kind == "clarify_ambiguous_join":
+        # Naming every candidate is the policy, in a question or in what the
+        # run handed back; naming one is choosing it.
+        texts = [*said, *(str(question.get("question", "")) for question in questions)]
+        named = tuple(keys[0] for keys in policy.candidates if keys and names(keys, texts))
+        missing = len(named) < len(policy.candidates)
+        return SourcePolicyGrade(kind=policy.kind, findings=("clarification_missing",) if missing else (), named=named)
+    # What the run produced is what it rests on: the answer and artifacts it
+    # returned, the records it left, and the arguments of its writes.
+    texts = [*said, *(json.dumps(after[fid], sort_keys=True, default=str) for fid in (*diff.created, *diff.updated))]
+    texts.extend(json.dumps(span.get("args"), sort_keys=True, default=str)
+                 for span in spans if span.get("writes") and not span.get("error"))
+    current, stale = names(policy.authoritative, texts), names(policy.stale, texts)
+    named = tuple(keys[0] for keys, hit in ((policy.authoritative, current), (policy.stale, stale)) if keys and hit)
+    if current:
+        findings: tuple[str, ...] = ()
+    else:
+        findings = ("stale_source_used",) if stale else ("authoritative_source_missing",)
+    return SourcePolicyGrade(kind=policy.kind, findings=findings, named=named)
 
 
 Rater = Callable[[EvalCase, str], tuple[float | None, str | None]]
@@ -536,6 +608,7 @@ def grade_outcomes(
     definitions: Mapping[str, Any] | None = None,
     rater: Rater | None = None,
     spans: Spans = (),
+    questions: Sequence[Mapping[str, Any]] = (),
 ) -> OutcomeGrade:
     diff = diff_state(before, after)
     skipped = skipped_nodes(case, spans)
@@ -611,6 +684,13 @@ def grade_outcomes(
             if candidates:
                 record, met = candidates[0], True
                 claimed = tuple(candidates) if expected.node in mapped else (candidates[0],)
+                # Creating a record is only the structural outcome. When the
+                # case pins computed fields, their actual persisted values
+                # must satisfy the same contract as an update's fields.
+                wrong = {key: value for key, value in expected.fields.items()
+                         if after.get(record, {}).get(key) != value}
+                if wrong:
+                    met, detail = False, f"{record} differs from expected fields: {sorted(wrong)}"
             else:
                 detail = f"no {expected.connector}/{expected.entity} record was created"
         elif expected.kind == "update":
@@ -735,15 +815,21 @@ def grade_outcomes(
         parts.append(grounding)
     if answer_score is not None:
         parts.append(max(0.0, min(1.0, answer_score)))
+    policy = _grade_source_policy(case, response, after, diff, materialized, questions)
+    if policy is not None:
+        parts.append(0.0 if policy.findings else 1.0)
     score = _mean(parts) if parts else 1.0
     passed = (met_count == expected_count and not collateral and (grounding in (None, 1.0))
               and answer_error is None and (answer_score is None or answer_score >= _answer_pass_score()))
     if case.outcomes.no_write:
         passed = not touched and answer_error is None
+    if policy is not None and policy.findings:
+        passed = False
     return OutcomeGrade(
         diff=diff, structured=tuple(matches), structured_met=met_count, structured_expected=expected_count,
         collateral=collateral, artifacts_produced=len(artifacts), grounding=grounding,
         answer_score=answer_score, answer_error=answer_error, score=score, passed=passed,
+        source_policy=policy,
     )
 
 
@@ -810,12 +896,14 @@ def score_case(plan: PlanGrade, trajectory: TrajectoryGrade, outcomes: OutcomeGr
 
 __all__ = [
     "SAFETY_LAWS",
+    "SOURCE_POLICY_FINDINGS",
     "CaseScore",
     "OutcomeGrade",
     "OutcomeMatch",
     "PlanGrade",
     "Rater",
     "SafetyFinding",
+    "SourcePolicyGrade",
     "StateDiff",
     "TrajectoryGrade",
     "diff_state",

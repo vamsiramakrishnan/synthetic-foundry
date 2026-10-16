@@ -8,6 +8,18 @@ no model service or cloud credentials. Complete
 [installation](/worldloom/getting-started/installation/) with the `all`
 extra so all five document renderers below are available.
 
+## 0. Check the install end to end
+
+```bash
+worldloom smoke --out ./smoke
+```
+
+This chains build, narration through the agent handshake, rendering,
+validation, retrieval scoring, enterprise eval case generation, and a reference
+agent run on a tiny world, printing one timed line per stage. It exits non-zero
+at the first stage that fails and names it. Omit `--out` to run in a temporary
+directory.
+
 ## 1. Build one episode
 
 ```bash

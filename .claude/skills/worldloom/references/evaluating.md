@@ -18,6 +18,7 @@ worldloom evaluate ./corpus -k 3
 worldloom evaluate ./corpus --retriever both
 worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 worldloom evals export ./corpus -o evals.jsonl
+worldloom evals passages ./corpus -o passages.jsonl
 worldloom stats ./corpus
 ```
 
@@ -30,6 +31,8 @@ default, unchanged), `tfidf`, `embedding`, `both` (the two lexical baselines)
 or `all`; see below. `worldloom evals export` writes the evaluation set as
 JSONL, one case per line, sorted keys: the format to hand to an external
 retrieval system you want to score against this same answer key.
+`worldloom evals passages` writes the passages that system should index; see
+"Scoring your own retrieval system" below.
 `worldloom stats` is `evaluate`'s sibling and answers a different question,
 "what does this corpus actually contain" rather than "is it hard to retrieve
 from"; see the section at the end of this file.
@@ -41,9 +44,10 @@ This scores **retrieval**, not generation. There is no judge model anywhere in
 test inside the measurement itself, and the score would stop being
 reproducible. Every case is graded by an objective, mechanical check against the
 manifest: did the retrieved passages between them carry the fact IDs the
-question needs (`_covers` in `score.py`), was the top hit written before the
-question's `temporal_cutoff`, did the top hit come from a passage whose
-authority rank matches or beats the best available source. The manifest is the
+question needs (`_covers` in `score.py`), does a temporal case's unfiltered
+top hit carry every expected fact and predate or equal `temporal_cutoff`,
+does an authority case's top hit carry an expected fact and match or beat
+the highest authority among all passages carrying an expected fact. The manifest is the
 answer key: which artifact carries which fact, when it was written
 (`created_at`), with what authority. It is built once by
 `src/worldloom/evaluate/index.py`, which turns each rendered artifact section
@@ -292,6 +296,130 @@ abstention case that names a source is no longer really an abstention case).
 It can't know that a *new* generator made an old question answerable in
 prose it doesn't parse. If you add a generator that models something the
 existing abstention list presumes doesn't exist, check that list by hand.
+
+## Scoring your own retrieval system
+
+The built-in retrievers are floors. A team with its own retrieval stack grades
+it against the same answer key, by the same rules, in four steps: export the
+passages, index them, write a ranking per question, score the rankings.
+
+```bash
+worldloom evals passages ./corpus -o passages.jsonl
+worldloom evals export ./corpus -o evals.jsonl
+worldloom evaluate ./corpus --predictions predictions.jsonl
+worldloom evaluate ./corpus --predictions predictions.jsonl -v --json
+```
+
+**Index.** `passages.jsonl` holds one line per passage, in index order, with
+sorted keys: `passage_id`, `artifact_id`, `artifact_type`, `title`, `heading`,
+`source` (the manifest path), `authority`, `created_at`, `fact_ids` and
+`text`. These are the units `index.passages()` yields, the ones `evaluate`
+and `search` rank, not a second chunking. Index `text`: it already carries the
+title and heading lines, exactly as the built-in retrievers see it.
+`authority` and `created_at` are the provenance the hard families reward
+reading. `fact_ids` is the grading key; use it to debug a ranking, not to
+rank. The bytes are deterministic, so the same corpus always exports the same
+file.
+
+**Rank.** Ask each case's `question` from `evals.jsonl` and write one line
+per case, best first:
+
+```json
+{"id": "EVAL-0001", "passage_ids": ["ART-0002#1", "ART-0003#0"]}
+{"id": "EVAL-0032", "abstain": true}
+```
+
+A system that ranks whole documents writes `"artifact_ids"` instead, one
+granularity per file; each artifact is then graded as one unit carrying every
+fact its passages carry, at the artifact's timestamp and authority.
+`"abstain": true` declines the question. `"metadata"` is carried and read by
+nothing. Any other key is refused, because a typo such as `passage_id` would
+otherwise read as an empty ranking and pass every abstention case.
+
+**Score.** `--predictions` hands the rankings to `grade()` in `score.py`, the
+function the built-in retrievers and `benchmark run` are graded by: `_covers`
+for the coverage families, the unfiltered top hit's time and full fact
+coverage for `temporal_state`, the top hit's authority and an expected fact
+for `authority_resolution`, the same per-family scorecard. Each
+ranking is cut at `-k` after repeats collapse to their first occurrence. A
+file carries no scores, so abstention is read from the line rather than a
+calibrated floor: an abstention case passes when the line abstains or ranks
+nothing, and an answerable case the line abstains on fails, as in `worldloom
+benchmark run`. A case with no line fails with `no prediction for this case`
+and is listed. Ids are checked before anything is graded: a case, passage or
+artifact id this corpus does not hold refuses the whole file
+(`predictions_unknown_ids`), because it means the index came from another
+corpus or an earlier build. A malformed line refuses as
+`predictions_unreadable`, naming the line.
+
+The scorecard is labelled with the file name, as `bm25` and `tfidf` label
+theirs. `--json` keeps the single-retriever shape (`retriever`, `k`,
+`overall`, `by_type`, `outcomes`) and adds `predictions`, `granularity` and
+`missing`. A file written from BM25's own top-k and its abstention verdicts
+reproduces `--retriever bm25` case for case; only the abstention detail
+differs, since there is no score to print.
+
+The final-status temporal case (EVAL-0023 on the seed-8128 March incident
+corpus) uses the first report's publication as its cut-off, computed with
+the same `documents.written_at` as the manifest. Finalisation is an event;
+its status becomes retrievable when a report records it. It remains a
+temporal case with the same expected fact and id. A perfect ranking now
+passes every case in this corpus, at either passage or artifact granularity.
+
+Older stored corpora keep their original cut-offs. A temporal case is reported
+unreachable when no single indexed unit carries every expected fact by its
+cut-off, even if later evidence exists. It still fails and stays in the
+denominator; rebuild the corpus with this generator to obtain the recut case.
+`tests/test_retrieval_grading_parity.py` checks the rules and reachability
+through the baseline, passage predictions, artifact predictions and executable
+paths, including real CLI/subprocess runs.
+
+### Standard formats
+
+`worldloom evals export --format` writes the same evaluation set in two
+harnesses' shapes. `worldloom`, the default, is the JSONL above, byte for byte
+what the command has always written. Neither of the others puts a model into
+the grading.
+
+```bash
+worldloom evals export ./corpus --format ragas -o ragas.jsonl
+worldloom evals export ./corpus --format promptfoo -o promptfoo-tests.json
+```
+
+- **ragas**: one row per case with `user_input` (the question), `reference`
+  (the expected answer), `reference_contexts` and `reference_context_ids`,
+  plus `id` and `metadata` (family, difficulty, fact ids, cut-off) for joining
+  scores back. `EvaluationDataset.from_jsonl` loads it into `SingleTurnSample`s
+  and ignores `id` and `metadata`. The reference passages are the ones
+  carrying an expected fact, narrowed to the case's `required_artifact_ids`
+  when it names any; a `temporal_state` case keeps only passages written by
+  its cut-off, as its grading does. The ids are `evals passages` ids, so
+  ragas's id-based context metrics join the same passages `--predictions`
+  does. Abstention rows have no references, and neither does a temporal case
+  whose evidence was all written after its cut-off; drop
+  `metadata.expects_abstention` rows before scoring context recall.
+- **promptfoo**: a JSON array for `tests: file://promptfoo-tests.json`.
+  `description` is the case id, `vars.question` the question, `metadata` the
+  rest. Assertions are substring checks taken from the expected answer, and
+  each one is passable by quoting the corpus:
+  - `contains` checks a figure the expected answer states, spelled as the
+    exported passages spell it (the corpus locale's digits, `617,200` or
+    `617.200`). Figures of one digit are skipped: `contains "1"` passes nearly
+    any answer.
+  - `icontains` checks a text value of four words or fewer that the expected
+    answer states: a status, an owner, a hypothesis's name. promptfoo matches
+    it as a plain substring, so `final` also matches `finalised`.
+
+  No value the question already contains is asserted, so an answer that only
+  repeats the question fails every check. A pass means the answer reproduces
+  those values. It does not check the reasoning, a name the fact ledger holds
+  only as a subject, or a figure restated at another scale (`617.2m` fails
+  where the corpus says `617,200`). A case with nothing to assert is left out
+  and counted on stderr, never exported with an empty list promptfoo would
+  pass. That leaves out every abstention case and every answer stated only in
+  prose; on a narrated `--seed 8128 --incident` corpus, 21 of 51 cases are
+  exported. Run through promptfoo 0.123.1 with no model, the reference
+  answers passed all 21 and a provider echoing the question passed none.
 
 ## `worldloom stats`: what's in the corpus, not how hard it is
 

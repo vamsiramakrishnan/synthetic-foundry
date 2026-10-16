@@ -15,10 +15,10 @@ refuses a pack whose content moved.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -26,6 +26,8 @@ from ..providers import digest
 from .envelope import PackEnvelope, parse_ref, read_envelope
 from .kinds import LintContext, PackKind, kind
 from .sources import Located, find
+
+T = TypeVar("T")
 
 MAX_DEPTH = 16
 
@@ -231,6 +233,33 @@ def shipped(kind_name: str) -> ResolvedPack:
     return resolve_envelope(found.envelope, located=found)
 
 
+_DERIVED: dict[tuple[str, tuple[tuple[str, Path], ...]], tuple[tuple[Any, ...], Any]] = {}
+
+
+def derived(name: str, compute: Callable[[], T]) -> T:
+    """*compute*'s value, recomputed only when the search path's pack files change.
+
+    For a value read off every visible pack (an industry's aliases), which a
+    caller asks for once per description: recomputing it resolved each pack
+    again, and each resolution rescanned every root for its signature, so one
+    lookup cost a filesystem walk per pack. Keyed on the search path and the
+    same signature `resolve` trusts, and forgotten by `refresh`, so it goes
+    stale exactly when a resolution would.
+    """
+    from .sources import CONTEXT_ROOTS, search_path
+
+    roots = CONTEXT_ROOTS.get()
+    key = (name, search_path(roots))
+    signature = _signature(roots)
+    held = _DERIVED.get(key)
+    if held is not None and held[0] == signature:
+        value: T = held[1]
+        return value
+    computed = compute()
+    _DERIVED[key] = (signature, computed)
+    return computed
+
+
 def refresh() -> None:
     """Forget cached resolutions and defaults (after an upload, or a test writing packs).
 
@@ -241,7 +270,8 @@ def refresh() -> None:
     from .active import forget_defaults
 
     _CACHE.clear()
+    _DERIVED.clear()
     forget_defaults()
 
 
-__all__ = ["MAX_DEPTH", "ResolvedPack", "lint", "merge", "refresh", "resolve", "resolve_envelope", "shipped"]
+__all__ = ["MAX_DEPTH", "ResolvedPack", "derived", "lint", "merge", "refresh", "resolve", "resolve_envelope", "shipped"]

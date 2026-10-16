@@ -105,6 +105,32 @@ def _corpus_cases(corpus: Path, limit: int | None) -> tuple[Any, tuple[Any, ...]
     return loaded, cases[:limit] if limit else cases
 
 
+@app.command("audit-split")
+def audit_split_command(
+    corpus: Path = typer.Argument(..., help="Training corpus or case set."),
+    holdout_corpus: Path = typer.Option(..., "--holdout-corpus", help="Held-out corpus or case set."),
+    source_origin: str | None = typer.Option(None, "--source-origin", help="Stable source-world origin shared by its snapshots and counterfactuals."),
+    holdout_origin: str | None = typer.Option(None, "--holdout-origin", help="Stable origin of the held-out source; independent worlds have distinct origins."),
+    unit_dimension: str | None = typer.Option(None, "--unit-dimension", help="Declared correlated-unit dimension, such as episode_id."),
+) -> None:
+    """Reject shared evidence and lineage across the proposed train/holdout boundary."""
+    from ..cli import _refuse
+    from ..quality_cli import _emit
+    from .qualification import audit_splits, with_record_provenance
+
+    try:
+        loaded, cases = _corpus_cases(corpus, None)
+        held_loaded, held = _corpus_cases(holdout_corpus, None)
+        cases = with_record_provenance(cases, loaded.connector_data.records, namespace=source_origin)
+        held = with_record_provenance(held, held_loaded.connector_data.records, namespace=holdout_origin)
+        report = audit_splits(cases, held, unit_dimension=unit_dimension)
+    except (ValueError, OSError) as error:
+        _refuse("qualification_rejected", str(error))
+    _emit(report.model_dump(mode="json"))
+    if not report.isolated:
+        raise typer.Exit(1)
+
+
 @app.command("cases")
 def cases_command(
     corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
@@ -641,6 +667,41 @@ def plan_command(
     _print_summary(summary, json_output)
 
 
+@app.command("flow")
+def flow_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set written by `worldloom industry programme`."),
+    out: Path = typer.Option(..., "--out", "-o", help="Where to write the flows (worldloom.compose-flows/v1 JSON)."),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    json_output: bool = typer.Option(False, "--json", help="Print the document instead of a summary."),
+) -> None:
+    """Write each case's expected DAG as an Anvil composite flow (anvil.compose-flow/v1).
+
+    The flow names Anvil operations through the shipped Anvil mappings, so
+    `python -m anvil_compose plan|validate|run` reads it against a composite
+    (`anvil connectors compose`). The reverse also holds: a planner may
+    answer `evalrun plan` with a composite flow or plan and is graded as if
+    it had named the tools. Tool nodes no mapping serves are listed under
+    `unmapped`; required inputs the gold payload does not give, under `needs`.
+    """
+    from ..cli import _refuse
+    from .compose import flows_document
+
+    _, cases = _corpus_cases(corpus, limit)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    document = flows_document(cases)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    if json_output:
+        typer.echo(json.dumps(document, indent=2))
+        return
+    flows = document["flows"].values()
+    complete = sum(1 for flow in flows if not flow.get("unmapped"))
+    steps = sum(len(flow["steps"]) for flow in flows)
+    typer.echo(f"wrote {out}: {len(document['flows'])} flow(s), {steps} step(s); "
+               f"{complete} case(s) map every tool node to an Anvil operation")
+
+
 @app.command("summarize")
 def summarize_command(
     run: Path = typer.Argument(..., help="A run directory written by `evalrun run`."),
@@ -1073,6 +1134,9 @@ def improve_command(
     proposer_pack: str | None = typer.Option(None, "--proposer-pack", help="The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest."),
     holdout_corpus: Path | None = typer.Option(None, "--holdout-corpus", help="Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back."),
     holdout_share: float | None = typer.Option(None, "--holdout-share", help="Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`)."),
+    qualification_policy: Path | None = typer.Option(None, "--qualification-policy", help="QualificationPolicy JSON: predeclared fresh evidence tranches, repeat support, and family-wise confidence budget. Requires enough independent held-out evidence."),
+    source_origin: str | None = typer.Option(None, "--source-origin", help="Stable training-world origin; keep it unchanged across snapshots and counterfactual variants."),
+    holdout_origin: str | None = typer.Option(None, "--holdout-origin", help="Stable held-out-world origin; distinct independent worlds use different origins."),
     rounds: int | None = typer.Option(None, "--rounds", min=1, help="Rounds to run (default: policy `evalrun.improve.rounds`)."),
     rater: str | None = typer.Option(None, "--rater", help="grounded or exec:<command>; pinned for the whole loop."),
     rater_timeout: float = typer.Option(600.0, "--rater-timeout"),
@@ -1097,6 +1161,9 @@ def improve_command(
     anvil_cmd: str | None = typer.Option(None, "--anvil-cmd", help="The Anvil CLI, e.g. 'node /path/to/anvil/packages/cli/dist/bin-anvil.js' (default: $WORLDLOOM_ANVIL, else `anvil` on PATH)."),
     source_root: list[str] | None = typer.Option(None, "--source-root", help="CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it."),
     transfer_agent: str | None = typer.Option(None, "--transfer-agent", help="A second agent as an executable (the --exec seam) that an interface candidate must not regress on the held-out cases. Without it the transfer gate is skipped and the receipt says why."),
+    curriculum: str | None = typer.Option(None, "--curriculum", help="failures: between rounds, add training cases drawn from --curriculum-pool for the clusters the round's champion failed (by the declared finding-key mapping, weighted by cluster size), never a held-out case. Off by default: the training set stays fixed."),
+    curriculum_cases: int | None = typer.Option(None, "--curriculum-cases", min=1, help="With --curriculum: training cases each round adds (default 8)."),
+    curriculum_pool: Path | None = typer.Option(None, "--curriculum-pool", help="With --curriculum: the corpus or case set new cases are drawn from, such as an `evalrun corners` case set. Default: the cases of CORPUS that --limit left out."),
     json_output: bool = typer.Option(False, "--json", help="Emit improve.json on stdout."),
     surface: str | None = typer.Option(None, "--surface", help=_SURFACE_HELP),
 ) -> None:
@@ -1163,6 +1230,44 @@ def improve_command(
     if holdout_corpus is not None:
         held_loaded, held = _corpus_cases(holdout_corpus, None)
         held_records = list(held_loaded.connector_data.records)
+    pool: tuple[Any, ...] = ()
+    # `None` while the pool is CORPUS's own cases, which run over its records.
+    pool_records: list[Any] | None = None
+    if curriculum is None:
+        if curriculum_cases is not None or curriculum_pool is not None:
+            _refuse("missing_flag", "--curriculum-cases and --curriculum-pool need --curriculum failures")
+    else:
+        from .failure_curriculum import CURRICULUM_MODES, case_key
+
+        if curriculum not in CURRICULUM_MODES:
+            _refuse("unknown_curriculum", f"--curriculum takes one of {', '.join(CURRICULUM_MODES)}; got {curriculum!r}")
+        if value or parents == "archive" or qualification_policy is not None:
+            _refuse("cannot_combine", "--curriculum grows the training set, which --value's table, --parents "
+                    "archive's cluster means and a --qualification-policy's sealed experiment are each fixed over")
+        if curriculum_pool is None:
+            # The cases --limit left out: compiled from the same world, over the same records.
+            _, everything = _corpus_cases(corpus, None)
+            loaded_keys = {case_key(case) for case in cases}
+            pool = tuple(case for case in everything if case_key(case) not in loaded_keys)
+        else:
+            if "interface" in chosen_levers:
+                _refuse("cannot_combine", "--curriculum-pool serves its cases over their own records, which the "
+                        "interface lever's served bundles do not cover; draw from CORPUS (omit --curriculum-pool)")
+            pool_loaded, pool = _corpus_cases(curriculum_pool, None)
+            pool_records = list(pool_loaded.connector_data.records)
+    qualification_options: dict[str, Any] = {}
+    if qualification_policy is not None:
+        from ..quality_cli import _document
+        from .qualification import QualificationPolicy, with_record_provenance
+
+        try:
+            policy = QualificationPolicy.model_validate(_document(qualification_policy))
+            cases = with_record_provenance(cases, records, namespace=source_origin)
+            if held is not None:
+                held = with_record_provenance(held, held_records, namespace=holdout_origin)
+        except ValueError as error:
+            _refuse("qualification_rejected", str(error))
+        qualification_options["qualification"] = policy
     services: dict[str, Any] = {}
     workers = default_concurrency() if concurrency is None else concurrency
     values = holdout_values = None
@@ -1172,18 +1277,38 @@ def improve_command(
         values = value_table(cases, records)
         if held is not None:
             holdout_values = value_table(held, held_records)
-    from .runner import case_set_digest
+    from .qualification import suite_digest
 
     # Each corpus is served over its own records: two worlds reuse external
     # keys (`WL-1`), so one service over both would resolve a key to whichever
     # world came first.
-    held_key = case_set_digest(held) if held is not None else None
+    held_keys = {suite_digest((case,)) for case in held} if held is not None else set()
+
+    def records_for(subset: Any) -> list[Any]:
+        held_subset = bool(subset) and all(suite_digest((case,)) in held_keys for case in subset)
+        return held_records if held_subset else records
+
+    pool_keys = {suite_digest((case,)) for case in pool} if pool_records is not None else set()
 
     def run(subset: Any, agent: Any) -> Any:
-        key = case_set_digest(subset)
+        if pool_keys and any(suite_digest((case,)) in pool_keys for case in subset):
+            # Curriculum cases from another corpus run over their own
+            # records, CORPUS's over CORPUS's: two worlds reuse external keys.
+            from .campaign import RecordGroups, run_grouped
+
+            assert pool_records is not None
+            drawn = [case.id for case in subset if suite_digest((case,)) in pool_keys]
+            mine = [case.id for case in subset if suite_digest((case,)) not in pool_keys]
+            groups = RecordGroups(groups=tuple(group for group in ((tuple(mine), tuple(records)),
+                                                                   (tuple(drawn), tuple(pool_records))) if group[0]))
+            return run_grouped(subset, groups, agent, rater=grader, concurrency=workers, principal=principal)
+        key = suite_digest(subset)
         if key not in services:
             try:
-                services[key] = service_for(subset, held_records if key == held_key else records, concurrency=workers)
+                # Fresh qualification tranches are subsets of the sealed pool.
+                # Comparing a tranche digest to the entire pool used to serve
+                # training records under a held-out task's oracle.
+                services[key] = service_for(subset, records_for(subset), concurrency=workers)
             except Exception as error:  # ServingError and its causes are all refusals here
                 _refuse("service_unbuildable", str(error))
         return run_cases(services[key], subset, agent, principal=principal, rater=grader, concurrency=workers)
@@ -1202,13 +1327,13 @@ def improve_command(
             # On the contract surface each variant presents its own tools, in
             # process; through Anvil the service replays what Anvil served.
             in_process = isinstance(serving, ContractServing)
-            base = case_set_digest(subset)
+            base = suite_digest(subset)
             key = (json.dumps(serving.identity(), sort_keys=True) + base) if in_process else base
             if key not in served:
                 try:
                     # Anvil's provider searches with the shared vendor query
                     # evaluator, so the replay's service does too.
-                    served[key] = service_for(subset, held_records if base == held_key else records,
+                    served[key] = service_for(subset, records_for(subset),
                                               concurrency=workers, query_engine="native",
                                               **({"surface": serving.surfaces} if in_process else {}))
                 except Exception as error:  # ServingError and its causes are all refusals here
@@ -1239,11 +1364,13 @@ def improve_command(
                          holdout=held, holdout_share=holdout_share, rounds=rounds,
                          ablate=False if no_ablate else None, values=values, holdout_values=holdout_values,
                          repeats=repeats, brief=brief, reference_run=reference, candidates=candidates, screen_cases=screen_cases, finalists=finalists,
-                         parents=parents, round_budget=round_budget, **lever_options)
+                         parents=parents, round_budget=round_budget, curriculum=curriculum,
+                         curriculum_pool=pool if curriculum is not None else None, curriculum_cases=curriculum_cases,
+                         **lever_options, **qualification_options)
     except GraderDrift as error:
         _refuse("grader_drift", str(error), pinned=error.pinned, current=error.current, changed=list(error.changed))
     except ValueError as error:
-        _refuse("cases_uncompilable", str(error))
+        _refuse("qualification_rejected" if qualification_policy is not None else "cases_uncompilable", str(error))
     if json_output:
         typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
         return
@@ -1263,6 +1390,12 @@ def improve_command(
                        f"{screen.cost} case-run(s); finalist(s): {', '.join(map(str, screen.finalists)) or 'none'}")
         if item.spent is not None:
             typer.echo(f"  spent {item.spent} case-run(s)")
+        if item.curriculum is not None:
+            drove = ", ".join(f"{target['key']} +{target['drawn']}" for target in item.curriculum["targets"]
+                              if target["drawn"])
+            typer.echo(f"  curriculum: +{item.curriculum['added']} training case(s) from round "
+                       f"{item.curriculum['source_round']}'s failures" + (f" ({drove})" if drove else "")
+                       + (f"; {item.curriculum['shortfall']} short" if item.curriculum["shortfall"] else ""))
         if item.interface is not None:
             transfer_state = item.interface.get("transfer") or {}
             if "skipped" in transfer_state:
@@ -1580,7 +1713,8 @@ def _meta_task(entry: Any, base: Path, *, timeout: float, shell: bool, max_turns
     from .harness import ExecAgent
     from .improve import split_cases
     from .meta import ImprovementTask
-    from .runner import case_set_digest, default_concurrency, run_cases, service_for
+    from .qualification import suite_digest
+    from .runner import default_concurrency, run_cases, service_for
 
     if not isinstance(entry, dict):
         _refuse("unreadable_document", "each task in TASKS.json is an object")
@@ -1617,14 +1751,15 @@ def _meta_task(entry: Any, base: Path, *, timeout: float, shell: bool, max_turns
 
         train, held = split_cases(cases, holdout_share=float(packkit.policy("evalrun.improve.holdout_share")))
     workers = default_concurrency() if concurrency is None else concurrency
-    held_key = case_set_digest(held)
+    held_keys = {suite_digest((case,)) for case in held}
     services: dict[str, Any] = {}
 
     def run(subset: Any, agent: Any) -> Any:
-        key = case_set_digest(subset)
+        key = suite_digest(subset)
         if key not in services:
             try:
-                services[key] = service_for(subset, held_records if key == held_key else records, concurrency=workers)
+                held_subset = bool(subset) and all(suite_digest((case,)) in held_keys for case in subset)
+                services[key] = service_for(subset, held_records if held_subset else records, concurrency=workers)
             except Exception as error:  # ServingError and its causes are all refusals here
                 _refuse("service_unbuildable", str(error))
         return run_cases(services[key], subset, agent, principal=principal, rater=rater, concurrency=workers)

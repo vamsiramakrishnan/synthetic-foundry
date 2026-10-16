@@ -1,0 +1,8 @@
+{
+  "use_case_id": "close-review",
+  "objective": "Reconcile the close evidence and prepare the operating review.",
+  "formats": ["docx", "pptx", "xlsx"],
+  "operations": ["read", "analyze", "update", "create"],
+  "max_tasks": 32,
+  "discovery_scope": "mixed"
+}

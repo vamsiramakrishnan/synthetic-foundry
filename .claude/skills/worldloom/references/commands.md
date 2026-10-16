@@ -278,6 +278,78 @@ worldloom contracts trim <CONNECTOR>
 | `--source` | The full source (default: the fetched, locked bytes). A large YAML source reads faster converted to JSON. |
 | `-o`, `--out` | Where to write the gzipped trim. |
 
+### `worldloom corpus-scale`
+
+Materialise and verify large enterprise corpus files.
+
+### `worldloom corpus-scale assess`
+
+Report construction shortfalls before spending on materialisation.
+
+```
+worldloom corpus-scale assess <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--fact` | Canonical numeric fact to allocate into an exactly reconciling transaction ledger. |
+| `--limits` | Explicit synthesis resource budgets JSON. |
+| `--profile` | development, enterprise, stress, or a profile JSON path. |
+| `--program` | Versioned operational synthesis Program JSON. |
+| `--reconciliation` | FactReconciliation JSON for --program; repeat for each exact total. |
+| `--rows` | Explicit transaction population for --fact. |
+
+### `worldloom corpus-scale build`
+
+Write bounded relational shards and grounded native files atomically.
+
+```
+worldloom corpus-scale build <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--fact` | Canonical numeric fact to allocate into an exactly reconciling transaction ledger. |
+| `--limits` | Explicit synthesis resource budgets JSON. |
+| `--maximum-files` | Maximum files in the committed corpus. |
+| `--native-plan` | NativeCorpusPlan JSON; repeat to select file topology. |
+| `--out`, `-o` | New destination; source corpus is unchanged. |
+| `--profile` | development, enterprise, stress, or a profile JSON path. |
+| `--program` | Versioned operational synthesis Program JSON. |
+| `--reconcile` | declared: only --reconciliation bindings. auto: also bind each operational measure to its company-level fact when both exist (see `corpus-scale reconcile`). |
+| `--reconcile-period` | Fact period the operational run covers, for --reconcile auto. |
+| `--reconciliation` | FactReconciliation JSON for --program; repeat for each exact total. |
+| `--resume` | Reuse a completed destination only after source reconstruction and verification. |
+| `--rows` | Explicit transaction population for --fact. |
+| `--shard-bytes` | Maximum bytes per CSV shard. |
+| `--shard-rows` | Maximum physical data rows per CSV shard. |
+| `--xlsx` | Also write typed workbooks from each relational shard. |
+
+### `worldloom corpus-scale reconcile`
+
+Show which measure-to-fact reconciliations `build --reconcile auto` binds, and why the rest do not.
+
+```
+worldloom corpus-scale reconcile <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--fact` | Canonical numeric fact to allocate into an exactly reconciling transaction ledger. |
+| `--limits` | Explicit synthesis resource budgets JSON. |
+| `--period` | Fact period the operational run covers. |
+| `--program` | Versioned operational synthesis Program JSON. |
+| `--reconciliation` | FactReconciliation JSON already declared; its column is not re-derived. |
+| `--rows` | Explicit transaction population for --fact. |
+
+### `worldloom corpus-scale verify`
+
+Reconstruct declared projections; reject changed files or source bindings.
+
+```
+worldloom corpus-scale verify <CORPUS_PATH> <DIRECTORY>
+```
+
 ### `worldloom demo`
 
 Build a bundled demo corpus, validate it, and export it.
@@ -348,6 +420,19 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 | `--shard-count` |  |
 | `--shard-index` |  |
 | `--strength` |  |
+
+### `worldloom enterprise-evals harness-dags`
+
+Generate search/read/reconcile/write/readback DAGs with controlled retrieval.
+
+```
+worldloom enterprise-evals harness-dags <RECORDS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--config` | HarnessDagConfig JSON defining cohort fields, operations and response conditions. |
+| `--out`, `-o` | New evalrun case-set directory with a separate public task view. |
 
 ### `worldloom enterprise-evals housekeeping`
 
@@ -433,6 +518,7 @@ worldloom enterprise-evals serve <CORPUS_PATH>
 | `--max-runs` | Runs open at once (default: policy `connectors.serving.max_runs`). |
 | `--port` |  |
 | `--query-id` | Serve only these query IDs; repeat to select more. |
+| `--run-store` | Journal runs to this append-only JSONL file (fsynced per record) and, on start, reload the runs it holds: open runs are replayed, ended runs keep their grades. Unset, runs live in memory only. |
 | `--surface` | The tools served: contract (each locked contract's operations exactly as Anvil projects them for MCP; a connector with no locked contract keeps its own; the default: policy `connectors.surface`) or native (each connector definition's own). |
 | `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
 | `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
@@ -487,6 +573,21 @@ worldloom evalrun agreement <CORPUS> <RESULTS>
 | `--rater-timeout` | Seconds an exec: rater child may run per answer. |
 | `--shell` | Run the exec: rater through the shell (the opt-in for pipelines). |
 | `--studio-instruction` | The auto-rater instruction the Studio run was configured with; recorded, not used. |
+
+### `worldloom evalrun audit-split`
+
+Reject shared evidence and lineage across the proposed train/holdout boundary.
+
+```
+worldloom evalrun audit-split <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--holdout-corpus` | Held-out corpus or case set. |
+| `--holdout-origin` | Stable origin of the held-out source; independent worlds have distinct origins. |
+| `--source-origin` | Stable source-world origin shared by its snapshots and counterfactuals. |
+| `--unit-dimension` | Declared correlated-unit dimension, such as episode_id. |
 
 ### `worldloom evalrun autopsy`
 
@@ -629,6 +730,20 @@ worldloom evalrun export <RUN>
 | `--out`, `-o` | JSONL file to write. |
 | `--split` | Keep only this dataset split (repeatable). Default: train, plus any case that carries no split. |
 
+### `worldloom evalrun flow`
+
+Write each case's expected DAG as an Anvil composite flow (anvil.compose-flow/v1).
+
+```
+worldloom evalrun flow <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Print the document instead of a summary. |
+| `--limit` |  |
+| `--out`, `-o` | Where to write the flows (worldloom.compose-flows/v1 JSON). |
+
 ### `worldloom evalrun frontier`
 
 Keep the cases the reference agent solves and the champion fails: the frontier.
@@ -696,10 +811,14 @@ worldloom evalrun improve <CORPUS>
 | `--candidates` | Proposals asked for each round, each told to differ from the earlier ones; more than one screens them on training cases by successive halving (default: policy `evalrun.improve.candidates`, 1). |
 | `--concurrency` | Cases in flight at once in every run (default: policy `evalrun.concurrency`, 1). |
 | `--contract` | With --levers ...interface: a served contract bundle compiled with --manifest, as CONNECTOR=PATH or a bare PATH whose service names the connector. Repeat per connector. Every run is then served through Anvil under the champion interface, or in process on the contract surface its bundles project with --surface contract (no Anvil server per case). |
+| `--curriculum` | failures: between rounds, add training cases drawn from --curriculum-pool for the clusters the round's champion failed (by the declared finding-key mapping, weighted by cluster size), never a held-out case. Off by default: the training set stays fixed. |
+| `--curriculum-cases` | With --curriculum: training cases each round adds (default 8). |
+| `--curriculum-pool` | With --curriculum: the corpus or case set new cases are drawn from, such as an `evalrun corners` case set. Default: the cases of CORPUS that --limit left out. |
 | `--exec` | The agent under test as an executable (the `evalrun run --exec` seam). |
 | `--finalists` | Candidates screening sends to the full training gate (default: policy `evalrun.improve.finalists`, 1). |
 | `--harness` | An installed coding harness as the agent under test: codex or claude. |
 | `--holdout-corpus` | Held-out cases from a separate corpus (fresh seeds). Without it a stable share of CORPUS is held back. |
+| `--holdout-origin` | Stable held-out-world origin; distinct independent worlds use different origins. |
 | `--holdout-share` | Share of CORPUS held back when no --holdout-corpus is given (default: policy `evalrun.improve.holdout_share`). |
 | `--json` | Emit improve.json on stdout. |
 | `--levers` | What a round may change: agent (the policy pack; the default), interface (an Anvil manifest overlay per served connector), or agent,interface (the first candidate goes to the lever that owns more failing findings; --candidates mixes both). interface needs --contract. |
@@ -712,6 +831,7 @@ worldloom evalrun improve <CORPUS>
 | `--proposer-exec` | The harness that proposes revised policies, over the `pack author` seam. |
 | `--proposer-harness` | An installed coding harness as the proposer: codex or claude. |
 | `--proposer-pack` | The `agent` pack the proposer runs under: agent:<name>[@<digest>] or a pack file, such as one `evalrun improve-proposer` promoted. Each receipt's authoring rounds record its reference and digest. |
+| `--qualification-policy` | QualificationPolicy JSON: predeclared fresh evidence tranches, repeat support, and family-wise confidence budget. Requires enough independent held-out evidence. |
 | `--rater` | grounded or exec:<command>; pinned for the whole loop. |
 | `--rater-timeout` |  |
 | `--reference-run` | A run directory of the reference agent over the training cases only, whose accepted calls a traces brief shows beside the failing ones. Refused when it holds a held-out case. |
@@ -720,6 +840,7 @@ worldloom evalrun improve <CORPUS>
 | `--rounds` | Rounds to run (default: policy `evalrun.improve.rounds`). |
 | `--screen-cases` | Training cases the first screening stage runs every candidate on; each later stage doubles them (default: policy `evalrun.improve.screen_cases`, 6). |
 | `--shell` | Run --exec and --proposer-exec through the shell. |
+| `--source-origin` | Stable training-world origin; keep it unchanged across snapshots and counterfactual variants. |
 | `--source-root` | CONNECTOR=DIR: the Anvil workspace holding a bundle's locked source snapshot (.anvil/sources), when `anvil status` cannot find it. |
 | `--surface` | The tools the agent is shown: contract (each locked contract's operations exactly as Anvil projects them for MCP, dispatched in process through the connector's Anvil mapping; a connector with no locked contract keeps its own tools; the default, policy `connectors.surface`) or native (each connector definition's own tools). |
 | `--timeout` | Seconds a child (agent turn or proposal) may run. |
@@ -977,10 +1098,23 @@ worldloom evals dataset verify <DIRECTORY>
 
 ### `worldloom evals export`
 
-Export the evaluation set as JSONL, ready to score a retrieval system.
+Export the evaluation set, ready to score a retrieval system or hand to a harness.
 
 ```
 worldloom evals export <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--format` | worldloom (the default: the evaluation set as JSONL, unchanged), ragas (JSONL rows with user_input, reference and the reference_contexts the answer rests on) or promptfoo (a JSON array of test cases with substring assertions only; cases no substring can check are left out and counted on stderr). |
+| `--out`, `-o` | Write the export here instead of stdout. |
+
+### `worldloom evals passages`
+
+Export the passages `evaluate` indexes as JSONL, for your own retriever to index.
+
+```
+worldloom evals passages <CORPUS>
 ```
 
 | Option | Purpose |
@@ -998,6 +1132,7 @@ worldloom evaluate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop; an agent deciding what to change next should read data, not parse a bar chart. |
+| `--predictions` | Grade your own system's rankings instead of a built-in retriever: JSONL, one {"id", "passage_ids" or "artifact_ids" best first, "abstain"} line per case. Same grading, -k and per-family scorecard as --retriever; passage ids are the ones `worldloom evals passages` exports. A case with no line fails and is listed; an id this corpus does not hold refuses. |
 | `--retriever` | bm25 (the default: the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family; see src/worldloom/evaluate/tfidf.py), embedding (dense vectors against a pinned model; needs the `embeddings` extra or a vector cache), both (the two lexical baselines side by side, with a per-family agreement reading), or all (every retriever this installation can run, skipping any whose model is unavailable). |
 | `--vectors` | Vector cache for --retriever embedding: a file, or a directory to keep one per model. A corpus that carries its cache scores against the embedding retriever with no model installed at all. |
 | `--verbose`, `-v` | Show every question. |
@@ -1113,6 +1248,18 @@ worldloom gemini-enterprise score <CORPUS> <RESULTS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. |
+
+### `worldloom guide`
+
+Which commands to run, by what you are testing.
+
+```
+worldloom guide <GOAL>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the goals and their command sequences as data. |
 
 ### `worldloom industry`
 
@@ -1394,6 +1541,211 @@ worldloom narrate requests <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom native-evals`
+
+Build, inspect, run and improve harnesses against byte-graded native tasks.
+
+### `worldloom native-evals build`
+
+Compile and reference-qualify tasks through the same SDK used by harnesses.
+
+```
+worldloom native-evals build <CORPUS_PATH> <SCALE_DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Benchmark package destination. |
+| `--plan` | NativeWorkloadPlan JSON: objective, formats, operations and task budget. |
+| `--resume` | Verify and reuse an identical completed package; refuse drift. |
+| `--split-role` | Persisted allocation role; curriculum feedback requires training. |
+
+### `worldloom native-evals diagnose`
+
+Regrade training receipts and propose SOURCE, QUERY and EVAL demands.
+
+```
+worldloom native-evals diagnose <TRAINING> <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--ablation` | Predeclare which training signal contributes demands. |
+| `--out`, `-o` | Write the content-addressed next-curriculum proposal. |
+| `--parent-digest` | Previous curriculum receipt digest. |
+| `--qualification-policy` | Fresh-tranche and repeat budget for the next study. |
+| `--requirements` | Additional measured capability demands. |
+| `--source-origin` | Stable company origin used throughout the experiment. |
+| `--version` | Curriculum version; later versions require a parent receipt digest. |
+
+### `worldloom native-evals evolve`
+
+Materialize verified curriculum demands into new canonical sources and tasks.
+
+```
+worldloom native-evals evolve <TRAINING> <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--curriculum` | NativeCurriculum receipt; independently rederived before building. |
+| `--out`, `-o` | Fresh training benchmark package; qualification needs a new study. |
+| `--resume` | Rebuild and verify an identical evolved package. |
+
+### `worldloom native-evals grade`
+
+Require exact task coverage and independently grade replies and files.
+
+```
+worldloom native-evals grade <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write grades JSON. |
+| `--replies` | NativeWorkloadReplies JSON with actual output bytes as base64. |
+
+### `worldloom native-evals improve`
+
+Revise a harness policy and qualify improvements on fresh, isolated evidence.
+
+```
+worldloom native-evals improve <TRAINING> <HELDOUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent-pack` | Initial champion agent pack reference or path. |
+| `--command` | Native target command consuming the public protocol. |
+| `--identity-file` | Pin target imported modules/configuration; repeat as needed. |
+| `--out`, `-o` | Persistent sealed study, policy revisions and run receipts. |
+| `--proposer-command` | Policy proposer using the existing pack-author JSON exchange. |
+| `--qualification-policy` | Predeclared finite promotion budget and evidence requirements. |
+| `--repeats` |  |
+| `--requirements` | Required capability cells enforced in both splits and every fresh tranche. |
+| `--rounds` |  |
+| `--source-origin` | Stable company origin shared by training and held-out source snapshots. |
+| `--timeout` |  |
+
+### `worldloom native-evals inspect`
+
+Separate executable tasks, requested coverage and independent promotion support.
+
+```
+worldloom native-evals inspect <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--holdout` | Independently built held-out benchmark to audit against training. |
+| `--out`, `-o` | Write readiness and coverage JSON. |
+| `--qualification-policy` | Declared fresh-tranche and repeat requirements. |
+| `--repeats` | Planned observations per task and policy. |
+| `--requirements` | Additional required capability cells and independent-unit floors. |
+| `--source-origin` | Stable world origin shared across snapshots and format replicas. |
+
+### `worldloom native-evals partition`
+
+Render disjoint source families and build independently audited train/holdout packages.
+
+```
+worldloom native-evals partition <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--holdout-families` |  |
+| `--out`, `-o` | Atomic destination containing training/, heldout/ and partition.json. |
+| `--plan` | NativeWorkloadPlan JSON for both independently built workloads. |
+| `--resume` | Verify and reuse identical source, plan, family allocation and packages. |
+| `--train-families` |  |
+
+### `worldloom native-evals protocol`
+
+Print the JSON exchange contract for a native harness adapter.
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write the versioned target request/reply contract. |
+
+### `worldloom native-evals qualify`
+
+Construct reference replies and check satisfiability against actual bytes.
+
+```
+worldloom native-evals qualify <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write independent reference grades JSON. |
+
+### `worldloom native-evals run`
+
+Run the real target on task-scoped public inputs; regrade actual submitted bytes.
+
+```
+worldloom native-evals run <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--command` | Trusted target executable and arguments; no shell expansion. |
+| `--identity-file` | Pin an imported module or configuration file; repeat as needed. |
+| `--max-output-bytes` | Maximum target stdout/stderr bytes. |
+| `--out`, `-o` | Run directory with independently graded task receipts. |
+| `--repeats` |  |
+| `--resume` | Reuse completed receipts only under identical inputs and harness identity. |
+| `--timeout` | Maximum seconds per task invocation. |
+
+### `worldloom native-evals scenarios`
+
+Generate native business evidence and partition only its newly authored cases.
+
+```
+worldloom native-evals scenarios <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--demand` | NativeScenarioDemand JSON defining new business cases. |
+| `--holdout-families` |  |
+| `--out`, `-o` | Destination containing training/, heldout/ and partition.json. |
+| `--plan` | NativeWorkloadPlan JSON for both source-isolated workloads. |
+| `--resume` | Verify and reuse the identical scenario and partition build. |
+| `--train-families` |  |
+
+### `worldloom native-evals workflow-qualify`
+
+Check every authored workflow step and actual bound reference file.
+
+```
+worldloom native-evals workflow-qualify <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write independently graded reference workflow results. |
+| `--plan` | NativeWorkflowPlan JSON with ordered dependencies and input bindings. |
+
+### `worldloom native-evals workflow-run`
+
+Execute a bounded authored DAG, blocking descendants of failed steps.
+
+```
+worldloom native-evals workflow-run <DIRECTORY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--command` | Trusted native target command; no shell expansion. |
+| `--identity-file` | Pin imported modules/configuration; repeat as needed. |
+| `--max-output-bytes` |  |
+| `--out`, `-o` | Workflow run directory with step receipts and byte lineage. |
+| `--plan` | NativeWorkflowPlan JSON sealed to this benchmark. |
+| `--resume` | Regrade and reuse the identical completed step prefix. |
+| `--timeout` | Maximum seconds per step invocation. |
 
 ### `worldloom pack`
 
@@ -1872,6 +2224,16 @@ worldloom series <CORPUS>
 | `--kind` | Fact kind to read. Default: the longest series in the corpus. |
 | `--subject` | Entity id the series is about. Default: whichever has the most periods. |
 
+### `worldloom smoke`
+
+Run the whole pipeline on a tiny world, one line per stage, in seconds.
+
+| Option | Purpose |
+| --- | --- |
+| `--format`, `-f` | Render these formats (repeatable). Default: markdown and xlsx; pass `-f markdown` alone on an install without the xlsx extra. |
+| `--out`, `-o` | Directory to run the pipeline in; kept afterwards for inspection. Must be empty or absent. Omit to run in a temporary directory that is removed. |
+| `--seed`, `-s` | World seed for the tiny world. |
+
 ### `worldloom spaces`
 
 The build-configuration space: what a fleet could vary, and what one did.
@@ -2343,6 +2705,43 @@ worldloom verify <CORPUS>
 ### `worldloom version`
 
 Print the installed version.
+
+### `worldloom visuals`
+
+Plan fact-grounded infographics, generate with Nano Banana, and replay recorded image bytes.
+
+### `worldloom visuals generate`
+
+Replay first, or explicitly generate one unqualified PNG with Nano Banana.
+
+```
+worldloom visuals generate <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--config` | NanoBananaConfig JSON; model, aspect ratio and resolution are replay inputs. |
+| `--offline` | Require a recorded result; never initialize an SDK client or call a provider. |
+| `--out`, `-o` | Destination PNG; a differing existing file is refused. |
+| `--spec` | VisualSpec JSON from visuals plan. |
+| `--store` | Recorded visual requests and image blobs; keep with the corpus. |
+
+### `worldloom visuals plan`
+
+Bind an infographic request to existing facts without calling a provider.
+
+```
+worldloom visuals plan <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--brief` | Presentation instructions; canonical facts remain authoritative. |
+| `--fact-id` | Existing canonical fact to depict; repeatable. |
+| `--id` | Stable visual request name. |
+| `--out`, `-o` | Write a VisualSpec JSON request. |
+| `--style` | Visual style instructions. |
+| `--title` | Infographic title. |
 
 ### `worldloom workspace`
 

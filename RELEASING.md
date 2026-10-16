@@ -27,6 +27,14 @@ can make: the tag and the package must agree about the version.
 4. `release.yml` runs the full test matrix, the docs check, the golden-episode
    validation, and the wheel smoke (bare install, degradation messages, all
    formats, byte-identical replay). If everything passes, it publishes to PyPI.
+   Alongside, the `scoreboard` job runs `python tools/scoreboard.py` and uploads
+   `release-scoreboard.json` and `.md` as the `release-scoreboard` artifact:
+   the reference and lazy agents over a digest-pinned enterprise case set and
+   the lexical retrieval baselines over a fixed-seed corpus. It is not
+   committed; diff it against `docs/measurements/release-scoreboard.json` to
+   see what the release moved. A moved case-set pin fails that job (not the
+   publish) and is fixed by updating `PINNED_CASE_SET` in the change that
+   moved the generator.
 
 ## One-time setup
 

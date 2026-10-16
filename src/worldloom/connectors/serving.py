@@ -7,10 +7,13 @@ protocol concurrency stay outside the deterministic generator.
 from __future__ import annotations
 
 import copy
+import hashlib
 import hmac
 import json
+import os
+import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field, replace
 from threading import RLock
 from typing import Any
@@ -26,6 +29,7 @@ from ..connector_emulator import (
 )
 from ..connector_keys import RECORDED_ALIAS_KEYS
 from ..connector_trace import grade_trace
+from .run_store import RunStore, RunStoreError, RunStoreWarning
 
 _READ_OPS = frozenset({"search", "get", "download"})
 _MANAGEMENT_TOOLS = 6
@@ -68,6 +72,10 @@ class _Run:
     query_id: str
     emulators: dict[str, ConnectorEmulator]
     spans: list[ConnectorSpan] = field(default_factory=list)
+    #: Evaluator-owned delivery receipts. They are deliberately separate from
+    #: the spans an agent can inspect: the intent and missing dimensions are
+    #: a private grading contract, not a search hint.
+    retrieval_receipts: dict[str, dict[str, Any]] = field(default_factory=dict)
     attempts: int = 0
     #: Calls the run did not admit (unknown tool, undeclared argument, a
     #: limit): no span exists for them, so they are kept here and graded as
@@ -100,6 +108,19 @@ class _Run:
     #: `end` released it, and waited on the lock meanwhile, is refused rather
     #: than acting on a released fork.
     ended: bool = False
+    #: The ordinal its id was minted from, so a listing orders runs as they began.
+    ordinal: int = 0
+    #: How deep the journalled entry points are nested on this run (`call`
+    #: reaches `call_connector`; both are entry points). Only the outermost
+    #: is journalled: replaying it makes the inner calls again. It is read
+    #: and changed only under the run's lock, which nested calls already hold.
+    journal_depth: int = 0
+
+
+def _row_digest(row: Mapping[str, Any]) -> str:
+    """What a journalled run was begun against; a reload refuses to replay it against anything else."""
+    text = json.dumps(row, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _resolve_surfaces(choice: Any, connectors: Sequence[str]) -> Any:
@@ -185,6 +206,15 @@ class ConnectorEvaluationService:
     runs every run's searches under that engine (``connector_emulator``'s
     ``predicate`` or ``native``); unset, the policy
     ``connectors.query.engine`` decides, as it always has.
+
+    ``run_store`` names an append-only JSONL journal (``connectors.run_store``)
+    that makes runs durable: every begin, every call, question and recorded
+    refusal, and every end with its grade is written and fsynced before the
+    entry point returns. A service constructed on an existing journal
+    replays the open runs' calls (the service is deterministic, so they leave
+    the same spans, records and grades) and keeps the ended runs' grades for
+    `list_runs`. Unset, runs live in memory only and `end` forgets them, as
+    they always have.
     """
 
     def __init__(
@@ -198,6 +228,7 @@ class ConnectorEvaluationService:
         run_prefix: str = "",
         query_engine: str | None = None,
         surface: Any = None,
+        run_store: str | os.PathLike[str] | None = None,
     ) -> None:
         if query_engine is not None and query_engine not in QUERY_ENGINES:
             raise ServingError(f"query_engine: one of {', '.join(QUERY_ENGINES)}")
@@ -272,6 +303,55 @@ class ConnectorEvaluationService:
         self._runs: dict[str, _Run] = {}
         self._ordinal = 0
         self._lock = RLock()
+        self._retrieval_contracts: dict[str, Any] = {}
+        self._retrieval_nodes: dict[str, str] = {}
+        self._prepare_retrieval()
+        #: Ended runs' summaries, kept only when a store is set: without one,
+        #: `end` forgets a run exactly as it always has.
+        self._ended: dict[str, dict[str, Any]] = {}
+        self._replaying = False
+        try:
+            self.run_store = RunStore(run_store) if run_store is not None else None
+            if self.run_store is not None:
+                self._restore(self.run_store.load())
+        except (OSError, RunStoreError) as error:
+            raise ServingError(str(error)) from error
+
+    def _prepare_retrieval(self) -> None:
+        """Refuse invalid or unsatisfiable controlled searches before a target runs."""
+        for query_id, row in sorted(self.rows.items()):
+            if "controlled_retrieval" not in row:
+                continue
+            from ..evalrun.retrieval import ControlledRetrieval, RetrievalContract
+
+            try:
+                contract = RetrievalContract.model_validate(row["controlled_retrieval"])
+                if contract.connector not in self.definitions:
+                    raise ValueError(f"connector {contract.connector!r} is not in the case")
+                if self.definitions[contract.connector].canonical_tool(contract.tool) != contract.tool:
+                    raise ValueError("controlled retrieval contracts must name the canonical connector tool")
+                controller = ControlledRetrieval(contract)
+                controller.bind(self.definitions[contract.connector])
+                matching = [node for node in row["expected_dag"]["nodes"]
+                            if node.get("server") == contract.connector and node.get("tool") == contract.tool
+                            and (contract.intent.entity is None or _entities_meet(
+                                self.definitions[contract.connector], str(node.get("entity", "")), contract.intent.entity))]
+                if len(matching) != 1:
+                    raise ValueError("a controlled retrieval contract must identify exactly one planned search node")
+                self._retrieval_contracts[query_id] = contract
+                self._retrieval_nodes[query_id] = str(matching[0]["id"])
+                source = self._source(contract.connector, row)
+                emulator = self._fork(contract.connector, source, row, "agent")
+                tool = self.definitions[contract.connector].tool(contract.tool)
+                pool = emulator._pool(contract.intent.entity, tool)
+                qualified = set(controller.qualify(tuple(emulator._record_for_predicate(record) for record in pool)))
+                target = matching[0]
+                expected = {str(value) for value in (*target.get("expected_reads", ()), *target.get("fixtures", ()),
+                                                    target.get("fixture")) if value}
+                if not expected <= qualified:
+                    raise ValueError("sufficient retrieval intent cannot expose the planned source records")
+            except (ConnectorError, KeyError, TypeError, ValueError) as error:
+                raise ServingError(f"controlled_retrieval:{query_id}: {error}") from error
 
     @classmethod
     def from_corpus(cls, corpus: Any, **options: Any) -> ConnectorEvaluationService:
@@ -300,12 +380,17 @@ class ConnectorEvaluationService:
                 "next_offset": offset + limit if offset + limit < len(ids) else None}
 
     def begin(self, principal: str, query_id: str) -> dict[str, Any]:
+        return self._begin(principal, query_id)
+
+    def _begin(self, principal: str, query_id: str, *, restored: tuple[str, int] | None = None) -> dict[str, Any]:
+        """Begin a run; *restored* is the id and ordinal a journal gave it, replayed without admission."""
         if not principal:
             raise ServingError("principal_required")
         with self._lock:
             if query_id not in self.rows:
                 raise ServingError(f"unknown_query: {query_id}")
-            self._admit(principal)
+            if restored is None:
+                self._admit(principal)
             row = self.rows[query_id]
             servers = sorted({str(node["server"]) for node in row["expected_dag"]["nodes"] if node.get("node_kind") != "transform"})
             # The shared inputs are built once, under the registry lock; the
@@ -316,14 +401,24 @@ class ConnectorEvaluationService:
         before = {fid: dict(record) for server in sorted(emulators)
                   for fid, record in sorted(emulators[server].records.items())}
         with self._lock:
-            # Checked again: another begin may have taken the last slot while
-            # this one was forking.
-            self._admit(principal)
-            self._ordinal += 1
-            run_id = f"{self.run_prefix}run-{self._ordinal}"
-            self._runs[run_id] = _Run(principal, query_id, emulators, before=before)
+            if restored is None:
+                # Checked again: another begin may have taken the last slot
+                # while this one was forking.
+                self._admit(principal)
+                self._ordinal += 1
+                run_id, ordinal = f"{self.run_prefix}run-{self._ordinal}", self._ordinal
+                if self.run_store is not None:
+                    # Under the registry lock, before the id is handed out:
+                    # no call on the run can be journalled ahead of its begin.
+                    self._append({"kind": "begin", "run_id": run_id, "ordinal": ordinal, "principal": principal,
+                                  "query_id": query_id, "row": _row_digest(row)})
+            else:
+                run_id, ordinal = restored
+                self._ordinal = max(self._ordinal, ordinal)
+            self._runs[run_id] = _Run(principal, query_id, emulators, before=before, ordinal=ordinal)
         return {"run_id": run_id, "query_id": query_id, "query": row.get("query", ""),
-                "max_calls": self.limits.max_calls_per_run}
+                "max_calls": self.limits.max_calls_per_run,
+                **({"execution_mode": "controlled_retrieval"} if query_id in self._retrieval_contracts else {})}
 
     def _admit(self, principal: str) -> None:
         """Refuse a begin the limits do not admit. The caller holds the service lock."""
@@ -363,7 +458,56 @@ class ConnectorEvaluationService:
         emulator.actor = principal
         if self.query_engine is not None:
             emulator.query_engine = self.query_engine
+        contract = self._retrieval_contracts.get(str(row["id"]))
+        if contract is not None and contract.connector == server:
+            from ..evalrun.retrieval import ControlledRetrieval
+
+            emulator.retrieval = ControlledRetrieval(contract)
+            emulator.retrieval.bind(self.definitions[server])
         return emulator
+
+    def _controlled_attribution(
+        self, run: _Run, name: str, arguments: Mapping[str, Any], receipt: Mapping[str, Any],
+    ) -> tuple[str | None, tuple[str, ...]]:
+        """Bind a sufficient query by its observed intent, never reference query bytes."""
+        if receipt.get("intent_status") != "sufficient":
+            return None, ()
+        node_id = self._retrieval_nodes[run.query_id]
+        row = self.rows[run.query_id]
+        node = next(item for item in row["expected_dag"]["nodes"] if str(item["id"]) == node_id)
+        if f"{node['server']}.{node['tool']}" != name:
+            return None, ()
+        prior = [span for span in run.spans if span.node == node_id and not span.error]
+        if prior:
+            # A repeat of page zero is not another plan step. Pagination has
+            # to continue the actual previous delivery with the same query.
+            previous = run.retrieval_receipts.get(prior[-1].id, {})
+            if (int(arguments.get("start_at", 0)) != int(prior[-1].args.get("start_at", 0)) + prior[-1].items
+                    or not prior[-1].items or previous.get("is_last") is True
+                    or receipt.get("query_digest") != previous.get("query_digest")):
+                return None, ()
+        elif int(arguments.get("start_at", 0)) != 0:
+            return None, ()
+        if row.get("grammar") == "enterprise-dag@1":
+            from ..enterprise_dag import condition_matches
+            from ..enterprise_dag_rows import program_for
+            from ..enterprise_dag_runtime import observed_flow
+
+            planned = next(item for item in program_for(row).nodes if item.id == node_id)
+            outputs, producers = observed_flow(row, run.spans)
+            if any(parent not in outputs for parent in planned.depends_on):
+                return None, ()
+            if planned.condition and (planned.condition.reference.node not in outputs
+                                      or not condition_matches(planned.condition, outputs)):
+                return None, ()
+            consumed = tuple(dict.fromkeys(identifier for parent in planned.depends_on
+                                           for identifier in producers.get(parent, ())))
+            return node_id, consumed
+        parents = {str(source) for source, target in row["expected_dag"].get("edges", ()) if str(target) == node_id}
+        completed = {span.node for span in run.spans if not span.error}
+        if not parents <= completed:
+            return None, ()
+        return node_id, tuple(span.id for span in run.spans if span.node in parents and not span.error)
 
     def _run(self, principal: str, run_id: str) -> _Run:
         """The run, looked up under the registry lock. Read or change it only inside `_held`."""
@@ -401,6 +545,7 @@ class ConnectorEvaluationService:
                     continue
                 if int(args["start_at"]) == int(prior.args.get("start_at", 0)) + prior.items:
                     return prior.node
+        candidates: list[tuple[str, set[str]]] = []
         for node in nodes:
             if f"{node['server']}.{node['tool']}" != name:
                 continue
@@ -425,8 +570,17 @@ class ConnectorEvaluationService:
                     continue
             if args.get("entity") and node.get("entity") != args["entity"]:
                 continue
-            return str(node["id"])
-        return None
+            candidates.append((str(node["id"]), parents))
+        # A read and its readback share a tool and a fixture, so a call both
+        # match is the readback once the readback's parents have run: a get
+        # issued after the write is that write's verify, whatever came before.
+        # First-declared-wins used to give it to the read, so a run that
+        # skipped the read and wrote blind was graded as missing its *verify*
+        # (the grader mutation suite's `drop_read` on `legacy-update`).
+        for node_id, parents in candidates:
+            if parents and parents.issubset(completed):
+                return node_id
+        return candidates[0][0] if candidates else None
 
     def _grammar_attribution(
         self, run: _Run, name: str, arguments: Mapping[str, Any],
@@ -453,6 +607,22 @@ class ConnectorEvaluationService:
             prior = [span for span in run.spans if span.node == node.id and not span.error]
             items = outputs.get(node.for_each.node, [])[:node.for_each.limit] if node.for_each else [None]
             index = len(prior) if node.operation != "search" else 0
+            if node.for_each and node.for_each.order == "any" and node.kind == "read" and arguments.get("id") is not None:
+                # Independent reads in a mapped node can run in either order.
+                # Bind the actual returned handle to its unconsumed input,
+                # rather than making source-list order an unstated task rule.
+                actual_id = emulator.by_ident.get(str(arguments["id"]), str(arguments["id"]))
+                already = {fid for span in prior for fid in span.reads}
+                index = len(items)
+                if actual_id not in already:
+                    for candidate_index, item in enumerate(items):
+                        try:
+                            bound_id = str(bound_arguments(node, outputs, item).get("id"))
+                        except ValueError:
+                            continue
+                        if emulator.by_ident.get(bound_id, bound_id) == actual_id:
+                            index = candidate_index
+                            break
             if index >= len(items):
                 continue
             try:
@@ -611,6 +781,10 @@ class ConnectorEvaluationService:
         return tuple(reversed(consumed))
 
     def call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        with self._journal("call", principal, run_id, {"name": name, "arguments": dict(arguments)}):
+            return self._call(principal, run_id, name, arguments)
+
+    def _call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         """One call on the surface this run presents.
 
         On the native surface *name* is ``connector.tool``. On the contract
@@ -618,6 +792,8 @@ class ConnectorEvaluationService:
         the connector's mapping to the connector tool it becomes; a connector
         tool of a contracted connector is not on that surface and is refused.
         """
+        if self.surface_for(principal, run_id) == "native":
+            return self.call_connector(principal, run_id, name, arguments)
         if self.surfaces is not None:
             held = self.contract_tools.get(name)
             if held is not None:
@@ -675,6 +851,10 @@ class ConnectorEvaluationService:
                 raise
 
     def call_planned(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        with self._journal("call_planned", principal, run_id, {"name": name, "arguments": dict(arguments)}):
+            return self._call_planned(principal, run_id, name, arguments)
+
+    def _call_planned(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         """A planned connector call (``connector.tool``), made on the surface this run presents.
 
         On the native surface it is ``call``. On the contract surface the call
@@ -688,7 +868,7 @@ class ConnectorEvaluationService:
         """
         from .surface import ContractCallError, SurfaceError
 
-        if self.surfaces is None or name not in self.tools:
+        if self.surface_for(principal, run_id) == "native" or name not in self.tools:
             return self.call(principal, run_id, name, arguments)
         connector, tool = self.tools[name]
         surface = self.surfaces.get(connector)
@@ -810,6 +990,10 @@ class ConnectorEvaluationService:
         return {name: set(self.definitions[connector].tool(tool).params) for name, (connector, tool) in self.tools.items()}
 
     def call_connector(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
+        with self._journal("call_connector", principal, run_id, {"name": name, "arguments": dict(arguments)}):
+            return self._call_connector(principal, run_id, name, arguments)
+
+    def _call_connector(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         """The connector tool ``connector.tool`` itself, whatever surface the run presents: the call graded.
 
         What the contract surface's mapping, the Anvil provider and the
@@ -862,6 +1046,25 @@ class ConnectorEvaluationService:
             local = trial.trace[-1]
             span = replace(local, id=f"s{len(run.spans) + 1}", ordinal=len(run.spans) + 1,
                            actor=principal)
+            controller = getattr(trial, "retrieval", None)
+            receipt = controller.receipt_for(local.id) if controller is not None else None
+            if receipt is not None:
+                assert controller is not None
+                if rollback and error is not None and error.kind == "response_limit":
+                    receipt = controller.reject_delivery(local.id)
+                evidence = receipt.model_dump(mode="json")
+                evidence.update(span_id=span.id, ordinal=span.ordinal)
+                if rollback:
+                    # The emulator produced a payload, but the service did
+                    # not deliver it. A response-size failure must not count
+                    # as successful acquisition or commit any state change.
+                    evidence.update(intent_status="transport_fault" if error is not None
+                                    and error.kind == "response_limit" else "tool_error", returned=[],
+                                    response_digest=None)
+                node, consumed = self._controlled_attribution(run, name, supplied, evidence)
+                span = replace(span, node=node, consumed_from=consumed)
+                run.structural.discard(span.ordinal)
+                run.retrieval_receipts[span.id] = evidence
             if node is not None and span.ordinal in run.structural:
                 # Attributed by shape, so the call itself has to bear it out. A
                 # read stands only if it read the record the node is for; a
@@ -883,6 +1086,11 @@ class ConnectorEvaluationService:
                 span = replace(span, error={"code": error.code, "kind": error.kind, "message": error.message})
             if rollback:
                 span = replace(span, reads=(), writes=(), items=0, bytes=0)
+                if controller is not None:
+                    # Delivery failed, but the attempt happened. Preserve its
+                    # corrected telemetry and fault ordinal without publishing
+                    # any of the trial's business state.
+                    run.emulators[connector].retrieval = controller
             else:
                 run.emulators[connector] = trial
             if error is None:
@@ -930,12 +1138,34 @@ class ConnectorEvaluationService:
         with self._held(principal, run_id) as run:
             return tuple(run.spans)
 
+    @staticmethod
+    def _grading_spans(run: _Run) -> tuple[Any, ...]:
+        if not run.retrieval_receipts:
+            return tuple(run.spans)
+        return tuple({**_span_json(span), **({"retrieval": copy.deepcopy(run.retrieval_receipts[span.id])}
+                                           if span.id in run.retrieval_receipts else {})}
+                     for span in run.spans)
+
+    def grading_spans(self, principal: str, run_id: str) -> tuple[Any, ...]:
+        """Trusted evaluator trace, including receipts never offered by target tools.
+
+        The agent's ``ToolSurface.spans`` and MCP ``eval_trace`` deliberately
+        use the ordinary spans. A target cannot submit or replace the
+        evaluator's intent classification or delivery receipts.
+        """
+        with self._held(principal, run_id) as run:
+            return self._grading_spans(run)
+
     def refusals(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
         """Every call this run refused before a span could exist, in order."""
         with self._held(principal, run_id) as run:
             return tuple(dict(item) for item in run.refusals)
 
     def ask(self, principal: str, run_id: str, question: str, about: tuple[str, ...] = ()) -> str:
+        with self._journal("ask", principal, run_id, {"question": question, "about": [str(value) for value in about]}):
+            return self._ask(principal, run_id, question, about)
+
+    def _ask(self, principal: str, run_id: str, question: str, about: tuple[str, ...] = ()) -> str:
         """Record a question to the user and answer it from the case.
 
         The reply comes from the row's own question points — the first
@@ -988,6 +1218,12 @@ class ConnectorEvaluationService:
         return behaviours
 
     def record_refusal(self, principal: str, run_id: str, name: str, arguments: Iterable[str], message: str) -> None:
+        arguments = tuple(arguments)
+        with self._journal("record_refusal", principal, run_id,
+                           {"name": name, "arguments": [str(key) for key in arguments], "message": message}):
+            self._record_refusal(principal, run_id, name, arguments, message)
+
+    def _record_refusal(self, principal: str, run_id: str, name: str, arguments: Iterable[str], message: str) -> None:
         """Record a call another surface refused before any connector saw it.
 
         An Anvil server answers some calls itself (auth, an injected fault,
@@ -1040,7 +1276,8 @@ class ConnectorEvaluationService:
         with self._held(principal, run_id) as run:
             out = []
             contracted: set[str] = set()
-            if self.surfaces is not None:
+            controlled = run.query_id in self._retrieval_contracts
+            if self.surfaces is not None and not controlled:
                 # A connector on its contract shows Anvil's tools for it, as
                 # Anvil's MCP server lists them, in place of its own.
                 for connector in sorted(run.emulators):
@@ -1055,7 +1292,7 @@ class ConnectorEvaluationService:
                 definition = self.definitions[connector]
                 declared = definition.tool(tool)
                 safety = classify_tool(connector, tool, declared)
-                entry = {"name": name, "op": declared.op, "entities": list(declared.entities),
+                entry: dict[str, Any] = {"name": name, "op": declared.op, "entities": list(declared.entities),
                          "params": dict(declared.params), "annotations": tool_annotations(safety),
                          "risk": safety.risk.value, "idempotency": safety.idempotency.value}
                 # What a create must carry, per entity, beyond `name`: the
@@ -1073,11 +1310,57 @@ class ConnectorEvaluationService:
                 # a grammar summary and examples in the vendor's own syntax: a
                 # pilot's call errors were mostly queries the agent had no way
                 # to know the grammar of.
-                help = query_help(definition, tool)
+                help = self.controlled_query_help(connector, tool, query_id=run.query_id) if controlled else None
+                if help is None:
+                    help = query_help(definition, tool)
                 if help is not None:
                     entry["query"] = help
+                    if controlled and help.get("name") == "controlled structured retrieval":
+                        entry["params"].pop("query", None)
+                if controlled:
+                    entry["execution_mode"] = "controlled_retrieval"
                 out.append(entry)
             return tuple(out)
+
+    def surface_for(self, principal: str, run_id: str) -> str:
+        """The actual surface of one case; controlled cases use typed connector tools."""
+        with self._held(principal, run_id) as run:
+            return "native" if run.query_id in self._retrieval_contracts else self.surface
+
+    def controlled_query_help(self, connector: str, tool: str, *, query_id: str | None = None) -> dict[str, Any] | None:
+        """Public query vocabulary: field names and types, never target filter values."""
+        from ..predicates import PredicateOp
+
+        contracts = (self._retrieval_contracts.get(query_id),) if query_id is not None else tuple(self._retrieval_contracts.values())
+        definition = self.definitions[connector]
+        if not any(contract is not None and contract.connector == connector
+                   and definition.canonical_tool(contract.tool) == definition.canonical_tool(tool) for contract in contracts):
+            return None
+        declared = definition.tool(tool)
+        fields = set(definition.query_fields)
+        # Include business columns from the corpus schema, not their values.
+        # Internal evidence and identity plumbing is not a query vocabulary.
+        internal = {"fid", "server", "ident", "external_id", "fact_ids", "event_ids", "source_artifact_ids"}
+        for record in self.records:
+            if isinstance(record, ConnectorRecord):
+                if record.connector == connector:
+                    fields.update(record.fields)
+            elif record.get("server", connector) == connector:
+                fields.update(str(key) for key in record if key not in internal)
+        names = sorted(fields - internal)
+        schema = {"type": "object", "additionalProperties": False,
+                  "properties": {"entity": {"type": "string", "enum": list(declared.entities)},
+                                 "where": {"type": "array", "items": {"type": "object", "additionalProperties": False,
+                                           "properties": {"field": {"type": "string", "enum": names},
+                                                          "op": {"type": "string", "enum": [op.value for op in PredicateOp]},
+                                                          "value": {"type": ["string", "number", "boolean", "null", "array"]}},
+                                           "required": ["field", "value"]}}}, "required": ["where"]}
+        return {"language": "predicate", "argument": "predicate", "name": "controlled structured retrieval",
+                "grammar": "Pass {entity, where: [{field, op, value}]}; clauses are ANDed and each field appears once. "
+                           "Use eq, ne, gt, gte, lt, lte, in, or contains. Results depend on declared query semantics, not ranking.",
+                "free_text": "Not supported in controlled mode. Use the structured predicate; native query strings return unsupported_query.",
+                "examples": ['{"where": [{"field": "<field>", "op": "eq", "value": "<value>"}]}'],
+                "fields": names, "schema": schema}
 
     def score(self, principal: str, run_id: str, *, answer: str = "",
               artifacts: Iterable[Mapping[str, Any]] = (), planned_dag: Mapping[str, Any] | None = None,
@@ -1115,14 +1398,15 @@ class ConnectorEvaluationService:
             after = {fid: dict(record) for server in sorted(run.emulators)
                      for fid, record in sorted(run.emulators[server].records.items())}
             assertions = self.grade(principal, run_id)
-            score = grade_run(case, spans, run.before, after, assertions, response,
+            score = grade_run(case, self._grading_spans(run), run.before, after, assertions, response,
                               definitions=self.definitions, rater=rater, safety=safety_for(self.definitions),
                               refusals=refusals, questions=questions)
             result = CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
                                 agent=f"served:{principal}", status="graded", score=score, answer=answer,
                                 calls=len(spans), spans=tuple(_span_json(span) for span in spans),
                                 refused=len(refusals), refusals=refusals,
-                                questions=tuple({k: v for k, v in item.items() if k != "point"} for item in questions))
+                                questions=tuple({k: v for k, v in item.items() if k != "point"} for item in questions),
+                                execution_mode="controlled_retrieval" if run.query_id in self._retrieval_contracts else None)
             return result.model_dump(mode="json")
 
     def grade(self, principal: str, run_id: str) -> dict[str, Any]:
@@ -1141,7 +1425,7 @@ class ConnectorEvaluationService:
             # `confirm_before` have always waited for, and `question:<id>`
             # is what `question_required` reads.
             behaviors |= self._question_behaviours(run)
-            return dict(grade_trace(run.spans, self.rows[run.query_id], post_state=post_state,
+            return dict(grade_trace(self._grading_spans(run), self.rows[run.query_id], post_state=post_state,
                                    behaviors=sorted(behaviors)))
 
     def end(self, principal: str, run_id: str) -> dict[str, Any]:
@@ -1149,10 +1433,137 @@ class ConnectorEvaluationService:
         # them in, so an end racing a call on the same run waits for it.
         with self._held(principal, run_id) as run:
             grade = self.grade(principal, run_id)
+            if self.run_store is not None:
+                summary = {"run_id": run_id, "ordinal": run.ordinal, "principal": principal,
+                           "query_id": run.query_id, "grade": grade}
+                # Written before the run is released: a failed write leaves
+                # it open, never ended in memory and open on disk.
+                self._append({"kind": "end", **summary})
+                # The listing returns what a reload would read back, so a
+                # grade is the same value before and after a restart.
+                self._ended[run_id] = json.loads(json.dumps(summary, sort_keys=True, default=str))
             run.ended = True
             with self._lock:
                 del self._runs[run_id]
         return {"run_id": run_id, "ended": True, "grade": grade}
+
+    def list_runs(self, principal: str) -> list[dict[str, Any]]:
+        """This principal's runs, open and (with a run store) ended, in the order they began.
+
+        An open run reports its calls so far; an ended one its final grade,
+        read back from the journal after a restart. Without a run store `end`
+        forgets a run, so only open runs are listed.
+        """
+        with self._lock:
+            opened = [(run_id, run) for run_id, run in self._runs.items() if run.principal == principal]
+            ended = [dict(item) for item in self._ended.values() if item["principal"] == principal]
+        listed: list[tuple[int, dict[str, Any]]] = []
+        for run_id, run in opened:
+            with run.lock:
+                if run.ended:
+                    continue
+                listed.append((run.ordinal, {"run_id": run_id, "query_id": run.query_id, "status": "open",
+                                             "calls": len(run.spans), "attempts": run.attempts}))
+        for item in ended:
+            listed.append((int(item["ordinal"]), {"run_id": item["run_id"], "query_id": item["query_id"],
+                                                  "status": "ended", "grade": item["grade"]}))
+        return [entry for _, entry in sorted(listed, key=lambda pair: (pair[0], pair[1]["run_id"]))]
+
+    # -- durability ---------------------------------------------------------
+
+    def _append(self, record: Mapping[str, Any]) -> None:
+        if self.run_store is None or self._replaying:
+            return
+        try:
+            self.run_store.append(record)
+        except (OSError, RunStoreError) as error:
+            raise ServingError(f"run_store: {error}") from error
+
+    @contextmanager
+    def _journal(self, op: str, principal: str, run_id: str, args: Mapping[str, Any]) -> Iterator[None]:
+        """Journal one entry-point call on a run once it has run, whether it returned or raised.
+
+        A refused call changes the run too (an attempt, a refusal), so it is
+        journalled and replayed like any other. Only the outermost entry
+        point on a run is written; the run's lock is held throughout, so the
+        journal's order for a run is the order its calls took effect.
+        """
+        if self.run_store is None or self._replaying:
+            yield
+            return
+        record = {"kind": "event", "op": op, "run_id": run_id, "principal": principal, "args": dict(args)}
+        try:
+            json.dumps(record, allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ServingError(f"run_store: {op} arguments must be plain JSON to be journalled ({error})") from error
+        try:
+            run: _Run | None = self._run(principal, run_id)
+        except ServingError:
+            # Unknown here: the call refuses without touching any run, so
+            # there is nothing to replay.
+            run = None
+        with run.lock if run is not None else nullcontext():
+            outer = run is not None and run.journal_depth == 0
+            if run is not None:
+                run.journal_depth += 1
+            try:
+                yield
+            finally:
+                if run is not None:
+                    run.journal_depth -= 1
+                    if outer and not run.ended:
+                        self._append(record)
+
+    def _restore(self, records: Sequence[Mapping[str, Any]]) -> None:
+        """Rebuild the runs a journal holds: ended runs as their summaries, open runs by replaying their calls."""
+        begun: dict[str, Mapping[str, Any]] = {}
+        events: dict[str, list[Mapping[str, Any]]] = {}
+        for record in records:
+            kind, run_id = record.get("kind"), str(record.get("run_id"))
+            if kind == "begin":
+                if run_id in begun:
+                    warnings.warn(f"run_store: {run_id} begins twice; keeping the first", RunStoreWarning, stacklevel=3)
+                    continue
+                begun[run_id] = record
+                events[run_id] = []
+                self._ordinal = max(self._ordinal, int(record["ordinal"]))
+            elif run_id not in begun:
+                warnings.warn(f"run_store: a {kind} record names {run_id}, which never began; skipped",
+                              RunStoreWarning, stacklevel=3)
+            elif kind == "end":
+                self._ended[run_id] = {key: record[key] for key in ("run_id", "ordinal", "principal", "query_id", "grade")}
+            elif kind == "event":
+                events[run_id].append(record)
+        self._replaying = True
+        try:
+            for run_id, begin in sorted(begun.items(), key=lambda item: (int(item[1]["ordinal"]), item[0])):
+                if run_id in self._ended:
+                    continue
+                query_id, principal = str(begin["query_id"]), str(begin["principal"])
+                if query_id not in self.rows or _row_digest(self.rows[query_id]) != begin.get("row"):
+                    warnings.warn(f"run_store: {run_id} began on query {query_id} as it no longer is; "
+                                  "not replayed", RunStoreWarning, stacklevel=3)
+                    continue
+                self._begin(principal, query_id, restored=(run_id, int(begin["ordinal"])))
+                for event in events[run_id]:
+                    self._replay(principal, run_id, event)
+        finally:
+            self._replaying = False
+
+    def _replay(self, principal: str, run_id: str, event: Mapping[str, Any]) -> None:
+        op, args = event.get("op"), dict(event.get("args") or {})
+        try:
+            if op in {"call", "call_planned", "call_connector"}:
+                getattr(self, str(op))(principal, run_id, args["name"], args["arguments"])
+            elif op == "ask":
+                self.ask(principal, run_id, args["question"], tuple(args.get("about") or ()))
+            elif op == "record_refusal":
+                self.record_refusal(principal, run_id, args["name"], args["arguments"], args["message"])
+            else:
+                warnings.warn(f"run_store: {run_id} has an unknown event {op!r}; skipped", RunStoreWarning, stacklevel=4)
+        except Exception:
+            # The journalled call raised too; replaying it rebuilds the same refusal.
+            pass
 
 
 def _recorded_aliases(outputs: Mapping[str, Sequence[Any]]) -> dict[str, str]:
@@ -1286,6 +1697,8 @@ def create_connector_app(
                                  "number": float, "bool": bool, "boolean": bool,
                                  "object": dict[str, Any], "array": list[Any]}
     contracted = set(service.surfaces.connectors) if service.surfaces is not None else set()
+    controlled_connectors = {str(node["server"]) for row in service.rows.values() if "controlled_retrieval" in row
+                             for node in row["expected_dag"]["nodes"] if node.get("node_kind") != "transform"}
     if contracted:
         from .surface import ContractCallError
 
@@ -1330,7 +1743,7 @@ def create_connector_app(
             if connector in service.definitions:
                 tools.extend(contract_tool(connector, item) for item in service.surfaces.surfaces[connector].tools)
     for name, (connector, tool_name) in service.tools.items():
-        if connector in contracted:
+        if connector in contracted and connector not in controlled_connectors:
             continue
         definition = service.definitions[connector]
         tool = definition.tool(tool_name)
@@ -1344,10 +1757,16 @@ def create_connector_app(
         def operation(principal: str, args: dict[str, Any], name: str = name) -> Any:
             return service.call(principal, args.pop("run_id"), name, args)
 
-        tools.append(register(name, params, operation,
-                              f"{definition.vendor_product}: {tool.op} {', '.join(tool.entities)}. "
-                              "Acts only in the named evaluation run." + describe(query_help(definition, tool_name)),
-                              tool.op in _READ_OPS))
+        controlled_help = service.controlled_query_help(connector, tool_name)
+        description = (f"{definition.vendor_product}: {tool.op} {', '.join(tool.entities)}. "
+                       "Acts only in the named evaluation run.")
+        if connector in contracted:
+            description += " This typed connector operation is available for controlled retrieval cases."
+        described = controlled_help if controlled_help is not None else query_help(definition, tool_name)
+        registered = register(name, params, operation, description + describe(described), tool.op in _READ_OPS)
+        if controlled_help is not None and "predicate" in registered.parameters.get("properties", {}):
+            registered.parameters["properties"]["predicate"] = copy.deepcopy(controlled_help["schema"])
+        tools.append(registered)
     server = MCPServer("worldloom-connectors", tools=tools)
     public_hosts = tuple(allowed_hosts)
     security = TransportSecuritySettings(

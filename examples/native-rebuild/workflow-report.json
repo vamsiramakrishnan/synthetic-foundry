@@ -1,0 +1,74 @@
+{
+  "assertions": {
+    "analyze": 1,
+    "create": 6,
+    "read": 1,
+    "update": 3,
+    "verify": 1
+  },
+  "benchmark_digest": "b0b46a8e1b2b44bc47ec9c0a3fee03a26aac1587c00082c8a536695c52fd62b7",
+  "benchmark_tasks": 192,
+  "capabilities": {
+    "maximum_steps": 256,
+    "observation": "runner_scheduled_calls_and_staged_bytes",
+    "schema": "worldloom.native-workflow-capabilities/v1",
+    "supported": [
+      "source_bound_authored_dag",
+      "ordered_dependencies",
+      "read",
+      "analyze",
+      "update",
+      "create",
+      "graded_update_bytes_as_inputs",
+      "reference_graph_qualification",
+      "independent_step_grading",
+      "failure_blocking",
+      "policy_pinning",
+      "deterministic_resume",
+      "receipt_lineage_verification"
+    ],
+    "unavailable": [
+      "conditional_branches",
+      "iteration",
+      "created_artifact_input_contracts",
+      "modified_input_write_contracts",
+      "target_internal_tool_trajectory",
+      "autonomous_agent_plan_scoring"
+    ]
+  },
+  "findings": {
+    "analyze": [],
+    "create": [],
+    "read": [],
+    "update": [],
+    "verify": []
+  },
+  "native_files": 6,
+  "passed": true,
+  "passed_steps": 5,
+  "pilot_limits": [
+    "one selected scenario case",
+    "DOCX operations only",
+    "authored sum analysis only",
+    "runner-scheduled graph",
+    "create uses canonical source inputs; updated-input writes unsupported",
+    "no autonomous model performance measurement"
+  ],
+  "readback_contains_actual_update": true,
+  "resume_byte_identical": true,
+  "resume_equal": true,
+  "seed": 8128,
+  "source_digest": "94051c60653092ed7f3ff6f76f61f1899aa7c07df06f650a37c14cfee3b10f0e",
+  "source_episodes": 3,
+  "statuses": {
+    "analyze": "graded",
+    "create": "graded",
+    "read": "graded",
+    "update": "graded",
+    "verify": "graded"
+  },
+  "target_boundary": "trusted subprocess/public-only DOCX worker",
+  "total_steps": 5,
+  "update_checksum_differs": true,
+  "workflow_digest": "efddb176db5b576b11e326050549424c"
+}

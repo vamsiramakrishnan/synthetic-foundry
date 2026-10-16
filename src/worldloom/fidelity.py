@@ -372,7 +372,8 @@ def univariate(
 def _pearson(x: np.ndarray, y: np.ndarray) -> float:
     if len(x) < 2:
         return float("nan")
-    xm, ym = x - x.mean(), y - y.mean()
+    xm: np.ndarray = x - x.mean()
+    ym: np.ndarray = y - y.mean()
     denominator = math.sqrt(float(np.sum(xm * xm)) * float(np.sum(ym * ym)))
     if denominator == 0:
         return 0.0

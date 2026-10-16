@@ -22,12 +22,20 @@ from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationType
 
 
+def magnitude(amount: float) -> str:
+    """A figure the way an expected answer spells it: grouped, two places unless whole.
+
+    Named so `evaluate.interchange` can find a figure inside an answer by the
+    spelling that wrote it, rather than by a copy of this expression that
+    would drift the first time one of them changed.
+    """
+    return f"{int(amount):,}" if float(amount).is_integer() else f"{amount:,.2f}"
+
+
 def fmt(fact: CanonicalFact) -> str:
     """A fact's value as a reader would write it."""
     if fact.value is not None:
-        amount = fact.value.amount
-        rendered = f"{int(amount):,}" if float(amount).is_integer() else f"{amount:,.2f}"
-        return f"{rendered} {fact.value.unit}"
+        return f"{magnitude(fact.value.amount)} {fact.value.unit}"
     return fact.text_value or ""
 
 
@@ -40,8 +48,7 @@ def adverse(fact: CanonicalFact) -> str:
     if fact.value is None:
         return fact.text_value or ""
     amount = fact.value.amount
-    magnitude = f"{abs(int(amount)):,}" if float(amount).is_integer() else f"{abs(amount):,.2f}"
-    return f"{magnitude} {fact.value.unit} {'below' if amount < 0 else 'above'} budget"
+    return f"{magnitude(abs(amount))} {fact.value.unit} {'below' if amount < 0 else 'above'} budget"
 
 
 class CaseBuilder:

@@ -7,6 +7,12 @@ state first, then validates artifacts and evaluation evidence against it.
 For a first run, use [the repository quickstart](../README.md#quickstart).
 For an enterprise dataset, define breadth and admission criteria before scaling.
 
+To see the commands before choosing a page, run `worldloom guide`. It lists
+the goals in [the README's table](../README.md#what-are-you-testing) with each
+one's first command; `worldloom guide <goal>` prints that goal's whole command
+sequence and the page to read next, and `--json` gives the same to an agent.
+The table below covers more paths than the guide's goals.
+
 ## Choose a path
 
 | Goal | Start here | Then read |
@@ -20,6 +26,11 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
 | Compile a diverse queryset with quotas and isolated splits | [Dataset compiler](dataset-compiler.md) | [Qualification](enterprise-qualification.md) and [Quality gates](quality-calibration.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
+| Build native file scenarios, require per-cell support and diagnose training failures | [Native benchmark workflow](native-benchmark-workflow.md) | [Agent workflow evaluations](agent-workflow-evals.md) |
+| Vary canonical populations, exceptions, revisions and document presentation | [Native realism tactics](native-realism-tactics.md) | [Native benchmark workflow](native-benchmark-workflow.md) |
+| Test queries, operations and recovery with fixed retrieval behavior | [Controlled retrieval and harness DAGs](harness-controlled-retrieval.md) | [Eval execution](eval-execution.md) |
+| Generate fact-grounded infographics with Nano Banana and replay their bytes | [Visual generation](visual-generation.md) | [Native realism tactics](native-realism-tactics.md) |
+| Materialise physical scale and qualify harness changes on fresh evidence | [Enterprise benchmark improvement](enterprise-benchmark-improvement.md) | [Self-improvement](self-improvement.md) |
 | Use Worldloom from Python | [Python SDK](sdk.md) | [Episode grammar](episode-grammar.md) |
 | Drive Worldloom with a coding agent | [Agent skills](skills.md) | [AGENTS.md](../AGENTS.md) |
 | Speak an industry's language, or change a prompt, default or connector without code | [Packs](packs.md) | [Studio](studio.md) |

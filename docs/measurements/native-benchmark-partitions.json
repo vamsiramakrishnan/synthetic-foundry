@@ -1,0 +1,718 @@
+{
+  "configuration": {
+    "heldout_families": 15,
+    "qualification_policy": {
+      "confidence": 0.95,
+      "min_repeats": 2,
+      "min_units": 5,
+      "trials": 3,
+      "unit_dimension": null
+    },
+    "repeats": 2,
+    "training_families": 3,
+    "workload_plan": {
+      "discovery_scope": "artifact",
+      "formats": [
+        "docx",
+        "pptx",
+        "xlsx"
+      ],
+      "max_tasks": 256,
+      "objective": "Review the company reporting evidence, reconcile the reported values, and preserve source content in requested updates.",
+      "operations": [
+        "read",
+        "analyze",
+        "update",
+        "create"
+      ],
+      "use_case_id": "monthly-enterprise-close"
+    }
+  },
+  "construction": {
+    "elapsed_seconds": 451.424,
+    "heldout_digest": "71b54cc16dba49b0f3d750c6080737dae120ab0290e3300ca23a378d26fc90ef",
+    "heldout_tasks": 256,
+    "packages_published": 2,
+    "passed": true,
+    "selected_content_units": 320,
+    "selected_distinct_fact_closure": 9510,
+    "selected_family_ids": [
+      "0556ff40e247bd6af916aded5c247295",
+      "1e6211c6d497115e494350b00bf3135f",
+      "1ea055c8704ae2b2683e14eaf6ed7be7",
+      "41c2daa0d8a4a567f449b6f2a3ced6a2",
+      "4780afaf4a854208a787213ec80bdae0",
+      "4dc661bd37adc66b9f10f53799f7a465",
+      "513d049c47d4f44ee384eb7e4169666b",
+      "72f1ff1f4e564df11ae1831289de61a6",
+      "98824bb54aa49565ab2060ba6fe5bb13",
+      "9b9eca5925b1b3b49cdf6c81779eedfb",
+      "9f55da34befdd603fe862b8960edc656",
+      "a85c27db2bef32b69cdff637db5e0587",
+      "ab83a663a4457f70aec024fed4b872b8",
+      "be7c3165b7a51e8a64e48dc4d40cedb6",
+      "c20cb80877c434e7761141d1290fd9ab",
+      "c6d3281fcbd785b2f315b7b128abbdb4",
+      "cf32e2a087917d25ee4fde7fa6212fb5",
+      "fdf2d133e9665770429614b268e10106"
+    ],
+    "split_audit": {
+      "heldout_cases": 256,
+      "heldout_units": 15,
+      "isolated": true,
+      "overlapping_units": 0,
+      "overlaps": [],
+      "training_cases": 68,
+      "training_units": 3
+    },
+    "timing_scope": "One local complete constructor observation, including observation-only serialization of unmodified intermediate workload returns; production proof gates were unchanged.",
+    "training_digest": "50b2d5e4b6e10511350d1cb7788d6c233ffd00df9aca3a0de968d72c9f631a6a",
+    "training_tasks": 68
+  },
+  "default_policy_support": {
+    "heldout_unit_budget_sufficient": true,
+    "heldout_units": 15,
+    "isolated": true,
+    "method": "arithmetic_over_sdk_split_audit_not_an_assessment_or_promotion_result",
+    "repeats_declared": 2,
+    "repeats_executed": 0,
+    "required_heldout_units": 15,
+    "training_units": 3
+  },
+  "elapsed_seconds": 458.387,
+  "exact_large_resume": {
+    "performed": false,
+    "reason": "Exact-resume mechanics have focused regression coverage; no additional large-corpus replay was run."
+  },
+  "limitations": [
+    "Reference qualification proves satisfiability, not external harness performance.",
+    "Promotion readiness establishes experiment prerequisites, not a measured improvement or successful promotion.",
+    "Source is the unchanged prior 18-month pilot; sections rejected by current source gates remain excluded.",
+    "Format replicas and related canonical facts count as one independent evidence family.",
+    "Independence requires each target invocation receive only its declared task input files.",
+    "The largest 224-section financial and incident component contains 9360 transitive canonical facts and remains one indivisible source component; family count is not a count of independent financial episodes.",
+    "Construction replays native-byte qualification during export and load. Large source files incur material parsing cost; the elapsed construction time is reported without an extra timing benchmark.",
+    "Held-out operation-specific source diversity remains uneven: read=15 families, analyze=1 families, update=12 families, create=12 families. The aggregate 15-family split does not establish 15 independent families for every operation.",
+    "Requested operation/format combinations remain uncovered: training analyze:PPTX and analyze:XLSX; held-out analyze:PPTX. Successful construction and aggregate family support do not imply complete declared coverage."
+  ],
+  "live_target_trials": 0,
+  "measurement_status": "Successful package construction with an incomplete operation/format matrix. SDK construction qualified 324 tasks and audited 3 training plus 15 held-out source families with zero overlap. No target trials, promotion, standalone assessment or additional large resume are claimed.",
+  "method": "partition-before-render; transitive canonical fact and native formula closure; independent byte qualification; canonical evidence split audit",
+  "packages": {
+    "heldout": {
+      "capability_coverage": {
+        "actual_budget_variance": 37,
+        "business_predicate": 136,
+        "content_update": 64,
+        "evidence_discovery": 256,
+        "formula_output": 48,
+        "multi_source_citations": 80,
+        "native_creation": 64,
+        "native_formula_inspection": 21,
+        "native_preservation": 64,
+        "period_change": 37,
+        "structured_arithmetic": 112,
+        "structured_output": 64,
+        "subject_difference": 38,
+        "table_discovery": 43
+      },
+      "digest": "71b54cc16dba49b0f3d750c6080737dae120ab0290e3300ca23a378d26fc90ef",
+      "distinct_families_by_operation": {
+        "analyze": 1,
+        "create": 12,
+        "read": 15,
+        "update": 12
+      },
+      "distinct_families_by_operation_definition": "Count of planned whole-source families referenced by the operation under artifact-only discovery; format replicas do not add families.",
+      "missing_operation_format_pairs": [
+        "analyze:pptx"
+      ],
+      "native_files": 45,
+      "native_format_counts": {
+        "docx": 15,
+        "pptx": 15,
+        "xlsx": 15
+      },
+      "operation_counts": {
+        "analyze": 64,
+        "create": 64,
+        "read": 64,
+        "update": 64
+      },
+      "operation_format_matrix_complete": false,
+      "operation_format_matrix_definition": "Additional cross-product diagnostic; the workload declares allowed/requested operations and formats separately, not a requirement for every combination.",
+      "operation_format_participation": {
+        "analyze:docx": 44,
+        "analyze:xlsx": 20,
+        "create:docx": 48,
+        "create:pptx": 4,
+        "create:xlsx": 48,
+        "read:docx": 21,
+        "read:pptx": 18,
+        "read:xlsx": 25,
+        "update:docx": 22,
+        "update:pptx": 22,
+        "update:xlsx": 20
+      },
+      "operation_format_participation_definition": "A task participates when the format appears in a declared input or output; source and output roles are also reported separately.",
+      "operations_by_family": {
+        "41c2daa0d8a4a567f449b6f2a3ced6a2": {
+          "read": 4
+        },
+        "4780afaf4a854208a787213ec80bdae0": {
+          "create": 1,
+          "read": 2,
+          "update": 3
+        },
+        "4dc661bd37adc66b9f10f53799f7a465": {
+          "create": 1,
+          "read": 7,
+          "update": 3
+        },
+        "513d049c47d4f44ee384eb7e4169666b": {
+          "create": 1,
+          "read": 5,
+          "update": 3
+        },
+        "72f1ff1f4e564df11ae1831289de61a6": {
+          "create": 2,
+          "read": 7,
+          "update": 3
+        },
+        "98824bb54aa49565ab2060ba6fe5bb13": {
+          "create": 2,
+          "read": 7,
+          "update": 3
+        },
+        "9b9eca5925b1b3b49cdf6c81779eedfb": {
+          "create": 1,
+          "read": 1,
+          "update": 3
+        },
+        "9f55da34befdd603fe862b8960edc656": {
+          "read": 5
+        },
+        "a85c27db2bef32b69cdff637db5e0587": {
+          "read": 4
+        },
+        "ab83a663a4457f70aec024fed4b872b8": {
+          "create": 2,
+          "read": 2,
+          "update": 3
+        },
+        "be7c3165b7a51e8a64e48dc4d40cedb6": {
+          "analyze": 64,
+          "create": 49,
+          "read": 9,
+          "update": 17
+        },
+        "c20cb80877c434e7761141d1290fd9ab": {
+          "create": 2,
+          "read": 2,
+          "update": 3
+        },
+        "c6d3281fcbd785b2f315b7b128abbdb4": {
+          "create": 1,
+          "read": 6,
+          "update": 3
+        },
+        "cf32e2a087917d25ee4fde7fa6212fb5": {
+          "create": 1,
+          "read": 1,
+          "update": 3
+        },
+        "fdf2d133e9665770429614b268e10106": {
+          "create": 1,
+          "read": 2,
+          "update": 17
+        }
+      },
+      "operations_by_output_format": {
+        "create:docx": 13,
+        "create:pptx": 3,
+        "create:xlsx": 48,
+        "update:docx": 22,
+        "update:pptx": 22,
+        "update:xlsx": 20
+      },
+      "operations_by_source_format": {
+        "analyze:docx": 44,
+        "analyze:xlsx": 20,
+        "create:docx": 47,
+        "create:pptx": 1,
+        "create:xlsx": 16,
+        "read:docx": 21,
+        "read:pptx": 18,
+        "read:xlsx": 25,
+        "update:docx": 22,
+        "update:pptx": 22,
+        "update:xlsx": 20
+      },
+      "planner_finding_counts": {
+        "ambiguous_evidence_selector": 408,
+        "ambiguous_numeric_selector": 1600
+      },
+      "public_bytes": 3886030,
+      "public_files": 46,
+      "reference_qualification": {
+        "method": "performed_by_sdk_construction",
+        "passed": true,
+        "standalone_recheck_performed": false,
+        "tasks": 256
+      },
+      "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+      "task_counts_by_family": {
+        "41c2daa0d8a4a567f449b6f2a3ced6a2": 4,
+        "4780afaf4a854208a787213ec80bdae0": 6,
+        "4dc661bd37adc66b9f10f53799f7a465": 11,
+        "513d049c47d4f44ee384eb7e4169666b": 9,
+        "72f1ff1f4e564df11ae1831289de61a6": 12,
+        "98824bb54aa49565ab2060ba6fe5bb13": 12,
+        "9b9eca5925b1b3b49cdf6c81779eedfb": 5,
+        "9f55da34befdd603fe862b8960edc656": 5,
+        "a85c27db2bef32b69cdff637db5e0587": 4,
+        "ab83a663a4457f70aec024fed4b872b8": 7,
+        "be7c3165b7a51e8a64e48dc4d40cedb6": 139,
+        "c20cb80877c434e7761141d1290fd9ab": 7,
+        "c6d3281fcbd785b2f315b7b128abbdb4": 10,
+        "cf32e2a087917d25ee4fde7fa6212fb5": 5,
+        "fdf2d133e9665770429614b268e10106": 20
+      },
+      "tasks": 256,
+      "truncated": true
+    },
+    "training": {
+      "capability_coverage": {
+        "business_predicate": 30,
+        "content_update": 6,
+        "evidence_discovery": 68,
+        "formula_output": 7,
+        "multi_source_citations": 24,
+        "native_creation": 25,
+        "native_formula_inspection": 2,
+        "native_preservation": 6,
+        "period_change": 6,
+        "structured_arithmetic": 14,
+        "structured_output": 25,
+        "subject_difference": 8,
+        "table_discovery": 18
+      },
+      "digest": "50b2d5e4b6e10511350d1cb7788d6c233ffd00df9aca3a0de968d72c9f631a6a",
+      "distinct_families_by_operation": {
+        "analyze": 1,
+        "create": 3,
+        "read": 3,
+        "update": 2
+      },
+      "distinct_families_by_operation_definition": "Count of planned whole-source families referenced by the operation under artifact-only discovery; format replicas do not add families.",
+      "missing_operation_format_pairs": [
+        "analyze:pptx",
+        "analyze:xlsx"
+      ],
+      "native_files": 9,
+      "native_format_counts": {
+        "docx": 3,
+        "pptx": 3,
+        "xlsx": 3
+      },
+      "operation_counts": {
+        "analyze": 7,
+        "create": 25,
+        "read": 30,
+        "update": 6
+      },
+      "operation_format_matrix_complete": false,
+      "operation_format_matrix_definition": "Additional cross-product diagnostic; the workload declares allowed/requested operations and formats separately, not a requirement for every combination.",
+      "operation_format_participation": {
+        "analyze:docx": 7,
+        "create:docx": 17,
+        "create:pptx": 10,
+        "create:xlsx": 17,
+        "read:docx": 10,
+        "read:pptx": 10,
+        "read:xlsx": 10,
+        "update:docx": 2,
+        "update:pptx": 2,
+        "update:xlsx": 2
+      },
+      "operation_format_participation_definition": "A task participates when the format appears in a declared input or output; source and output roles are also reported separately.",
+      "operations_by_family": {
+        "0556ff40e247bd6af916aded5c247295": {
+          "analyze": 7,
+          "create": 7,
+          "read": 18
+        },
+        "1e6211c6d497115e494350b00bf3135f": {
+          "create": 9,
+          "read": 6,
+          "update": 3
+        },
+        "1ea055c8704ae2b2683e14eaf6ed7be7": {
+          "create": 9,
+          "read": 6,
+          "update": 3
+        }
+      },
+      "operations_by_output_format": {
+        "create:docx": 6,
+        "create:pptx": 6,
+        "create:xlsx": 13,
+        "update:docx": 2,
+        "update:pptx": 2,
+        "update:xlsx": 2
+      },
+      "operations_by_source_format": {
+        "analyze:docx": 7,
+        "create:docx": 13,
+        "create:pptx": 6,
+        "create:xlsx": 6,
+        "read:docx": 10,
+        "read:pptx": 10,
+        "read:xlsx": 10,
+        "update:docx": 2,
+        "update:pptx": 2,
+        "update:xlsx": 2
+      },
+      "planner_finding_counts": {},
+      "public_bytes": 529514,
+      "public_files": 10,
+      "reference_qualification": {
+        "method": "performed_by_sdk_construction",
+        "passed": true,
+        "standalone_recheck_performed": false,
+        "tasks": 68
+      },
+      "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+      "task_counts_by_family": {
+        "0556ff40e247bd6af916aded5c247295": 32,
+        "1e6211c6d497115e494350b00bf3135f": 18,
+        "1ea055c8704ae2b2683e14eaf6ed7be7": 18
+      },
+      "tasks": 68,
+      "truncated": false
+    }
+  },
+  "partition_inventory": {
+    "allocated_source_components": 44,
+    "allocation_receipt_digest": "4e58f65ccae5c04718f377d330e04e5b",
+    "available_families": 44,
+    "component_section_count_distribution": {
+      "1": 42,
+      "224": 1,
+      "54": 1
+    },
+    "grouped_families": [
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "9be3027fbf5358e6073521a631e838b2",
+          "a2520c3df2f21cc2bfa180010a9fa55a"
+        ],
+        "content_units": 2,
+        "id": "0556ff40e247bd6af916aded5c247295",
+        "split": "training"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "982830227d8a0fc5b611da16a9b8b142",
+          "a3c9162486f77394ca9178ff5ca85619"
+        ],
+        "content_units": 2,
+        "id": "1e6211c6d497115e494350b00bf3135f",
+        "split": "training"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "b2a4a8e65d32b736f97c6441170008d5",
+          "cbd30bbcee7c91114d878d707cabaa76"
+        ],
+        "content_units": 2,
+        "id": "1ea055c8704ae2b2683e14eaf6ed7be7",
+        "split": "training"
+      },
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "c71aef83fafd71222c01d646843eb732",
+          "e31a91ae5a0e3405f65642be87539f78"
+        ],
+        "content_units": 2,
+        "id": "41c2daa0d8a4a567f449b6f2a3ced6a2",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "81546a36202038a48d8530678a5c9535",
+          "822db37e353a74eeb611aab05e60cb7e"
+        ],
+        "content_units": 2,
+        "id": "4780afaf4a854208a787213ec80bdae0",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "6f9509608607d676a85f2cdeade898ed",
+          "756e929a3e1f49890876269d4039efbf",
+          "7588cebdd3d5f4e64b9c9b92d19ab225",
+          "89663559cf6f102f0e013b846a5e70f5"
+        ],
+        "content_units": 4,
+        "id": "4dc661bd37adc66b9f10f53799f7a465",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "5211369ca26f45fb9dd6e4da2787ebf5",
+          "5d29ddce7d63c7d231954571f41b26dd",
+          "661e2cd487889b38f30e32776cd2b3f7",
+          "6ac23f9017bdffaff594ffcdb60c8de6"
+        ],
+        "content_units": 4,
+        "id": "513d049c47d4f44ee384eb7e4169666b",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "01629c4eb05398d9ab3e2e61ebe98fd8",
+          "087e6fda96c88a500c216f90e25ebe1d",
+          "0bec5c649e5c05d00f52adf799ff2b13",
+          "367685fc63735e89fddee3d33ef0017c"
+        ],
+        "content_units": 4,
+        "id": "72f1ff1f4e564df11ae1831289de61a6",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "44e7d4e8fdbafe59a7dcea89104c46c4",
+          "4b5c6d3f68e4569566f8962458994335",
+          "4b6f839c3a408cb09da78f9f819acb0b",
+          "61034c71771ab7becaecf0df53a3c233"
+        ],
+        "content_units": 4,
+        "id": "98824bb54aa49565ab2060ba6fe5bb13",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "a9f299529fdd02ac19636265c2a75058",
+          "caa925fa7f7d05c9fa3dcaeec72a327d"
+        ],
+        "content_units": 2,
+        "id": "9b9eca5925b1b3b49cdf6c81779eedfb",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "a59fc1878805b9577b2ae690ef697410",
+          "c62d3e574753a9c9d76c0008570b50e1"
+        ],
+        "content_units": 2,
+        "id": "9f55da34befdd603fe862b8960edc656",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 6,
+        "component_ids": [
+          "905ef23dc54ad44dc5f4329f4110a0af",
+          "9bb2a875068490e453437fbcf1c1414d"
+        ],
+        "content_units": 2,
+        "id": "a85c27db2bef32b69cdff637db5e0587",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "d9c4c4440177542e34f1bdcfcbc18a6b",
+          "eb40e69d1df3eedbb3c29d757c862ebd"
+        ],
+        "content_units": 2,
+        "id": "ab83a663a4457f70aec024fed4b872b8",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 9360,
+        "component_ids": [
+          "be7c3165b7a51e8a64e48dc4d40cedb6"
+        ],
+        "content_units": 224,
+        "id": "be7c3165b7a51e8a64e48dc4d40cedb6",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "9361faa7971ae8ff05b36bba212e2903",
+          "93b848d1175424220e34ac6d6a8d0295"
+        ],
+        "content_units": 2,
+        "id": "c20cb80877c434e7761141d1290fd9ab",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 8,
+        "component_ids": [
+          "0c81f244d084b547b230f293ed49bac4",
+          "1cf99528002c3ad26044ded8c9519629",
+          "2863ad5a8ebd8f281819b72eab933244",
+          "3e18157ea248daae4a3ec4cceb65f3c8"
+        ],
+        "content_units": 4,
+        "id": "c6d3281fcbd785b2f315b7b128abbdb4",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 2,
+        "component_ids": [
+          "8a87c3b914d19f2ed799dea32e093eb4",
+          "97ec51e9c20ca4acb836dc56c3c62609"
+        ],
+        "content_units": 2,
+        "id": "cf32e2a087917d25ee4fde7fa6212fb5",
+        "split": "heldout"
+      },
+      {
+        "canonical_fact_closure": 72,
+        "component_ids": [
+          "fdf2d133e9665770429614b268e10106"
+        ],
+        "content_units": 54,
+        "id": "fdf2d133e9665770429614b268e10106",
+        "split": "heldout"
+      }
+    ],
+    "largest_components": [
+      {
+        "canonical_fact_closure": 9360,
+        "content_units": 224,
+        "id": "be7c3165b7a51e8a64e48dc4d40cedb6",
+        "source_artifacts": 128
+      },
+      {
+        "canonical_fact_closure": 72,
+        "content_units": 54,
+        "id": "fdf2d133e9665770429614b268e10106",
+        "source_artifacts": 54
+      }
+    ],
+    "omitted_families": 0,
+    "output_family_count": 18,
+    "retained_content_units": 320,
+    "retained_distinct_fact_closure": 9510,
+    "retained_families": 44
+  },
+  "phase": "final_contextual_cached_fair_sampling_construction",
+  "resource_observations": {
+    "method": "externally sampled kernel process VmHWM before completion",
+    "samples": [
+      {
+        "peak_rss_so_far": "1014468 kB",
+        "pid": 18107,
+        "rss": "989460 kB"
+      }
+    ]
+  },
+  "schema": "worldloom.native-benchmark-partition-measurement/v1",
+  "sdk_assessment": {
+    "performed": false,
+    "reason": "SDK construction already qualified tasks and audited the split; a separate large assessment replay was not needed for construction measurements."
+  },
+  "source": {
+    "artifact_irs": 162,
+    "authored_sections": 792,
+    "company": "Northstar Retail",
+    "company_id": "CO-0001",
+    "excluded_sections": 472,
+    "exclusion_codes": {
+      "duplicate_grounded_content": 70,
+      "invalid_native_evidence": 234,
+      "private_native_section": 168
+    },
+    "facts": 11624,
+    "file_count": 10,
+    "periods": [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12",
+      "2027-01",
+      "2027-02",
+      "2027-03",
+      "2027-04",
+      "2027-05",
+      "2027-06"
+    ],
+    "recipe_digest": "7088298e5b502df50da36a9a51ca60f26b510c8a26af3adb526f80b4c4f456b8",
+    "seed": 8128,
+    "selected_sections": 320,
+    "source_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+    "tree_digest": "c0851147b3676f70f4c1430350d6ebc03388adb03cf704745ec267e97d342e01"
+  },
+  "source_code_digests": {
+    "src/worldloom/benchmarks/core.py": "fc5176f8a20f6f205236515f187c95409c5ab689d13003db491d6d236db82dd2",
+    "src/worldloom/benchmarks/coverage.py": "187fe34a60761a763d241416bc9a333a11f8a1ad6ede509e8a4fbafcea52cdb1",
+    "src/worldloom/benchmarks/partitions.py": "6ac49e87f24229612a3a9669910d06bbe162ef77bc35a3b103cee7e6b124a63b",
+    "src/worldloom/native_artifacts.py": "b8a43f9fed5def4a94aa2985739f57bd09a90d02adbb81a379aa778e9c896170",
+    "src/worldloom/native_business.py": "7906772e179c2e22e538f51fe69ba03970c4de158620241618aae80724365d33",
+    "src/worldloom/native_corpus.py": "62b75f07cb3021dabcc46d010b42a16855f9a79132b4340ea8cb80b988ec828c",
+    "src/worldloom/native_eval_bridge.py": "3d5fee3be58d7832e47695238d72877376ca4efa0cffcbe8c005a7e26c6af6a8",
+    "src/worldloom/native_query_evidence.py": "9336c3b1f6bd02520b04626db1ea2a574f9bcc34ec8d1ff571bb304848723709",
+    "src/worldloom/native_query_planning.py": "6854ecffc39eae4cd0c610084f909633c550ca3ec08bc6300190c45ffbec45e9",
+    "src/worldloom/native_reference.py": "027cba759dd01c4625e26c22030cb9e14559bd5d76004bb8fd8a01430a4e7d7c",
+    "src/worldloom/native_tasks.py": "51b273d78793cf029911997253e9730c72973384b267874b7cd5470068390456"
+  },
+  "source_code_stable_during_measurement": true,
+  "source_code_unchanged_after_sdk_constructor": true,
+  "source_inspection_cache_admission": {
+    "canonical_fact_closure": 9360,
+    "family_id": "be7c3165b7a51e8a64e48dc4d40cedb6",
+    "formats": {
+      "docx": {
+        "inspect_seconds": 1.005,
+        "locator_utf8_bytes": 582191,
+        "native_bytes": 144725,
+        "render_seconds": 4.746,
+        "text_utf8_bytes": 314662,
+        "units": 26191
+      },
+      "pptx": {
+        "inspect_seconds": 0.696,
+        "locator_utf8_bytes": 881890,
+        "native_bytes": 1149244,
+        "render_seconds": 4.98,
+        "text_utf8_bytes": 484787,
+        "units": 30641
+      },
+      "xlsx": {
+        "inspect_seconds": 0.272,
+        "locator_utf8_bytes": 2018759,
+        "native_bytes": 204382,
+        "render_seconds": 2.269,
+        "text_utf8_bytes": 847030,
+        "units": 41812
+      }
+    },
+    "method": "one direct cold render and inspection per format; no task qualification",
+    "sections": 224,
+    "total_text_and_locator_utf8_bytes": 5129319,
+    "total_units": 98644
+  }
+}

@@ -193,7 +193,14 @@ class StudioHandler(BaseHTTPRequestHandler):
                     progress = studio.path("datasets", digest([job["project"], job["revision"]])) / "progress.json"
                     if progress.exists():
                         from ..evals.dataset import _read
-                        job["progress"] = _read(progress)
+                        # Advisory, and written by the worker process while
+                        # this request reads it: a partial or locked file
+                        # (Windows CI saw it) leaves progress out rather than
+                        # failing the whole poll with a 422.
+                        try:
+                            job["progress"] = _read(progress)
+                        except (ValueError, OSError):
+                            pass
                 self.send(200, job)
                 return
             if method == "GET" and len(parts) >= 3 and parts[:2] == ["api", "projects"]:

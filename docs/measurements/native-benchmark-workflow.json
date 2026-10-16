@@ -1,0 +1,224 @@
+{
+  "assessment": {
+    "capabilities": [
+      {
+        "independent_units": 0,
+        "name": "analyze:docx",
+        "requested": true,
+        "tasks": 0
+      },
+      {
+        "independent_units": 0,
+        "name": "analyze:pptx",
+        "requested": true,
+        "tasks": 0
+      },
+      {
+        "independent_units": 1,
+        "name": "analyze:xlsx",
+        "requested": true,
+        "tasks": 8
+      },
+      {
+        "independent_units": 1,
+        "name": "create:docx",
+        "requested": true,
+        "tasks": 1
+      },
+      {
+        "independent_units": 1,
+        "name": "create:pptx",
+        "requested": true,
+        "tasks": 2
+      },
+      {
+        "independent_units": 1,
+        "name": "create:xlsx",
+        "requested": true,
+        "tasks": 7
+      },
+      {
+        "independent_units": 1,
+        "name": "read:docx",
+        "requested": true,
+        "tasks": 1
+      },
+      {
+        "independent_units": 1,
+        "name": "read:pptx",
+        "requested": true,
+        "tasks": 1
+      },
+      {
+        "independent_units": 1,
+        "name": "read:xlsx",
+        "requested": true,
+        "tasks": 6
+      },
+      {
+        "independent_units": 1,
+        "name": "update:docx",
+        "requested": true,
+        "tasks": 4
+      },
+      {
+        "independent_units": 1,
+        "name": "update:pptx",
+        "requested": true,
+        "tasks": 2
+      },
+      {
+        "independent_units": 1,
+        "name": "update:xlsx",
+        "requested": true,
+        "tasks": 2
+      }
+    ],
+    "coverage_complete": true,
+    "execution_ready": true,
+    "findings": [
+      {
+        "blocks": [],
+        "code": "operation_format_gaps",
+        "detail": "Requested operation/format combinations without tasks: analyze:docx, analyze:pptx.",
+        "remediation": "Inspect the missing combinations before treating aggregate coverage as coverage of every format."
+      },
+      {
+        "blocks": [
+          "promotion"
+        ],
+        "code": "qualification_policy_missing",
+        "detail": "No promotion experiment policy was supplied.",
+        "remediation": "Supply QualificationPolicy before selecting the held-out pool or running candidates."
+      },
+      {
+        "blocks": [],
+        "code": "shared_evidence",
+        "detail": "32 tasks reduce to 1 evidence components.",
+        "remediation": "Place disjoint canonical sections and facts in separate task input files; paraphrases, extra assertions, and format copies do not add units."
+      },
+      {
+        "blocks": [],
+        "code": "task_limit_reached",
+        "detail": "Candidate selection was truncated at the task ceiling of 32.",
+        "remediation": "Increase max_tasks if omitted candidates cover required operations or formats."
+      }
+    ],
+    "formats": [
+      {
+        "independent_units": 1,
+        "name": "docx",
+        "requested": true,
+        "tasks": 6
+      },
+      {
+        "independent_units": 1,
+        "name": "pptx",
+        "requested": true,
+        "tasks": 5
+      },
+      {
+        "independent_units": 1,
+        "name": "xlsx",
+        "requested": true,
+        "tasks": 23
+      }
+    ],
+    "heldout_reference_qualified": null,
+    "independent_units": 1,
+    "namespace": "northstar-8128",
+    "operations": [
+      {
+        "independent_units": 1,
+        "name": "analyze",
+        "requested": true,
+        "tasks": 8
+      },
+      {
+        "independent_units": 1,
+        "name": "create",
+        "requested": true,
+        "tasks": 8
+      },
+      {
+        "independent_units": 1,
+        "name": "read",
+        "requested": true,
+        "tasks": 8
+      },
+      {
+        "independent_units": 1,
+        "name": "update",
+        "requested": true,
+        "tasks": 8
+      }
+    ],
+    "promotion_ready": false,
+    "qualification_policy": null,
+    "reference_qualified": 32,
+    "repeats": null,
+    "required_heldout_units": null,
+    "schema_version": "worldloom.benchmark-assessment/v1",
+    "split_audit": null,
+    "task_limit": 32,
+    "tasks": 32,
+    "unassigned_tasks": null,
+    "used_canonical_facts": 1004,
+    "used_sources": 3,
+    "workload_digest": "c7db0013f756c92969ebe03eb5621ef6"
+  },
+  "coverage_complete": true,
+  "exact_export_resume": true,
+  "execution_ready": true,
+  "independent_units": 1,
+  "limitations": [
+    "32 reference-qualified tasks share one evidence component.",
+    "This records the baseline implementation at measurement time; later planner changes intentionally require a new package/run identity.",
+    "No live target trials or measured harness improvement."
+  ],
+  "live_target_trials": 0,
+  "measurement_stage": "Baseline aggregate package before source-family grouping and contextual native headings.",
+  "operation_counts": {
+    "analyze": 8,
+    "create": 8,
+    "read": 8,
+    "update": 8
+  },
+  "package_digest": "0f12e6a5bba7ba183c1a7739a3cd995f1b54db430e83029221732768c0e3d3db",
+  "planner_findings_summary": {
+    "by_code": {
+      "ambiguous_evidence_selector": 435,
+      "ambiguous_numeric_selector": 835,
+      "independent_cross_artifact_evidence_missing": 1
+    },
+    "examples": [
+      {
+        "artifact_id": null,
+        "code": "independent_cross_artifact_evidence_missing",
+        "detail": "supplied files do not offer compatible, disjoint canonical evidence for a cross-file task; format replicas do not satisfy this requirement",
+        "operation": null
+      },
+      {
+        "artifact_id": "ART-SCALE-BOOK",
+        "code": "ambiguous_numeric_selector",
+        "detail": "measure 'ops.affected_records' and subject 'SVC-0002' do not uniquely identify their reporting period",
+        "operation": null
+      },
+      {
+        "artifact_id": "ART-SCALE-BOOK",
+        "code": "ambiguous_evidence_selector",
+        "detail": "repeated heading 'Actions' lacks a unique business subject in its prose",
+        "operation": null
+      }
+    ],
+    "total": 1271
+  },
+  "promotion_ready": false,
+  "reference_qualified": 32,
+  "schema": "worldloom.benchmark-workflow-measurement/v1",
+  "source_corpus": "Original measured 18-month retail pilot (seed 8128); no regeneration.",
+  "source_pilot": "corpus-scale-retail.json",
+  "source_world_digest": "35f486a09b4b30092a9b8b39c40b957245a35a40a981d47a511a45cc65d38a28",
+  "tasks": 32,
+  "workload_plan": "docs/examples/native-discovery-workload.json"
+}

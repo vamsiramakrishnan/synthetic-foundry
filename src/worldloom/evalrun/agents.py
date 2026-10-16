@@ -110,7 +110,7 @@ class ToolSurface:
     @property
     def surface(self) -> str:
         """``native`` or ``contract``: which tools ``tools()`` lists (``connectors.surface``)."""
-        return str(getattr(self._service, "surface", "native"))
+        return self._service.surface_for(self._principal, self.run_id)
 
     def call_planned(self, tool: str, /, **arguments: Any) -> Any:
         """A planned connector call (``connector.tool``), made on this run's surface.

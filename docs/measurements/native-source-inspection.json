@@ -1,0 +1,151 @@
+{
+  "cache_bounds": {
+    "entries": 64,
+    "overflow": "Evict least-recently-used entries; do not retain an oversized snapshot; never refuse an otherwise valid source.",
+    "text_and_locator_utf8_bytes": 33554432,
+    "units": 200000
+  },
+  "capacity_sample": {
+    "canonical_fact_closure": 9360,
+    "family_id": "be7c3165b7a51e8a64e48dc4d40cedb6",
+    "formats": {
+      "docx": {
+        "inspect_seconds": 1.005,
+        "locator_utf8_bytes": 582191,
+        "native_bytes": 144725,
+        "native_sha256": "ee1e19b6837fc88997ed49e395c1d8793ba4256649f07331f5351ac43807ce03",
+        "text_utf8_bytes": 314662,
+        "units": 26191
+      },
+      "pptx": {
+        "inspect_seconds": 0.696,
+        "locator_utf8_bytes": 881890,
+        "native_bytes": 1149244,
+        "native_sha256": "a59478d7737b7b6a6f980a73f91b4cc080ac86cce4b5ba7f6de33e1f0ca18d5f",
+        "text_utf8_bytes": 484787,
+        "units": 30641
+      },
+      "xlsx": {
+        "inspect_seconds": 0.272,
+        "locator_utf8_bytes": 2018759,
+        "native_bytes": 204382,
+        "native_sha256": "ef76921a8cdf10088fc54546d1f4ee5470fe2f5b6e07d66e55cecf5a05a9d36d",
+        "text_utf8_bytes": 847030,
+        "units": 41812
+      }
+    },
+    "method": "Independent rendering and one direct inspection per format; no task generation.",
+    "source_sections": 224,
+    "total_snapshot_units": 98644,
+    "total_text_and_locator_utf8_bytes": 5129319
+  },
+  "comparisons": [
+    {
+      "all_parser_calls": 83,
+      "non_source_parser_calls": 13,
+      "observed_local_seconds": 0.6712,
+      "source_cache": "disabled",
+      "source_parser_calls": 70,
+      "workload_json_bytes": 44370,
+      "workload_json_sha256": "8f4bf53de0d4f1b7459acea8a4f813daa971b97f51c401434aab336ba8fffab8"
+    },
+    {
+      "all_parser_calls": 19,
+      "non_source_parser_calls": 13,
+      "observed_local_seconds": 0.2408,
+      "source_cache": "enabled",
+      "source_parser_calls": 6,
+      "workload_json_bytes": 44370,
+      "workload_json_sha256": "8f4bf53de0d4f1b7459acea8a4f813daa971b97f51c401434aab336ba8fffab8"
+    }
+  ],
+  "fixture": {
+    "fixture": "_world()",
+    "module": "tests/test_native_query_planning.py",
+    "operation_counts": {
+      "analyze": 4,
+      "create": 6,
+      "read": 7,
+      "update": 7
+    },
+    "plan": "_plan(max_tasks=24)",
+    "reference_qualified": 24,
+    "seed": 8128,
+    "source_format_counts": {
+      "docx": 2,
+      "pptx": 2,
+      "xlsx": 2
+    },
+    "source_sha256": "034c0ebc86862f46f5132d9f712216029a666a3247f7bbf18f3cfefa4cbca945",
+    "sources": {
+      "actual-docx": {
+        "format": "docx",
+        "native_bytes": 36693,
+        "sha256": "f43caec4c33caad14d3fbb94ed0aa9960bdf61008c8d895fbf058d0cbf8b0a3d"
+      },
+      "actual-pptx": {
+        "format": "pptx",
+        "native_bytes": 34923,
+        "sha256": "d03087d0cc938477a6c1d43b495c2c52790f0be9c542a87da5d83e0e9d3bfb5f"
+      },
+      "actual-xlsx": {
+        "format": "xlsx",
+        "native_bytes": 5766,
+        "sha256": "78f0306755a67905cd510376606b4f4721735fd0c7b4805db3f05fdd3e0c9a0a"
+      },
+      "budget-docx": {
+        "format": "docx",
+        "native_bytes": 36692,
+        "sha256": "2e467107d349144c273366b68376577d551a260c0b064f26a7c0ad1f55a1c64f"
+      },
+      "budget-pptx": {
+        "format": "pptx",
+        "native_bytes": 34922,
+        "sha256": "946485fcb21c03761d297be755374c08a97712b4587694c27dfd7032d2c28181"
+      },
+      "budget-xlsx": {
+        "format": "xlsx",
+        "native_bytes": 5766,
+        "sha256": "f9069eabc43e846d5144f1778327dc8966cba9b44484721867f359b985b36f63"
+      }
+    },
+    "surface": "legacy",
+    "tasks": 24
+  },
+  "limitations": [
+    "Timings are one local observation, not a general speedup claim; subsequent count and identity verification used the same deterministic fixture.",
+    "The cache retains extracted source values only; actual output bytes are independently parsed on every grade.",
+    "Unit and UTF-8 text limits bound admission, not an exact resident-memory measurement.",
+    "World privacy, canonical provenance and task assertions are checked on every invocation; no grades or proof results are cached.",
+    "The large-family capacity sample is separate from the 24-task timing fixture; this does not establish end-to-end large-corpus runtime or explain the earlier process crash.",
+    "No live external model or target-harness quality improvement was measured."
+  ],
+  "measurement_stage": "Bounded source snapshot reuse, before source-aware task-budget allocation; timings and workload hashes belong to the recorded production hashes.",
+  "method": "Compare the same deterministic planner fixture with source-cache admission disabled and enabled; count actual inspect_artifact calls and compare complete NativeWorkload JSON bytes.",
+  "production_source_sha256": {
+    "src/worldloom/native_artifacts.py": "b8a43f9fed5def4a94aa2985739f57bd09a90d02adbb81a379aa778e9c896170",
+    "src/worldloom/native_business.py": "7906772e179c2e22e538f51fe69ba03970c4de158620241618aae80724365d33",
+    "src/worldloom/native_corpus.py": "62b75f07cb3021dabcc46d010b42a16855f9a79132b4340ea8cb80b988ec828c",
+    "src/worldloom/native_eval_bridge.py": "3d5fee3be58d7832e47695238d72877376ca4efa0cffcbe8c005a7e26c6af6a8",
+    "src/worldloom/native_query_evidence.py": "9336c3b1f6bd02520b04626db1ea2a574f9bcc34ec8d1ff571bb304848723709",
+    "src/worldloom/native_query_planning.py": "2ae7b5bf9cc74eb99cbd107ac43d7d0bb9ca3bdde30f0a1e74341c653abfeffa",
+    "src/worldloom/native_reference.py": "027cba759dd01c4625e26c22030cb9e14559bd5d76004bb8fd8a01430a4e7d7c",
+    "src/worldloom/native_tasks.py": "51b273d78793cf029911997253e9730c72973384b267874b7cd5470068390456",
+    "src/worldloom/render/ooxml.py": "3e538294279ea1cd140acfe207797d46a004a60c782fd68773b9b632a6cc514d"
+  },
+  "runtime": {
+    "dependencies": {
+      "networkx": "3.7",
+      "openpyxl": "3.1.5",
+      "pydantic": "2.13.5",
+      "python-docx": "1.2.0",
+      "python-pptx": "1.0.2"
+    },
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "system": "Linux"
+  },
+  "schema": "worldloom.native-source-inspection-measurement/v1",
+  "source_parser_calls_reduction": 64,
+  "workload_json_byte_identical": true
+}

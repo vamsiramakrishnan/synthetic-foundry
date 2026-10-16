@@ -1,0 +1,1074 @@
+{
+  "construction_seconds": 71.105,
+  "limitations": [
+    "Reference prose; no empirical editorial realism measurement.",
+    "DOCX explicit page boundaries are a construction floor; physical pagination is unmeasured.",
+    "Ledger allocation is an exact synthetic disaggregation, not a calibrated enterprise transaction distribution.",
+    "Repeated formats do not add independent evidence.",
+    "No target harness improvement is measured by this construction pilot."
+  ],
+  "live_target_trials": 0,
+  "manifest_summary": {
+    "company_id": "CO-0001",
+    "distinct_native_facts": 1004,
+    "files": [
+      {
+        "file_size_bytes": 421843,
+        "kind": "native",
+        "path": "native/a358468a7a174c29b890e8a16925dfa5.pptx",
+        "sha256": "9370e5f795ebe61c60f7195a5b2f13ec9614cba76b46f1298cd73774ab79316f"
+      },
+      {
+        "file_size_bytes": 73800,
+        "kind": "native",
+        "path": "native/b5bd4def7eeab5e2c7b4a0e0d94853ce.docx",
+        "sha256": "018f184fbf33388e82c01efb21c07d10229eb6e5bfe0f6c8d06238a8e2afb8e2"
+      },
+      {
+        "file_size_bytes": 40763,
+        "kind": "native",
+        "path": "native/d94ea1c89b2225f4cb5f6608d9f7e29c.xlsx",
+        "sha256": "90538e5ebaf6e18e4d3fc52cb798b9665d608f8ee080e2bda6ba1938a0038031"
+      },
+      {
+        "file_size_bytes": 343,
+        "kind": "source",
+        "path": "source/manifest.json",
+        "sha256": "b7984462545e0a9a1382b11c73e8435431c00de520bcd61998c36e39d392ad48"
+      },
+      {
+        "file_size_bytes": 4177,
+        "kind": "source",
+        "path": "source/recipe.json",
+        "sha256": "a9baadb4f582a120c4fc6db1e9f50d7d4e17b0f237cbc3dcfd6aecedfcd1b8be"
+      },
+      {
+        "file_size_bytes": 341978133,
+        "kind": "source",
+        "path": "source/records.jsonl",
+        "sha256": "4049ed1c334d48ffe65ff3d259cd8714510789cc8b5e447c76ecc07c59987e55"
+      },
+      {
+        "file_size_bytes": 235,
+        "kind": "csv",
+        "path": "tables/ledger-00000.csv",
+        "sha256": "f154ea89118c4628c5d4f2b7beb1b62e493234922223681f59c13257ceb87e87"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00000.csv",
+        "sha256": "a5ed0db4068a579dfa2d5287306f669b8e6f19d10f48d2451f3c7ea575c72308"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00001.csv",
+        "sha256": "f2d85b7baa46dc006c140d79907c018bde0cd607165ac55cb42cadcc8685a9aa"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00002.csv",
+        "sha256": "f0921754fb2eaa9a7c571cc3a0adccbfd66c30ab3edd3514ff94f4a5ddfe3867"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00003.csv",
+        "sha256": "688020e967561e6b11c1df7d84733ca0a88f140524263881da0fe607117019fc"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00004.csv",
+        "sha256": "45b05113a364a6e9a91e1851c7d02a730d920d2d53308fb4b26feb636fd2881c"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00005.csv",
+        "sha256": "a3647188895c8765900abdc53dc16c040b4fdfc2d32a5b0be1360dbe71f9c488"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00006.csv",
+        "sha256": "0cc48d3ba2bf167162164f8993c30859b618f491d265aca5b839b586af47d2d7"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00007.csv",
+        "sha256": "02ed6a01e718fd619bfe17ce816d6326716fed624537a219949122524533a077"
+      },
+      {
+        "file_size_bytes": 3252293,
+        "kind": "csv",
+        "path": "tables/transaction-00008.csv",
+        "sha256": "665892c082a4057e3b3bcb82660ec33e88c8be788399027afb1c1ae70edaf52a"
+      },
+      {
+        "file_size_bytes": 3252298,
+        "kind": "csv",
+        "path": "tables/transaction-00009.csv",
+        "sha256": "024113f12a73c611425042158cd83d821a819d5a4d3e0d08af2ab672f48e49c6"
+      },
+      {
+        "file_size_bytes": 3252292,
+        "kind": "csv",
+        "path": "tables/transaction-00010.csv",
+        "sha256": "838c03c089825c4f98066046119e580dbf4601acafe82ff28a03662e07da6c53"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00011.csv",
+        "sha256": "94dfc52266aea4702123fc3ab445f146dbcaa5a8fb35b0dd0119dbe7abbb2b14"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00012.csv",
+        "sha256": "6a2418105916823b37a203a0b29892e00caea57c53d9745772d28a498743c15e"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00013.csv",
+        "sha256": "4516dce9b4d1d22b1abce6099f1a38eaa947d3a03482fcb0129d8a7ae04ec071"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00014.csv",
+        "sha256": "a423bcefeb6e7864a8e006202d862634151493ad66978be5b8304f42e5057a9b"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00015.csv",
+        "sha256": "689bd6b06ea70bc3fd4841f8ee3f547e7345ea425ca1a49da7470165c4784dde"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00016.csv",
+        "sha256": "342a313531897f190425e2f6c235124b35249c09a5adbddef983c22344e21cfc"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00017.csv",
+        "sha256": "a7fce89e8018149b091dcdee56b77a2a7a7b0efaaf79693bb2704313b6053792"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00018.csv",
+        "sha256": "bbbe4b795b268fc714819f7a6843d245c5ff77cc5fe0e09a0c116ecc8692483c"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00019.csv",
+        "sha256": "cbccfcdd711310c771abd33c8682fb91189886dfe9c1caa739dccee0d99cb719"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00020.csv",
+        "sha256": "d0d17a12a4ce27682c5cdb31aa21f9a8d1c290380f6f366064974fbf27c6149e"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00021.csv",
+        "sha256": "e1d2a9b68ddf9be8d4f9275f5b7f6cf3343b3ede31d33bdf433b004ddf2e02d0"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00022.csv",
+        "sha256": "2786e95e5b87864dafe1ec8544ce389d5568b06e1e1e96f98552e7a8ab8155a0"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00023.csv",
+        "sha256": "bcee7f37d29163424a2ea43c91b53c398b304c5fdecae1f7536d1afab9d4fb84"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00024.csv",
+        "sha256": "805a7aed1884588a1175104e664d4541e62adcad0dd11e6560e860ff4b45600c"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00025.csv",
+        "sha256": "d9e5d5423fc74c412963f114c73c53855757dbdff4b3c4aacf9198f0d352a123"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00026.csv",
+        "sha256": "966ee2e0a912655af6d43bf468b28da7d399d3ee1ee89a8deba70c60bd9f88ab"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00027.csv",
+        "sha256": "30a94d926a259434de578c918c4fcebab46aae0ffdc06f5ea21bc32a98761085"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00028.csv",
+        "sha256": "38b51e5399da3b79ba0c682cb50b42bfc8dbfecd963f0827ca428a029198a6eb"
+      },
+      {
+        "file_size_bytes": 3252293,
+        "kind": "csv",
+        "path": "tables/transaction-00029.csv",
+        "sha256": "7dd7af9959936636e713a7219a9a57a3a278bc800b739cb04dd4f0fd7c085ae4"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00030.csv",
+        "sha256": "2d355f65d54b219dadcfc46ad5f8e4656928c3723d7b1c4cae86ec0192bfd1db"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00031.csv",
+        "sha256": "e7135bc0c5034e3407139cc61b71f50062a25e535e9a2a16fc056601cc4ed286"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00032.csv",
+        "sha256": "14e849faebc1f2de403d9b808d2916b8cd7feb436f1cf7a56e3e18791b2f6a31"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00033.csv",
+        "sha256": "a3c719cb80875b2b9a198f50067e125c682ef6af842e07be57593ae54b11bf60"
+      },
+      {
+        "file_size_bytes": 3252297,
+        "kind": "csv",
+        "path": "tables/transaction-00034.csv",
+        "sha256": "b094c6780958b59c557f07a6fedcbb39fb5b583111ab9f0ef80b035402e8e099"
+      },
+      {
+        "file_size_bytes": 3252293,
+        "kind": "csv",
+        "path": "tables/transaction-00035.csv",
+        "sha256": "b54a132934280c3f32f4eeabea0e3b93dc8f473f64a4c272cf685358860b86b0"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00036.csv",
+        "sha256": "540161c8d60ee4384005196a505b3830450cea11ef02d45947dab3ee65e6c713"
+      },
+      {
+        "file_size_bytes": 3252294,
+        "kind": "csv",
+        "path": "tables/transaction-00037.csv",
+        "sha256": "89aa46517f3692a30aa5e3e634eff3d7a085568fff97b864664740e9f8dcb677"
+      },
+      {
+        "file_size_bytes": 3252296,
+        "kind": "csv",
+        "path": "tables/transaction-00038.csv",
+        "sha256": "a56793b3268760bbaf71ae0ea98a127865f8e1b514931bc24ac770e9c637bcc2"
+      },
+      {
+        "file_size_bytes": 3252295,
+        "kind": "csv",
+        "path": "tables/transaction-00039.csv",
+        "sha256": "92d3127825c0af789e41d38bb8a853363554aa21a56c8b64d4ee9cb3dd8b440c"
+      }
+    ],
+    "foreign_key_links": 1000000,
+    "native": [
+      {
+        "artifact_id": "ART-SCALE-BOOK",
+        "ballast_is_evidence": false,
+        "content_units": 203,
+        "distinct_fact_count": 1004,
+        "explicit_page_floor": 0,
+        "file_size_bytes": 40763,
+        "format": "xlsx",
+        "native_metrics": {
+          "columns": 6,
+          "columns_per_sheet": 2,
+          "comments": 0,
+          "file_size_bytes": 40763,
+          "formula_cells": 172,
+          "hidden_sheets": 0,
+          "image_bytes": 0,
+          "rows": 361,
+          "rows_per_sheet": 4,
+          "sheets": 8
+        },
+        "sha256": "90538e5ebaf6e18e4d3fc52cb798b9665d608f8ee080e2bda6ba1938a0038031",
+        "source_artifact_count": 98
+      },
+      {
+        "artifact_id": "ART-SCALE-DECK",
+        "ballast_is_evidence": false,
+        "content_units": 103,
+        "distinct_fact_count": 728,
+        "explicit_page_floor": 0,
+        "file_size_bytes": 421843,
+        "format": "pptx",
+        "native_metrics": {
+          "file_size_bytes": 421843,
+          "hidden_slides": 0,
+          "image_bytes": 0,
+          "native_charts": 0,
+          "slides": 237,
+          "speaker_notes": 100,
+          "tables": 134
+        },
+        "sha256": "9370e5f795ebe61c60f7195a5b2f13ec9614cba76b46f1298cd73774ab79316f",
+        "source_artifact_count": 46
+      },
+      {
+        "artifact_id": "ART-SCALE-DOC",
+        "ballast_is_evidence": false,
+        "content_units": 203,
+        "distinct_fact_count": 1004,
+        "explicit_page_floor": 203,
+        "file_size_bytes": 73800,
+        "format": "docx",
+        "native_metrics": {
+          "explicit_pages": 203,
+          "file_size_bytes": 73800,
+          "image_bytes": 0,
+          "paragraphs": 605,
+          "tables": 203
+        },
+        "sha256": "018f184fbf33388e82c01efb21c07d10229eb6e5bfe0f6c8d06238a8e2afb8e2",
+        "source_artifact_count": 98
+      }
+    ],
+    "native_content_units": 509,
+    "physical_native_pages": null,
+    "plan_digest": "e4335639eb7eef48864638d0d97f6c291d958b491b12f4b18789d64b83d3a118",
+    "reconciliations": [
+      {
+        "column": "amount_scaled",
+        "decimals": 2,
+        "fact_id": "FACT-0004",
+        "table": "transaction"
+      }
+    ],
+    "relational_rows": 1000001,
+    "schema_version": "worldloom.corpus.scale.manifest/v1",
+    "source": {
+      "recipe_digest": "a9baadb4f582a120c4fc6db1e9f50d7d4e17b0f237cbc3dcfd6aecedfcd1b8be",
+      "records_sha256": "4049ed1c334d48ffe65ff3d259cd8714510789cc8b5e447c76ecc07c59987e55",
+      "rows": 1000001,
+      "schema_version": "worldloom.synthesis.export/v1",
+      "shard_count": 1,
+      "shard_index": 0,
+      "tables": [
+        {
+          "rows": 1,
+          "table": "ledger"
+        },
+        {
+          "rows": 1000000,
+          "table": "transaction"
+        }
+      ]
+    },
+    "tables": [
+      {
+        "columns": [
+          {
+            "distinct_exact": true,
+            "distinct_observed": 1,
+            "kind": "int",
+            "maximum": 13239600,
+            "minimum": 13239600,
+            "name": "control_total_scaled",
+            "nonzero_count": 1,
+            "total": 13239600,
+            "unit": "AUD_thousands*10^-2"
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 1,
+            "kind": "int",
+            "maximum": 2,
+            "minimum": 2,
+            "name": "decimal_places",
+            "nonzero_count": 1,
+            "total": 2,
+            "unit": null
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 1,
+            "kind": "str",
+            "maximum": null,
+            "minimum": null,
+            "name": "ledger_reference",
+            "nonzero_count": 0,
+            "total": null,
+            "unit": null
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 1,
+            "kind": "str",
+            "maximum": null,
+            "minimum": null,
+            "name": "unit",
+            "nonzero_count": 0,
+            "total": null,
+            "unit": null
+          }
+        ],
+        "csv_shards": [
+          "tables/ledger-00000.csv"
+        ],
+        "entities": 1,
+        "foreign_key_links": 0,
+        "foreign_keys": {},
+        "name": "ledger",
+        "rows": 1,
+        "spreadsheet_shards": []
+      },
+      {
+        "columns": [
+          {
+            "distinct_exact": false,
+            "distinct_observed": 512,
+            "kind": "int",
+            "maximum": 999999,
+            "minimum": 0,
+            "name": "allocation_rank",
+            "nonzero_count": 999999,
+            "total": 499999500000,
+            "unit": null
+          },
+          {
+            "distinct_exact": true,
+            "distinct_observed": 4,
+            "kind": "int",
+            "maximum": 106,
+            "minimum": 2,
+            "name": "amount_scaled",
+            "nonzero_count": 1000000,
+            "total": 13239600,
+            "unit": "AUD_thousands*10^-2"
+          }
+        ],
+        "csv_shards": [
+          "tables/transaction-00000.csv",
+          "tables/transaction-00001.csv",
+          "tables/transaction-00002.csv",
+          "tables/transaction-00003.csv",
+          "tables/transaction-00004.csv",
+          "tables/transaction-00005.csv",
+          "tables/transaction-00006.csv",
+          "tables/transaction-00007.csv",
+          "tables/transaction-00008.csv",
+          "tables/transaction-00009.csv",
+          "tables/transaction-00010.csv",
+          "tables/transaction-00011.csv",
+          "tables/transaction-00012.csv",
+          "tables/transaction-00013.csv",
+          "tables/transaction-00014.csv",
+          "tables/transaction-00015.csv",
+          "tables/transaction-00016.csv",
+          "tables/transaction-00017.csv",
+          "tables/transaction-00018.csv",
+          "tables/transaction-00019.csv",
+          "tables/transaction-00020.csv",
+          "tables/transaction-00021.csv",
+          "tables/transaction-00022.csv",
+          "tables/transaction-00023.csv",
+          "tables/transaction-00024.csv",
+          "tables/transaction-00025.csv",
+          "tables/transaction-00026.csv",
+          "tables/transaction-00027.csv",
+          "tables/transaction-00028.csv",
+          "tables/transaction-00029.csv",
+          "tables/transaction-00030.csv",
+          "tables/transaction-00031.csv",
+          "tables/transaction-00032.csv",
+          "tables/transaction-00033.csv",
+          "tables/transaction-00034.csv",
+          "tables/transaction-00035.csv",
+          "tables/transaction-00036.csv",
+          "tables/transaction-00037.csv",
+          "tables/transaction-00038.csv",
+          "tables/transaction-00039.csv"
+        ],
+        "entities": 1000000,
+        "foreign_key_links": 1000000,
+        "foreign_keys": {
+          "fk_ledger": "ledger.entity_id"
+        },
+        "name": "transaction",
+        "rows": 1000000,
+        "spreadsheet_shards": []
+      }
+    ],
+    "target_files": [
+      "native/a358468a7a174c29b890e8a16925dfa5.pptx",
+      "native/b5bd4def7eeab5e2c7b4a0e0d94853ce.docx",
+      "native/d94ea1c89b2225f4cb5f6608d9f7e29c.xlsx",
+      "tables/ledger-00000.csv",
+      "tables/transaction-00000.csv",
+      "tables/transaction-00001.csv",
+      "tables/transaction-00002.csv",
+      "tables/transaction-00003.csv",
+      "tables/transaction-00004.csv",
+      "tables/transaction-00005.csv",
+      "tables/transaction-00006.csv",
+      "tables/transaction-00007.csv",
+      "tables/transaction-00008.csv",
+      "tables/transaction-00009.csv",
+      "tables/transaction-00010.csv",
+      "tables/transaction-00011.csv",
+      "tables/transaction-00012.csv",
+      "tables/transaction-00013.csv",
+      "tables/transaction-00014.csv",
+      "tables/transaction-00015.csv",
+      "tables/transaction-00016.csv",
+      "tables/transaction-00017.csv",
+      "tables/transaction-00018.csv",
+      "tables/transaction-00019.csv",
+      "tables/transaction-00020.csv",
+      "tables/transaction-00021.csv",
+      "tables/transaction-00022.csv",
+      "tables/transaction-00023.csv",
+      "tables/transaction-00024.csv",
+      "tables/transaction-00025.csv",
+      "tables/transaction-00026.csv",
+      "tables/transaction-00027.csv",
+      "tables/transaction-00028.csv",
+      "tables/transaction-00029.csv",
+      "tables/transaction-00030.csv",
+      "tables/transaction-00031.csv",
+      "tables/transaction-00032.csv",
+      "tables/transaction-00033.csv",
+      "tables/transaction-00034.csv",
+      "tables/transaction-00035.csv",
+      "tables/transaction-00036.csv",
+      "tables/transaction-00037.csv",
+      "tables/transaction-00038.csv",
+      "tables/transaction-00039.csv"
+    ]
+  },
+  "method": "reference-construction-and-source-reconstruction",
+  "narration_provider": "worldloom.narrative.DeterministicProvider (reference prose)",
+  "native_evidence_in_private_manifest": true,
+  "python": "3.12.14",
+  "schema": "worldloom.corpus-scale-measurement/v1",
+  "source_recipe": {
+    "annual_revenue": null,
+    "archetype": "pack:northstar-retail",
+    "artifact_realism": "enterprise/v2",
+    "employees": null,
+    "locale": "australia",
+    "pack": {
+      "annual_revenue": 7800000,
+      "artifact_types": [],
+      "base": "retail",
+      "company_name": "Northstar Retail",
+      "currency": "AUD",
+      "currency_unit": "thousands",
+      "description": "Mid-size omnichannel retailer",
+      "employees": 80000,
+      "episode_text": {},
+      "episodes": [],
+      "evaluation_text": {},
+      "fiscal_year_start_month": 7,
+      "headquarters": "Sydney, Australia",
+      "industry": "Omnichannel retail",
+      "lobs": [],
+      "lore": [],
+      "name": "northstar-retail",
+      "name_pools": {
+        "family": [
+          "Achterberg",
+          "Faulkner-Reyes",
+          "Venkataraghavan",
+          "Oyelaran",
+          "Draeger",
+          "Bergqvist",
+          "Nwachukwu-Hall",
+          "Lindqvist",
+          "Abenov",
+          "Vandermolen",
+          "Mbatha",
+          "Demirsoy",
+          "Okonkwo",
+          "Sandoval-Klein",
+          "Ferreira-Osei",
+          "Costa-Braithwaite",
+          "Aasland",
+          "Eze-Whitfield",
+          "Ramaswamy",
+          "Trbojevic",
+          "Kaczmarek",
+          "Olubunmi",
+          "Haverkamp",
+          "Szczepanski",
+          "Mwangi-Turner",
+          "Delacroix",
+          "Bhattacharya",
+          "Nakamura-Wells",
+          "Petrosyan",
+          "Ojukwu",
+          "Lindegaard",
+          "Rasmussen",
+          "Adeyemi",
+          "Kowalczyk",
+          "Fitzmaurice",
+          "Sarkisian",
+          "Vukovi\u0107",
+          "Anand-Pereira",
+          "Halvorsen",
+          "Ntuli"
+        ],
+        "given": [
+          "Rosalind",
+          "Desmond",
+          "Priya",
+          "Marguerite",
+          "Callum",
+          "Sunniva",
+          "Adaeze",
+          "Tobias",
+          "Yerlan",
+          "Ilse",
+          "Ezekiel",
+          "Havva",
+          "Rafferty",
+          "Beatriz",
+          "Nikolai",
+          "Wilhelmina",
+          "Grethe",
+          "Chidubem",
+          "Solveig",
+          "Anselm",
+          "Mireille",
+          "Tarquin",
+          "Oleksandra",
+          "Bartholomew",
+          "Naledi",
+          "Fionnuala",
+          "Kwabena",
+          "Isaura",
+          "Dmitri",
+          "Yolanda",
+          "Emeka",
+          "Signe",
+          "Rustam",
+          "Perpetua",
+          "Lachlan",
+          "Zerlina",
+          "Osman",
+          "Brigid",
+          "Takoda",
+          "Annelies"
+        ]
+      },
+      "regions": [
+        "NSW",
+        "VIC",
+        "QLD",
+        "WA",
+        "SA",
+        "TAS",
+        "ACT",
+        "NT"
+      ],
+      "seasonality": "flat",
+      "sheets": [],
+      "system_brands": {},
+      "units": [
+        {
+          "categories": [
+            {
+              "margin": 0.238,
+              "name": "Fresh",
+              "share": 0.34
+            },
+            {
+              "margin": 0.261,
+              "name": "Packaged Grocery",
+              "share": 0.41
+            },
+            {
+              "margin": 0.244,
+              "name": "Drinks",
+              "share": 0.25
+            }
+          ],
+          "key": "food",
+          "kind": "supermarkets",
+          "name": "Food",
+          "share": 0.64,
+          "site_formats": [
+            {
+              "count": 120,
+              "name": "Supermarket",
+              "revenue_weight": 1.0
+            }
+          ]
+        },
+        {
+          "categories": [
+            {
+              "margin": 0.318,
+              "name": "Apparel",
+              "share": 0.44
+            },
+            {
+              "margin": 0.294,
+              "name": "Home and Living",
+              "share": 0.36
+            },
+            {
+              "margin": 0.201,
+              "name": "Seasonal",
+              "share": 0.2
+            }
+          ],
+          "key": "gm",
+          "kind": "general_merchandise",
+          "name": "General Merchandise",
+          "share": 0.21,
+          "site_formats": [
+            {
+              "count": 40,
+              "name": "Department Store",
+              "revenue_weight": 1.0
+            }
+          ]
+        },
+        {
+          "categories": [
+            {
+              "margin": 0.187,
+              "name": "Online Grocery",
+              "share": 0.71
+            },
+            {
+              "margin": 0.412,
+              "name": "Marketplace",
+              "share": 0.29
+            }
+          ],
+          "key": "digital",
+          "kind": "online",
+          "name": "Digital",
+          "share": 0.15,
+          "site_formats": []
+        }
+      ],
+      "voices": {}
+    },
+    "process_structure": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "countries": [],
+          "name": "Food"
+        },
+        {
+          "archetype": "product_line",
+          "countries": [],
+          "name": "General Merchandise"
+        },
+        {
+          "archetype": "channel",
+          "countries": [],
+          "name": "Digital"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "countries": [],
+          "name": "Supply Chain"
+        },
+        {
+          "archetype": "group_function",
+          "countries": [],
+          "name": "Group Finance"
+        }
+      ],
+      "countries": [
+        "AU"
+      ],
+      "industry": "retail",
+      "landscape": {},
+      "name": "Northstar Retail",
+      "operating_model": "centralised"
+    },
+    "seasonality": {
+      "about": "No trading season at all. The right answer for a bank, an insurer, or any business whose revenue is a book rather than a till \u2014 and the reason this profile exists: a premium that peaks at Christmas is not a subtle error, it is a different industry.",
+      "index": {
+        "1": 1.0,
+        "10": 1.0,
+        "11": 1.0,
+        "12": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "5": 1.0,
+        "6": 1.0,
+        "7": 1.0,
+        "8": 1.0,
+        "9": 1.0
+      }
+    },
+    "seed": 8128,
+    "steps": [
+      {
+        "formed_at": "2024-08-18T00:43:52.547576+00:00",
+        "leader_roles": {
+          "Group Finance": "ceo",
+          "Supply Chain": "ceo"
+        },
+        "scenario": "MaterializeProcessOwners",
+        "structure": {
+          "bus": [
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "Food"
+            },
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "General Merchandise"
+            },
+            {
+              "archetype": "channel",
+              "countries": [],
+              "name": "Digital"
+            },
+            {
+              "archetype": "shared_service_centre",
+              "countries": [],
+              "name": "Supply Chain"
+            },
+            {
+              "archetype": "group_function",
+              "countries": [],
+              "name": "Group Finance"
+            }
+          ],
+          "countries": [
+            "AU"
+          ],
+          "industry": "retail",
+          "landscape": {},
+          "name": "Northstar Retail",
+          "operating_model": "centralised"
+        }
+      },
+      {
+        "scenario": "ApplyProcessStructure",
+        "structure": {
+          "bus": [
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "Food"
+            },
+            {
+              "archetype": "product_line",
+              "countries": [],
+              "name": "General Merchandise"
+            },
+            {
+              "archetype": "channel",
+              "countries": [],
+              "name": "Digital"
+            },
+            {
+              "archetype": "shared_service_centre",
+              "countries": [],
+              "name": "Supply Chain"
+            },
+            {
+              "archetype": "group_function",
+              "countries": [],
+              "name": "Group Finance"
+            }
+          ],
+          "countries": [
+            "AU"
+          ],
+          "industry": "retail",
+          "landscape": {},
+          "name": "Northstar Retail",
+          "operating_model": "centralised"
+        }
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-01",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-02",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-03",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-04",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-05",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-06",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-07",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-08",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-09",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-10",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-11",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2026-12",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-01",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-02",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-03",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-04",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-05",
+        "scenario": "MonthEndClose"
+      },
+      {
+        "actors": false,
+        "comparatives": 0,
+        "incident": null,
+        "period": "2027-06",
+        "scenario": "MonthEndClose"
+      }
+    ]
+  },
+  "source_reconstruction_seconds": 83.781,
+  "verified": true,
+  "workload": {
+    "checked_table_sections": [
+      "ART-0002:3",
+      "ART-0002:4",
+      "ART-0002:5"
+    ],
+    "ledger_fact": "FACT-0004",
+    "ledger_rows": 1000000,
+    "maximum_csv_rows": 25000,
+    "products": null,
+    "program": "reconciled-ledger",
+    "seed": 8128,
+    "source_artifacts": 162,
+    "source_events": 98,
+    "source_facts": 11624,
+    "stores": null,
+    "ticks": null,
+    "typed_spreadsheets": false,
+    "units": 200
+  }
+}

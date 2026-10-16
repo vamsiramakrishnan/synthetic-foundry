@@ -39,7 +39,10 @@ class EnterpriseEvalHarness:
     strategy: Literal["covering", "exhaustive"] = "covering"
     limit: int | None = None
     projections: ConnectorProjectionRegistry | None = None
-    strict_sources: bool = False
+    # Strict by default, like `materialize_corpus`: a case the source corpus
+    # cannot answer is refused with the shortfall named. `strict_sources=False`
+    # is the explicit opt-out; see `materialize_corpus` for what it still refuses.
+    strict_sources: bool = True
     dag_shapes: tuple[str, ...] = ()
     operational_max_cases: int | None = None
 
@@ -86,7 +89,7 @@ class EnterpriseEvalHarness:
         ), strict_sources=True)
 
     def require_sources(self) -> EnterpriseEvalHarness:
-        """Refuse missing source evidence instead of generating placeholder rows."""
+        """Refuse missing source evidence; the default, kept so a caller can restore it."""
         return replace(self, strict_sources=True)
 
     def with_operational_case_binding(self, *, max_cases: int = 128) -> EnterpriseEvalHarness:

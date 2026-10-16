@@ -122,11 +122,19 @@ class PlannedDag(Model):
 def parse_plan(document: Mapping[str, Any]) -> PlannedDag:
     """Read ``{"plan": {"nodes": [...]}}`` (or the bare ``{"nodes": [...]}``) into a ``PlannedDag``.
 
+    An Anvil composite flow or plan (``anvil.compose-flow/v1``,
+    ``anvil.compose-plan/v1``, bare or under ``plan``) is read through the
+    shipped Anvil mappings by ``compose.planned_from_compose``.
+
     A node without an ``id`` is numbered by position; ``depends_on`` may be a
     single id or a list. Anything else is a contract breach, reported as the
     planner's error rather than repaired.
     """
 
+    from .compose import is_compose_document, planned_from_compose
+
+    if is_compose_document(document):
+        return planned_from_compose(document)
     body = document.get("plan", document)
     if not isinstance(body, Mapping) or not isinstance(body.get("nodes"), list):
         raise ValueError("plan must be {\"plan\": {\"nodes\": [...]}}")

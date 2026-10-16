@@ -13,6 +13,7 @@ import copy
 import json
 from pathlib import Path
 
+import build_cache
 import pytest
 from typer.testing import CliRunner
 
@@ -40,7 +41,16 @@ def completed(tmp_path_factory: pytest.TempPathFactory) -> interview.InterviewRu
 
 @pytest.fixture(scope="module")
 def realised(completed: interview.InterviewRun) -> interview.Realised:
-    return interview.realise(completed.opened.state)
+    # Realising (build, narrate, render docx/xlsx/pptx, plan cases) is ~18
+    # CPU-seconds and a pure function of the accepted answers, so it is reused
+    # across runs and workers, keyed on those answers and the whole source
+    # tree (`build_cache`). `completed` stays fresh: its tests read the
+    # transcript it writes into its own directory. The byte-identity test
+    # below still realises once more, fresh, every run: its claim is about
+    # building, so it compares this world with a new one.
+    state = completed.opened.state
+    recipe = {"seed": 8128, "answers": [[key, answer.model_dump(mode="json")] for key, answer in state.answers]}
+    return build_cache.cached_value("interview-realised", recipe, lambda: interview.realise(state), inputs=[SCRIPT])
 
 
 # -- the orchestrator ------------------------------------------------------------------------

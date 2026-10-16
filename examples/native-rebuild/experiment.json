@@ -1,0 +1,12 @@
+{
+  "heldout_families": 15,
+  "qualification_policy": {
+    "confidence": 0.95,
+    "min_repeats": 2,
+    "min_units": 5,
+    "trials": 3
+  },
+  "repeats": 2,
+  "seed": 8128,
+  "training_families": 3
+}

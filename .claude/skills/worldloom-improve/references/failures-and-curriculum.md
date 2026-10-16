@@ -29,7 +29,7 @@ carry an id or free text, so clusters compare across case sets:
 | --- | --- |
 | Trajectory | `trajectory.safety:<law>`, `trajectory.question:<law>`, `trajectory.failure_leaked`, `trajectory.failure_not_reached`, `trajectory.budget_exceeded`, `trajectory.retry_storm`, `trajectory.refused_call` |
 | Plan | `plan.missing:<read/write/verify>`, `plan.extra_write`, `plan.order` |
-| Outcomes | `outcomes.unmet:<create/update/delete>`, `outcomes.collateral`, `outcomes.ungrounded`, `outcomes.answer_below_threshold`, `outcomes.answer_unrated` |
+| Outcomes | `outcomes.unmet:<create/update/delete>`, `outcomes.collateral`, `outcomes.ungrounded`, `outcomes.answer_below_threshold`, `outcomes.answer_unrated`, and on source-policy cases `outcomes.clarification_missing`, `outcomes.stale_source_used`, `outcomes.authoritative_source_missing` |
 | Stages | `query.missed_evidence`, `query.overfetch`, `query.missing_filter`, `query.wrong_window`, `query.malformed`, `query.wrong_scope`, `query.zero_result`, `query.error`, `plan.node_missing:<kind>`, `plan.node_extra:<kind>`, `plan.node_misordered`, `output.field_mismatch`, `output.wrong_format`, `output.missing_section`, `output.ungrounded_fact` |
 | Other | `error:<code>`, `assertion.fail`, `run.errored`, `unclassified` (a gap: report it) |
 
@@ -77,6 +77,40 @@ session.escalate("round-1", "round-2", "round-3")   # pooled
 
 A loop that stopped `no_failures` is the signal to escalate, compile the new
 plan, and start the next loop on the harder cases with the current champion.
+
+## Growing the training set between rounds
+
+`curriculum` and `campaign` build the *next* case set. Inside one loop the
+training set is fixed unless you opt in:
+
+```bash
+worldloom evalrun corners ./corpus --out ./pool --templates confirmed_cause,restated_figure
+worldloom evalrun improve ./cases --agent-pack agent:baseline --harness codex \
+  --proposer-harness codex --holdout-corpus ./fresh-cases \
+  --curriculum failures --curriculum-cases 8 --curriculum-pool ./pool -o ./improve
+```
+
+After each round the champion's training failures are clustered again and
+`--curriculum-cases` pool cases join the next round's training set, shared
+over the clusters by size. Which cases exercise which key is data:
+`FINDING_TARGETS` in `worldloom.evalrun.failure_curriculum` maps each key to
+corner templates (matched by a case's `corner` dimension) and to dataset
+dimensions (`where` values, and `follow` dimensions taken from the cluster's
+majority value); `UNMAPPABLE` lists the keys no case can be generated for,
+with the reason (`run.errored`, transport errors, `trajectory.refused_call`,
+...). `check_targets()` is the lint, and the test suite fails when the
+autopsy can emit a key with neither entry: add one when you add a finding.
+
+Without `--curriculum-pool` the pool is the cases of CORPUS that `--limit`
+left out (compile with `--exhaustive` and run on a `--limit` slice). A pool
+case is never drawn when it shares a case id, a content key, a source-record
+digest or a gold-DAG digest with a held-out case, declares a held-out split,
+or would have been held out by the share split; nor when it repeats a
+training case. The next round's receipt carries `curriculum`: the round its
+clusters came from, each cluster's size, allotment, resolved predicates and
+the case ids it drew, every unmappable cluster with its reason, and the
+shortfall when the pool ran dry. Not combinable with `--value`,
+`--parents archive` or a qualification policy.
 
 ## Trace-level brief
 

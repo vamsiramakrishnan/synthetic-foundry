@@ -12,6 +12,7 @@ import io
 import json
 import re
 import zipfile
+from decimal import ROUND_HALF_UP, Decimal
 
 import openpyxl
 import pytest
@@ -73,6 +74,17 @@ def _resolve(book, sheet_name: str, token: str, depth: int) -> float:  # type: i
 
 def _compute(book, sheet_name: str, expression: str, depth: int) -> float:  # type: ignore[no-untyped-def]
     expression = expression.strip()
+
+    rounded = re.fullmatch(r"ROUND\((.+),(\d+)\)(/100)?", expression)
+    if rounded:
+        value = _compute(book, sheet_name, rounded.group(1), depth)
+        result = Decimal(str(value)).quantize(Decimal(1).scaleb(-int(rounded.group(2))),
+                                               rounding=ROUND_HALF_UP)
+        return float(result) / (100 if rounded.group(3) else 1)
+
+    percentage = re.fullmatch(r"\((.+)\)\*100", expression)
+    if percentage:
+        return _compute(book, sheet_name, percentage.group(1), depth) * 100
 
     guard = re.fullmatch(rf"IF\(({_CELL})=0,0,({_CELL})/({_CELL})\)", expression)
     if guard:

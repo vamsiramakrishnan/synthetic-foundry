@@ -22,6 +22,7 @@ def serve_command(
     max_calls: int | None = typer.Option(None, min=1, help="Calls one run may make (default: policy `connectors.serving.max_calls_per_run`)."),
     worker_id: str | None = typer.Option(None, "--worker-id", help="Prefix every run id with this worker's name (w3 mints w3-run-1), so ids from several server processes never collide. Each process keeps its own runs: route every call for a run id to the process that began it."),
     check: bool = typer.Option(False, "--check", help="Validate the server configuration and exit without listening."),
+    run_store: Annotated[Path | None, typer.Option("--run-store", help="Journal runs to this append-only JSONL file (fsynced per record) and, on start, reload the runs it holds: open runs are replayed, ended runs keep their grades. Unset, runs live in memory only.")] = None,
     surface: str | None = typer.Option(None, "--surface", help="The tools served: contract (each locked contract's operations exactly as Anvil projects them for MCP; a connector with no locked contract keeps its own; the default: policy `connectors.surface`) or native (each connector definition's own)."),
 ) -> None:
     """Serve isolated enterprise evaluations as StreamableHTTP MCP connector tools.
@@ -31,6 +32,8 @@ def serve_command(
     behind a proxy with sticky routing by run id: the id's prefix names the
     process that began it, and a call that reaches another process is
     refused as an unknown run. Run state is never shared across processes.
+    `--run-store` makes one process's runs survive its restart; give each
+    process its own file, since a journal is not a shared registry.
     """
     from .cli import _refuse
     from .connectors.serving import (
@@ -72,7 +75,7 @@ def serve_command(
                          max_calls_per_run=policy.max_calls_per_run if max_calls is None else max_calls)
         service = ConnectorEvaluationService.from_corpus(
             corpus, allowed_tools=tools or None, limits=limits,
-            run_prefix=f"{worker_id}-" if worker_id else "", surface=surface,
+            run_prefix=f"{worker_id}-" if worker_id else "", surface=surface, run_store=run_store,
         )
         app = create_connector_app(service, host=host, bearer_tokens=tokens, allowed_hosts=allowed_hosts or ())
         if check:

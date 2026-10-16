@@ -37,16 +37,26 @@ with ``datetime.now(timezone.utc)`` — a second clock, nested inside the first,
 that the top-level substitution above never reaches because it only reads
 ``docProps/core.xml`` at the outer package's own root. Found the same way the
 first one was: two renders a few seconds apart, diffed.
+
+The **host's file modes** are the same kind of defect across machines rather
+than across seconds: an entry a library staged on disk records that file's
+permission bits, which differ between Windows and POSIX. See
+``_portable_attributes``.
 """
 
 from __future__ import annotations
 
 import re
+import stat
 from io import BytesIO
 
 #: Fixed timestamp for every archive entry. The earliest a zip can represent, so
 #: it reads as deliberately unset rather than as a plausible date.
 EPOCH = (1980, 1, 1, 0, 0, 0)
+
+#: Permissions for an entry a writer staged on disk: what ``mkstemp`` creates on
+#: POSIX, so the fix leaves Linux and macOS bytes as they were.
+_FILE_PERMISSIONS = 0o600
 
 _CORE_PART = "docProps/core.xml"
 
@@ -129,8 +139,31 @@ def custom_properties(archive_bytes: bytes) -> dict[str, str]:
     return out
 
 
+def _portable_attributes(external_attr: int) -> int:
+    """*external_attr* with a staged file's host permissions pinned to ``0o600``.
+
+    The only stdlib path that copies a host file mode into an archive is
+    ``ZipInfo.from_file`` (``ZipFile.write``), and it always sets the file-type
+    bits, which is how such an entry is recognised here. openpyxl stages every
+    worksheet in a temporary file and adds it that way. ``mkstemp`` creates it
+    ``0o600`` on POSIX, but Windows ``os.stat`` reports ``0o666``, so every XLSX
+    rendered on Windows differed from Linux by its worksheets' mode bits. Found
+    by the Windows CI job: native task ids digest their input checksums, so a
+    Windows benchmark planned different tasks from the same world.
+
+    POSIX already writes ``0o600``, so Linux and macOS bytes are unchanged.
+    Entries written from memory carry no type bits (``writestr`` gives them
+    ``0o600`` unless the writer chose a mode) and are host-independent already,
+    so they are left exactly as written.
+    """
+    mode = external_attr >> 16
+    if not stat.S_ISREG(mode):
+        return external_attr
+    return (stat.S_IFREG | _FILE_PERMISSIONS) << 16 | (external_attr & 0xFFFF)
+
+
 def normalise(payload: bytes, *, created: str | None = None) -> bytes:
-    """Strip the wall clock out of a finished Office package.
+    """Strip the wall clock and the host's file modes out of a finished Office package.
 
     *created* is an ISO timestamp derived from the world — the moment the
     document would have been written — and is stamped into both core-property
@@ -161,7 +194,7 @@ def normalise(payload: bytes, *, created: str | None = None) -> bytes:
                 content = normalise(content, created=created)
             fixed = ZipInfo(filename=info.filename, date_time=EPOCH)
             fixed.compress_type = info.compress_type
-            fixed.external_attr = info.external_attr
+            fixed.external_attr = _portable_attributes(info.external_attr)
             fixed.internal_attr = info.internal_attr
             fixed.create_system = 3  # Unix, so the host OS does not leak in either
             rebuilt.writestr(fixed, content)
