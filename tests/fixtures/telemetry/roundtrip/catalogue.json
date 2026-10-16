@@ -1,0 +1,496 @@
+{
+  "schema_version": "cuj-catalogue/1",
+  "catalogue_id": "w4_roundtrip_2026.10",
+  "created_at": "2026-10-16T00:00:00Z",
+  "producer": {
+    "tool": "customer-telemetry-miner",
+    "version": "0.0.0-w4-fixture",
+    "config_digest": "b2dbf162220d9dbbbe247856e88dd332d235cac3a43f8133951f3205cd34fc91"
+  },
+  "source": {
+    "queryset_id": "w4_roundtrip",
+    "queryset_version": "2026.10",
+    "queryset_checksum": "8e347340cd1a2c7bab7567891a465d7beb26dddcca905a7dd5404685eec99b78",
+    "window": {
+      "start": "2026-08-10T00:00:00Z",
+      "end": "2026-08-25T00:00:00Z"
+    },
+    "counts": {
+      "records_ingested": 400,
+      "records_curated": 240,
+      "sessions": 120,
+      "tool_calls": 600
+    }
+  },
+  "privacy": {
+    "min_support": 3,
+    "text_policy": "templates",
+    "pii_redaction": "regex",
+    "notes": "Illustrative values only; not derived from any customer."
+  },
+  "connectors": [
+    {
+      "key": "confluence",
+      "display_name": "Confluence",
+      "observed_prefixes": [
+        "confluence_agent"
+      ],
+      "call_count": 120,
+      "entities": [
+        {
+          "name": "page",
+          "operations": [
+            "create",
+            "read",
+            "search",
+            "update"
+          ],
+          "argument_fields": [
+            "body",
+            "page_id",
+            "queries",
+            "space_key",
+            "title"
+          ],
+          "calls": 120
+        }
+      ],
+      "tools": [
+        {
+          "name": "confluence_agent__create_page",
+          "entity": "page",
+          "operation": "create",
+          "calls": 30,
+          "classified_by": "rule"
+        },
+        {
+          "name": "confluence_agent__read_page",
+          "entity": "page",
+          "operation": "read",
+          "calls": 30,
+          "classified_by": "rule"
+        },
+        {
+          "name": "confluence_agent__search_page",
+          "entity": "page",
+          "operation": "search",
+          "calls": 30,
+          "classified_by": "rule"
+        },
+        {
+          "name": "confluence_agent__update_page",
+          "entity": "page",
+          "operation": "update",
+          "calls": 30,
+          "classified_by": "rule"
+        }
+      ]
+    },
+    {
+      "key": "jira",
+      "display_name": "Jira",
+      "observed_prefixes": [
+        "jira_agent"
+      ],
+      "call_count": 60,
+      "entities": [
+        {
+          "name": "issue",
+          "operations": [
+            "create",
+            "update"
+          ],
+          "argument_fields": [
+            "description",
+            "summary"
+          ],
+          "calls": 60
+        }
+      ],
+      "tools": [
+        {
+          "name": "jira_agent__create_issue",
+          "entity": "issue",
+          "operation": "create",
+          "calls": 30,
+          "classified_by": "rule"
+        },
+        {
+          "name": "jira_agent__update_issue",
+          "entity": "issue",
+          "operation": "update",
+          "calls": 30,
+          "classified_by": "rule"
+        }
+      ]
+    }
+  ],
+  "excluded_tools": [],
+  "cujs": [
+    {
+      "id": "cuj_d026ff688c88",
+      "label": "Meeting notes to Jira epics",
+      "label_source": "manual",
+      "anchor": "tool_signature",
+      "kind": "single_turn",
+      "steps": [
+        {
+          "id": "search_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "search",
+          "effect": "read",
+          "argument_fields": [
+            "queries"
+          ],
+          "presence": 1.0
+        },
+        {
+          "id": "read_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "read",
+          "effect": "read",
+          "argument_fields": [
+            "page_id"
+          ],
+          "presence": 1.0,
+          "depends_on": [
+            "search_page"
+          ]
+        },
+        {
+          "id": "draft",
+          "capability": "generate",
+          "effect": "transform",
+          "presence": 1.0,
+          "depends_on": [
+            "read_page"
+          ]
+        },
+        {
+          "id": "create_epics",
+          "connector": "jira",
+          "entity": "issue",
+          "operation": "create",
+          "effect": "write",
+          "argument_fields": [
+            "summary",
+            "description"
+          ],
+          "presence": 1.0,
+          "depends_on": [
+            "draft"
+          ]
+        }
+      ],
+      "support": {
+        "sessions": 30,
+        "queries": 60,
+        "share": 0.2
+      },
+      "outcomes": {
+        "SUCCESS": 60
+      },
+      "hardness": {
+        "HEAD_EASY": 30,
+        "MEDIUM": 30
+      },
+      "checks": {
+        "trace": 60
+      },
+      "volatility": {
+        "stable": 60,
+        "high": 0
+      },
+      "domains": {
+        "TOOL_USE": 60
+      },
+      "domain_terms": [
+        "sprint retro"
+      ],
+      "failure_modes": [],
+      "phrasings": [
+        {
+          "template": "Create epics in Jira from the action items in the {topic} notes",
+          "support": 30,
+          "slots": [
+            {
+              "name": "topic",
+              "step_id": "search_page",
+              "field": "queries"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cuj_b25f0df78df5",
+      "label": "Summarise notes into a Confluence page",
+      "label_source": "manual",
+      "anchor": "tool_signature",
+      "kind": "single_turn",
+      "steps": [
+        {
+          "id": "search_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "search",
+          "effect": "read",
+          "argument_fields": [
+            "queries"
+          ],
+          "presence": 1.0
+        },
+        {
+          "id": "draft",
+          "capability": "generate",
+          "effect": "transform",
+          "presence": 1.0,
+          "depends_on": [
+            "search_page"
+          ]
+        },
+        {
+          "id": "create_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "create",
+          "effect": "write",
+          "argument_fields": [
+            "title",
+            "space_key"
+          ],
+          "presence": 1.0,
+          "depends_on": [
+            "draft"
+          ]
+        }
+      ],
+      "support": {
+        "sessions": 30,
+        "queries": 60,
+        "share": 0.2
+      },
+      "outcomes": {
+        "SUCCESS": 60
+      },
+      "hardness": {
+        "HEAD_EASY": 30,
+        "MEDIUM": 30
+      },
+      "checks": {
+        "trace": 60
+      },
+      "volatility": {
+        "stable": 60,
+        "high": 0
+      },
+      "domains": {
+        "TOOL_USE": 60
+      },
+      "domain_terms": [
+        "supplier review"
+      ],
+      "failure_modes": [],
+      "phrasings": [
+        {
+          "template": "Summarise the {topic} notes into a new Confluence page",
+          "support": 30,
+          "slots": [
+            {
+              "name": "topic",
+              "step_id": "search_page",
+              "field": "queries"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cuj_bdabb5af6191",
+      "label": "Update a Jira ticket from a page",
+      "label_source": "manual",
+      "anchor": "tool_signature",
+      "kind": "single_turn",
+      "steps": [
+        {
+          "id": "search_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "search",
+          "effect": "read",
+          "argument_fields": [
+            "queries"
+          ],
+          "presence": 1.0
+        },
+        {
+          "id": "read_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "read",
+          "effect": "read",
+          "argument_fields": [
+            "page_id"
+          ],
+          "presence": 1.0,
+          "depends_on": [
+            "search_page"
+          ]
+        },
+        {
+          "id": "draft",
+          "capability": "generate",
+          "effect": "transform",
+          "presence": 1.0,
+          "depends_on": [
+            "read_page"
+          ]
+        },
+        {
+          "id": "update_ticket",
+          "connector": "jira",
+          "entity": "issue",
+          "operation": "update",
+          "effect": "write",
+          "argument_fields": [
+            "description"
+          ],
+          "presence": 1.0,
+          "depends_on": [
+            "draft"
+          ]
+        }
+      ],
+      "support": {
+        "sessions": 30,
+        "queries": 60,
+        "share": 0.2
+      },
+      "outcomes": {
+        "SUCCESS": 60
+      },
+      "hardness": {
+        "HEAD_EASY": 30,
+        "MEDIUM": 30
+      },
+      "checks": {
+        "trace": 60
+      },
+      "volatility": {
+        "stable": 60,
+        "high": 0
+      },
+      "domains": {
+        "TOOL_USE": 60
+      },
+      "domain_terms": [
+        "store rollout"
+      ],
+      "failure_modes": [],
+      "phrasings": [
+        {
+          "template": "Update the Jira ticket with the decisions from the {topic} page",
+          "support": 30,
+          "slots": [
+            {
+              "name": "topic",
+              "step_id": "search_page",
+              "field": "queries"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cuj_34edfbeb3d54",
+      "label": "Refresh a Confluence page",
+      "label_source": "manual",
+      "anchor": "tool_signature",
+      "kind": "single_turn",
+      "steps": [
+        {
+          "id": "search_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "search",
+          "effect": "read",
+          "argument_fields": [
+            "queries"
+          ],
+          "presence": 1.0
+        },
+        {
+          "id": "draft",
+          "capability": "generate",
+          "effect": "transform",
+          "presence": 1.0,
+          "depends_on": [
+            "search_page"
+          ]
+        },
+        {
+          "id": "update_page",
+          "connector": "confluence",
+          "entity": "page",
+          "operation": "update",
+          "effect": "write",
+          "argument_fields": [
+            "page_id",
+            "body"
+          ],
+          "presence": 1.0,
+          "depends_on": [
+            "draft"
+          ]
+        }
+      ],
+      "support": {
+        "sessions": 30,
+        "queries": 60,
+        "share": 0.2
+      },
+      "outcomes": {
+        "SUCCESS": 60
+      },
+      "hardness": {
+        "HEAD_EASY": 30,
+        "MEDIUM": 30
+      },
+      "checks": {
+        "trace": 60
+      },
+      "volatility": {
+        "stable": 60,
+        "high": 0
+      },
+      "domains": {
+        "TOOL_USE": 60
+      },
+      "domain_terms": [
+        "leave policy"
+      ],
+      "failure_modes": [],
+      "phrasings": [
+        {
+          "template": "Bring the {topic} page up to date with this week's changes",
+          "support": 30,
+          "slots": [
+            {
+              "name": "topic",
+              "step_id": "search_page",
+              "field": "queries"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "cujs_emitted": 4,
+    "covered_share": 0.8,
+    "suppressed_share": 0.15,
+    "unclassified_share": 0.05
+  }
+}
