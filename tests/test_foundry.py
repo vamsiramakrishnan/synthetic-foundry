@@ -10,6 +10,7 @@ from worldloom.corpus import write_json
 from worldloom.evals.calibration import NoiseVariant
 from worldloom.evals.dataset import _files, verify_dataset
 from worldloom.execseam import ExecReply
+from worldloom.providers import digest
 from worldloom.studio import RunOptions, Studio, preset
 from worldloom.studio.calibration import CompanyCalibrationPlan, independent_samples
 from worldloom.studio.checkpoints import Exchanges, save_world
@@ -141,3 +142,44 @@ def test_foundry_renders_every_format_its_sources_are_read_in() -> None:
     assert source_formats(result.project) == ("html", "markdown", "pdf")
     assert source_formats(ProjectSpec(company=result.project.company)) == ("markdown",)
 
+
+def test_evalrun_falls_back_to_a_foundry_baseline_when_nothing_is_frozen(tmp_path, monkeypatch):
+    """A project whose sources are read as files never freezes: calibration
+    refuses file-reading tasks. Its qualified baseline is still a complete,
+    reference-qualified queryset, which is what a reference run needs. A
+    frozen dataset or a complete compiled queryset still comes first."""
+    from types import SimpleNamespace
+
+    import worldloom.evals.dataset as dataset_module
+
+    studio = Studio(tmp_path / "workspace")
+    jobs = [{"id": "f-older", "revision": "r1", "status": "complete",
+             "options": {"operation": "foundry"}, "result": {"status": "blocked"}},
+            {"id": "b-build", "revision": "r1", "status": "complete",
+             "options": {"operation": "build"}, "result": {}}]
+    monkeypatch.setattr(studio.store, "jobs", lambda project: jobs)
+    complete: set[str] = set()
+    monkeypatch.setattr(dataset_module, "verify_dataset",
+                        lambda path: SimpleNamespace(complete=str(path) in complete))
+    compiled = studio.path("datasets", digest(["p1", "r1"]))
+    baseline = studio.path("foundry", "f-older") / "baseline"
+
+    # Nothing anywhere: the compiled location, as before.
+    assert studio.dataset_location("p1", "r1") == compiled
+
+    # A complete Foundry baseline and no compiled queryset: the baseline.
+    baseline.mkdir(parents=True)
+    write_json(baseline / "manifest.json", {})
+    complete.add(str(baseline))
+    assert studio.dataset_location("p1", "r1") == baseline
+
+    # An incomplete baseline is never graded.
+    complete.discard(str(baseline))
+    assert studio.dataset_location("p1", "r1") == compiled
+
+    # A complete compiled queryset wins over the baseline.
+    complete.add(str(baseline))
+    compiled.mkdir(parents=True)
+    write_json(compiled / "manifest.json", {})
+    complete.add(str(compiled))
+    assert studio.dataset_location("p1", "r1") == compiled
