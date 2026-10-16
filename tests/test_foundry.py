@@ -119,3 +119,25 @@ def test_connected_foundry_qualifies_trials_freezes_and_replays(tmp_path, monkey
     write_json(destination / "manifest.json", {**manifest, "complete": False})
     with pytest.raises(ValueError, match="manifest or files changed"):
         studio.dataset_location(project["id"], project["revision"])
+
+
+def test_foundry_renders_every_format_its_sources_are_read_in() -> None:
+    """A Confluence page source is read as html, markdown or pdf, and a
+    question is qualified only when the document behind it was rendered in
+    that format. Foundry rendered markdown alone, so every html and pdf
+    question was refused (source_format_unsupported)."""
+    from pathlib import Path
+
+    from worldloom.studio.foundry import source_formats
+    from worldloom.studio.models import ProjectSpec
+    from worldloom.telemetry import import_catalogue
+
+    catalogue = (Path(__file__).parent / "fixtures" / "telemetry" / "conformance"
+                 / "valid" / "example.json").read_bytes()
+    result = import_catalogue(catalogue, {"engine": "retail",
+                                          "identity": {"company_name": "Northwind Grocers"}})
+    assert result.project is not None
+
+    assert source_formats(result.project) == ("html", "markdown", "pdf")
+    assert source_formats(ProjectSpec(company=result.project.company)) == ("markdown",)
+

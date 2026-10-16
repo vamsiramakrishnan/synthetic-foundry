@@ -35,6 +35,51 @@ if TYPE_CHECKING:
     from .service import Studio
 
 
+_SUFFIX_FORMATS = {".md": "markdown", ".html": "html", ".pdf": "pdf",
+                   ".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx"}
+
+
+def _rendered_formats(world: World) -> set[str]:
+    return {_SUFFIX_FORMATS[suffix] for suffix in
+            (Path(item.path).suffix for item in world._rendered)
+            if suffix in _SUFFIX_FORMATS}
+
+
+def source_formats(spec: ProjectSpec) -> tuple[str, ...]:
+    """The formats the project's sources are read in, that Worldloom renders.
+
+    A source whose entity declares formats is read as one of them: a
+    Confluence page as html, markdown or pdf. Qualification accepts such a
+    question only when the document behind the source was rendered in that
+    format, so rendering markdown alone refused every html and pdf question
+    (``source_format_unsupported``). Markdown is always included, as before.
+    A document type with no layout for a format renders none of it, and the
+    questions that need one are still refused, by name.
+    """
+    from .. import render as render_module
+    from ..enterprise_specs import apply_scenario_profile, builtin_registry
+
+    wanted = {"markdown"}
+    for case in spec.use_cases:
+        if case.scenario is None:
+            continue
+        registry = apply_scenario_profile(builtin_registry(), case.scenario)
+        for name in case.scenario.workflows:
+            workflow = registry.workflows.get(name)
+            if workflow is None:
+                continue
+            for source in workflow.sources:
+                connector = registry.connectors.get(source.connector)
+                if connector is None:
+                    continue
+                for entity in source.entities:
+                    try:
+                        wanted.update(connector.entity(entity).formats)
+                    except KeyError:
+                        continue
+    return tuple(sorted(wanted & set(render_module.available())))
+
+
 def progress(studio: Studio, job_id: str) -> dict[str, Any] | None:
     path = studio.path("foundry", job_id) / "progress.json"
     return _read(path) if path.exists() else None
@@ -163,6 +208,24 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
         # The construction replay restores the sequential generator state;
         # accepted prose and bytes come only from the authenticated checkpoint.
         world = replace(authored[0], _minter=world._minter)
+    # The formats the sources are read in, rendered from the accepted prose
+    # into a checkpoint of their own. The authored checkpoint stays exactly as
+    # accepted (checkpoints are write-once), and a run resumed from it renders
+    # the same bytes without another authoring call. The question compiler
+    # fingerprints the world on disk, so it reads this checkpoint, never an
+    # in-memory render the disk does not hold.
+    formats = sorted(set(source_formats(spec)) | _rendered_formats(world))
+    rendered_path = root / "rendered"
+    if world.artifact_irs and not set(formats) <= _rendered_formats(world):
+        rendered_intent = {"authored": authored_intent, "formats": formats}
+        if load_world(rendered_path, rendered_intent) is None:
+            save_world(rendered_path, rendered_intent, world.render(*formats), {})
+        loaded = load_world(rendered_path, rendered_intent)
+        assert loaded is not None
+        world = replace(loaded[0], _minter=world._minter)
+        evidence_path = rendered_path / "world"
+    else:
+        evidence_path = authored_path / "world"
     stage("narration", "complete", snapshot=world_digest(world))
 
     transforms = {case.id: partial(bind_query, construction_plan, case.id) for case in spec.use_cases}
@@ -181,7 +244,7 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
 
     stage("qualification")
     baseline_path = root / "baseline"
-    baseline = compile_at(world, baseline_path, authored_path / "world")
+    baseline = compile_at(world, baseline_path, evidence_path)
     state["report"] = baseline.report.model_dump(mode="json")
     if not baseline.report.complete:
         return incomplete("qualification", baseline.report)
@@ -201,7 +264,10 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
         intent = {"baseline": world_digest(world), "variant": variant.model_dump(mode="json")}
         changed = load_world(location / "noise", intent)
         if changed is None:
-            noisy = _noise_world(world, variant, ("markdown",) if world.artifact_irs else ())
+            # The same formats the baseline was rendered in: a variant rendered
+            # in fewer would point an artifact at a file its evidence root does
+            # not hold, and would drop the questions qualified in the others.
+            noisy = _noise_world(world, variant, source_formats(spec) if world.artifact_irs else ())
             save_world(location / "noise", intent, noisy, {})
         else:
             noisy = changed[0]
