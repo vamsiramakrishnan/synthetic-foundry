@@ -315,3 +315,96 @@ def test_overwrite_replaces_a_campaign_and_refuses_anything_else(tmp_path) -> No
     with pytest.raises(FileExistsError):
         campaign.export(lambda plan: _base(plan.seed), other, count=1, occurred_at=AT, construct=True, overwrite=True)
     assert (other / "keep.txt").exists()
+
+
+def _page_witnesses():  # type: ignore[no-untyped-def]
+    """A demand for one Confluence page titled "sprint", as the telemetry
+    importer makes when a question names the notes it searched for."""
+    spec = EvalSpec(
+        id="EVALSPEC-PAGE-WITNESS", capability="notes_to_epics", persona="employee",
+        request_template="Create epics from the action items in the sprint notes.",
+        steps=(EvalStepSpec(id="find", capability="search", connector="confluence",
+                            entity="page", operation="search"),),
+        requirements=(WorldRequirement(
+            id="notes", kind=RequirementKind.CONNECTOR,
+            selector={"connector": "confluence", "entity": "page", "title": "sprint"}),),
+        candidate_count=1,
+    )
+    plan = plan_candidates(spec)[0]
+    world = construct_candidate(spec, plan, _base(plan.seed), occurred_at=AT).candidate.world
+    records = _connector_records(world, "confluence")
+    return records, [record for record in records if record.fields.get("witness_role")]
+
+
+def test_a_page_witness_borrows_a_real_documents_text_and_facts() -> None:
+    """A page minted from fields alone had no body and no fact, so an agent
+    sent to "the sprint notes" found an empty page and nothing it wrote could
+    be graded. The witness keeps its title and borrows a real document."""
+    records, minted = _page_witnesses()
+    by_id = {record.id: record for record in records}
+    witness = next(record for record in minted if record.fields["witness_role"] == "witness")
+
+    assert witness.title == "sprint"
+    donor = by_id[witness.fields["borrowed_from"]]
+    assert witness.fact_ids and witness.fact_ids == donor.fact_ids
+    assert witness.source_artifact_ids == donor.source_artifact_ids
+    assert witness.id != donor.id
+
+
+def test_a_page_witness_has_the_stable_id_its_connector_numbers_records_by() -> None:
+    """The validator refused every witness page for a missing ``page_id``.
+    It is numbered as Confluence numbers pages, and unique."""
+    records, minted = _page_witnesses()
+
+    for record in minted:
+        assert str(record.fields["page_id"]).isdigit()
+        assert record.external_id == record.fields["page_id"]
+    assert len({record.fields["page_id"] for record in records}) == len(records)
+
+
+def test_a_near_miss_page_borrows_a_different_document() -> None:
+    _, minted = _page_witnesses()
+    witness = next(r for r in minted if r.fields["witness_role"] == "witness")
+    miss = next(r for r in minted if r.fields["witness_role"] == "near_miss")
+
+    assert miss.title != "sprint"
+    assert miss.fields["borrowed_from"] != witness.fields["borrowed_from"]
+
+
+def test_borrowing_is_deterministic_and_skips_entities_that_are_not_documents() -> None:
+    first, _ = _page_witnesses()
+    second, _ = _page_witnesses()
+    assert [r.model_dump() for r in first] == [r.model_dump() for r in second]
+
+    _, _, _, result = _construct()
+    incidents = [r for r in _connector_records(result.candidate.world, "servicenow")
+                 if r.fields.get("witness_role")]
+    assert incidents and not any("borrowed_from" in r.fields for r in incidents)
+
+
+def test_independent_page_witnesses_borrow_documents_that_share_no_fact() -> None:
+    """Two demands for two different pages. Shared facts are shared evidence,
+    so pages borrowing overlapping documents would weld two independent
+    questions into one leakage group, and no train/validation/test split
+    could separate them."""
+    spec = EvalSpec(
+        id="EVALSPEC-TWO-PAGES", capability="notes", persona="employee",
+        request_template="Use the retro notes and the rollout notes.",
+        steps=(EvalStepSpec(id="find", capability="search", connector="confluence",
+                            entity="page", operation="search"),),
+        requirements=tuple(
+            WorldRequirement(id=name, kind=RequirementKind.CONNECTOR,
+                             selector={"connector": "confluence", "entity": "page",
+                                       "title": title})
+            for name, title in (("retro", "sprint retro"), ("rollout", "store rollout"))),
+        candidate_count=1,
+    )
+    plan = plan_candidates(spec)[0]
+    world = construct_candidate(spec, plan, _base(plan.seed), occurred_at=AT).candidate.world
+    pages = [r for r in _connector_records(world, "confluence")
+             if r.fields.get("witness_role") == "witness"]
+
+    assert sorted(page.title for page in pages) == ["sprint retro", "store rollout"]
+    first, second = pages
+    assert first.fact_ids and second.fact_ids
+    assert not set(first.fact_ids) & set(second.fact_ids)

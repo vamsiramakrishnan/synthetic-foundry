@@ -391,16 +391,41 @@ class Studio:
                 "workflow": self.workflow(project, revision, harness_configured=bool(harness_command)).model_dump(mode="json")}
 
     def dataset_location(self, project: str, revision: str) -> Path:
+        """The connector queryset a revision's evalrun grades, in this order:
+
+        a frozen Foundry dataset
+            calibrated against a target cohort and published by ``freeze``.
+        the compiled queryset
+            ``studio run --operation compile``, when it is complete.
+        a Foundry baseline
+            the qualified, split dataset Foundry built before calibration,
+            when nothing above exists. Not calibrated: every row passed
+            reference qualification, but no target agent's pass rate was
+            fitted. It is what a reference-agent run needs, and the only
+            queryset a project gets whose sources are read as files, since
+            calibration refuses file-reading tasks and so never freezes them.
+        """
         from ..evals.dataset import verify_dataset
-        for job in self.store.jobs(project):
-            if job["revision"] == revision and job["status"] == "complete" and job["result"].get("frozen_dataset"):
+        jobs = [job for job in self.store.jobs(project)
+                if job["revision"] == revision and job["status"] == "complete"]
+        for job in jobs:
+            if job["result"].get("frozen_dataset"):
                 location = self.path("datasets", job["result"]["frozen_dataset"])
                 frozen = _read(self.path("foundry", job["id"]) / "frozen.json")
                 if frozen.get("dataset") != location.name or frozen.get("files") != _files(location):
                     raise ValueError("frozen dataset changed after publication")
                 verify_dataset(location)
                 return location
-        return self.path("datasets", digest([project, revision]))
+        compiled = self.path("datasets", digest([project, revision]))
+        if (compiled / "manifest.json").exists() and verify_dataset(compiled).complete:
+            return compiled
+        for job in sorted(jobs, key=lambda item: item["id"]):
+            if job["options"].get("operation") != "foundry":
+                continue
+            baseline = self.path("foundry", job["id"]) / "baseline"
+            if (baseline / "manifest.json").exists() and verify_dataset(baseline).complete:
+                return baseline
+        return compiled
 
     def interviews(self, project: str) -> list[dict[str, Any]]:
         with self.store.connection() as db:

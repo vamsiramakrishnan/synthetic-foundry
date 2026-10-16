@@ -1,0 +1,713 @@
+{
+ "note": "Claude's replies to the W4 round trip's narration and reader requests, recorded 2026-10-16; replayed by replay_harness.py",
+ "replies": {
+  "42938287a83f95fc74c29ecfa673f5fe68cac362dc906c8dbbf7cad887059cb1": {
+   "claims": [
+    {
+     "kind": "close.due_date",
+     "quote": "Northwind Grocers commits to completing the close for this period by 4 September 2026",
+     "subject": "Northwind Grocers",
+     "value": "2026-09-04"
+    }
+   ],
+   "contract_version": "reader/v2",
+   "id": "32f2b95e4378a6bdb9eecac29d9cc215",
+   "reader_id": "foundry-reader/4bc2396a677d98b1821317048fb1886c",
+   "request_id": "ART-0001/Commitment",
+   "text_digest": "9e461bcf86ad1081feaffafa76fa2522"
+  },
+  "7a140a4bb4c5e15b7e43b0cf8754d176872225385b19b87af8c302b3f8b0a472": {
+   "responses": [
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0001"
+       ],
+       "text": "The group's committed close date for the period is the recorded due date."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0001"
+       ],
+       "text": "Period-end work is scheduled to complete before the committed close date."
+      }
+     ],
+     "id": "ART-0001/Commitment",
+     "text": "Northwind Grocers commits to completing the close for this period by {{fact:FACT-0001}}, and every submission, review and sign-off in the period timetable is set against that date.\n\nContributors should plan their period-end work so that it lands before {{fact:FACT-0001}}, and should raise any expected slippage with group reporting in advance rather than on the day."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0039"
+       ],
+       "text": "The group missed its revenue budget for the month by the recorded adverse variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0039",
+        "FACT-0555"
+       ],
+       "text": "The group is behind plan and the result is not acceptable."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0015",
+        "FACT-0027"
+       ],
+       "text": "Group revenue came in at the recorded actual against the recorded budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0531",
+        "FACT-0543",
+        "FACT-0555",
+        "FACT-0039"
+       ],
+       "text": "Group gross profit fell short of budget by a gap larger than the revenue miss."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0567",
+        "FACT-0579"
+       ],
+       "text": "Group gross margin was below the budgeted margin."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0039",
+        "FACT-0555",
+        "FACT-0567",
+        "FACT-0579",
+        "FACT-0015",
+        "FACT-0027",
+        "FACT-0531",
+        "FACT-0543"
+       ],
+       "text": "The revenue shortfall alone does not account for the gross profit gap; most of the gap sits in margin rate."
+      }
+     ],
+     "id": "ART-0003/Position",
+     "text": "Northwind Grocers missed its revenue budget for the month by {{fact:FACT-0039}}; the group is behind plan, and with the margin shortfall beneath it, this is not a result I would describe as acceptable.\n\nRevenue came in at {{fact:FACT-0015}} against a budget of {{fact:FACT-0027}}. Gross profit was {{fact:FACT-0531}} against a budget of {{fact:FACT-0543}}, a gap of {{fact:FACT-0555}}, so the profit shortfall is materially larger than the revenue miss. Gross margin was {{fact:FACT-0567}} against a budgeted {{fact:FACT-0579}}, so the group earned less on each sale as well as making fewer of them.\n\nThe sentence for the board is that this was a margin month more than a volume month: the revenue shortfall alone does not account for the gross profit gap, and the larger part of that gap sits in rate rather than in sales."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0014",
+        "FACT-0026",
+        "FACT-0038",
+        "FACT-0036",
+        "FACT-0037"
+       ],
+       "text": "Digital missed its revenue budget by the largest divisional revenue gap."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0012",
+        "FACT-0024",
+        "FACT-0036"
+       ],
+       "text": "Food held revenue close to plan with a small adverse variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0013",
+        "FACT-0025",
+        "FACT-0037"
+       ],
+       "text": "General Merchandise held revenue close to plan with a small adverse variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0552",
+        "FACT-0553",
+        "FACT-0554"
+       ],
+       "text": "Food had the largest gross profit shortfall of the three divisions, with Digital and General Merchandise short by smaller amounts."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0528",
+        "FACT-0540",
+        "FACT-0564",
+        "FACT-0576",
+        "FACT-0012",
+        "FACT-0024"
+       ],
+       "text": "Food's gross profit was below budget because its margin was below plan on broadly planned sales."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0530",
+        "FACT-0542",
+        "FACT-0566",
+        "FACT-0578"
+       ],
+       "text": "Digital's gross profit and margin were both below budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0529",
+        "FACT-0541",
+        "FACT-0565",
+        "FACT-0577"
+       ],
+       "text": "General Merchandise's gross profit and margin were both below budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0564",
+        "FACT-0576",
+        "FACT-0565",
+        "FACT-0577",
+        "FACT-0566",
+        "FACT-0578",
+        "FACT-0552",
+        "FACT-0528",
+        "FACT-0540"
+       ],
+       "text": "Every division ran below its budgeted margin by a similar distance, and Food's scale made its gross profit gap the largest."
+      }
+     ],
+     "id": "ART-0003/By business unit",
+     "text": "Digital carried the revenue miss: sales of {{fact:FACT-0014}} against a budget of {{fact:FACT-0026}} left it short by {{fact:FACT-0038}}, by far the largest divisional revenue gap. Food held revenue close to plan at {{fact:FACT-0012}} against {{fact:FACT-0024}}, short by only {{fact:FACT-0036}}, and General Merchandise did likewise at {{fact:FACT-0013}} against {{fact:FACT-0025}}, short by {{fact:FACT-0037}}. Gross profit tells a different story: Food fell short by {{fact:FACT-0552}}, the largest gross profit gap of the three, while Digital was short by {{fact:FACT-0554}} and General Merchandise was short by {{fact:FACT-0553}}.\n\nFood earned gross profit of {{fact:FACT-0528}} against a budget of {{fact:FACT-0540}}, at a margin of {{fact:FACT-0564}} against a planned {{fact:FACT-0576}}, so its gap is a rate problem on broadly planned sales. Digital earned {{fact:FACT-0530}} against {{fact:FACT-0542}}, at a margin of {{fact:FACT-0566}} against a planned {{fact:FACT-0578}}, so a thinner rate compounded its lower sales. General Merchandise earned {{fact:FACT-0529}} against {{fact:FACT-0541}}, with its margin of {{fact:FACT-0565}} sitting below the budgeted {{fact:FACT-0577}}.\n\nThe margin shortfall is therefore not confined to the division that missed on sales: every division ran below its budgeted margin by a similar distance, and Food's scale turned that into the largest gross profit gap, so recovery depends on rate across all three divisions rather than on Digital's volume alone."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0580"
+       ],
+       "text": "Group gross margin finished adverse to budget by the recorded variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0581"
+       ],
+       "text": "Promotional depth within Digital had the recorded adverse margin impact on that division."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0581",
+        "FACT-0580"
+       ],
+       "text": "The promotional driver is specific to Digital rather than group-wide."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0583",
+        "FACT-0582"
+       ],
+       "text": "Digital's online conversion rate came in below forecast."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0581",
+        "FACT-0582",
+        "FACT-0583"
+       ],
+       "text": "Digital gave up margin on promotion without achieving forecast conversion."
+      }
+     ],
+     "id": "ART-0003/Drivers",
+     "text": "Group gross margin finished {{fact:FACT-0580}} against budget, and the one driver identified so far sits inside a single division rather than across the group. Promotional depth within Digital had a margin impact of {{fact:FACT-0581}} on that division; it is a divisional driver and should not be read as the explanation for the group-wide figure. The deeper promotions were also not matched by demand, with Digital's online conversion rate at {{fact:FACT-0583}} against a forecast of {{fact:FACT-0582}}.\n\nDigital gave up margin on promotion without getting the conversion the forecast assumed. One month of figures cannot show whether that is structural or one-off, so it should be treated as a promotional decision to review, not yet as a settled shift in the division's economics."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0002"
+       ],
+       "text": "The period close reached final status."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0003",
+        "FACT-0002"
+       ],
+       "text": "The close completed with no delay against the committed date."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0002",
+        "FACT-0003"
+       ],
+       "text": "The on-time close is a calendar outcome and has no bearing on the reported variances."
+      }
+     ],
+     "id": "ART-0003/Close timetable",
+     "text": "The period close reached {{fact:FACT-0002}} status within the committed timetable. The recorded delay against the committed date was {{fact:FACT-0003}}, so no part of the close calendar slipped.\n\nThis is a calendar result, not a profit and loss result: a close with no delay means the figures in this memo were available on schedule, and it neither explains nor offsets any variance reported in them."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0036"
+       ],
+       "text": "Food missed its revenue budget by a small adverse variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0012",
+        "FACT-0024"
+       ],
+       "text": "Food revenue came in close to budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0552",
+        "FACT-0036"
+       ],
+       "text": "Food's gross profit shortfall was many times larger than its revenue shortfall."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0528",
+        "FACT-0540"
+       ],
+       "text": "Food gross profit was below budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0564",
+        "FACT-0576"
+       ],
+       "text": "Food gross margin was below the planned margin, driving the gross profit shortfall."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0036",
+        "FACT-0012",
+        "FACT-0024",
+        "FACT-0552",
+        "FACT-0528",
+        "FACT-0540",
+        "FACT-0564",
+        "FACT-0576"
+       ],
+       "text": "Food's issue this month is margin rate rather than sales volume."
+      }
+     ],
+     "id": "ART-0004/Performance",
+     "text": "Food finished the month short of its revenue budget by just {{fact:FACT-0036}}, which is behind plan but close enough to treat the top line as delivered.\n\nSales came in at {{fact:FACT-0012}} against a budget of {{fact:FACT-0024}}, so the top line held broadly to plan. The real movement was at gross profit, which fell short by {{fact:FACT-0552}}, many times the size of the revenue gap.\n\nGross profit landed at {{fact:FACT-0528}} against a budget of {{fact:FACT-0540}}. Gross margin was {{fact:FACT-0564}} against a planned {{fact:FACT-0576}}, which is where the shortfall comes from: the division sold close to what it planned but kept less of each sale.\n\nThe conversation for Food this month is about rate, not volume: the revenue line needs no rescue, but the margin gap is what needs explaining and recovering."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0037"
+       ],
+       "text": "General Merchandise missed its revenue budget by a small adverse variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0013",
+        "FACT-0025"
+       ],
+       "text": "General Merchandise revenue was close to budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0529",
+        "FACT-0541",
+        "FACT-0553",
+        "FACT-0037"
+       ],
+       "text": "General Merchandise gross profit fell short of budget by about three times the revenue miss."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0565",
+        "FACT-0577",
+        "FACT-0553",
+        "FACT-0013"
+       ],
+       "text": "Most of the gross profit gap came from margin rate falling below budget rather than from lower sales."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0037",
+        "FACT-0013",
+        "FACT-0025",
+        "FACT-0553",
+        "FACT-0565",
+        "FACT-0577"
+       ],
+       "text": "Closing the gross profit shortfall depends on margin rate recovering."
+      }
+     ],
+     "id": "ART-0005/What moved",
+     "text": "General Merchandise missed its revenue budget by {{fact:FACT-0037}}, a small miss on the top line that would not, on its own, be a concern.\n\nSales of {{fact:FACT-0013}} came in against a budget of {{fact:FACT-0025}}, so the top line held close to plan. Gross profit is where the month moved: it landed at {{fact:FACT-0529}} against {{fact:FACT-0541}}, a gap of {{fact:FACT-0553}}, about three times the revenue miss. Margin explains it: the division earned {{fact:FACT-0565}} against a budgeted {{fact:FACT-0577}}, so most of the profit gap came from rate rather than from the lower sales.\n\nThe issue to chase in General Merchandise is margin: the revenue line is effectively on plan, and the gross profit shortfall will not close unless rate recovers."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0013",
+        "FACT-0025",
+        "FACT-0037"
+       ],
+       "text": "General Merchandise revenue closed below budget by the recorded variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0529",
+        "FACT-0541",
+        "FACT-0553"
+       ],
+       "text": "General Merchandise gross profit closed below budget by the recorded variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0565",
+        "FACT-0577"
+       ],
+       "text": "General Merchandise gross margin finished below budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0013",
+        "FACT-0025",
+        "FACT-0037",
+        "FACT-0529",
+        "FACT-0541",
+        "FACT-0553",
+        "FACT-0565",
+        "FACT-0577"
+       ],
+       "text": "The division is close to plan on sales but behind on profit because of margin rate."
+      }
+     ],
+     "id": "ART-0005/Position",
+     "text": "For the record, revenue closed at {{fact:FACT-0013}} against a budget of {{fact:FACT-0025}}, a shortfall of {{fact:FACT-0037}}. Gross profit closed at {{fact:FACT-0529}} against {{fact:FACT-0541}}, short by {{fact:FACT-0553}}. Gross margin finished at {{fact:FACT-0565}} against a budgeted {{fact:FACT-0577}}.\n\nTaken together, the division sits close to plan on sales but behind on profit, with margin rate the one line that needs management attention."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0038"
+       ],
+       "text": "Digital missed its revenue budget by a material adverse variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0014",
+        "FACT-0026"
+       ],
+       "text": "Digital revenue came in below budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0530",
+        "FACT-0542",
+        "FACT-0554"
+       ],
+       "text": "Digital gross profit fell short of budget by the recorded variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0566",
+        "FACT-0578"
+       ],
+       "text": "Digital gross margin was below budget, compounding the lower sales."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0038",
+        "FACT-0014",
+        "FACT-0026",
+        "FACT-0554",
+        "FACT-0530",
+        "FACT-0542",
+        "FACT-0566",
+        "FACT-0578"
+       ],
+       "text": "Both lower sales and lower margin rate contributed to the gross profit gap."
+      }
+     ],
+     "id": "ART-0006/What moved",
+     "text": "Digital missed its revenue budget by {{fact:FACT-0038}}, a material shortfall and not one the division can treat as acceptable.\n\nSales came in at {{fact:FACT-0014}} against a budget of {{fact:FACT-0026}}, so the miss sits squarely on the top line. That carried through to gross profit, which landed at {{fact:FACT-0530}} against {{fact:FACT-0542}}, short by {{fact:FACT-0554}}. Margin made it worse rather than cushioning it: the division earned {{fact:FACT-0566}} against a budgeted {{fact:FACT-0578}}, so lower sales and a thinner rate compounded each other.\n\nDigital's month needs explaining on two fronts at once, volume and rate, and neither alone accounts for the gross profit gap."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0581"
+       ],
+       "text": "Deeper promotional activity in Digital had the recorded adverse margin impact."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0583",
+        "FACT-0582"
+       ],
+       "text": "Digital's online conversion rate came in below forecast."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0581",
+        "FACT-0582",
+        "FACT-0583"
+       ],
+       "text": "Digital gave up margin on promotion without achieving forecast conversion."
+      }
+     ],
+     "id": "ART-0006/Why",
+     "text": "The division ran deeper promotions than planned, and that discounting had a margin impact of {{fact:FACT-0581}}. The promotions did not convert as expected either, with online conversion at {{fact:FACT-0583}} against a forecast of {{fact:FACT-0582}}, so the deeper discounts were not matched by the demand the forecast assumed.\n\nIn commercial terms, the division gave away margin to buy demand it did not get, and the depth of promotion is the first lever to review."
+    },
+    {
+     "claims": [
+      {
+       "supporting_fact_ids": [
+        "FACT-0014",
+        "FACT-0026",
+        "FACT-0038"
+       ],
+       "text": "Digital revenue closed below budget by the recorded variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0530",
+        "FACT-0542",
+        "FACT-0554"
+       ],
+       "text": "Digital gross profit closed below budget by the recorded variance."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0566",
+        "FACT-0578"
+       ],
+       "text": "Digital gross margin finished below budget."
+      },
+      {
+       "supporting_fact_ids": [
+        "FACT-0014",
+        "FACT-0026",
+        "FACT-0038",
+        "FACT-0530",
+        "FACT-0542",
+        "FACT-0554",
+        "FACT-0566",
+        "FACT-0578"
+       ],
+       "text": "Digital is behind plan on both sales and margin rate."
+      }
+     ],
+     "id": "ART-0006/Position",
+     "text": "For the record, revenue closed at {{fact:FACT-0014}} against a budget of {{fact:FACT-0026}}, a shortfall of {{fact:FACT-0038}}. Gross profit closed at {{fact:FACT-0530}} against {{fact:FACT-0542}}, short by {{fact:FACT-0554}}. Gross margin finished at {{fact:FACT-0566}} against a budgeted {{fact:FACT-0578}}.\n\nThe division is behind plan on both sales and rate, and the record should show both rather than treating this as a volume month alone."
+    }
+   ]
+  },
+  "83edb27a33cfe87a4649fbe1d9f9896b16a591838b0fcb5849dc73f875b247ab": {
+   "claims": [
+    {
+     "kind": "financial.revenue.actual",
+     "quote": "sales of AUD 91.7m",
+     "subject": "Digital",
+     "value": "AUD 91.7m"
+    },
+    {
+     "kind": "financial.revenue.budget",
+     "quote": "a budget of AUD 97.5m",
+     "subject": "Digital",
+     "value": "AUD 97.5m"
+    },
+    {
+     "kind": "financial.revenue.variance",
+     "quote": "left it short by AUD 5.8m",
+     "subject": "Digital",
+     "value": "-AUD 5.8m"
+    },
+    {
+     "kind": "financial.revenue.actual",
+     "quote": "Food held revenue close to plan at AUD 415.3m",
+     "subject": "Food",
+     "value": "AUD 415.3m"
+    },
+    {
+     "kind": "financial.revenue.budget",
+     "quote": "AUD 415.3m against AUD 416.0m",
+     "subject": "Food",
+     "value": "AUD 416.0m"
+    },
+    {
+     "kind": "financial.revenue.variance",
+     "quote": "short by only AUD 700k",
+     "subject": "Food",
+     "value": "-AUD 700k"
+    },
+    {
+     "kind": "financial.revenue.actual",
+     "quote": "General Merchandise did likewise at AUD 135.7m",
+     "subject": "General Merchandise",
+     "value": "AUD 135.7m"
+    },
+    {
+     "kind": "financial.revenue.budget",
+     "quote": "AUD 135.7m against AUD 136.5m",
+     "subject": "General Merchandise",
+     "value": "AUD 136.5m"
+    },
+    {
+     "kind": "financial.revenue.variance",
+     "quote": "short by AUD 800k",
+     "subject": "General Merchandise",
+     "value": "-AUD 800k"
+    },
+    {
+     "kind": "financial.gross_profit.variance",
+     "quote": "Food fell short by AUD 6.9m",
+     "subject": "Food",
+     "value": "-AUD 6.9m"
+    },
+    {
+     "kind": "financial.gross_profit.variance",
+     "quote": "Digital was short by AUD 3.0m",
+     "subject": "Digital",
+     "value": "-AUD 3.0m"
+    },
+    {
+     "kind": "financial.gross_profit.variance",
+     "quote": "General Merchandise was short by AUD 2.5m",
+     "subject": "General Merchandise",
+     "value": "-AUD 2.5m"
+    },
+    {
+     "kind": "financial.gross_profit.actual",
+     "quote": "Food earned gross profit of AUD 96.7m",
+     "subject": "Food",
+     "value": "AUD 96.7m"
+    },
+    {
+     "kind": "financial.gross_profit.budget",
+     "quote": "AUD 96.7m against a budget of AUD 103.6m",
+     "subject": "Food",
+     "value": "AUD 103.6m"
+    },
+    {
+     "kind": "financial.gross_margin_pct.actual",
+     "quote": "at a margin of 23.28%",
+     "subject": "Food",
+     "value": "23.28%"
+    },
+    {
+     "kind": "financial.gross_margin_pct.budget",
+     "quote": "a planned 24.89%",
+     "subject": "Food",
+     "value": "24.89%"
+    },
+    {
+     "kind": "financial.gross_profit.actual",
+     "quote": "Digital earned AUD 21.6m",
+     "subject": "Digital",
+     "value": "AUD 21.6m"
+    },
+    {
+     "kind": "financial.gross_profit.budget",
+     "quote": "AUD 21.6m against AUD 24.6m",
+     "subject": "Digital",
+     "value": "AUD 24.6m"
+    },
+    {
+     "kind": "financial.gross_margin_pct.actual",
+     "quote": "at a margin of 23.50%",
+     "subject": "Digital",
+     "value": "23.50%"
+    },
+    {
+     "kind": "financial.gross_margin_pct.budget",
+     "quote": "a planned 25.22%",
+     "subject": "Digital",
+     "value": "25.22%"
+    },
+    {
+     "kind": "financial.gross_profit.actual",
+     "quote": "General Merchandise earned AUD 36.5m",
+     "subject": "General Merchandise",
+     "value": "AUD 36.5m"
+    },
+    {
+     "kind": "financial.gross_profit.budget",
+     "quote": "AUD 36.5m against AUD 39.0m",
+     "subject": "General Merchandise",
+     "value": "AUD 39.0m"
+    },
+    {
+     "kind": "financial.gross_margin_pct.actual",
+     "quote": "its margin of 26.89%",
+     "subject": "General Merchandise",
+     "value": "26.89%"
+    },
+    {
+     "kind": "financial.gross_margin_pct.budget",
+     "quote": "the budgeted 28.60%",
+     "subject": "General Merchandise",
+     "value": "28.60%"
+    }
+   ],
+   "contract_version": "reader/v2",
+   "id": "596a492d4c8d8f12c897f6af920bb4e2",
+   "reader_id": "foundry-reader/4bc2396a677d98b1821317048fb1886c",
+   "request_id": "ART-0003/By business unit",
+   "text_digest": "76dfdf7aa0d54290f30ada1ff5b1ca7e"
+  },
+  "87acac0f314641e3367a2d024dbc1650b8ccf862f9f183a0d9fa5f8ac4bd3918": {
+   "claims": [
+    {
+     "kind": "financial.revenue.actual",
+     "quote": "Sales of AUD 135.7m came in against a budget of AUD 136.5m",
+     "subject": "General Merchandise",
+     "value": "AUD 135.7m"
+    },
+    {
+     "kind": "financial.revenue.budget",
+     "quote": "Sales of AUD 135.7m came in against a budget of AUD 136.5m",
+     "subject": "General Merchandise",
+     "value": "AUD 136.5m"
+    },
+    {
+     "kind": "financial.revenue.variance",
+     "quote": "General Merchandise missed its revenue budget by AUD 800k",
+     "subject": "General Merchandise",
+     "value": "-AUD 800k"
+    }
+   ],
+   "contract_version": "reader/v2",
+   "id": "b7290e1ce1d4ec281093afb4657e13f5",
+   "reader_id": "foundry-reader/4bc2396a677d98b1821317048fb1886c",
+   "request_id": "ART-0005/What moved",
+   "text_digest": "25b8ea5c093340ecfb18a31f2546f487"
+  },
+  "d3fe0f014e50fde497889170af284f46e24e8c7516acbb5ddc2c622b1d50d751": {
+   "claims": [
+    {
+     "kind": "metric.online_conversion_rate.actual",
+     "quote": "Digital's online conversion rate at 3.18%",
+     "subject": "Digital",
+     "value": "3.18%"
+    },
+    {
+     "kind": "metric.online_conversion_rate.forecast",
+     "quote": "Digital's online conversion rate at 3.18% against a forecast of 3.28%",
+     "subject": "Digital",
+     "value": "3.28%"
+    },
+    {
+     "kind": "metric.promotional_depth_margin_impact",
+     "quote": "Promotional depth within Digital had a margin impact of 172 bps adverse on that division",
+     "subject": "Digital",
+     "value": "172 bps adverse"
+    }
+   ],
+   "contract_version": "reader/v2",
+   "id": "7a77fd342ff4d0483ce85da91b42bab3",
+   "reader_id": "foundry-reader/4bc2396a677d98b1821317048fb1886c",
+   "request_id": "ART-0003/Drivers",
+   "text_digest": "ad1e7782e2b4d43cef8d61c1bdd85744"
+  }
+ },
+ "schema": "worldloom.telemetry-roundtrip-recording/v1"
+}
