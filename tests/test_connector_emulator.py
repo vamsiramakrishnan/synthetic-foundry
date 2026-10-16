@@ -228,3 +228,30 @@ def test_every_identity_a_shaped_payload_hands_out_resolves_back() -> None:
                     checked.add((name, key))
     assert ("servicenow", "sys_id") in checked
     assert ("jira", "id") in checked and ("jira", "key") in checked
+
+
+def test_a_built_world_holds_the_jira_projects_and_sprints_its_issues_name() -> None:
+    """Every issue names a project and a sprint, and jira.json models both,
+    but nothing projected them: search_projects found nothing in a built
+    world. One container per distinct key, after the issues, so issue ids
+    and order are unchanged."""
+    from worldloom.connector_data import generate_jira
+    from worldloom.retail import RetailWorld
+    from worldloom.scenarios import MonthEndClose
+
+    world = RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-08"))
+    records = generate_jira(world)
+    issues = [r for r in records if r.entity == "issue"]
+    assert records[:len(issues)] == issues
+
+    projects = {r.external_id for r in records if r.entity == "project"}
+    sprints = {r.external_id for r in records if r.entity == "sprint"}
+    assert projects == {i.fields["project_key"] for i in issues}
+    assert sprints == {i.fields["sprint_id"] for i in issues}
+
+    emulator = ConnectorEmulator(load_connector_definition("jira"), [
+        {"fid": r.id, "server": "jira", "entity": r.entity, "ident": r.external_id,
+         "name": r.title, "title": r.title, **r.fields} for r in records])
+    page = emulator.call("search_projects")
+    assert [item["key"] for item in page["items"]] == sorted(projects)
+    assert emulator.call("get_project", id=page["items"][0]["id"])["key"] == "WL"

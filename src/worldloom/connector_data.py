@@ -197,13 +197,53 @@ def _email_address(name: str, company: str) -> str:
     return f"{local}@{domain}.example"
 
 
+def _jira_containers(world: World, issues: list[ConnectorRecord],
+                     sprints: dict[str, str]) -> list[ConnectorRecord]:
+    """The project and sprint records the issues already point at.
+
+    ``jira.json`` models both as containers, and every issue names one of
+    each (``project_key``, ``sprint_id``), but nothing projected the
+    containers themselves: ``search_projects`` found nothing in a built
+    world, and a project existed only when an eval witness minted one. One
+    record per distinct key, after the issues, so every issue keeps its id
+    and position. *sprints* names each sprint id.
+    """
+    period = world.period or "current"
+    projects: dict[str, int] = {}
+    for issue in issues:
+        key = str(issue.fields.get("project_key") or "")
+        if key:
+            projects[key] = projects.get(key, 0) + 1
+    containers = [
+        ConnectorRecord(
+            id=f"CONN-JIRA-P{content_key('jira-project', world.seed, key)[:11].upper()}",
+            connector="jira", entity="project", external_id=key,
+            title=f"{world.company.name} {key}",
+            fields={"key": key, "name": f"{world.company.name} {key}",
+                    "project_key": key, "issue_count": count})
+        for key, count in sorted(projects.items())]
+    used = {str(issue.fields.get("sprint_id")) for issue in issues if issue.fields.get("sprint_id")}
+    containers += [
+        ConnectorRecord(
+            id=f"CONN-JIRA-S{content_key('jira-sprint-record', world.seed, sprint)[:11].upper()}",
+            connector="jira", entity="sprint", external_id=sprint,
+            title=f"{period} {sprints.get(sprint, 'sprint')}",
+            fields={"sprint_id": sprint, "name": f"{period} {sprints.get(sprint, 'sprint')}",
+                    "project_key": next(iter(sorted(projects)), ""), "period": period})
+        for sprint in sorted(used)]
+    return containers
+
+
 def generate_jira(world: World) -> list[ConnectorRecord]:
     facts = _facts_by_event(world)
     records: list[ConnectorRecord] = []
+    sprints: dict[str, str] = {}
     if world.tasks:
         for index, task in enumerate(sorted(world.tasks, key=lambda item: (item.created_at, item.id)), start=1):
             key = f"WL-{index}"
             record_id = content_key("jira", world.seed, task.id)
+            sprint = content_key("jira-sprint", world.period or "current", task.domain)
+            sprints[sprint] = task.domain
             records.append(
                 ConnectorRecord(
                     id=f"CONN-JIRA-{record_id[:12].upper()}",
@@ -221,7 +261,7 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                         "project_key": "WL",
                         "issue_type": "Epic" if task.kind == "programme" else "Task",
                         "epic_key": f"WL-EPIC-{task.domain.upper()}",
-                        "sprint_id": content_key("jira-sprint", world.period or "current", task.domain),
+                        "sprint_id": sprint,
                         "assignee_id": task.owner_id,
                         "reporter_id": task.created_by,
                         "due_at": task.due_at.isoformat() if task.due_at else None,
@@ -231,10 +271,12 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                     source_artifact_ids=_artifact_ids(world, set(task.fact_ids)),
                 )
             )
-        return records
+        return records + _jira_containers(world, records, sprints)
     for index, event in enumerate(world.timeline(), start=1):
         linked = facts.get(event.id, [])
         fact_ids = sorted(fact.id for fact in linked)
+        sprint = content_key("jira-sprint", world.period or "current", event.kind)
+        sprints[sprint] = event.kind.replace("_", " ")
         records.append(
             ConnectorRecord(
                 id=f"CONN-JIRA-{content_key(world.seed, event.id)[:12].upper()}",
@@ -252,7 +294,7 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                     "project_key": "WL",
                     "issue_type": "Bug" if "incident" in event.kind else "Task",
                     "epic_key": f"WL-EPIC-{event.kind.split('_')[0].upper()}",
-                    "sprint_id": content_key("jira-sprint", world.period or "current", event.kind),
+                    "sprint_id": sprint,
                     "linked_event_id": event.id,
                     "service_ids": event.services,
                     "system_ids": event.systems,
@@ -263,7 +305,7 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                 source_artifact_ids=_artifact_ids(world, set(fact_ids)),
             )
         )
-    return records
+    return records + _jira_containers(world, records, sprints)
 
 
 def generate_servicenow(world: World) -> list[ConnectorRecord]:
