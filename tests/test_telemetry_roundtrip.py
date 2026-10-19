@@ -35,6 +35,8 @@ def test_the_fixture_is_what_its_script_writes() -> None:
 
 
 def test_four_write_journeys_import_with_no_hard_finding() -> None:
+    # 12 questions: 4 journeys × 3 each, Studio's cap per evidence group,
+    # enough for a 2:1:1 train/validation/test split.
     result = import_catalogue((ROOT / "catalogue.json").read_bytes(), COMPANY, cases=12)
 
     assert result.project is not None
@@ -75,6 +77,8 @@ def test_the_round_trip_scores_full_marks_offline(tmp_path: Path) -> None:
     from worldloom.studio.calibration import CompanyCalibrationPlan
     from worldloom.studio.worker import run_job
 
+    # 4 journeys × Studio's 3 questions per evidence group (max_per_case),
+    # which the 2:1:1 split below shares out as 6 train, 3 validation, 3 test.
     result = import_catalogue((ROOT / "catalogue.json").read_bytes(), COMPANY, cases=12)
     assert result.project is not None
     spec = result.project.model_copy(update={
@@ -98,6 +102,22 @@ def test_the_round_trip_scores_full_marks_offline(tmp_path: Path) -> None:
     stages = finished["result"]["stages"]
     assert {name: stages[name]["status"] for name in ("construction", "narration", "qualification")} \
         == {"construction": "complete", "narration": "complete", "qualification": "complete"}
+
+    # A Confluence page is read as html, markdown or pdf. Foundry used to
+    # render markdown alone and refuse every html and pdf question; it now
+    # renders each format into its own checkpoint, and qualification accepts
+    # questions in them.
+    root = studio.path("foundry", foundry["id"])
+    rendered = {path.suffix for path in (root / "rendered" / "world" / "artifacts").iterdir()}
+    assert {".md", ".html", ".pdf"} <= rendered
+    qualified: set[str] = set()
+    for queries in (root / "baseline" / "batches").glob("*/qualified/queries.jsonl"):
+        for line in queries.read_text(encoding="utf-8").splitlines():
+            qualified.add(json.loads(line)["dimensions"]["input_formats"])
+    assert {"html", "markdown", "pdf"} <= qualified
+    for refusals in (root / "baseline" / "batches").glob("*/qualified/qualification.json"):
+        assert not [r for r in json.loads(refusals.read_text(encoding="utf-8"))["refusals"]
+                    if "native html payload" in r.get("detail", "")]
 
     evalrun = studio.store.enqueue(project["id"], project["revision"],
                                    RunOptions(operation="evalrun", evalrun_agent="reference"))

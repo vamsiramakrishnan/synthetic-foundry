@@ -53,6 +53,7 @@ from worldloom.telemetry.compile import (
     CASES_BELOW_JOURNEYS,
     DEFAULT_CASES,
     DROPPED_FOR_CONFLICT,
+    EPISODES_UNKNOWN,
     FAILURE_MODE_UNCONSTRUCTABLE,
     LOOKUP_NOT_PLANNED,
     VALUE_NOT_IN_WORLD,
@@ -1122,3 +1123,18 @@ def test_with_nothing_pinned_every_shape_is_allowed() -> None:
         for step in cuj.steps if step.id == "create_epics")})
 
     assert build_use_case(write_only, prompt, ()).dag_shapes == ("*",)
+
+
+def test_a_catalogue_with_no_readable_date_writes_no_project() -> None:
+    """Review on #80: with neither date readable the importer returned no
+    episodes, the import succeeded, and Studio could then build nothing into
+    the world. It is a hard finding and no project, not a silent dud."""
+    payload = json.loads(EXAMPLE.read_text())
+    payload["source"]["window"] = {"start": "not a date", "end": "also not"}
+    payload["created_at"] = "unknown"
+
+    result = import_catalogue(json.dumps(payload).encode("utf-8"), COMPANY)
+
+    assert result.project is None
+    finding = next(f for f in result.report.findings if f.code == EPISODES_UNKNOWN)
+    assert finding.severity is Severity.HARD

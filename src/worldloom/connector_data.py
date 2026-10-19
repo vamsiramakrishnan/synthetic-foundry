@@ -207,13 +207,22 @@ def _jira_containers(world: World, issues: list[ConnectorRecord],
     world, and a project existed only when an eval witness minted one. One
     record per distinct key, after the issues, so every issue keeps its id
     and position. *sprints* names each sprint id.
+
+    A sprint belongs to the project its issues are in: the most common one
+    when they span several, ties to the first key, so no sprint claims a
+    project none of its issues use.
     """
     period = world.period or "current"
     projects: dict[str, int] = {}
+    sprint_projects: dict[str, dict[str, int]] = {}
     for issue in issues:
         key = str(issue.fields.get("project_key") or "")
         if key:
             projects[key] = projects.get(key, 0) + 1
+        sprint = str(issue.fields.get("sprint_id") or "")
+        if sprint and key:
+            counts = sprint_projects.setdefault(sprint, {})
+            counts[key] = counts.get(key, 0) + 1
     containers = [
         ConnectorRecord(
             id=f"CONN-JIRA-P{content_key('jira-project', world.seed, key)[:11].upper()}",
@@ -223,13 +232,18 @@ def _jira_containers(world: World, issues: list[ConnectorRecord],
                     "project_key": key, "issue_count": count})
         for key, count in sorted(projects.items())]
     used = {str(issue.fields.get("sprint_id")) for issue in issues if issue.fields.get("sprint_id")}
+
+    def project_of(sprint: str) -> str:
+        counts = sprint_projects.get(sprint, {})
+        return min(counts, key=lambda key: (-counts[key], key)) if counts else ""
+
     containers += [
         ConnectorRecord(
             id=f"CONN-JIRA-S{content_key('jira-sprint-record', world.seed, sprint)[:11].upper()}",
             connector="jira", entity="sprint", external_id=sprint,
             title=f"{period} {sprints.get(sprint, 'sprint')}",
             fields={"sprint_id": sprint, "name": f"{period} {sprints.get(sprint, 'sprint')}",
-                    "project_key": next(iter(sorted(projects)), ""), "period": period})
+                    "project_key": project_of(sprint), "period": period})
         for sprint in sorted(used)]
     return containers
 

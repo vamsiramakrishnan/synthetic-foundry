@@ -255,3 +255,25 @@ def test_a_built_world_holds_the_jira_projects_and_sprints_its_issues_name() -> 
     page = emulator.call("search_projects")
     assert [item["key"] for item in page["items"]] == sorted(projects)
     assert emulator.call("get_project", id=page["items"][0]["id"])["key"] == "WL"
+
+
+def test_a_sprint_belongs_to_the_project_its_issues_are_in() -> None:
+    """Review on #80: every sprint was given the alphabetically first project,
+    whatever its issues used. With two projects, a sprint names the one most
+    of its issues are in."""
+    from worldloom.connector_data import ConnectorRecord, _jira_containers
+    from worldloom.retail import RetailWorld
+
+    world = RetailWorld(seed=8128).build()
+
+    def issue(n: int, project: str, sprint: str) -> ConnectorRecord:
+        return ConnectorRecord(id=f"I{n}", connector="jira", entity="issue",
+                               external_id=f"{project}-{n}", title="t",
+                               fields={"project_key": project, "sprint_id": sprint})
+
+    issues = [issue(1, "AAA", "s1"), issue(2, "ZZZ", "s2"), issue(3, "ZZZ", "s2"),
+              issue(4, "AAA", "s2")]
+    sprints = {r.external_id: r.fields["project_key"]
+               for r in _jira_containers(world, issues, {}) if r.entity == "sprint"}
+
+    assert sprints == {"s1": "AAA", "s2": "ZZZ"}

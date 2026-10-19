@@ -271,6 +271,13 @@ VALUE_NOT_IN_WORLD = "value_not_in_world"
 only writes, and nothing the journey reads makes that container exist. Hard:
 the question may ask for something the world does not hold."""
 
+EPISODES_UNKNOWN = "episodes_unknown"
+"""Neither the telemetry window nor the catalogue's creation time names a
+date, so the import cannot say which months to give the company. Hard: with
+no episode Studio refuses to build anything into the world, so no project is
+written rather than one that only fails later. The current month is not
+used instead, because the output would then depend on the day it was run."""
+
 FAILURE_MODE_UNCONSTRUCTABLE = "failure_mode_unconstructable"
 """A failure the customer's users hit that Worldloom cannot build into a
 question yet. Hard: real behaviour is missing from the corpus. The finding
@@ -1416,9 +1423,17 @@ def import_catalogue(data: bytes, company: dict[str, Any], *,
                 for allocation in counts.allocations}
     final = tuple(case.model_copy(update={"count": allotted[case.id]})
                   for case in survivors if case.id in allotted)
-    project = (ProjectSpec(company=company, use_cases=final,
-                           episodes=episodes(catalogue))
-               if final else None)
+    months = episodes(catalogue)
+    if final and not months:
+        findings.append(hard(
+            EPISODES_UNKNOWN,
+            "the telemetry window and created_at name no date, so there are no "
+            "months to give the company; no project was written",
+            detail={"window_start": catalogue.source.window.start,
+                    "window_end": catalogue.source.window.end,
+                    "created_at": catalogue.created_at}))
+    project = (ProjectSpec(company=company, use_cases=final, episodes=months)
+               if final and months else None)
     groups = {
         **{cuj.id: Group.WRITE for cuj in piles.write},
         **dict.fromkeys(piles.lookup, Group.LOOKUP),
