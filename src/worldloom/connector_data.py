@@ -197,13 +197,67 @@ def _email_address(name: str, company: str) -> str:
     return f"{local}@{domain}.example"
 
 
+def _jira_containers(world: World, issues: list[ConnectorRecord],
+                     sprints: dict[str, str]) -> list[ConnectorRecord]:
+    """The project and sprint records the issues already point at.
+
+    ``jira.json`` models both as containers, and every issue names one of
+    each (``project_key``, ``sprint_id``), but nothing projected the
+    containers themselves: ``search_projects`` found nothing in a built
+    world, and a project existed only when an eval witness minted one. One
+    record per distinct key, after the issues, so every issue keeps its id
+    and position. *sprints* names each sprint id.
+
+    A sprint belongs to the project its issues are in: the most common one
+    when they span several, ties to the first key, so no sprint claims a
+    project none of its issues use.
+    """
+    period = world.period or "current"
+    projects: dict[str, int] = {}
+    sprint_projects: dict[str, dict[str, int]] = {}
+    for issue in issues:
+        key = str(issue.fields.get("project_key") or "")
+        if key:
+            projects[key] = projects.get(key, 0) + 1
+        sprint = str(issue.fields.get("sprint_id") or "")
+        if sprint and key:
+            counts = sprint_projects.setdefault(sprint, {})
+            counts[key] = counts.get(key, 0) + 1
+    containers = [
+        ConnectorRecord(
+            id=f"CONN-JIRA-P{content_key('jira-project', world.seed, key)[:11].upper()}",
+            connector="jira", entity="project", external_id=key,
+            title=f"{world.company.name} {key}",
+            fields={"key": key, "name": f"{world.company.name} {key}",
+                    "project_key": key, "issue_count": count})
+        for key, count in sorted(projects.items())]
+    used = {str(issue.fields.get("sprint_id")) for issue in issues if issue.fields.get("sprint_id")}
+
+    def project_of(sprint: str) -> str:
+        counts = sprint_projects.get(sprint, {})
+        return min(counts, key=lambda key: (-counts[key], key)) if counts else ""
+
+    containers += [
+        ConnectorRecord(
+            id=f"CONN-JIRA-S{content_key('jira-sprint-record', world.seed, sprint)[:11].upper()}",
+            connector="jira", entity="sprint", external_id=sprint,
+            title=f"{period} {sprints.get(sprint, 'sprint')}",
+            fields={"sprint_id": sprint, "name": f"{period} {sprints.get(sprint, 'sprint')}",
+                    "project_key": project_of(sprint), "period": period})
+        for sprint in sorted(used)]
+    return containers
+
+
 def generate_jira(world: World) -> list[ConnectorRecord]:
     facts = _facts_by_event(world)
     records: list[ConnectorRecord] = []
+    sprints: dict[str, str] = {}
     if world.tasks:
         for index, task in enumerate(sorted(world.tasks, key=lambda item: (item.created_at, item.id)), start=1):
             key = f"WL-{index}"
             record_id = content_key("jira", world.seed, task.id)
+            sprint = content_key("jira-sprint", world.period or "current", task.domain)
+            sprints[sprint] = task.domain
             records.append(
                 ConnectorRecord(
                     id=f"CONN-JIRA-{record_id[:12].upper()}",
@@ -221,7 +275,7 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                         "project_key": "WL",
                         "issue_type": "Epic" if task.kind == "programme" else "Task",
                         "epic_key": f"WL-EPIC-{task.domain.upper()}",
-                        "sprint_id": content_key("jira-sprint", world.period or "current", task.domain),
+                        "sprint_id": sprint,
                         "assignee_id": task.owner_id,
                         "reporter_id": task.created_by,
                         "due_at": task.due_at.isoformat() if task.due_at else None,
@@ -231,10 +285,12 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                     source_artifact_ids=_artifact_ids(world, set(task.fact_ids)),
                 )
             )
-        return records
+        return records + _jira_containers(world, records, sprints)
     for index, event in enumerate(world.timeline(), start=1):
         linked = facts.get(event.id, [])
         fact_ids = sorted(fact.id for fact in linked)
+        sprint = content_key("jira-sprint", world.period or "current", event.kind)
+        sprints[sprint] = event.kind.replace("_", " ")
         records.append(
             ConnectorRecord(
                 id=f"CONN-JIRA-{content_key(world.seed, event.id)[:12].upper()}",
@@ -252,7 +308,7 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                     "project_key": "WL",
                     "issue_type": "Bug" if "incident" in event.kind else "Task",
                     "epic_key": f"WL-EPIC-{event.kind.split('_')[0].upper()}",
-                    "sprint_id": content_key("jira-sprint", world.period or "current", event.kind),
+                    "sprint_id": sprint,
                     "linked_event_id": event.id,
                     "service_ids": event.services,
                     "system_ids": event.systems,
@@ -263,7 +319,7 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                 source_artifact_ids=_artifact_ids(world, set(fact_ids)),
             )
         )
-    return records
+    return records + _jira_containers(world, records, sprints)
 
 
 def generate_servicenow(world: World) -> list[ConnectorRecord]:
@@ -755,7 +811,62 @@ def _with_process_evidence(connector: str, base: Projection) -> Projection:
     return project
 
 
-def generate_witnesses(world: World, connector: str) -> list[ConnectorRecord]:
+#: Words in an artifact type that make it a likely stand-in for notes, so a
+#: witness page named in a question about notes borrows notes when it can.
+_NOTE_WORDS = ("minutes", "notes", "meeting")
+
+
+def _document_donors(connector: str, base: Sequence[ConnectorRecord],
+                     ) -> dict[str, list[ConnectorRecord]]:
+    """The real documents a witness of each document entity may borrow from.
+
+    A document is a record of an entity the definition calls a ``doc`` (a
+    Confluence page), projected from an artifact and carrying its facts.
+    Notes-like artifact types first, when there are any.
+    """
+    try:
+        definition = load_connector_definition(connector)
+    except (KeyError, ValueError):
+        return {}
+    donors: dict[str, list[ConnectorRecord]] = {}
+    for record in sorted(base, key=lambda item: item.id):
+        spec = definition.entities.get(record.entity)
+        if spec is None or spec.kind != "doc" or not record.fact_ids \
+                or not record.source_artifact_ids:
+            continue
+        donors.setdefault(record.entity, []).append(record)
+    for entity, records in donors.items():
+        notes = [record for record in records
+                 if any(word in str(record.fields.get("artifact_type", ""))
+                        for word in _NOTE_WORDS)]
+        donors[entity] = notes or records
+    return donors
+
+
+def _donor_start(pool: Sequence[ConnectorRecord], seed: int | None, tactic: str,
+                 claimed: set[str]) -> int:
+    """Where *tactic*'s witnesses start in *pool*.
+
+    A document sharing no fact with *claimed*, and of those the one sharing
+    facts with the fewest other documents, nearest the position *tactic*'s id
+    hashes to. Fewest first matters: a hub document that cites what every
+    other one cites (a finance workbook) taken early leaves no separate
+    document for the next demand, while taking the self-contained ones first
+    keeps as many demands apart as the documents allow. With none left, the
+    hashed position.
+    """
+    start = int(content_key("witness-donor", seed, tactic), 16) % len(pool)
+    facts = [set(record.fact_ids) for record in pool]
+    shared = [sum(1 for other, theirs in enumerate(facts) if other != index and mine & theirs)
+              for index, mine in enumerate(facts)]
+    free = [index for index in range(len(pool)) if not claimed & facts[index]]
+    if not free:
+        return start
+    return min(free, key=lambda index: (shared[index], (index - start) % len(pool)))
+
+
+def generate_witnesses(world: World, connector: str,
+                       base: Sequence[ConnectorRecord] = ()) -> list[ConnectorRecord]:
     """Records the eval-first constructive layer minted for *connector*.
 
     A witness is a world event carrying an ``eval-witness/v1`` document (see
@@ -763,10 +874,40 @@ def generate_witnesses(world: World, connector: str) -> list[ConnectorRecord]:
     own projections rather than inside the eval code so that the validator, the
     emulator, the exporters and the eval generator all see one record set: a
     witness found by a search the eval did not write is the whole point.
+
+    Two things a witness takes from the records around it, *base*, so it is
+    held to the same contract they are:
+
+    its stable id
+        The field the connector's catalog names (a page's ``page_id``),
+        numbered as the vendor numbers its records. Without it the validator
+        refused every witness of an entity that has one.
+    a document's content
+        A witness of a document entity borrows the text and facts of a real
+        document in *base*, chosen by the tactic so the same world always
+        borrows the same one, and keeps its own title and pinned fields. A
+        page minted with fields alone has no body and no fact: an agent sent
+        to "the sprint notes" would find an empty page, and nothing it wrote
+        could be graded against it. A near miss borrows a different document,
+        so it is a believable look-alike rather than an empty decoy.
     """
 
+    from .enterprise_corpus import destination_handle
     from .eval_witnesses import witness_payload
 
+    stable = {capability.entity: capability.stable_id_field
+              for capability in connector_capabilities((connector,))}
+    try:
+        numeric = load_connector_definition(connector).id.pattern == "numeric"
+    except (KeyError, ValueError):
+        numeric = False
+    donors = _document_donors(connector, base)
+    # One donor position per tactic, and the facts its witnesses borrowed. A
+    # second tactic's witness avoids documents citing those facts: shared facts
+    # are shared evidence, which welds independent demands into one leakage
+    # group that no train/validation/test split can separate.
+    starts: dict[str, int] = {}
+    claimed: set[str] = set()
     records: list[ConnectorRecord] = []
     for event in world.events:
         payload = witness_payload(event)
@@ -774,25 +915,51 @@ def generate_witnesses(world: World, connector: str) -> list[ConnectorRecord]:
             continue
         entity = str(payload["entity"])
         key = content_key("witness", world.seed, event.id)
-        fields: dict[str, Any] = dict(payload["fields"])
+        stable_field = stable.get(entity)
+
+        donor = None
+        if donors.get(entity):
+            pool = donors[entity]
+            start = starts.setdefault(payload["tactic_id"], _donor_start(
+                pool, world.seed, payload["tactic_id"], claimed))
+            offset = (payload["ordinal"] if payload["role"] == "witness"
+                      else -(payload["ordinal"] + 1))
+            donor = pool[(start + offset) % len(pool)]
+            if payload["role"] == "witness":
+                claimed.update(donor.fact_ids)
+        borrowed = ({name: value for name, value in donor.fields.items()
+                     if name not in {stable_field, "name"}} if donor else {})
+
+        fields: dict[str, Any] = {**borrowed, **payload["fields"]}
         title = str(fields.get("title") or fields.get("name") or fields.get("summary")
                     or f"{entity.replace('_', ' ')} {payload['ordinal'] + 1}")
+        if donor is not None and "name" in donor.fields:
+            fields["name"] = title
+        external_id = f"W-{key[:10].upper()}"
+        if stable_field and not fields.get(stable_field):
+            if numeric:
+                external_id = destination_handle(connector, entity, stable_field, key)
+            fields[stable_field] = external_id
         fields.update({
             "world_event_id": event.id,
             "eval_tactic_id": payload["tactic_id"],
             "witness_role": payload["role"],
             "near_miss_of": payload["near_miss_of"],
             "opened_at": event.occurred_at.isoformat(),
+            **({"borrowed_from": donor.id} if donor is not None else {}),
         })
         records.append(
             ConnectorRecord(
                 id=f"CONN-{connector.upper()}-W{key[:11].upper()}",
                 connector=connector,
                 entity=entity,
-                external_id=f"W-{key[:10].upper()}",
+                external_id=external_id,
                 title=title,
                 fields=fields,
-                event_ids=[event.id],
+                fact_ids=list(donor.fact_ids) if donor is not None else [],
+                event_ids=[event.id, *(donor.event_ids if donor is not None else [])],
+                source_artifact_ids=(list(donor.source_artifact_ids)
+                                     if donor is not None else []),
             )
         )
     return records
@@ -830,7 +997,8 @@ class ConnectorProjectionRegistry:
         if projection is None and not _is_defined(connector):
             raise ValueError(f"unknown connector projection {connector!r}")
         base = projection(world) if projection is not None else []
-        return [*base, *generate_witnesses(world, connector), *retail_records(world, connector)]
+        return [*base, *generate_witnesses(world, connector, base),
+                *retail_records(world, connector)]
 
     @property
     def names(self) -> tuple[str, ...]:

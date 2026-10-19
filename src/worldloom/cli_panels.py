@@ -28,8 +28,8 @@ PANELS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "fidelity", "actors",
     )),
     ("Author a company", (
-        "studio", "interview", "pack", "probe", "compose", "causal", "present",
-        "industry", "calibrate",
+        "studio", "telemetry", "interview", "pack", "probe", "compose", "causal",
+        "present", "industry", "calibrate",
     )),
     ("Agent-written content", ("narrate", "plan", "act", "visuals")),
     ("Evaluate retrieval", ("evaluate", "evals", "benchmark", "gemini-enterprise")),
