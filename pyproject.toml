@@ -71,7 +71,7 @@ pdf = ["reportlab>=4.0"]
 pptx = ["python-pptx>=1.0"]
 # Explicit, optional image generation. Accepted PNG bytes replay locally;
 # ordinary world generation and narration do not depend on a model SDK.
-visuals = ["google-genai>=2.28,<3", "Pillow>=10.0"]
+visuals = ["google-genai>=2.28,<4", "Pillow>=10.0"]
 polars = ["polars>=0.20"]
 pandas = ["pandas>=2.0"]
 arrow = ["pyarrow>=15.0"]
